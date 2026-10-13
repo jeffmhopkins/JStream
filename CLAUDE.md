@@ -46,11 +46,13 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: hash-bound ver
 ## The PR loop (you are a builder)
 <!-- @section
 depends_on = ["REVIEW.md#output", "REVIEW.md#rounds"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "New: builder side of the reviewer-agent loop" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Added the exact commands for enabling auto-merge; loop steps unchanged" }
 -->
 
 1. Open the PR with **auto-merge (squash) enabled**. It merges by itself once every required
-   check, including `review-gate`, is green.
+   check, including `review-gate`, is green. To enable it, use the GitHub MCP tool
+   `enable_pr_auto_merge` with `mergeMethod: SQUASH`, or `gh pr merge <n> --auto --squash`.
+   If enabling fails, say so in the PR. Never merge by hand instead.
 2. A reviewer agent will comment findings `B<n>` (blocking) and `N<n>` (non-blocking), and
    end with a verdict line. **Never post `jstream-review` markers yourself, and never merge
    by hand.**
