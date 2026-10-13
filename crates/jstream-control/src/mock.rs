@@ -3,7 +3,7 @@
 //!
 //! [`MockEngine`] holds a tiny collection (scenes, items and sources) plus a set of outputs,
 //! and follows the protocol's rules for it: the handshake, atomic batches that bump `rev`
-//! by one, `expected_rev` conflicts, idempotency keys, `state.changed` and
+//! by one, `expected_rev` conflicts, idempotency keys, every query, `state.changed` and
 //! `output.state_changed` events. Each [`MockEngine::connect`] opens one client session.
 //! It does no undo, persistence or real output work.
 
@@ -11,9 +11,10 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, Edit, EntityKind, Event, Hello, IdempotencyKey,
-    ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, Query, QueryResult, RequestId,
-    Response, Rev, SceneId, SceneSummary, SourceId, SourceKind, Welcome,
+    Action, Batch, Call, CallResult, ClientId, Crop, Edit, EntityKind, Event, Hello,
+    IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputState, PROTOCOL_VERSION,
+    ProtocolError, Query, QueryResult, RequestId, Response, Rev, SceneId, SceneInfo, SceneSummary,
+    SourceId, SourceInfo, SourceKind, Welcome,
 };
 use std::collections::{BTreeMap, VecDeque};
 use std::future;
@@ -163,8 +164,15 @@ struct Collection {
     /// In display order.
     scenes: Vec<Scene>,
     items: BTreeMap<ItemId, Item>,
-    /// What each source shows. The mock keeps no source names or settings.
-    sources: BTreeMap<SourceId, SourceKind>,
+    /// Ordered by ID, as `source.list` reports them.
+    sources: BTreeMap<SourceId, Source>,
+}
+
+/// A source: its name and what it shows. Sources have no settings yet.
+#[derive(Clone)]
+struct Source {
+    name: String,
+    kind: SourceKind,
 }
 
 #[derive(Clone)]
@@ -175,12 +183,15 @@ struct Scene {
     items: Vec<ItemId>,
 }
 
-/// An item. The mock keeps only what its checks need: no query reports an item's
-/// transform, crop or visibility yet.
+/// An item: the scene that holds it, the source it places, and every property an edit
+/// sets, as `item.list` and `state.get` report them.
 #[derive(Clone)]
 struct Item {
     scene_id: SceneId,
     source_id: SourceId,
+    transform: ItemTransform,
+    crop: Crop,
+    visible: bool,
 }
 
 impl State {
@@ -294,6 +305,32 @@ impl State {
                 };
                 QueryResult::OutputStatus { output_id, state }
             }
+            Query::SourceList => QueryResult::SourceList {
+                rev: self.collection.rev,
+                sources: self.collection.source_infos(),
+            },
+            Query::ItemList { scene_id } => {
+                let index = self.collection.existing_scene(&scene_id)?;
+                QueryResult::ItemList {
+                    rev: self.collection.rev,
+                    items: self.collection.item_infos(&self.collection.scenes[index]),
+                    scene_id,
+                }
+            }
+            Query::StateGet => QueryResult::StateGet {
+                rev: self.collection.rev,
+                sources: self.collection.source_infos(),
+                scenes: self
+                    .collection
+                    .scenes
+                    .iter()
+                    .map(|scene| SceneInfo {
+                        scene_id: scene.id.clone(),
+                        name: scene.name.clone(),
+                        items: self.collection.item_infos(scene),
+                    })
+                    .collect(),
+            },
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(CallResult::Query { result })
@@ -371,9 +408,9 @@ impl Collection {
             }
             Edit::SceneDelete { scene_id } => {
                 let index = self.existing_scene(&scene_id)?;
-                let shown = self.sources.values().any(
-                    |kind| matches!(kind, SourceKind::Scene { scene_id: s } if *s == scene_id),
-                );
+                let shown = self.sources.values().any(|source| {
+                    matches!(&source.kind, SourceKind::Scene { scene_id: s } if *s == scene_id)
+                });
                 if shown {
                     return Err(invalid(
                         at,
@@ -396,11 +433,11 @@ impl Collection {
                 scene_id,
                 item_id,
                 source_id,
-                ..
+                transform,
             } => {
                 check_id(item_id.as_str(), at, "item_id")?;
                 let index = self.existing_scene(&scene_id)?;
-                let Some(kind) = self.sources.get(&source_id) else {
+                let Some(Source { kind, .. }) = self.sources.get(&source_id) else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
                 if self.items.contains_key(&item_id) {
@@ -423,6 +460,9 @@ impl Collection {
                     Item {
                         scene_id,
                         source_id,
+                        transform: transform.unwrap_or(ItemTransform::IDENTITY),
+                        crop: Crop::NONE,
+                        visible: true,
                     },
                 );
             }
@@ -442,10 +482,14 @@ impl Collection {
                 items.retain(|id| *id != item_id);
                 items.insert(to, item_id);
             }
-            Edit::ItemSetTransform { item_id, .. }
-            | Edit::ItemSetCrop { item_id, .. }
-            | Edit::ItemSetVisible { item_id, .. } => {
-                self.existing_item(&item_id)?;
+            Edit::ItemSetTransform { item_id, transform } => {
+                self.existing_item(&item_id)?.transform = transform;
+            }
+            Edit::ItemSetCrop { item_id, crop } => {
+                self.existing_item(&item_id)?.crop = crop;
+            }
+            Edit::ItemSetVisible { item_id, visible } => {
+                self.existing_item(&item_id)?.visible = visible;
             }
             Edit::SourceCreate {
                 source_id,
@@ -464,19 +508,19 @@ impl Collection {
                     SourceKind::Builtin { .. } => {}
                     _ => return Err(unimplemented_by_mock("this source kind")),
                 }
-                self.create_source(source_id, kind)?;
+                self.create_source(source_id, name, kind)?;
             }
             Edit::SourceDuplicate {
                 source_id,
                 new_source_id,
                 name,
             } => {
-                let Some(kind) = self.sources.get(&source_id).cloned() else {
+                let Some(kind) = self.sources.get(&source_id).map(|s| s.kind.clone()) else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
                 check_id(new_source_id.as_str(), at, "new_source_id")?;
                 check_name(&name, at)?;
-                self.create_source(new_source_id, kind)?;
+                self.create_source(new_source_id, name, kind)?;
             }
             Edit::SourceDelete { source_id } => {
                 if !self.sources.contains_key(&source_id) {
@@ -496,12 +540,46 @@ impl Collection {
         Ok(())
     }
 
-    fn create_source(&mut self, id: SourceId, kind: SourceKind) -> Result<(), ProtocolError> {
+    fn create_source(
+        &mut self,
+        id: SourceId,
+        name: String,
+        kind: SourceKind,
+    ) -> Result<(), ProtocolError> {
         if self.sources.contains_key(&id) {
             return Err(already_exists(EntityKind::Source, id.as_str()));
         }
-        self.sources.insert(id, kind);
+        self.sources.insert(id, Source { name, kind });
         Ok(())
+    }
+
+    /// Every source, ordered by ID, as queries report them.
+    fn source_infos(&self) -> Vec<SourceInfo> {
+        self.sources
+            .iter()
+            .map(|(id, source)| SourceInfo {
+                source_id: id.clone(),
+                name: source.name.clone(),
+                kind: source.kind.clone(),
+            })
+            .collect()
+    }
+
+    /// `scene`'s items, bottom first, as queries report them.
+    fn item_infos(&self, scene: &Scene) -> Vec<ItemInfo> {
+        scene
+            .items
+            .iter()
+            .filter_map(|id| {
+                self.items.get(id).map(|item| ItemInfo {
+                    item_id: id.clone(),
+                    source_id: item.source_id.clone(),
+                    transform: item.transform,
+                    crop: item.crop,
+                    visible: item.visible,
+                })
+            })
+            .collect()
     }
 
     /// Whether scene `outer` is `inner` or shows it, directly or through nested scene
@@ -517,8 +595,8 @@ impl Collection {
             self.items
                 .get(item_id)
                 .and_then(|item| self.sources.get(&item.source_id))
-                .is_some_and(|kind| {
-                    matches!(kind, SourceKind::Scene { scene_id } if self.contains(scene_id, inner))
+                .is_some_and(|source| {
+                    matches!(&source.kind, SourceKind::Scene { scene_id } if self.contains(scene_id, inner))
                 })
         })
     }
@@ -532,9 +610,9 @@ impl Collection {
             .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))
     }
 
-    fn existing_item(&self, item_id: &ItemId) -> Result<&Item, ProtocolError> {
+    fn existing_item(&mut self, item_id: &ItemId) -> Result<&mut Item, ProtocolError> {
         self.items
-            .get(item_id)
+            .get_mut(item_id)
             .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))
     }
 }
@@ -627,9 +705,10 @@ mod tests {
     use super::MockEngine;
     use crate::{Control, ControlError, EventStream};
     use jstream_protocol::{
-        Action, Batch, Call, CallResult, ClientId, Edit, EntityKind, Event, Hello, IdempotencyKey,
-        ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query,
-        QueryResult, Rev, SceneId, SourceId, SourceKind,
+        Action, Batch, Call, CallResult, ClientId, Crop, Edit, EntityKind, Event, Hello,
+        IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputState, PROTOCOL_VERSION,
+        ProtocolError, ProtocolVersion, Query, QueryResult, Rev, SceneId, SceneInfo, SourceId,
+        SourceInfo, SourceKind, Vec2,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -917,6 +996,202 @@ mod tests {
             source_id: SourceId::new("webcam_2"),
         });
         assert_eq!(batch(&*control, unplaced), Ok(Rev(2)));
+    }
+
+    fn query(control: &dyn Control, query: Query) -> Result<QueryResult, ControlError> {
+        match block_on(control.call(Call::Query { query }))?.result {
+            CallResult::Query { result } => Ok(result),
+            other => panic!("not a query result: {other:?}"),
+        }
+    }
+
+    /// The same collection, built by the same batch, as `jstream-graph`'s read test
+    /// (`read::tests::reads_report_the_model_at_its_rev`), so the expected results below
+    /// are exactly what `Graph::query` returns for it. It can't be called here: it is in
+    /// the same layer (R-ARCH-002).
+    #[test]
+    fn queries_report_what_the_edits_set() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let moved = ItemTransform {
+            position: Vec2::new(10.0, 20.0).expect("finite"),
+            ..ItemTransform::IDENTITY
+        };
+        let crop = Crop {
+            left: 1,
+            top: 2,
+            right: 3,
+            bottom: 4,
+        };
+        let cam = SourceInfo {
+            source_id: SourceId::new("cam"),
+            name: "Camera".into(),
+            kind: SourceKind::Builtin {
+                kind: "webcam".into(),
+            },
+        };
+        let nested_b = SourceInfo {
+            source_id: SourceId::new("b_src"),
+            name: "Scene B".into(),
+            kind: SourceKind::Scene {
+                scene_id: SceneId::new("b"),
+            },
+        };
+        let source = |s: &SourceInfo| Edit::SourceCreate {
+            source_id: s.source_id.clone(),
+            name: s.name.clone(),
+            kind: s.kind.clone(),
+        };
+        let edits = vec![
+            Edit::SceneCreate {
+                scene_id: SceneId::new("a"),
+                name: "A".into(),
+            },
+            Edit::SceneCreate {
+                scene_id: SceneId::new("b"),
+                name: "B".into(),
+            },
+            source(&nested_b),
+            source(&cam),
+            add("a", "i1", "cam"),
+            add("a", "i2", "b_src"),
+            add("a", "i3", "cam"),
+            Edit::ItemSetTransform {
+                item_id: ItemId::new("i3"),
+                transform: moved,
+            },
+            Edit::ItemSetCrop {
+                item_id: ItemId::new("i3"),
+                crop,
+            },
+            Edit::ItemSetVisible {
+                item_id: ItemId::new("i3"),
+                visible: false,
+            },
+            Edit::ItemReorder {
+                item_id: ItemId::new("i3"),
+                index: 0,
+            },
+            Edit::SceneReorder {
+                scene_id: SceneId::new("b"),
+                index: 0,
+            },
+        ];
+        let setup = Batch {
+            edits,
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+
+        let plain = |item: &str, source: &str| ItemInfo {
+            item_id: ItemId::new(item),
+            source_id: SourceId::new(source),
+            transform: ItemTransform::IDENTITY,
+            crop: Crop::NONE,
+            visible: true,
+        };
+        let items = vec![
+            ItemInfo {
+                item_id: ItemId::new("i3"),
+                source_id: SourceId::new("cam"),
+                transform: moved,
+                crop,
+                visible: false,
+            },
+            plain("i1", "cam"),
+            plain("i2", "b_src"),
+        ];
+        // Sources by ID, whatever order they were created in.
+        assert_eq!(
+            query(&*control, Query::SourceList),
+            Ok(QueryResult::SourceList {
+                rev: Rev(1),
+                sources: vec![nested_b.clone(), cam.clone()],
+            })
+        );
+        assert_eq!(
+            query(
+                &*control,
+                Query::ItemList {
+                    scene_id: SceneId::new("a")
+                }
+            ),
+            Ok(QueryResult::ItemList {
+                rev: Rev(1),
+                scene_id: SceneId::new("a"),
+                items: items.clone(),
+            })
+        );
+        assert_eq!(
+            query(&*control, Query::StateGet),
+            Ok(QueryResult::StateGet {
+                rev: Rev(1),
+                sources: vec![nested_b, cam],
+                scenes: vec![
+                    SceneInfo {
+                        scene_id: SceneId::new("b"),
+                        name: "B".into(),
+                        items: vec![],
+                    },
+                    SceneInfo {
+                        scene_id: SceneId::new("a"),
+                        name: "A".into(),
+                        items,
+                    },
+                ],
+            })
+        );
+
+        let missing = query(
+            &*control,
+            Query::ItemList {
+                scene_id: SceneId::new("ghost"),
+            },
+        )
+        .expect_err("no such scene");
+        assert_eq!(
+            missing.protocol(),
+            Some(&ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "ghost".into()
+            })
+        );
+        // A duplicate takes the new name and the original's kind; removing an item
+        // leaves its source.
+        let more = Batch {
+            edits: vec![
+                Edit::SourceDuplicate {
+                    source_id: SourceId::new("cam"),
+                    new_source_id: SourceId::new("cam_2"),
+                    name: "Camera 2".into(),
+                },
+                Edit::ItemRemove {
+                    item_id: ItemId::new("i1"),
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, more), Ok(Rev(2)));
+        let Ok(QueryResult::SourceList { rev, sources }) = query(&*control, Query::SourceList)
+        else {
+            panic!("not a source list");
+        };
+        assert_eq!(rev, Rev(2));
+        let names: Vec<(&str, &str)> = sources
+            .iter()
+            .map(|s| (s.source_id.as_str(), s.name.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("b_src", "Scene B"),
+                ("cam", "Camera"),
+                ("cam_2", "Camera 2")
+            ]
+        );
+        assert_eq!(sources[2].kind, sources[1].kind);
     }
 
     #[test]

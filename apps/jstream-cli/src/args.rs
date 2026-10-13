@@ -29,7 +29,10 @@ Global options (before the command):
 Commands:
   version                          print the CLI and protocol versions (no connection)
   hello                            handshake with the engine and print the session
+  state get                        print the whole collection state (query state.get)
   scene list                       list the scenes (query scene.list)
+  source list                      list the sources (query source.list)
+  item list <scene-id>             list a scene's items, bottom first (query item.list)
   output status <output-id>        report an output's state (query output.status)
   output start <output-id>         start an output (action output.start)
   output stop <output-id>          stop an output (action output.stop)
@@ -179,7 +182,12 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["help"] => Command::Help,
         ["version"] => Command::Version,
         ["hello"] => Command::Hello,
+        ["state", "get"] => Command::Query(Query::StateGet),
         ["scene", "list"] => Command::Query(Query::SceneList),
+        ["source", "list"] => Command::Query(Query::SourceList),
+        ["item", "list", id] => Command::Query(Query::ItemList {
+            scene_id: SceneId::new(*id),
+        }),
         ["output", "status", id] => Command::Query(Query::OutputStatus {
             output_id: OutputId::new(*id),
         }),
@@ -193,7 +201,8 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["events", rest @ ..] => parse_events(rest)?,
         [word, ..] => {
             let known = [
-                "help", "version", "hello", "scene", "output", "edit", "events",
+                "help", "version", "hello", "state", "scene", "source", "item", "output", "edit",
+                "events",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -447,6 +456,32 @@ mod tests {
         assert_eq!(ok(&["help"]).command, Command::Help);
         assert_eq!(ok(&["--help"]).command, Command::Help);
         assert_eq!(ok(&["--mock", "-h", "junk"]).command, Command::Help);
+    }
+
+    #[test]
+    fn read_commands_map_to_queries() {
+        assert_eq!(
+            ok(&["state", "get"]).command,
+            Command::Query(Query::StateGet)
+        );
+        assert_eq!(
+            ok(&["source", "list"]).command,
+            Command::Query(Query::SourceList)
+        );
+        assert_eq!(
+            ok(&["item", "list", "main"]).command,
+            Command::Query(Query::ItemList {
+                scene_id: SceneId::new("main")
+            })
+        );
+        for wrong in [
+            &["item", "list"][..],
+            &["item", "list", "a", "b"],
+            &["source"],
+            &["state"],
+        ] {
+            assert!(err(wrong).starts_with("wrong arguments for `"), "{wrong:?}");
+        }
     }
 
     #[test]

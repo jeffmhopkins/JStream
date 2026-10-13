@@ -9,6 +9,7 @@
 
 mod apply;
 mod model;
+mod read;
 
 pub use apply::Applied;
 pub use model::{Graph, Item, Scene, Source, State};

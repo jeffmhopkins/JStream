@@ -739,6 +739,39 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "A scene item: one placement of a source inside a scene. Unique across scenes.",
       "type": "string"
     },
+    "ItemInfo": {
+      "description": "One item, a placement of a source in a scene, as `item.list` and `state.get` report\nit. It carries every property an edit can set.",
+      "properties": {
+        "crop": {
+          "$ref": "#/$defs/Crop",
+          "description": "How much of the source it cuts off."
+        },
+        "item_id": {
+          "$ref": "#/$defs/ItemId",
+          "description": "The item's ID."
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId",
+          "description": "The source it places."
+        },
+        "transform": {
+          "$ref": "#/$defs/ItemTransform",
+          "description": "Where it sits in its scene."
+        },
+        "visible": {
+          "description": "Whether it is drawn.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "item_id",
+        "source_id",
+        "transform",
+        "crop",
+        "visible"
+      ],
+      "type": "object"
+    },
     "ItemTransform": {
       "description": "Where a scene item sits in its scene.\n\nA deliberately small first cut: position, scale and rotation about the item's\ntop-left corner. The full 3D transform and crop (ARCH data model) replace it in a\nlater minor version, as added fields with defaults.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
       "properties": {
@@ -856,6 +889,50 @@ source: crates/jstream-protocol/src/fixtures.rs
             "output_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "Lists the collection's sources, ordered by ID. Sources have no display order of\ntheir own.",
+          "properties": {
+            "type": {
+              "const": "source.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists one scene's items, in stacking order (the first is at the bottom). Fails with\n`not_found` if the scene doesn't exist.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene whose items to list."
+            },
+            "type": {
+              "const": "item.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Reads the whole collection state (every source, and every scene with its items)\nat one revision: what a client reads on connecting, after a `state.changed` it\ndidn't cause, or before an edit it sends with `expected_rev`.",
+          "properties": {
+            "type": {
+              "const": "state.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -910,6 +987,97 @@ source: crates/jstream-protocol/src/fixtures.rs
             "state"
           ],
           "type": "object"
+        },
+        {
+          "description": "The result of `source.list`.",
+          "properties": {
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the list was read at."
+            },
+            "sources": {
+              "description": "The sources, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/SourceInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "source.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "rev",
+            "sources"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `item.list`.",
+          "properties": {
+            "items": {
+              "description": "Its items, in stacking order: the first is at the bottom.",
+              "items": {
+                "$ref": "#/$defs/ItemInfo"
+              },
+              "type": "array"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the list was read at."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene listed."
+            },
+            "type": {
+              "const": "item.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "rev",
+            "scene_id",
+            "items"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `state.get`: the whole collection state at one revision.",
+          "properties": {
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the state was read at."
+            },
+            "scenes": {
+              "description": "Every scene with its items, in display order.",
+              "items": {
+                "$ref": "#/$defs/SceneInfo"
+              },
+              "type": "array"
+            },
+            "sources": {
+              "description": "Every source, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/SourceInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "state.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "rev",
+            "sources",
+            "scenes"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -962,6 +1130,32 @@ source: crates/jstream-protocol/src/fixtures.rs
     "SceneId": {
       "description": "A scene in the collection.",
       "type": "string"
+    },
+    "SceneInfo": {
+      "description": "One scene with its items, as `state.get` reports it.",
+      "properties": {
+        "items": {
+          "description": "Its items, in stacking order: the first is at the bottom.",
+          "items": {
+            "$ref": "#/$defs/ItemInfo"
+          },
+          "type": "array"
+        },
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene's ID."
+        }
+      },
+      "required": [
+        "scene_id",
+        "name",
+        "items"
+      ],
+      "type": "object"
     },
     "SceneSummary": {
       "description": "One scene in a `scene.list` result.",
@@ -1052,6 +1246,29 @@ source: crates/jstream-protocol/src/fixtures.rs
     "SourceId": {
       "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
       "type": "string"
+    },
+    "SourceInfo": {
+      "description": "One source, as `source.list` and `state.get` report it.",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SourceKind",
+          "description": "What it shows."
+        },
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId",
+          "description": "The source's ID."
+        }
+      },
+      "required": [
+        "source_id",
+        "name",
+        "kind"
+      ],
+      "type": "object"
     },
     "SourceKind": {
       "description": "What a source shows.\n\nSerialized with an internal `type` tag. A source is one shared instance: every item\nthat places it shows the same capture, and (once filters land) the same filters.",
@@ -1356,5 +1573,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.2"
+  "title": "JStream protocol 0.3"
 }

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:eff8bda43699e1ef", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only: this PR's jstream-sources (browser) and jstream-platform-windows (CEF backend) rows; this crate's row and purpose text are main's, unchanged" }
+verified = { hash = "b3:7ba96d70baaa7109", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "mock.rs grew query answers and stored item properties; contents list (trait, errors, mock behind feature, protocol re-export) still matches src/; layer and WASM claims unchanged" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -39,7 +39,7 @@ Not here yet: the WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:e3e9b603ddd6aece", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B2 on #27: State::emit now skips and forgets closed queues, so a dropped session's stream stays ended; the Mock bullet says so and the test emits (directly and via another session's batch) after the drop; rest of #design unchanged against src/" }
+verified = { hash = "b3:6ebb5e81ad536765", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Mock: new bullet for the 0.3 queries (state.get, scene.list, source.list by ID, item.list bottom first with not_found, output.status) answered as Graph::query does; mock now stores source names and item transform/crop/visible; parity paragraph names Graph::query and the shared-batch test queries_report_what_the_edits_set; checked against mock.rs" }
 -->
 
 ### The trait
@@ -96,7 +96,7 @@ protocol's rules for them:
   retry with a known key answers first; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol 0.2 edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol 0.3 edit, with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
@@ -106,8 +106,12 @@ protocol's rules for them:
   - deleting a source that an item places, or a scene that a scene source shows;
   - nesting cycles.
 
-  Error messages may differ; clients match on codes and fields. It stores no
-  transforms, crops or visibility, because no query reports them yet;
+  Error messages may differ; clients match on codes and fields;
+- every protocol 0.3 query, answered from that state with the results
+  `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
+  `source.list` (ordered by ID) and `item.list` (bottom first; `not_found` for a missing
+  scene), each at the current `rev`, and `output.status`. So it keeps everything an
+  edit sets: source names and kinds, and each item's transform, crop and visibility;
 - `state.changed` events carrying the request ID, and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
@@ -118,11 +122,12 @@ protocol's rules for them:
 Its futures are always ready. It has no undo, persistence or real outputs, and answers a
 protocol variant it doesn't know with `internal`.
 
-The mock re-implements these checks rather than calling `jstream_graph::Graph::apply`.
-`jstream-graph` is also layer 2, and [R-ARCH-002](../../docs/RULES.md#R-ARCH-002) allows
-only strictly lower layers, even for dev-dependencies, so the dependency would need a
-layering change. The duplication is small, and the mock's tests pin the shared error
-paths.
+The mock re-implements these checks and reads rather than calling
+`jstream_graph::Graph::apply` and `Graph::query`. `jstream-graph` is also layer 2, and
+[R-ARCH-002](../../docs/RULES.md#R-ARCH-002) allows only strictly lower layers, even
+for dev-dependencies, so the dependency would need a layering change. The duplication
+is small, and the mock's tests pin the shared error paths, and the query results for
+the same batch that `jstream-graph`'s read test checks.
 
 ### WebSocket client (deferred)
 
