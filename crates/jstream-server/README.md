@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:7b4a168a02e6e176", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: contents list matches lib.rs (Server, Connector, upgrade handler), config.rs, gate.rs, session.rs, error.rs; layer 4 and dyn Control-only per crate map; deferred items (UI assets, MCP mount, TLS) and the why-a-crate paragraph stated" }
+verified = { hash = "b3:c821449cc9dc66db", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #44 N1/N2: config.rs (Token::matches now length-independent, extra_hosts doc) and gate.rs (portless Host on port 80) change behaviour inside existing modules only; contents list (lib, config, gate, session, error), layer 4 and deferred items still hold" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:08b8605edb8c79f3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream control#design gained main's parity paragraph only; server design (admission gate, session, request-id remap, shutdown) unaffected" }
+verified = { hash = "b3:3defba6a111e19e8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for #44 N1/N2: Host row and new 'Host without a port' paragraph match gate.rs (portless Host/Origin = :80, accepted only when bound to port 80, refused otherwise incl. ephemeral); Authorization row and new 'Token compare' paragraph match Token::matches (cycled token, length xor folded, time depends only on presented length); sessions, request-id remap, shutdown, dependencies (none added) and open questions 4, 6, 7 (N3) unchanged" }
 -->
 
 ### Listening and admission
@@ -61,9 +61,9 @@ Every upgrade request passes three checks, in this order, before a session is op
 
 | Check | Accepted | Refused with |
 |---|---|---|
-| `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra | 403 |
+| `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra; without a port only on port 80 (below) | 403 |
 | `Origin` | present, and `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
-| `Authorization` | `Bearer <token>`, compared in constant time | 401 with `WWW-Authenticate: Bearer` |
+| `Authorization` | `Bearer <token>`, compared in time that reveals neither the token nor its length | 401 with `WWW-Authenticate: Bearer` |
 
 Each header must appear exactly once, and comparisons ignore ASCII case (except the
 token). The `Host` check defeats DNS rebinding: a page on an attacker's domain that
@@ -71,6 +71,17 @@ resolves to `127.0.0.1` still sends its own name. The `Origin` check stops forei
 pages, since browsers always send `Origin` on a WebSocket upgrade; native clients send
 the server's own. A request without `Origin` is refused too, so every client must send
 one. The token is never logged, and `Token`'s `Debug` form hides it.
+
+**`Host` without a port.** A `Host` (or `Origin`) without a port names the scheme's
+default port, 80 for `http` and `ws`, and browsers leave `:80` out. So when the server
+listens on port 80, `localhost` is the same as `localhost:80` and is accepted (and
+`http://localhost` is its own origin). On any other port, the default and ephemeral
+ones included, a `Host` without a port names a different port and is refused.
+
+**Token compare.** Each presented byte is compared with the token repeated to the
+presented length, and the difference of the lengths is folded into the result, so the
+time taken depends only on what the client sent: neither the first difference nor the
+token's length shows.
 
 ### Sessions
 

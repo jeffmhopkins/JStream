@@ -7,7 +7,8 @@ use std::net::{Ipv4Addr, SocketAddr};
 
 /// The control token every connection must present (ADR-0006).
 ///
-/// Its `Debug` form never shows the value, and it is compared in constant time.
+/// Its `Debug` form never shows the value, and it is compared in time that reveals neither
+/// the value nor its length.
 #[derive(Clone)]
 pub struct Token(String);
 
@@ -29,18 +30,21 @@ impl Token {
         Ok(Token(value))
     }
 
-    /// Whether `presented` is this token. The time taken depends only on the lengths, not
-    /// on where the first difference is.
+    /// Whether `presented` is this token, in time that depends only on `presented`'s
+    /// length: neither where the first difference is nor the token's own length shows.
+    ///
+    /// Every presented byte is compared with the token repeated to that length (a token
+    /// is never empty), and the difference of the two lengths is folded in, so a value
+    /// that is the token repeated (`abcabc` for `abc`) still fails.
     pub(crate) fn matches(&self, presented: &[u8]) -> bool {
         let expected = self.0.as_bytes();
-        if expected.len() != presented.len() {
-            return false;
-        }
-        expected
+        let lengths = expected.len() ^ presented.len();
+        let bytes = expected
             .iter()
+            .cycle()
             .zip(presented)
-            .fold(0u8, |diff, (a, b)| diff | (a ^ b))
-            == 0
+            .fold(0u8, |diff, (a, b)| diff | (a ^ b));
+        (lengths | usize::from(bytes)) == 0
     }
 }
 
@@ -60,7 +64,8 @@ pub struct ServerConfig {
     pub token: Token,
     /// `Host` values (`name:port`) accepted besides the loopback names
     /// (`127.0.0.1`, `localhost`, `[::1]`) and the bound address, each with the bound
-    /// port. Compared without regard to ASCII case.
+    /// port. Compared without regard to ASCII case. A `Host` without a port means port 80,
+    /// so it matches `name:80` when the server listens on port 80, and nothing otherwise.
     pub extra_hosts: Vec<String>,
     /// `Origin` values (`scheme://host[:port]`) accepted besides the server's own
     /// (`http://` plus an accepted `Host`). Compared without regard to ASCII case.
@@ -101,8 +106,25 @@ mod tests {
         };
         assert!(token.matches(b"abc"));
         assert!(!token.matches(b"abd"));
+        assert!(!token.matches(b"ABC"));
         assert!(!token.matches(b"ab"));
         assert!(!token.matches(b"abcd"));
+        assert!(!token.matches(b"abcabc"));
         assert!(!token.matches(b""));
+    }
+
+    /// The compare doesn't stop early on a length mismatch (#44), and a wrong token of
+    /// the same length, of another length, or an empty one still fails.
+    #[test]
+    fn wrong_tokens_of_any_length_fail() {
+        let Ok(token) = Token::new("s3cret-T0ken") else {
+            panic!("a valid token");
+        };
+        assert!(token.matches(b"s3cret-T0ken"), "the token");
+        assert!(!token.matches(b"s3cret-T0kem"), "same length");
+        assert!(!token.matches(b"s3cret-T0ke"), "shorter");
+        assert!(!token.matches(b"s3cret-T0ken-"), "longer");
+        assert!(!token.matches(b"s3cret-T0kens3cret-T0ken"), "repeated");
+        assert!(!token.matches(b""), "empty");
     }
 }
