@@ -24,7 +24,8 @@ Two tracks run in parallel.
 **Track A: repo machinery**
 - Cargo workspace, toolchain, `[workspace.lints]`, `cargo-deny`, and the required CI checks
   from [R-GIT-003](docs/RULES.md#R-GIT-003): `fmt`, `clippy`, `test`, `doc`, `deny`,
-  `lint-deps`, `docs`, `governance`, `pr-title`, `ai-review`. `macos` runs but isn't required.
+  `lint-deps`, `docs`, `governance`, `pr-title`. `macos` runs but isn't required.
+  (`review-gate` exists already; see [REVIEW.md](REVIEW.md).)
 - `xtask docs` **MVP**: front matter and anchor parsing, link resolution (internal plus the
   external registry), hash-bound verification, unmatched-glob errors, the uncovered-crate
   report, generated-block drift, `docs for`, `docs verify`. It replaces every `bootstrap`

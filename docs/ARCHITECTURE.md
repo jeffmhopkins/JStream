@@ -90,7 +90,8 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: docs registrie
 JStream/
 ├── Cargo.toml              # workspace: members, shared deps, [workspace.lints]
 ├── rust-toolchain.toml  deny.toml  rustfmt.toml  clippy.toml  .editorconfig
-├── CLAUDE.md               # short agent entry point; points to RULES/DOCS
+├── CLAUDE.md               # builder-agent entry point; points to RULES/DOCS
+├── REVIEW.md               # reviewer-agent prompt; its verdict drives review-gate
 ├── ROADMAP.md
 ├── crates/                 # all library crates, flat, every name prefixed `jstream-`
 ├── apps/                   # host binaries (thin)
@@ -106,7 +107,7 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md)
 │   └── guides/
-└── .github/                # workflows, PR template
+└── .github/                # workflows (review-gate now; CI in M0), PR template
 ```
 
 <a id="crate-map"></a>

@@ -42,16 +42,35 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: hash-bound ver
 - *Before the tool exists:* set `hash = "bootstrap"` on any section you edit or re-read,
   and put your note in `note`.
 
+<a id="pr-loop"></a>
+## The PR loop (you are a builder)
+<!-- @section
+depends_on = ["REVIEW.md#output", "REVIEW.md#rounds"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "New: builder side of the reviewer-agent loop" }
+-->
+
+1. Open the PR with **auto-merge (squash) enabled**. It merges by itself once every required
+   check, including `review-gate`, is green.
+2. A reviewer agent will comment findings `B<n>` (blocking) and `N<n>` (non-blocking), and
+   end with a verdict line. **Never post `jstream-review` markers yourself, and never merge
+   by hand.**
+3. Answer every blocking finding: push a fix and reply naming the commit, or reply with a
+   concrete rebuttal ([R-GOV-004](docs/RULES.md#R-GOV-004)). Each push resets the gate and
+   triggers a new review round.
+4. Non-blocking findings: fix them if cheap, or say they're deferred. Pre-existing problems
+   become issues.
+5. A `needs-human` label means the maintainer decides. Stop arguing that point.
+
 <a id="limits"></a>
 ## Things you never do
 <!-- @section
 -->
 
-- Apply `governance-approved` or `ai-review-override` without writing the matching
+- Apply `governance-approved` or `review-override` without writing the matching
   justification section in the PR description. Apply them only after you have examined
   what the check flagged ([R-GOV-002](docs/RULES.md#R-GOV-002)). Every use goes to
   the maintainer's weekly audit.
-- Change branch protection or repository settings.
+- Change branch protection or repository settings, merge by hand, or post a review verdict.
 - Weaken a check silently. `#[allow]` without a reason, narrowing `covers`, or editing lint
   or deny config is always a declared governance change.
 - Verify a section you did not re-read.

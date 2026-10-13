@@ -45,7 +45,8 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: support policy
 - [docs/DOCS.md](docs/DOCS.md): how docs stay accurate (hash-checked sections, history from git)
 - [docs/adr/](docs/adr/): decision records
 - [ROADMAP.md](ROADMAP.md): milestones
-- [CLAUDE.md](CLAUDE.md): the entry point for AI agents
+- [CLAUDE.md](CLAUDE.md): the entry point for builder agents
+- [REVIEW.md](REVIEW.md): the reviewer agent's instructions; its verdict gates merges
 
 <a id="license"></a>
 ## License

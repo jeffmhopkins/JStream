@@ -23,7 +23,7 @@ The format and the `enforced_by` vocabulary are defined in
 ### R-ARCH-001: Protocol first
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/**"]
 -->
 Every capability is first a command, query, event or stream in `jstream-protocol`.
@@ -54,7 +54,7 @@ to the interfaces.
 ### R-ARCH-004: Structural decisions need an ADR
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review", "human"]
+enforced_by = ["review", "human"]
 applies_to = ["Cargo.toml", "crates/**", "apps/**"]
 -->
 Changes to structure, dependency boundaries, protocol compatibility, platform support
@@ -65,7 +65,7 @@ Contradicting an accepted ADR requires a new ADR that supersedes it.
 ### R-ARCH-005: New crates are declared and justified
 <!-- @rule
 status = "active"
-enforced_by = ["ci:lint-deps", "ai-review"]
+enforced_by = ["ci:lint-deps", "review"]
 applies_to = ["crates/*/Cargo.toml"]
 -->
 A new crate declares `[package.metadata.jstream]` (layer, summary, `unsafe_allowed`),
@@ -76,7 +76,7 @@ crate.
 ### R-ARCH-006: Edits and actions are distinct
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_protocol::every_command_is_classified", "ai-review"]
+enforced_by = ["test:jstream_protocol::every_command_is_classified", "review"]
 applies_to = ["crates/jstream-protocol/**", "crates/jstream-core/**"]
 -->
 Every command is classified as a **state edit** (undoable, batchable, atomic) or an
@@ -113,7 +113,7 @@ every required platform ([R-GIT-003](#R-GIT-003)).
 ### R-RS-003: Error types
 <!-- @rule
 status = "active"
-enforced_by = ["deny:bans", "ai-review"]
+enforced_by = ["deny:bans", "review"]
 applies_to = ["crates/**"]
 -->
 Libraries use `thiserror` enums that carry context. `anyhow` is allowed only in `apps/*` and
@@ -124,7 +124,7 @@ are never just strings.
 ### R-RS-004: No unwrap outside tests
 <!-- @rule
 status = "active"
-enforced_by = ["lint:clippy::unwrap_used", "ai-review"]
+enforced_by = ["lint:clippy::unwrap_used", "review"]
 applies_to = ["crates/**", "apps/**"]
 -->
 No `unwrap()` in non-test code. Use `expect()` only as `expect("invariant: …")`, with the
@@ -134,7 +134,7 @@ message stating the invariant.
 ### R-RS-005: Logging through tracing, never on the audio thread
 <!-- @rule
 status = "active"
-enforced_by = ["lint:clippy::print_stdout", "lint:clippy::print_stderr", "ai-review"]
+enforced_by = ["lint:clippy::print_stdout", "lint:clippy::print_stderr", "review"]
 applies_to = ["crates/**"]
 -->
 Libraries never print. Use `tracing`, with spans around commands, outputs and sessions.
@@ -154,7 +154,7 @@ Public items in library crates have doc comments.
 ### R-RS-007: Traits only at real seams
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/**"]
 -->
 Prefer plain data and functions. Add a trait only at a real seam: platform backend,
@@ -164,7 +164,7 @@ encoder/decoder, source kind, output kind, effect, or control transport.
 ### R-RS-008: No global mutable state
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/**"]
 -->
 State is passed explicitly or owned by `Engine`. No `static mut`, and no global
@@ -218,7 +218,7 @@ Every `unsafe` block has a `// SAFETY:` comment explaining why it is sound.
 ### R-UNSAFE-003: Safe wrappers, RAII resources
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
 -->
 FFI wrappers expose safe APIs. Raw handles don't leak past a crate's public API.
@@ -228,7 +228,7 @@ COM / Objective-C / C resources are wrapped in RAII types.
 ### R-UNSAFE-004: Official bindings first
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
 -->
 Prefer maintained bindings (`windows`, `objc2-*`, `pipewire`) over hand-written `extern` blocks.
@@ -237,7 +237,7 @@ Prefer maintained bindings (`windows`, `objc2-*`, `pipewire`) over hand-written 
 ### R-UNSAFE-005: No panic crosses an FFI boundary
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
 -->
 Every function called from foreign code (COM methods, WGC/WASAPI/MF callbacks, Core Audio
@@ -255,7 +255,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Rules rewritten af
 ### R-RT-001: Audio thread does not allocate, lock, block or log
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "ai-review"]
+enforced_by = ["test:jstream_audio::rt::callback_does_not_allocate", "review"]
 applies_to = ["crates/jstream-audio/src/rt/**", "crates/jstream-platform-*/src/audio/**"]
 -->
 In steady state, the audio callback and mixer do not allocate, take locks, block, make
@@ -266,7 +266,7 @@ syscalls other than the device API, or log. Debug builds and tests install
 ### R-RT-002: Render and encode threads do bounded work
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/jstream-render/**", "crates/jstream-encode/**"]
 -->
 Render and encode threads never wait on the control plane, do bounded work per tick, and
@@ -277,7 +277,7 @@ allocate and block internally. Avoid per-item allocation in per-frame loops.
 ### R-RT-003: Lock-free hand-off, deferred reclamation
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/jstream-core/**", "crates/jstream-audio/**", "crates/jstream-render/**"]
 -->
 Real-time threads exchange data with the control plane only through lock-free queues,
@@ -288,7 +288,7 @@ would be dropped on a real-time thread go to a collector thread to be freed.
 ### R-RT-004: Overload drops, never stalls
 <!-- @rule
 status = "active"
-enforced_by = ["test:scenarios::overload_drops_and_counts", "ai-review"]
+enforced_by = ["test:scenarios::overload_drops_and_counts", "review"]
 applies_to = ["crates/jstream-render/**", "crates/jstream-encode/**", "crates/jstream-outputs/**"]
 -->
 Under overload, frames and packets are dropped and counted, never stalling the clock.
@@ -298,7 +298,7 @@ Drop counts are reported in `stats.tick`.
 ### R-RT-005: Performance claims state where they were measured
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/jstream-audio/**", "crates/jstream-render/**", "crates/jstream-encode/**"]
 -->
 A PR that touches a hot loop states its cost as "measured on `<hardware, OS>`: …" or
@@ -308,7 +308,7 @@ A PR that touches a hot loop states its cost as "measured on `<hardware, OS>`: �
 ### R-RT-006: Real-time panics degrade, never vanish
 <!-- @rule
 status = "active"
-enforced_by = ["test:scenarios::rt_panic_is_reported", "ai-review"]
+enforced_by = ["test:scenarios::rt_panic_is_reported", "review"]
 applies_to = ["crates/jstream-core/**", "crates/jstream-audio/**", "crates/jstream-render/**"]
 -->
 A panic on a real-time thread is caught at the thread boundary. Audio mutes the affected
@@ -358,7 +358,7 @@ Dependency versions are declared in `[workspace.dependencies]`, and member crate
 ### R-DEP-004: New dependencies are justified
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["Cargo.toml"]
 -->
 The PR says why the dependency is needed, its maintenance status and its transitive weight.
@@ -379,7 +379,7 @@ until M1 and switches to `deny` there ([ROADMAP](../ROADMAP.md#m1)).
 ### R-DEP-006: TLS through rustls with the ring provider
 <!-- @rule
 status = "active"
-enforced_by = ["deny:licenses", "ai-review"]
+enforced_by = ["deny:licenses", "review"]
 applies_to = ["Cargo.toml"]
 -->
 Use `rustls` with the `ring` crypto provider. `aws-lc-rs` is not used, because its license
@@ -405,7 +405,7 @@ terms are not on the allow list.
 ### R-TEST-001: Bug fixes ship a regression test
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/**"]
 -->
 Every bug fix includes a test that fails without the fix.
@@ -423,7 +423,7 @@ Any protocol change updates the `insta` schema snapshot. The snapshot diff is th
 ### R-TEST-003: Golden images change only through tooling
 <!-- @rule
 status = "active"
-enforced_by = ["ci:test", "ai-review"]
+enforced_by = ["ci:test", "review"]
 applies_to = ["tests/golden/**"]
 -->
 Golden images change only through `cargo xtask golden --update` on the reference adapter.
@@ -443,7 +443,7 @@ behind `hw-tests`.
 ### R-TEST-005: Say what wasn't run
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/jstream-platform-*/**", "crates/jstream-vcam-windows/**"]
 -->
 Platform code must compile for its target. The PR lists every platform test that was not
@@ -461,7 +461,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Added MCP tool-nam
 ### R-API-001: Protocol semver
 <!-- @rule
 status = "active"
-enforced_by = ["ci:test", "ai-review"]
+enforced_by = ["ci:test", "review"]
 applies_to = ["crates/jstream-protocol/**"]
 -->
 `jstream-protocol` follows semver, independently of the app. Additions are minor. Removing
@@ -492,7 +492,7 @@ that loads the previous version.
 ### R-API-004: Concurrency-safe writes
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_core::stale_expected_rev_is_rejected", "ai-review"]
+enforced_by = ["test:jstream_core::stale_expected_rev_is_rejected", "review"]
 applies_to = ["crates/jstream-protocol/**", "crates/jstream-core/**"]
 -->
 State edits accept an optional `expected_rev` (rejected if stale) and an optional
@@ -507,7 +507,7 @@ idempotency key. Undo is per client ([ADR-0013](adr/0013-command-model.md)).
 ### R-SEC-001: Secrets stay in the OS credential store
 <!-- @rule
 status = "active"
-enforced_by = ["test:jstream_core::secrets_are_redacted", "ai-review"]
+enforced_by = ["test:jstream_core::secrets_are_redacted", "review"]
 applies_to = ["crates/**"]
 -->
 Stream keys and OAuth tokens live only in the OS credential store. They never appear in
@@ -538,7 +538,7 @@ user grants it.
 ### R-SEC-004: No telemetry; crash dumps stay local
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["crates/**", "apps/**"]
 -->
 JStream sends no telemetry. Crash minidumps and logs are written locally. Nothing is
@@ -576,7 +576,8 @@ status = "active"
 enforced_by = ["ci:governance"]
 applies_to = [".github/workflows/**"]
 -->
-This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`:
+This table is the **only** list of check names that `enforced_by` may cite as `ci:<name>`.
+`enforced_by = ["review"]` means the rule is judged by the reviewer agent ([REVIEW.md](../REVIEW.md)).
 
 | Check | Runs | Required | From |
 |---|---|---|---|
@@ -587,9 +588,9 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `deny` | `cargo deny check` | yes | M0 |
 | `lint-deps` | `cargo xtask lint-deps` (layering, unsafe, `links=` allowlist, workspace deps) | yes | M0 |
 | `docs` | `cargo xtask docs check` | yes | M0 |
-| `governance` | `cargo xtask governance` (label plus justification for governance changes and overrides) | yes | M0 |
+| `governance` | `cargo xtask governance` (label plus justification for governance changes) | yes | M0 |
 | `pr-title` | Conventional Commit title | yes | M0 |
-| `ai-review` | AI review against the applicable rules and sections ([R-GOV-003](#R-GOV-003)) | yes | M0 |
+| `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
 | `sweep` | weekly docs/external/facts sweep plus override audit list (scheduled) | n/a | M1 |
 
@@ -597,7 +598,7 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 ### R-GIT-004: One logical change per PR
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = []
 -->
 Keep mechanical refactors separate from behavior changes.
@@ -606,7 +607,7 @@ Keep mechanical refactors separate from behavior changes.
 ### R-GIT-005: PR description answers the template
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = []
 -->
 The description covers what changed, why, what was not run, and any new crate, new
@@ -653,7 +654,7 @@ A section's stored `verified.hash` must match the computed hash
 ### R-DOC-004: Fix docs in the same PR; verify only what you re-read
 <!-- @rule
 status = "active"
-enforced_by = ["ai-review"]
+enforced_by = ["review"]
 applies_to = ["**"]
 -->
 A PR that makes any doc wrong fixes it in the same PR, whether or not a hash flagged it.
@@ -743,7 +744,7 @@ warning in drafts). Empty `applies_to = []` is allowed for process rules.
 ## Governance
 <!-- @section
 depends_on = ["docs/adr/0015-review-and-governance.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "New section from review: protect the checks, add AI review" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Reviewer-agent gate for a single GitHub account; labels with justification" }
 -->
 
 <a id="R-GOV-001"></a>
@@ -761,24 +762,36 @@ change" section in its description. Agents may apply the label.
 ### R-GOV-002: Overrides are declared, justified and audited
 <!-- @rule
 status = "active"
-enforced_by = ["ci:governance", "ci:sweep"]
+enforced_by = ["ci:governance", "ci:review-gate", "ci:sweep"]
 applies_to = []
 -->
-Anyone, agents included, may apply `governance-approved` or `ai-review-override`, but only
-with the matching justification section in the PR description. Never apply them just to
-get past a check you haven't examined. Every PR merged with either label is listed in the
-weekly sweep issue for the maintainer to audit. Agents never change branch protection or
-repository settings.
+Anyone, agents included, may apply `governance-approved` or `review-override`, but only
+with the matching justification section in the PR description ("Governance change",
+"Review override"). Never apply them just to get past a check you haven't examined.
+Every PR merged with either label is listed in the weekly sweep issue for the maintainer
+to audit. Agents never change branch protection or repository settings.
 
 <a id="R-GOV-003"></a>
-### R-GOV-003: Independent AI review
+### R-GOV-003: An independent reviewer agent gates every merge
 <!-- @rule
 status = "active"
-enforced_by = ["ci:ai-review"]
+enforced_by = ["ci:review-gate"]
 applies_to = []
 -->
-The `ai-review` check runs in a fresh context that did not author the PR. Its input is
-the diff, the rules and sections that `xtask docs for` returns for each changed path, and
-every verification note. Blocking findings fail the check. It can be overridden with the
-`ai-review-override` label plus an "AI review override" section explaining why the findings
-are wrong or acceptable ([R-GOV-002](#R-GOV-002)).
+Every PR is reviewed by a reviewer agent following [REVIEW.md](../REVIEW.md), in a session
+that authored none of the PR's commits. Its verdict comment, tied to the head SHA,
+drives the `review-gate` status. PRs merge only through GitHub auto-merge once every
+required check, `review-gate` included, is green. Builder agents never post verdict
+markers and never merge by hand.
+
+<a id="R-GOV-004"></a>
+### R-GOV-004: Builders answer every blocking finding
+<!-- @rule
+status = "active"
+enforced_by = ["review"]
+applies_to = []
+-->
+For each blocking finding (`B<n>`), the builder either pushes a fix and replies naming the
+commit, or replies with a concrete rebuttal (a code path, test or doc that shows the
+finding is wrong). Disputes that last three rounds go to the maintainer through
+`needs-human` ([REVIEW › Re-review rounds](../REVIEW.md#rounds)).

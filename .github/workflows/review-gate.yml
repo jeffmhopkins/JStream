@@ -1,0 +1,92 @@
+# review-gate: turns the reviewer agent's verdict comment into a required commit status.
+# Spec: REVIEW.md#output and docs/adr/0015-review-and-governance.md.
+#
+# Security: runs on pull_request_target / issue_comment, so it always uses the workflow
+# file from the default branch, and it never checks out PR code. A PR cannot change the gate
+# to pass itself. Editing this file is a governance change (R-GOV-001).
+
+name: review-gate
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled, ready_for_review]
+  issue_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: review-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate reviewer verdict
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request?.number ?? context.payload.issue.number;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+            const head = pr.head.sha;
+
+            const setStatus = async (state, description) => {
+              await github.rest.repos.createCommitStatus({
+                owner, repo, sha: head, state, context: 'review-gate',
+                description: description.slice(0, 140),
+              });
+              core.info(`${state}: ${description}`);
+            };
+
+            // Session ids, normalized so URLs and bare ids compare equal.
+            const norm = (s) => (s.match(/session_[A-Za-z0-9]+/) || [s.trim()])[0];
+
+            // A justification section must exist and contain real text (HTML comments stripped).
+            const section = (body, title) => {
+              const re = new RegExp(`^##\\s+${title}[^\\n]*\\n([\\s\\S]*?)(?=^##\\s|$(?![\\s\\S]))`, 'mi');
+              const m = (body || '').match(re);
+              return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').trim() : '';
+            };
+
+            // 1. Maintainer escape hatch: review-override label + justification.
+            const labels = pr.labels.map((l) => l.name);
+            if (labels.includes('review-override')) {
+              if (section(pr.body, 'Review override').length >= 40) {
+                return setStatus('success', 'Overridden via review-override (justified in PR description)');
+              }
+              return setStatus('failure', 'review-override label needs a "## Review override" justification section');
+            }
+
+            // 2. Authoring sessions from commit trailers.
+            const commits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number: number, per_page: 100 });
+            const authors = new Set();
+            for (const c of commits) {
+              for (const m of c.commit.message.matchAll(/^Claude-Session:\s*(\S+)\s*$/gm)) authors.add(norm(m[1]));
+            }
+
+            // 3. Newest verdict marker in the PR conversation.
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
+            const markerRe = /^<!-- jstream-review v1 verdict=(pass|fail|escalate|recuse) sha=([0-9a-f]{40}) round=(\d+) reviewer-session=(\S+) -->$/m;
+            let latest = null;
+            for (const c of comments) {
+              const m = (c.body || '').match(markerRe);
+              if (m) latest = { verdict: m[1], sha: m[2], round: m[3], session: norm(m[4]) };
+            }
+
+            const sha7 = head.slice(0, 7);
+            if (!latest) return setStatus('pending', `Waiting for review of ${sha7}`);
+            if (latest.sha !== head) return setStatus('pending', `Last review was ${latest.sha.slice(0, 7)}; waiting for review of ${sha7}`);
+            if (authors.has(latest.session)) return setStatus('failure', 'Verdict came from a session that authored this PR');
+
+            switch (latest.verdict) {
+              case 'pass':     return setStatus('success', `No issues found at ${sha7} (round ${latest.round})`);
+              case 'fail':     return setStatus('failure', `Blocking findings at ${sha7} (round ${latest.round})`);
+              case 'escalate': return setStatus('failure', 'Escalated: needs the maintainer (see needs-human)');
+              case 'recuse':   return setStatus('pending', 'Reviewer recused; waiting for an independent reviewer');
+            }

@@ -220,8 +220,8 @@ so it never causes merge conflicts.
    and has no tombstone. See [Lifecycle](#lifecycle).
 9. **Rule metadata:** see [Rules](#rules).
 
-It also **reports**, without failing: crates that no section covers. The `ai-review`
-check ([governance](#governance)) reads this report.
+It also **reports**, without failing: crates that no section covers. The reviewer agent
+([REVIEW.md](../REVIEW.md)) reads this report.
 
 CI posts one PR comment listing every verification in the PR (section, by, note)
 so a reviewer reads all of them in one place.
@@ -236,8 +236,9 @@ holds**. The note says what was checked and why it still holds, e.g.:
 `"Added P010 output; pipeline order, device ownership and interop unchanged"`.
 
 - If the section is wrong, edit it. Do not verify a section you know is wrong.
-- The `ai-review` check judges each verification against the diff, and flags notes
-  that don't engage with what changed. A stock-phrase list alone is too easy to game.
+- The reviewer agent ([REVIEW.md](../REVIEW.md#checks)) re-reads each verified section
+  against the diff. A note that doesn't engage with what changed is a blocking finding.
+  A stock-phrase list alone is too easy to game.
 - A false verification is a bug, and gets fixed and noted like one.
 - The sweep reports each section's verify-to-edit ratio from git. A section that gets
   re-verified far more often than it is edited has `covers` that are too broad, so
@@ -268,7 +269,7 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
     as *unknown*, not broken);
   - lists due docs and externals, fact drift, verify-to-edit ratios, pending
     enforcement past its milestone, and every PR merged with `governance-approved`
-    or `ai-review-override` (the override audit);
+    or `review-override` (the override audit);
   - **updates one pinned issue, "Docs due for review"**, instead of opening new ones.
   - A scheduled agent may pick items from that issue and open PRs. Those PRs go
     through the normal gate.
@@ -298,7 +299,7 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
 ### R-RT-001: Audio thread does not allocate or block
 <!-- @rule
 status = "active"                                  # active | retired
-enforced_by = ["test:jstream_audio::rt::no_alloc", "ai-review"]
+enforced_by = ["test:jstream_audio::rt::no_alloc", "review"]
 applies_to = ["crates/jstream-audio/src/rt/**"]
 replaced_by = "R-RT-009"                           # retired rules only, with a reason in the text
 -->
@@ -312,10 +313,10 @@ replaced_by = "R-RT-009"                           # retired rules only, with a 
 | `lint:<lint>` | A rustc or clippy lint | Must be configured in `[workspace.lints]` |
 | `deny:<section>` | A cargo-deny policy | Section exists in `deny.toml` |
 | `test:<path>` | A named test | Must appear in `cargo test -- --list` once its crate exists. Until then it is *pending*. |
-| `ai-review` | Judged by the AI review check | — |
+| `review` | Judged by the reviewer agent ([REVIEW.md](../REVIEW.md)) | — |
 | `human` | Needs the maintainer's judgment | — |
 
-A rule enforced only by `ai-review`/`human` is allowed, but is listed in the index.
+A rule enforced only by `review`/`human` is allowed, but is listed in the index.
 
 <a id="facts"></a>
 ## Facts
@@ -354,7 +355,7 @@ section saying what is loosened or tightened, and why:
 - edits to `covers`, `applies_to`, `enforced_by` or `status` in any metadata block;
 - retiring a rule; deleting or retiring a doc or section;
 - edits to `deny.toml`, `clippy.toml`, `rustfmt.toml`, `rust-toolchain.toml`,
-  `[workspace.lints]`, `.github/**`, `xtask/src/docs/**`, or `docs/DOCS.md`;
+  `[workspace.lints]`, `.github/**`, `xtask/src/docs/**`, `docs/DOCS.md`, or `REVIEW.md`;
 - new `#[allow(…)]` / `#[expect(…)]` attributes (these must also carry `reason = "…"`).
 
 Agents and the maintainer may both apply the label. The weekly sweep lists every PR
