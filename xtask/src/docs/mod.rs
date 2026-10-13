@@ -198,14 +198,17 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
         Some("check") => {
             let diags = check_repo(root)?;
             for d in &diags {
-                eprintln!("{}:{}: {}", d.path, d.line, d.msg);
+                let kind = if d.warning { "warning: " } else { "" };
+                eprintln!("{}:{}: {kind}{}", d.path, d.line, d.msg);
             }
-            if diags.is_empty() {
-                eprintln!("docs check: ok");
+            let errors = diags.iter().filter(|d| !d.warning).count();
+            let warnings = diags.len() - errors;
+            if errors == 0 {
+                eprintln!("docs check: ok ({warnings} warning(s))");
             } else {
-                eprintln!("docs check: {} problem(s)", diags.len());
+                eprintln!("docs check: {errors} problem(s), {warnings} warning(s)");
             }
-            Ok(diags.is_empty())
+            Ok(errors == 0)
         }
         Some("verify") => {
             let mut target = None;
@@ -246,6 +249,37 @@ mod tests {
         assert!(!is_tracked("Cargo.toml"));
     }
 
+    /// `verify` refuses while an untracked file matches `covers`: CI hashes only the
+    /// committed tree, so the recorded hash would be wrong (review N4 on #10).
+    #[test]
+    fn verify_refuses_untracked_covered_files() {
+        let dir = std::env::temp_dir().join(format!("xtask-verify-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src")).expect("invariant: temp dir is writable");
+        let doc = "<!-- @doc\nid = \"T\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
+        std::fs::write(dir.join("T.md"), doc).expect("invariant: temp dir is writable");
+        std::fs::write(dir.join("src/a.rs"), "a").expect("invariant: temp dir is writable");
+        let git = |args: &[&str]| {
+            let ok = Command::new("git")
+                .args(args)
+                .current_dir(&dir)
+                .output()
+                .is_ok_and(|o| o.status.success());
+            assert!(ok, "git {args:?} failed");
+        };
+        git(&["init", "-q"]);
+        git(&["add", "T.md", "src/a.rs"]);
+        std::fs::write(dir.join("src/b.rs"), "b").expect("invariant: temp dir is writable");
+        let note = "checked the section text against src in this test";
+        let err = verify(&dir, "T#a", "agent:test", note).expect_err("untracked src/b.rs");
+        assert!(format!("{err:#}").contains("src/b.rs"), "{err:#}");
+        git(&["add", "src/b.rs"]);
+        verify(&dir, "T#a", "agent:test", note).expect("all covered files tracked");
+        let written = std::fs::read_to_string(dir.join("T.md")).expect("invariant: just written");
+        assert!(written.contains("hash = \"b3:"), "{written}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The repository's own docs must pass. This is what the `docs` CI job enforces.
     #[test]
     fn repository_docs_pass() {
@@ -253,10 +287,11 @@ mod tests {
         let diags = check_repo(&root).expect("invariant: the repo is readable");
         let report: Vec<String> = diags
             .iter()
+            .filter(|d| !d.warning)
             .map(|d| format!("{}:{}: {}", d.path, d.line, d.msg))
             .collect();
         assert!(
-            diags.is_empty(),
+            report.is_empty(),
             "docs check failed:\n{}",
             report.join("\n")
         );

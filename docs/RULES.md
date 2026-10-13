@@ -630,7 +630,7 @@ dependency or performance claim (`.github/pull_request_template.md`).
 ## Documentation
 <!-- @section
 depends_on = ["docs/DOCS.md#gate"]
-verified = { hash = "b3:81474b4217fcf80a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against DOCS#gate: R-DOC-003 now enforced by docs check hashing; R-DOC-008/012 still pending in xtask as DOCS#bootstrap states" }
+verified = { hash = "b3:67f33fae25c6b8f1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against updated DOCS#gate: R-DOC-012 now matches maintainer option B (covers strict, applies_to may name future crates) and is enforced by docs check; R-DOC-008 still pending" }
 -->
 
 <a id="R-DOC-001"></a>
@@ -754,8 +754,10 @@ status = "active"
 enforced_by = ["ci:docs"]
 applies_to = ["**/*.md"]
 -->
-A `covers` or `applies_to` glob that matches nothing is an error in active docs (a
-warning in drafts). Empty `applies_to = []` is allowed for process rules.
+A section's `covers` glob that matches no tracked file is an error in active docs (a
+warning in drafts): a section must not describe code that doesn't exist. A rule's
+`applies_to` glob must be valid but may match nothing, so a rule can govern a crate before
+it exists. Empty `applies_to = []` is allowed for process rules.
 
 <a id="governance"></a>
 ## Governance
