@@ -1,0 +1,41 @@
+# governance: the R-GOV-001 check (docs/DOCS.md#governance), run by `cargo xtask governance`.
+# It reads the PR's labels, description and author from the event payload (GITHUB_EVENT_PATH).
+# It lives in its own workflow so that adding the label or editing the description re-runs
+# only this check, not the whole CI matrix (whose concurrency group would cancel it).
+# Editing this file is a governance change (R-GOV-001).
+
+# Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
+# Dependabot proposes updates (ADR-0018). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
+
+name: governance
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: governance-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      # The PR head itself (not the merge commit), with full history for the merge base.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Governance changes are labeled and justified (R-GOV-001)
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: cargo xtask governance --base "origin/$BASE_REF"

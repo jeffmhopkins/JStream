@@ -6,7 +6,7 @@ mod backrefs;
 mod check;
 mod govern;
 mod hash;
-mod parse;
+pub(crate) mod parse;
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -17,7 +17,7 @@ use anyhow::{Context, Result, bail};
 pub(crate) use parse::Diag;
 
 /// Files that look like docs but are not tracked (docs/DOCS.md#identity).
-fn is_tracked(path: &str) -> bool {
+pub(crate) fn is_tracked(path: &str) -> bool {
     path.ends_with(".md")
         && !path.starts_with(".github/")
         && !path.starts_with("LICENSE")

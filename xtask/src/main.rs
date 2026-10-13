@@ -1,6 +1,6 @@
 //! `cargo xtask`: repository automation.
 //!
-//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap
+//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap, docs/DOCS.md#governance
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -9,21 +9,16 @@
 )]
 
 mod docs;
+mod governance;
 
 use std::path::Path;
 use std::process::ExitCode;
 
 /// Subcommands planned for M0 (ROADMAP.md#m0) that are not implemented yet.
-const PLANNED: &[(&str, &str)] = &[
-    (
-        "lint-deps",
-        "crate layering, unsafe declarations, links= allowlist (R-ARCH-002)",
-    ),
-    (
-        "governance",
-        "label + justification for governance changes (R-GOV-001)",
-    ),
-];
+const PLANNED: &[(&str, &str)] = &[(
+    "lint-deps",
+    "crate layering, unsafe declarations, links= allowlist (R-ARCH-002)",
+)];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -34,6 +29,14 @@ fn main() -> ExitCode {
             Ok(false) => ExitCode::FAILURE,
             Err(e) => {
                 eprintln!("xtask docs: {e:#}");
+                ExitCode::from(2)
+            }
+        },
+        Some("governance") => match governance::run(&args[1..], &root) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("xtask governance: {e:#}");
                 ExitCode::from(2)
             }
         },
@@ -50,6 +53,10 @@ fn main() -> ExitCode {
                     "record a re-read section: <DOC#anchor> --by <who> --note <text>",
                 ),
                 ("docs for", "what governs a file: <repo-relative path>"),
+                (
+                    "governance",
+                    "governance changes since a base (R-GOV-001): --base <rev> [--event <json>]",
+                ),
             ] {
                 eprintln!("  {name:<12} {what}");
             }
