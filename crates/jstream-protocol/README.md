@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:89a9b050b3da9b3c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main into the control PR: main's 0.2 contents bullets kept; depends_on ARCH#crate-map now has control L2/mcp L3/server L4; purpose's Layer 1 and 'jstream-control compiles it to wasm32' still true" }
+verified = { hash = "b3:41c6db993ba7aaa9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only: this PR's jstream-sources (browser) and jstream-platform-windows (CEF backend) rows; this crate's row and purpose text are main's, unchanged" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined

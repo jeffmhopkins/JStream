@@ -16,7 +16,7 @@ that runs from a clean checkout.
 ## M0: Foundation and risk spikes
 <!-- @section
 depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:c5cf2aaf8b50ebac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "S2 bullet now asks whether Frame Server accepts HKCU registration or needs one elevated HKLM registration (ADR-0020), replacing the MSIX question; tracks otherwise unchanged" }
+verified = { hash = "b3:82028f4d88d590e3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review N1 on #26: Demo now says S1-S3 have results and S4 may finish in M1b but needs a written result before the browser source is built, matching ADR-0021's 'prove it first'; Track B S4 bullet unchanged" }
 -->
 
 Two tracks run in parallel.
@@ -45,23 +45,37 @@ Two tracks run in parallel.
   ([ADR-0020](docs/adr/0020-portable-windows-distribution.md)).
 - **S3 Clock:** WASAPI mic + loopback timestamps mapped to QPC, drift measured over an hour,
   adaptive resampler validated.
+- **S4 Browser source:** a CEF off-screen page delivered as a shared GPU texture
+  through accelerated paint (transparent, 1080p60, no CPU copy) into wgpu, with its audio
+  from CEF's audio handler. Also picks the Rust CEF bindings and the helper-process layout
+  ([ADR-0021](docs/adr/0021-browser-source.md)).
 
 **Demo:** CI green with all required checks. A PR that changes covered code without
-re-verifying is rejected. S1–S3 each have a written result.
+re-verifying is rejected. S1–S3 each have a written result. S4 may finish in M1b, but
+must have a written result before the browser source is built.
 
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:83f0593079a94609", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1c now in-app vcam registration shipped in the portable zip per ADR-0020 instead of signed MSI; M1a/b/d unchanged and still match ADR-0003" }
+verified = { hash = "b3:935465d03f8c01b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b expanded per maintainer: browser source (ADR-0021, after S4), scenes as sources with cycle rejection, shared vs duplicate sources, transform+crop, source filters vs item effects; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
   MF AAC (WASAPI mic + desktop loopback) → FLV → RTMPS to YouTube with a stream key. Minimal
   `jstream-core`, `jstream-server`, `jstream-mcp`, `jstream-cli`, `video.snapshot`.
-- **M1b Scenes and mixing:** scene graph, sources (window, webcam incl. MJPEG decode, image,
-  color, text), 2D transform + crop, golden tests; bus-matrix mixer with filters and meters;
-  per-client undo, `expected_rev`, audit log; recording to fMP4; encoder sharing.
+- **M1b Scenes and mixing:**
+  - Scene graph and sources: window, webcam (incl. MJPEG decode), image, color, text, and
+    **browser** ([ADR-0021](docs/adr/0021-browser-source.md); after spike S4).
+  - **Scenes as sources**: a scene placed inside another scene, with cycles rejected.
+  - **Shared sources:** adding an existing source places the *same* instance (one capture,
+    one set of source filters) in another scene. **Duplicate** makes an independent copy.
+  - Place, move, resize, rotate and **crop** scene items (2D transform + crop), with golden
+    tests.
+  - **Filters and effects:** source filters apply everywhere the source appears, and item
+    effects apply to one placement.
+  - Bus-matrix mixer with filters and meters.
+  - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
 - **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the
   portable zip ([ADR-0020](docs/adr/0020-portable-windows-distribution.md); from spike S2).
 - **M1d Hardening:** RTMP reconnect with backoff, log rotation, local minidumps, `stats.tick`,
@@ -74,11 +88,14 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:4e872137e6946ac1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: Leptos confirmation, preview transport (WebCodecs + JPEG fallback), Tauri/daemon and studio mode still match ADR-0002" }
+verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "UI bullet now names canvas editing: drag-to-place, resize/rotate, crop handles, snapping, add-existing vs duplicate; Leptos/preview/Tauri/studio items unchanged and still match ADR-0002" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
-- `jstream-ui`: scenes, sources, properties, transform gizmo, mixer, outputs.
+- `jstream-ui`: scenes, sources, properties, mixer, outputs.
+- Canvas editing: **drag to place**, resize, rotate and **crop by dragging** handles
+  (Alt-drag crop, OBS style), snapping, multi-select, and **add existing** versus
+  **duplicate** when adding a source.
 - Preview as low-res H.264 over binary WebSocket frames → WebCodecs → `<canvas>`, with a JPEG fallback.
 - `jstream-desktop` (Tauri) and `jstream-daemon` serving the same UI. Token pairing for
   remote browsers.
@@ -104,5 +121,5 @@ verified = { hash = "b3:4e872137e6946ac1", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 -->
 
-- Media-file source, browser source (needs an ADR), replay buffer.
+- Media-file source, replay buffer.
 - Virtual microphone (needs a kernel-driver ADR), SRT/WHIP outputs, OBS scene-collection import.

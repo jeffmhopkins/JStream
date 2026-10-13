@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:e223e42024f8ef2d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after the B2 emit fix in src/mock.rs: purpose text (Control trait, ControlError, mock feature, deferred WebSocket client) unaffected" }
+verified = { hash = "b3:eff8bda43699e1ef", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only: this PR's jstream-sources (browser) and jstream-platform-windows (CEF backend) rows; this crate's row and purpose text are main's, unchanged" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine

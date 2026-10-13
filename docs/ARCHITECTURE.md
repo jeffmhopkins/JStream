@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:c3c2be6440c7bfeb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#30): table keeps main's L2 jstream-mux, L2 jstream-graph and L4 jstream-outputs rows (each depending only on lower layers) plus this PR's control L2, mcp L3, server L4 moves and client-stack paragraph; summaries match each Cargo.toml metadata" }
+verified = { hash = "b3:43d2fc2e00537d95", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#27): table is main's (control L2, mcp L3, server L4, client-stack paragraph, graph/mux/outputs rows) plus this PR's two edits only: browser built-in in jstream-sources and CEF browser backend in jstream-platform-windows (ADR-0021); layers and unsafe column consistent" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -139,7 +139,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat). No media code. | no |
-| 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side | **yes** |
+| 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
@@ -147,7 +147,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; serves UI assets; mounts MCP over HTTP; token and Origin checks | no |
-| 4 | `jstream-sources` | `Source` trait plus built-ins (display, window, webcam, image, color, text, media file, scene). Uses platform traits; backends are injected. | no |
+| 4 | `jstream-sources` | `Source` trait plus built-ins (display, window, webcam, image, color, text, browser, media file, scene). Uses platform traits; backends are injected. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
@@ -162,7 +162,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "b3:34e2e3757523f785", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added Nesting bullet (scene sources, cycles rejected) and a Built-so-far bullet matching jstream-graph/src/model (sources keyed by ID with builtin|scene kind, scenes in display order, items bottom-first with source_id/transform/crop/visible, reference not copy, referenced deletes rejected, no persistence); diagram and ADR-0007 mixes/buses unchanged" }
+verified = { hash = "b3:92b0462b389879d4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read merged section: shared-source/duplicate, scenes-as-sources (merged with main's Nesting bullet, no duplicate), filters vs effects, and main's Built-so-far graph paragraph all consistent" }
 -->
 
 ```
@@ -183,14 +183,20 @@ Collection (JSON on disk, schema_version, rev: u64)
   `program_scene`, including any transition in progress. A `VideoMix` with input
   `Program` follows it.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
+  Adding an *existing* source to a scene adds a `SceneItem` that references it. Changing
+  the source or its `filters[]` changes it everywhere. **Duplicate** creates a new
+  `Source` with its own id.
+- **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
+  scenes nest. A scene never contains itself at any depth, so the graph rejects the edit
+  that would close a cycle.
+- **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
+  is used. `SceneItem.effects[]` and `crop` belong to that one placement.
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
   encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
   count.
 - **Color:** compositing is done in linear light in an FP16 working format. Output is
   BT.709 limited range by default. HDR (FP16) capture is tone-mapped to SDR. HDR output is later.
-- **Nesting:** a source can show another scene. A scene never contains itself, at any
-  depth; the edit that would close a cycle is rejected.
 - **Undo** primitives (an edit plus its inverse) live in `jstream-graph`. The per-client
   undo stacks live in `jstream-core`.
 - **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind name or a nested
@@ -236,7 +242,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:4254c46ea9f65ae9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream change only: jstream-control mock emit fix and README #design wording; protocol section text unaffected" }
+verified = { hash = "b3:db7b4bb2a05a41d5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#27): section text is main's (control client and mock), unchanged by this PR; re-flagged only by the crate-map rows this PR edits (browser built-in, CEF backend)" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -337,12 +343,13 @@ verified = { hash = "b3:233514b2be0b9df3", by = "agent:claude@session_01QBbMRwRu
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:bb220b835e3ff5b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rewritten for ADR-0020: portable zip, crt-static, state in APPDATA or beside exe via portable marker, vcam registered by app on first use (HKCU or one UAC prompt, S2 decides); covers dropped with installer/" }
+verified = { hash = "b3:bb081c51d8417c30", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Portable zip contents now include the CEF runtime folder for browser sources (ADR-0021, CEF); state location and vcam registration text unchanged and still match ADR-0020" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
-`jstream-daemon.exe`, `jstream-cli.exe` and the `jstream-vcam-windows` DLL. Release builds
+`jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
+runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder. Release builds
 link the C runtime statically and need only OS components (WebView2, Media Foundation,
 Direct3D 12).
 
