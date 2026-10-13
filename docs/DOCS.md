@@ -226,8 +226,9 @@ so it never causes merge conflicts.
 
 1. **Stale verifications:** any section whose computed hash differs from its stored one.
 2. **Unmatched globs:** any `covers` glob that matches no tracked file, unless the doc is
-   `status = "draft"` (a warning then). `applies_to` globs only need to be valid: rules may
-   name crates that don't exist yet ([R-DOC-012](RULES.md#R-DOC-012)).
+   `status = "draft"` (a warning then) or `status = "retired"` (exempt). `applies_to`
+   globs only need to be valid: rules may name crates that don't exist yet
+   ([R-DOC-012](RULES.md#R-DOC-012)).
 3. **Broken references:** see [References](#references).
 4. **Back-reference mismatches:** see [Code back-references](#back-references).
 5. **Generated drift:** regenerated content differs from what is committed.
