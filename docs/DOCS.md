@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:1f46a7b7a507e84f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against final xtask/src/docs (parse, check, hash, verify incl. new untracked-covers guard) with every file tracked; available/not-yet lists accurate" }
+verified = { hash = "b3:bc311b92683db85e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against xtask/src/docs with unmatched-glob check (covers error, draft warn, applies_to validity only) and Diag warnings; available/not-yet lists match the code" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -34,9 +34,11 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   fails on any section whose stored hash no longer matches its text, covered files and
   dependencies, and `cargo xtask docs verify` records a re-read. Every `bootstrap`
   placeholder was replaced, each after a re-read, in the PR that added hashing.
-- **Not yet:** errors for globs that match nothing (`covers`, `applies_to`), code
-  back-references, and the `review`, `for` and `log` commands. Until they land, those
-  rules are enforced by review.
+- **Unmatched globs** ([R-DOC-012](RULES.md#R-DOC-012)): `covers` globs that match no
+  tracked file fail (warn in drafts); `applies_to` globs are checked for validity only.
+  `verify` refuses while untracked files match the section's `covers`.
+- **Not yet:** code back-references, and the `review`, `for` and `log` commands. Until
+  they land, those rules are enforced by review.
 - IDs, anchors and rule numbers became permanent at the first merge to `main` (#1).
 
 <a id="identity"></a>
@@ -222,8 +224,9 @@ so it never causes merge conflicts.
 `xtask docs check` runs on every PR (required check `docs`) and fails on:
 
 1. **Stale verifications:** any section whose computed hash differs from its stored one.
-2. **Unmatched globs:** any `covers` or `applies_to` glob that matches nothing, unless
-   the doc is `status = "draft"` (a warning then).
+2. **Unmatched globs:** any `covers` glob that matches no tracked file, unless the doc is
+   `status = "draft"` (a warning then). `applies_to` globs only need to be valid: rules may
+   name crates that don't exist yet ([R-DOC-012](RULES.md#R-DOC-012)).
 3. **Broken references:** see [References](#references).
 4. **Back-reference mismatches:** see [Code back-references](#back-references).
 5. **Generated drift:** regenerated content differs from what is committed.

@@ -5,12 +5,14 @@
 
 use pulldown_cmark::{Event, Parser, Tag};
 
-/// A problem found in a doc, reported as `path:line: message`.
+/// A problem found in a doc, reported as `path:line: message`. Warnings are reported but
+/// never fail the check.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Diag {
     pub(crate) path: String,
     pub(crate) line: usize,
     pub(crate) msg: String,
+    pub(crate) warning: bool,
 }
 
 /// A `##` section with its anchor and `@section` metadata.
@@ -102,6 +104,7 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
             path: path.to_owned(),
             line,
             msg,
+            warning: false,
         });
     };
 

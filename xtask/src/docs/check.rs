@@ -132,6 +132,7 @@ fn diag(path: &str, line: usize, msg: String) -> Diag {
         path: path.to_owned(),
         line,
         msg,
+        warning: false,
     }
 }
 
@@ -220,6 +221,21 @@ fn check_section_meta(
     }
     let covers = string_array(meta, "covers", doc, line, out);
     let deps = string_array(meta, "depends_on", doc, line, out);
+    // R-DOC-012: a section can't describe code that doesn't exist. Drafts only warn.
+    for g in &covers {
+        match repo.files.matching(std::slice::from_ref(g)) {
+            Ok(m) if m.is_empty() => out.push(Diag {
+                warning: doc.meta_str("status") == Some("draft"),
+                ..diag(
+                    &doc.path,
+                    line,
+                    format!("section `{anchor}`: `covers` glob `{g}` matches no tracked file"),
+                )
+            }),
+            Ok(_) => {}
+            Err(e) => out.push(diag(&doc.path, line, format!("section `{anchor}`: {e:#}"))),
+        }
+    }
     if !covers.is_empty() || !deps.is_empty() {
         match meta.get("verified").and_then(|v| v.as_table()) {
             None => out.push(diag(
@@ -317,7 +333,16 @@ fn check_rule_meta(
             format!("rule `{id}`: status must be `active` or `retired`, got {other:?}"),
         )),
     }
-    string_array(meta, "applies_to", doc, line, out);
+    // R-DOC-012: `applies_to` may name paths that don't exist yet, but must be valid globs.
+    for g in string_array(meta, "applies_to", doc, line, out) {
+        if let Err(e) = globset::Glob::new(&g) {
+            out.push(diag(
+                &doc.path,
+                line,
+                format!("rule `{id}`: invalid `applies_to` glob `{g}`: {e}"),
+            ));
+        }
+    }
     for e in string_array(meta, "enforced_by", doc, line, out) {
         let ok = match e.split_once(':') {
             Some(("ci", name)) => ci_checks.contains(name),
