@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:1d1af9c564242e87", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Diagram vcam box now says registered by the app on first use (ADR-0020) instead of by the installer; rest of the shape unchanged" }
+verified = { hash = "b3:d75fd5a7179de0f1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: CLI changes (mock behind an opt-in feature, JSON flag parsing, request IDs on action output, README) keep the jstream-cli row true: a remote client through Control only, no engine link; jstream mcp still an open question" }
 -->
 
 ```
@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:2b417a43f41b236d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#34): table text is main's; manifests now include L1 jstream-platform (depends on L0 media) and this PR's L3 jstream-mcp (depends on L2 control, L1 protocol), all strictly lower; summaries match metadata" }
+verified = { hash = "b3:2d97a518d048471c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#33): table text is main's; manifests now include L6 apps/jstream-cli (depends on L2 control) alongside this PR's L3 jstream-mcp (L2 control, L1 protocol), all strictly lower; one shared jstream-control workspace entry" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
