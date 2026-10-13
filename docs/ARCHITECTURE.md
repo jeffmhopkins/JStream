@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:d9f4c0aa00acc558", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased on main (#32: jstream-outputs L4 now depends on jstream-mux L2, already in its row). New jstream-mcp manifest: layer 3, summary verbatim from its row, unsafe_allowed false, deps jstream-control (L2) and jstream-protocol (L1), strictly lower; table text unchanged" }
+verified = { hash = "b3:2b417a43f41b236d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#34): table text is main's; manifests now include L1 jstream-platform (depends on L0 media) and this PR's L3 jstream-mcp (depends on L2 control, L1 protocol), all strictly lower; summaries match metadata" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

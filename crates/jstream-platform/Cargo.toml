@@ -1,0 +1,26 @@
+[package]
+name = "jstream-platform"
+version = "0.0.0"
+description = "Platform backend traits: video capture, audio I/O, encoders and decoders, the virtual-camera sink and the media clock."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 1
+summary = "Backend traits: `Capture`, `AudioIo`, `VideoEncoder`, `AudioEncoder`, `VideoDecoder`, `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types). The **single owner** of the encoder and decoder traits."
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[features]
+# The `fake` module: deterministic in-memory backends (a manual clock, fake capture,
+# audio I/O, codecs and virtual-camera sink) for engine and scenario tests. Off by
+# default; consumers enable it in dev-dependencies.
+fake = []
+
+[dependencies]
+jstream-media.workspace = true
+thiserror.workspace = true
