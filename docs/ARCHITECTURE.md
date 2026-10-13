@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:f1d4e4ac0fcfec6b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only covered change is jstream-outputs/Cargo.toml adding jstream-mux: L4 -> L2 is strictly lower per R-ARCH-002, and the outputs row already says it uses mux; no row, layer or unsafe column changes needed" }
+verified = { hash = "b3:c343ac1ebc0223ed", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#32): table text identical to main; new crates/jstream-platform/Cargo.toml matches the L1 row (summary verbatim, unsafe_allowed=false) and depends only on L0 jstream-media; outputs now depends on mux (L4->L2), both strictly lower" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

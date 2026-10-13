@@ -1,0 +1,43 @@
+//! Platform backend traits: the seam between the engine and the OS. Platform crates
+//! (`jstream-platform-windows` first) implement them, and the engine holds the backends as
+//! injected trait objects, so engine code never names a platform API. Layer 1: depends
+//! only on `jstream-media` and `thiserror`.
+//!
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-platform/README.md#purpose, docs/adr/0003-media-stack-and-codecs.md, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0014-media-clock.md, docs/adr/0020-portable-windows-distribution.md
+
+#![forbid(unsafe_code)]
+
+mod audio;
+mod backends;
+mod capture;
+mod clock;
+mod codec;
+mod error;
+#[cfg(any(test, feature = "fake"))]
+pub mod fake;
+mod id;
+mod surface;
+#[cfg(test)]
+mod tests;
+mod vcam;
+
+pub use audio::{
+    AudioDeviceInfo, AudioDirection, AudioInputHandler, AudioInputTarget, AudioIo,
+    AudioOutputHandler, AudioOutputTarget, AudioPacket, AudioPacketFlags, AudioRenderBuffer,
+    AudioStream,
+};
+pub use backends::Backends;
+pub use capture::{Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo};
+pub use clock::MediaClock;
+pub use codec::{
+    AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, HardwarePreference,
+    RateControl, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
+};
+pub use error::PlatformError;
+pub use id::DeviceId;
+pub use surface::VideoSurface;
+pub use vcam::{VcamFormat, VcamSink};
+
+/// The media types the traits are written in, re-exported so backends and the engine can
+/// name them through one dependency.
+pub use jstream_media as media;
