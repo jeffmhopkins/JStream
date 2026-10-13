@@ -54,8 +54,8 @@ impl Args {
                 "--json" => args.json = true,
                 "--seconds" => {
                     args.seconds = parse_num(&value("--seconds")?)?;
-                    if args.seconds.is_nan() || args.seconds <= 0.0 {
-                        return Err("--seconds must be > 0".into());
+                    if !args.seconds.is_finite() || args.seconds <= 0.0 {
+                        return Err("--seconds must be a finite number > 0".into());
                     }
                 }
                 "--size" => args.size = parse_size(&value("--size")?)?,

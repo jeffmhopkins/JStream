@@ -135,7 +135,8 @@ fn run_pipeline(args: &Args) -> Result<Report> {
         packets: 0,
         encode_ms: Samples::default(),
         in_flight: VecDeque::new(),
-        mismatch: None,
+        free_slots: (0..RING).rev().collect(),
+        unmatched: 0,
     };
     let mut tick_work_ms = Samples::default();
     let mut fence_value = 0u64;
@@ -186,15 +187,15 @@ fn run_pipeline(args: &Args) -> Result<Report> {
         }
 
         // 2. Back-pressure: a free NV12 slot and an encoder that wants input.
-        if sink.in_flight.len() >= RING {
+        let Some(&slot) = sink.free_slots.last() else {
             ring_full += 1;
             continue;
-        }
+        };
         if !encoder.can_accept() {
             busy += 1;
             continue;
         }
-        let (shared, target) = &ring[(submitted % RING as u64) as usize];
+        let (shared, target) = &ring[slot];
 
         // 3. D3D11 -> D3D12: the copy is done before the conversion reads it.
         fence_value += 1;
@@ -221,11 +222,14 @@ fn run_pipeline(args: &Args) -> Result<Report> {
         }
         let time = this_tick as i64 * frame_100ns;
         encoder.submit(&shared.d3d11, time, frame_100ns)?;
-        sink.in_flight.push_back((time, Instant::now()));
+        sink.free_slots.pop();
+        sink.in_flight.push_back((time, Instant::now(), slot));
         submitted += 1;
         tick_work_ms.push(work_start.elapsed().as_secs_f64() * 1e3);
     }
     let measured = start.elapsed().as_secs_f64();
+    // Packets drained after this point are counted in frames_encoded but not in the fps.
+    let encoded_in_window = sink.packets;
     let cpu_used = process_cpu_time() - cpu_start;
 
     encoder.drain(&mut packets, Duration::from_secs(3))?;
@@ -239,7 +243,13 @@ fn run_pipeline(args: &Args) -> Result<Report> {
     let _ = gpu.device.poll(wgpu::PollType::wait_indefinitely());
 
     warnings.append(&mut encoder.warnings);
-    warnings.extend(sink.mismatch.take());
+    if sink.unmatched > 0 {
+        warnings.push(format!(
+            "{} encoder output(s) had no input with the same sample time; they freed no \
+             NV12 slot and have no encode latency",
+            sink.unmatched
+        ));
+    }
     let logical_cpus = thread::available_parallelism().map_or(1, |n| n.get() as u32);
     Ok(Report {
         adapter_name: facts.name,
@@ -263,6 +273,7 @@ fn run_pipeline(args: &Args) -> Result<Report> {
         wgc_frames,
         frames_submitted: submitted,
         frames_encoded: sink.packets,
+        frames_encoded_in_window: encoded_in_window,
         dropped_late_ticks: late,
         dropped_encoder_busy: busy,
         dropped_ring_full: ring_full,
@@ -278,15 +289,19 @@ fn run_pipeline(args: &Args) -> Result<Report> {
     })
 }
 
-/// Writes encoded packets and matches them to their inputs for the encode latency.
+/// Writes encoded packets and matches them to their inputs by sample time, which frees the
+/// input's NV12 slot and gives its encode latency.
 struct Sink {
     file: BufWriter<File>,
     bytes: u64,
     packets: u64,
     encode_ms: Samples,
-    /// (sample time, ProcessInput instant) of inputs not yet returned as output.
-    in_flight: VecDeque<(i64, Instant)>,
-    mismatch: Option<String>,
+    /// (sample time, ProcessInput instant, ring slot) of inputs with no output yet.
+    in_flight: VecDeque<(i64, Instant, usize)>,
+    /// Ring slots not held by the encoder.
+    free_slots: Vec<usize>,
+    /// Outputs whose sample time matched no in-flight input.
+    unmatched: u64,
 }
 
 impl Sink {
@@ -295,16 +310,17 @@ impl Sink {
             self.file.write_all(&p.data).context("write out.h264")?;
             self.bytes += p.data.len() as u64;
             self.packets += 1;
-            // No B-frames: outputs come back in input order, so the oldest input is done.
-            if let Some((time, t_in)) = self.in_flight.pop_front() {
-                self.encode_ms.push(t_in.elapsed().as_secs_f64() * 1e3);
-                if time != p.time && self.mismatch.is_none() {
-                    self.mismatch = Some(format!(
-                        "encoder output time {} != oldest input time {time}; encode latency \
-                         and slot reuse assume in-order output",
-                        p.time
-                    ));
+            let found = self
+                .in_flight
+                .iter()
+                .position(|&(time, _, _)| time == p.time)
+                .and_then(|i| self.in_flight.remove(i));
+            match found {
+                Some((_, t_in, slot)) => {
+                    self.encode_ms.push(t_in.elapsed().as_secs_f64() * 1e3);
+                    self.free_slots.push(slot);
                 }
+                None => self.unmatched += 1,
             }
         }
         Ok(())

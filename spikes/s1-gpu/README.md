@@ -8,12 +8,22 @@ review_every = "180d"
 
 # Spike S1: GPU interop
 
-Throwaway code for spike S1 in [ROADMAP M0](../../ROADMAP.md#m0), Track B. It checks
-that the Windows path in [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)
-works with no CPU copy of frame data, at 1080p60, on real hardware. That path is fixed
-by [ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md) and
-[ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md). The crate is not a workspace
-member. It has its own `[workspace]` table and its own `Cargo.lock`.
+Throwaway code for spike S1 in [ROADMAP M0](../../ROADMAP.md#m0), Track B. It checks,
+on real hardware, the Windows path that
+[ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md) and
+[ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md) fix: shared capture texture,
+shared fence, wgpu on D3D12, NV12, Media Foundation H.264, with no CPU copy of frame data
+at 1080p60.
+
+It follows [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline) except for one
+deliberate deviation in the convert step. ARCH step 4 writes separate R8 and RG8 targets
+in compute shaders and then copies them into an NV12 resource (through hal, or a D3D11
+video processor). This spike tries the simpler path first: render passes that write
+straight into the NV12 texture's plane views. If that fails, ARCH's step 4 is the
+fallback. The results PR must record which convert path was actually proven.
+
+The crate is not a workspace member. It has its own `[workspace]` table and its own
+`Cargo.lock`.
 
 Results don't go in this file. They come from the maintainer's run, and a later PR records
 them in ARCHITECTURE or an ADR.
@@ -38,8 +48,9 @@ default) runs these steps:
    for `a` and signals `b`. The wait and signal are staged with wgpu-hal's
    `Queue::add_wait_fence` and `add_signal_fence`, so wgpu itself issues them around its
    submit.
-3. **Convert:** two WGSL render passes write the Y (`R8Unorm`) and CbCr (`Rg8Unorm`) plane
-   views of an **NV12** texture, using BT.709 limited range and bilinear scaling to the
+3. **Convert:** two WGSL render passes write directly into the Y (`R8Unorm`) and CbCr
+   (`Rg8Unorm`) plane views of an **NV12** texture (the deviation from ARCH step 4
+   described above), using BT.709 limited range and bilinear scaling to the
    encode size. That NV12 texture is also a shared D3D11 texture, one of a ring of 8.
    The command buffer ends by transitioning both shared textures back to `COMMON`
    (wgpu's `TextureUses::PRESENT`) so D3D11 sees them in the state it expects.
@@ -104,6 +115,8 @@ How to read the numbers:
 - **Dropped ticks** have three causes: `late_ticks` (the loop missed its deadline),
   `encoder_busy` (the MFT hadn't asked for more input) and `ring_full` (all 8 NV12 slots
   were still being encoded).
+- **Encoded fps** counts only the packets out by the end of the measured window.
+  `frames_encoded` also includes the packets from the final drain.
 - **CPU** is the process's user and kernel time divided by wall time.
 
 <a id="risks"></a>
@@ -119,8 +132,8 @@ fail at the first run, roughly in order:
   wraps a D3D11-created NV12 texture with `RENDER_ATTACHMENT` usage and renders into its
   `Plane0` and `Plane1` views. wgpu-core accepts planar views as render targets, and
   wgpu-hal creates plane-sliced RTVs. If the driver or wgpu rejects this, the fallback is
-  ARCH's plan B: separate R8 and RG8 targets, copied into the NV12 planes through hal or
-  the D3D11 video processor.
+  ARCH's documented step 4: compute shaders write separate R8 and RG8 targets, which are
+  copied into the NV12 resource through hal or the D3D11 video processor.
 - **Creating the shared NV12 texture.** This is D3D11 `CreateTexture2D(NV12,
   SHARED | SHARED_NTHANDLE, RENDER_TARGET)` followed by D3D12 `OpenSharedHandle`. Some
   drivers may refuse this combination. The other option is to create the texture in D3D12
@@ -134,9 +147,11 @@ fail at the first run, roughly in order:
   against the context could encode stale frames. Look for flicker or old frames in
   `out.h264`.
 - **Encoder quirks.** ICodecAPI settings that fail are reported as warnings, not errors.
-  `MFT_ENUM_ADAPTER_LUID` is read as a UINT64 or as an 8-byte blob. Encode latency and
-  ring slot reuse assume output comes back in input order (no B-frames). A warning says
-  so if the timestamps disagree.
+  `MFT_ENUM_ADAPTER_LUID` is read as a UINT64 or as an 8-byte blob. An output frees its
+  NV12 slot and gets an encode latency only when its sample time matches an input's.
+  That assumes the MFT keeps input sample times. A warning counts outputs that matched no
+  input. If an MFT rewrote every timestamp, no slot would be freed, the ring would fill
+  and every later tick would be counted as `ring_full`.
 - **Capture.** The pool is not recreated when the display changes resolution. A warning
   is reported and frames keep the original size. `SetIsBorderRequired(false)` is
   best-effort, so the yellow border may show.

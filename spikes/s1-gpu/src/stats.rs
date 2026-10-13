@@ -88,6 +88,8 @@ pub struct Report {
     pub wgc_frames: u64,
     pub frames_submitted: u64,
     pub frames_encoded: u64,
+    /// Packets out by the end of the measured window (the rest came from the final drain).
+    pub frames_encoded_in_window: u64,
     pub dropped_late_ticks: u64,
     pub dropped_encoder_busy: u64,
     pub dropped_ring_full: u64,
@@ -116,7 +118,7 @@ impl Report {
                 "\"target_fps\":{},\"bitrate_kbps\":{},",
                 "\"seconds_requested\":{},\"seconds_measured\":{},",
                 "\"ticks\":{},\"wgc_frames\":{},\"capture_fps\":{},",
-                "\"frames_submitted\":{},\"frames_encoded\":{},\"encoded_fps\":{},",
+                "\"frames_submitted\":{},\"frames_encoded\":{},\"frames_encoded_in_window\":{},\"encoded_fps\":{},",
                 "\"dropped\":{{\"late_ticks\":{},\"encoder_busy\":{},\"ring_full\":{}}},",
                 "\"convert_latency_ms\":{},\"encode_latency_ms\":{},\"tick_cpu_work_ms\":{},",
                 "\"cpu\":{{\"percent_of_one_core\":{},\"percent_of_machine\":{},\"logical_cpus\":{}}},",
@@ -147,6 +149,7 @@ impl Report {
             num(self.capture_fps()),
             self.frames_submitted,
             self.frames_encoded,
+            self.frames_encoded_in_window,
             num(self.encoded_fps()),
             self.dropped_late_ticks,
             self.dropped_encoder_busy,
@@ -201,9 +204,10 @@ impl Report {
             self.capture_fps()
         ));
         line(format!(
-            "encode:         {} submitted, {} encoded = {:.2} fps",
+            "encode:         {} submitted, {} encoded ({} in window) = {:.2} fps",
             self.frames_submitted,
             self.frames_encoded,
+            self.frames_encoded_in_window,
             self.encoded_fps()
         ));
         line(format!(
@@ -232,7 +236,7 @@ impl Report {
     }
 
     fn encoded_fps(&self) -> f64 {
-        self.frames_encoded as f64 / self.seconds_measured.max(f64::EPSILON)
+        self.frames_encoded_in_window as f64 / self.seconds_measured.max(f64::EPSILON)
     }
 }
 
