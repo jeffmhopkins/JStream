@@ -274,7 +274,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d07c607642f56488", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1 on #35: progressive discovery is now stated as the goal, and the bullet says the first cut does not yet do it (each tool carries full op schemas, ~50 KB tools/list; describe_api returns the whole protocol schema), matching tools.rs/with_defs and schema/tools.snap, with a link to README open question 1; noun-grouped tools, names (R-API-002), snapshots (future), access and per-client undo unchanged" }
+verified = { hash = "b3:8f5c811ef14ec9ab", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1 on #35, re-recorded after CRATE-jstream-mcp#design's verified line changed (this section covers the crate): schema-size bullet states progressive discovery as the goal and that the first cut ships full op schemas (~50 KB tools/list), matching tools.rs and schema/tools.snap; rest unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
