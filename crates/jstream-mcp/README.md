@@ -41,7 +41,7 @@ Not here yet: the streamable-HTTP transport ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:8e7dba0edb1fb2e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: checked against src/ and tests: noun tools generated from Edit/Action/Query oneOf, op/expected_rev/idempotency_key rules, deny_unknown_fields, standalone $defs; dual-era dispatch (-32022, -32602, initialize negotiation, ping); error table matches server.rs call(); lazy hello and disconnected reset; block_on stdio; rmcp 3.5.1 deps re-read from its manifest" }
+verified = { hash = "b3:a5c882007af50614", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#mcp edit only (schema-size bullet now says full op schemas in the first cut); Design text (tool table, describe_api returning the whole schema, dual-era revisions, session, stdio, deferred HTTP) already matches it and the code" }
 -->
 
 ### Tools

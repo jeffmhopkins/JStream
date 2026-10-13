@@ -274,15 +274,20 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:da2c6ccebcc83e37", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the tools bullet: one tool per protocol noun (scene, item, source, output so far; audio/studio/youtube/state later), batch now and script later, link to jstream-mcp Design; names (R-API-002), access via the session's token (ADR-0006), per-client undo still match the new crate; snapshots bullet is still future work" }
+verified = { hash = "b3:d07c607642f56488", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1 on #35: progressive discovery is now stated as the goal, and the bullet says the first cut does not yet do it (each tool carries full op schemas, ~50 KB tools/list; describe_api returns the whole protocol schema), matching tools.rs/with_defs and schema/tools.snap, with a link to README open question 1; noun-grouped tools, names (R-API-002), snapshots (future), access and per-client undo unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
   (`scene`, `item`, `source`, `output` so far; `audio`, `studio`, `youtube`, `state` as
   those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
-  schema is generated from the protocol. `describe_api` returns detailed schemas on demand
-  (progressive discovery), so the agent's context stays small. The first cut, the MCP
-  revisions it serves and its transports are in
+  schema is generated from the protocol.
+- **Schema size:** the goal is progressive discovery. Tools list only their op names, and
+  `describe_api` returns detailed schemas on demand, so the agent's context stays small.
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 50 KB
+  of `tools/list` today), and `describe_api` returns the whole protocol schema. Shrinking
+  the tools is an open question in
+  [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
+  MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
