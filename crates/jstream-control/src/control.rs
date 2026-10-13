@@ -60,7 +60,7 @@ impl<T: ?Sized> MaybeSendSync for T {}
 /// A `Control` value is one connection identity: after [`hello`](Control::hello) it acts
 /// as the `client_id` in the [`Welcome`], which keys its undo history and audit-log
 /// entries (ADR-0013). Implementations: in-process by `jstream-core` (`InProcessControl`),
-/// over the WebSocket API by this crate (planned), and in memory by
+/// over the WebSocket API by this crate (`WsControl`, feature `ws`), and in memory by
 /// `MockControl` behind the `mock` feature.
 ///
 /// Every method takes `&self`, so one session can be shared (`Arc<dyn Control>`) and

@@ -1,0 +1,140 @@
+<!-- @doc
+id = "CRATE-jstream-server"
+title = "jstream-server"
+kind = "normative"
+status = "active"
+review_every = "90d"
+-->
+
+# jstream-server
+
+<a id="purpose"></a>
+## Purpose
+<!-- @section
+covers = ["crates/jstream-server/src/**"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map"]
+verified = { hash = "b3:7b4a168a02e6e176", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: contents list matches lib.rs (Server, Connector, upgrade handler), config.rs, gate.rs, session.rs, error.rs; layer 4 and dyn Control-only per crate map; deferred items (UI assets, MCP mount, TLS) and the why-a-crate paragraph stated" }
+-->
+
+The server: it puts the control API on an authenticated localhost WebSocket, so remote
+clients (the CLI, the web UI, a stdio MCP proxy) reach the engine through
+`jstream-control`'s WebSocket client. It is written against `dyn Control` and
+`jstream-protocol` only, never the engine
+([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host app hands it a `Connector`
+that opens one session per connection. Layer 4
+([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)).
+
+Contents (a first cut; [Design](#design) explains the choices):
+- **Server** (`lib.rs`): `Server::bind`, `serve` and `serve_with_shutdown`, the
+  `Connector` type, and the `GET /api/v1/ws` upgrade handler.
+- **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
+  origins) and `Token`, the control token.
+- **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every upgrade passes
+  ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
+- **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
+  session and back.
+- **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
+
+Not here yet: serving the UI assets, the MCP streamable-HTTP mount and TLS
+([Open questions](#design)).
+
+Why a crate and not a module of `jstream-control` or `jstream-mcp`: it owns the HTTP
+stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
+`jstream-control` nor the runtime-free `jstream-mcp` may carry, and it sits above both
+(it will mount MCP), so it is its own layer-4 crate, as the crate map plans.
+
+<a id="design"></a>
+## Design
+<!-- @section
+covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
+depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
+verified = { hash = "b3:1090c9e5f526902c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: admission table checked against gate.rs (Host set incl. bound addr, own Origin = http:// + accepted Host, Bearer constant-time, 403/401, single headers); session bullets against session.rs (hello subscribes then welcome, 1008 on refused first hello, concurrent calls, malformed with readable id, binary, 4 MiB, ID remapping with 1024 caps, close codes 1001/1011); shutdown against lib.rs; deps against Cargo.toml; R-SEC-002, ADR-0006, ARCH#protocol and control#design re-read" }
+-->
+
+### Listening and admission
+
+`ServerConfig::new(token)` listens on `127.0.0.1` with an ephemeral port; any other
+address is the host's explicit choice ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)).
+The one route is `GET /api/v1/ws` (`jstream_control::WS_PATH`, shared with the client).
+Every upgrade request passes three checks, in this order, before a session is opened
+([R-SEC-002](../../docs/RULES.md#R-SEC-002)):
+
+| Check | Accepted | Refused with |
+|---|---|---|
+| `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra | 403 |
+| `Origin` | present, and `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
+| `Authorization` | `Bearer <token>`, compared in constant time | 401 with `WWW-Authenticate: Bearer` |
+
+Each header must appear exactly once, and comparisons ignore ASCII case (except the
+token). The `Host` check defeats DNS rebinding: a page on an attacker's domain that
+resolves to `127.0.0.1` still sends its own name. The `Origin` check stops foreign
+pages, since browsers always send `Origin` on a WebSocket upgrade; native clients send
+the server's own. A request without `Origin` is refused too, so every client must send
+one. The token is never logged, and `Token`'s `Debug` form hides it.
+
+### Sessions
+
+Each accepted connection gets a fresh session from the `Connector`
+(`Arc<dyn Fn() -> Box<dyn Control>>`), dropped when the connection ends. The connection
+task speaks the envelope
+([jstream-protocol › Design](../jstream-protocol/README.md#design)):
+
+- `hello` is forwarded to `Control::hello`. On success the task subscribes to the
+  session's events and answers `welcome`; from then on events are forwarded. A refused
+  first handshake (`unsupported_version`) is answered and the connection closed (close
+  code 1008), as the envelope says.
+- Each `request` is forwarded to `Control::call` and may stay in flight while others
+  run; answers go back as they complete, carrying the client's request ID. A request
+  before `hello` is answered by the session itself (`handshake_required`).
+- A message that doesn't parse gets a `malformed` error, with the request ID when one is
+  readable. Binary frames get `malformed` too, until binary streams are designed.
+  Messages over 4 MiB close the connection.
+- **Request IDs.** A `Control` session assigns its own IDs, which appear in the
+  `state.changed` events its calls cause. The task maps them back to the client's wire
+  IDs, so a client matches its event to its response by the ID it chose, as in the
+  protocol README's example. An event can arrive before the answer that reveals the
+  mapping, so while calls are in flight it is held back, with every event after it to
+  keep the order, until the answer arrives or nothing is left in flight (or 1024 events
+  are held). The last 1024 pairs are remembered. Other clients' `state.changed` events
+  pass unchanged: their IDs mean nothing to this client.
+- The connection ends when the client closes it, when the session's event stream ends
+  (the engine went away; close code 1001), when the session reports `Disconnected`
+  (close code 1011), or when the server shuts down.
+
+`serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
+open connection (close code 1001), so their clients' pending and later calls fail with
+`Disconnected` and their event streams end.
+
+### Dependencies
+
+axum (features `http1`, `tokio`, `ws`, no defaults) for HTTP and the upgrade, which
+brings hyper, tower and `tokio-tungstenite` without TLS; tokio for the listener and the
+connection tasks; `futures-util` to split the socket and run calls concurrently
+(`FuturesUnordered`). No TLS crate is in the tree, so no `ring` or `rustls`.
+
+### Open questions
+
+1. **TLS.** Plain `ws://` on loopback is the first cut. Remote browsers need `wss://`
+   with rustls and the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)), which
+   puts `ring` on the lint-deps native-code allowlist: a governance change.
+2. **Browser token.** Browsers can't set `Authorization` on a WebSocket. The client
+   design sends the token in `Sec-WebSocket-Protocol` instead
+   ([jstream-control › Design](../jstream-control/README.md#design)); the subprotocol
+   naming is not decided, so the server accepts only `Authorization` today.
+3. **UI assets and MCP over HTTP.** Serving the web UI and mounting the MCP
+   streamable-HTTP transport (`jstream_mcp::Server::handle`) are deferred; both go
+   behind the same gate.
+4. **Requests without `Origin`.** Refused today. Non-browser tools (`websocat`, scripts)
+   must send one; allowing a missing `Origin` together with a valid token is safe from
+   browsers but loosens the check, so it is the maintainer's call.
+5. **Default port and token file.** The host apps (`jstream-daemon`, `jstream-desktop`)
+   will choose the port and create the user-only token file
+   ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)); neither exists yet,
+   so the server takes both from its caller.
+6. **Logging.** [R-RS-005](../../docs/RULES.md#R-RS-005) asks for `tracing` spans around
+   sessions. The first cut logs nothing; adding `tracing` is a new dependency for a
+   later PR.
+7. **Backpressure.** Events and answers are written as they come; a client that stops
+   reading makes the connection task wait on the socket, which holds that session's
+   events in its unbounded buffer
+   ([jstream-control open question 1](../jstream-control/README.md#design)).

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:160f4916f930df3d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "args.rs gained state get, source list, item list; run.rs gained their table output; contents bullets (parser, running, exit codes, block_on) and the not-yet list still hold" }
+verified = { hash = "b3:e62b90286b76751b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Running bullet names the WsControl connection; not-here-yet drops the WebSocket client, keeps jstream mcp, adds default address/token file and notes no engine host exists yet so --mock is still the usual path; contents list matches src/" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -27,35 +27,48 @@ Contents (a first cut):
 - **Commands** (`args.rs`): a hand-rolled parser that maps each command onto one protocol
   call: the handshake, queries, a batch of edits, actions, and the event stream
   ([Usage](#usage)).
-- **Running** (`run.rs`): opens a session through a connector, runs the call, and writes
+- **Running** (`run.rs`): opens a session through a connector (the engine's WebSocket
+  API through `jstream-control`'s `WsControl`, or the mock), runs the call, and writes
   human or `--json` output through the `Write` handles it is given.
 - **Exit codes** (`exit.rs`): one per failure kind, including one per protocol error code.
 - **Blocking** (`block.rs`): a thread-parking `block_on` for `Control`'s futures.
 
-Not here yet: a connection to a real engine (it needs the WebSocket client in
-`jstream-control`), and `jstream mcp`, the stdio MCP proxy
-([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)). Until then every command that talks
-to an engine needs `--mock`, which needs a build with the `mock` cargo feature
+Not here yet: `jstream mcp`, the stdio MCP proxy
+([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)), and a default address and token
+file ([open question 5](#design)). No engine host serves the WebSocket API yet
+(`jstream-daemon` and `jstream-desktop` don't exist), so outside tests the CLI is still
+mostly used with `--mock`, which needs a build with the `mock` cargo feature
 (`cargo run -p jstream-cli --features mock -- --mock …`).
 
 <a id="usage"></a>
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs"]
-verified = { hash = "b3:4fea1e84e90d1879", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Command table adds state get, source list, item list <scene-id>; new Reads bullet describes the tables (kind in builtin:/scene: spelling, items bottom first with VISIBLE/POSITION/SCALE/ROTATION/CROP, empty-list lines), checked against run.rs and the new golden tests; exit codes unchanged (item list of a missing scene exits 15)" }
+verified = { hash = "b3:f3e54f66cc5334f7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Global options add --url and --token-file (JSTREAM_TOKEN_FILE fallback, trimmed, no inline token per ADR-0006), missing/unreadable/empty token or missing url is usage (2), --mock exclusive with them; exit table rows 2 and 3 updated (refused token/Origin/Host is 3); checked against args.rs, run.rs connect/read_token and the updated tests" }
 -->
 
 ```sh
 jstream-cli [global options] <command> [arguments]
+jstream-cli --url ws://127.0.0.1:4455 --token-file /path/to/token scene list
 jstream-cli --mock --mock-output out_1 output start out_1
 jstream-cli --mock edit --expected-rev 0 scene.create main Main \
     source.create cam Camera builtin:webcam item.add main cam_1 cam
 ```
 
-Global options come before the command: `--json`, `--mock`, `--mock-output <id>`
-(repeatable; adds a stopped output to the mock) and `--help`. `jstream-cli help` prints
-the full grammar. `--mock` needs the `mock` cargo feature; without it, `--mock` is a
-usage error that says so.
+Global options come before the command: `--json`, `--url <url>`, `--token-file <path>`,
+`--mock`, `--mock-output <id>` (repeatable; adds a stopped output to the mock) and
+`--help`. `jstream-cli help` prints the full grammar.
+
+- **A real engine:** `--url` is the engine's WebSocket API, `ws://<host>:<port>` (the
+  path defaults to `/api/v1/ws`; `wss://` is not supported yet). The control token is
+  read from the file named by `--token-file`, or else by the `JSTREAM_TOKEN_FILE`
+  environment variable, without surrounding whitespace. There is no option that takes
+  the token itself, which would show it in the process list
+  ([ADR-0006](../../docs/adr/0006-mcp-full-access.md): the token lives in a user-only
+  file). A missing `--url` or token file, or an unreadable or empty one, is a usage
+  error.
+- **The mock:** `--mock` needs the `mock` cargo feature; without it, `--mock` is a
+  usage error that says so. It can't be combined with `--url` or `--token-file`.
 
 | Command | Protocol call |
 |---|---|
@@ -105,8 +118,8 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
 |---|---|
 | 0 | Success |
 | 1 | The output could not be written (a closed pipe exits silently) |
-| 2 | Usage: the command line could not be parsed |
-| 3 | `Disconnected`: no connection to the engine, or it was lost (whether the call took effect is unknown) |
+| 2 | Usage: the command line could not be parsed, or names no engine or no readable token file |
+| 3 | `Disconnected`: no connection to the engine (unreachable, or it refused the token, `Origin` or `Host`), or it was lost (whether the call took effect is unknown) |
 | 10 | `unsupported_version` |
 | 11 | `handshake_required` |
 | 12 | `malformed` |
@@ -124,7 +137,7 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:26b56fe42751b8b7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Open question 2 (more queries) resolved by protocol 0.3 and replaced with the persistent-mock question; parser, block_on, connector seam, opt-in mock and writer bullets unchanged against src/ and Cargo.toml; control#design dependency re-read" }
+verified = { hash = "b3:b32d70414ca6eb33", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Connection seam bullet now opens WsControl (control ws feature on) after reading the token file in the connector, parser stays pure; runtime bullet notes the client's own thread; open questions 3-4 reworded and 5 (defaults) added; control#design re-read for the client's executor-agnostic futures" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -134,17 +147,19 @@ verified = { hash = "b3:26b56fe42751b8b7", by = "agent:claude@session_01QBbMRwRu
   [R-DEP-004](../../docs/RULES.md#R-DEP-004)) for the few global options and the help
   text. The parser is pure (`&[String]` in, a typed `Invocation` out) and unit-tested.
   Revisit if the command set grows enough that generated help and completions pay off.
-- **No async runtime.** `Control` returns boxed futures that need no particular executor
+- **No async runtime of its own.** `Control` returns boxed futures that need no particular executor
   ([jstream-control › Design](../../crates/jstream-control/README.md#design)). The CLI
   does one call at a time, so `block_on` polls on the calling thread and parks between
   polls; a transport that completes a future from another thread wakes it through the
-  waker. The mock's futures are always ready.
+  waker. The mock's futures are always ready; the WebSocket client's are completed by
+  its own connection thread (which runs tokio inside `jstream-control`).
 - **The connection is a seam.** `run` takes a connector, `Fn(&Connection) ->
   Result<Box<dyn Control>, CliError>`, and everything after it sees only
   `dyn Control`. `--mock` builds a fresh `MockEngine`, so its state lasts one run.
-  Without `--mock` the connector answers `Disconnected`, until the WebSocket client
-  lands; then that branch opens it, with the address and token file as new global
-  options.
+  Without `--mock` the connector reads the token file and opens a `WsControl`
+  (`jstream-control`'s `ws` feature, always on here) to `--url`. The parser stays pure:
+  the environment variable and the file are read by the connector. The client runs its
+  own connection thread, so `block_on` drives its futures too.
 - **The mock is opt-in.** This crate's `mock` feature (off by default) enables
   `jstream-control/mock` and the `--mock` branch; without it, `--mock` is a usage error,
   so a default or release build carries no mock. The unit tests get `MockEngine`
@@ -166,6 +181,11 @@ verified = { hash = "b3:26b56fe42751b8b7", by = "agent:claude@session_01QBbMRwRu
    tests read a populated `MockEngine`). Should `--mock` load and save its state (a
    file option) until a real engine can be reached?
 3. **The `mock` feature after the WebSocket client.** Keep it as a scripting sandbox,
-   or remove it once a real engine can be reached.
+   or remove it once an engine host serves the WebSocket API.
 4. **Exit codes.** The numbering (2 usage, 3 disconnected, 10 and up for protocol
-   codes) is provisional until the maintainer confirms it.
+   codes) is provisional until the maintainer confirms it. A refused token exits 3
+   with a reason naming HTTP 401; a code of its own may be clearer for scripts.
+5. **Defaults.** No default `--url` (the daemon's port is not chosen yet) and no
+   default token file (it will be in the platform config directory,
+   [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence), once the host apps
+   create it). Both are required until then.

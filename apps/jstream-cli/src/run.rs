@@ -2,7 +2,7 @@
 //!
 //! Everything here writes through the `Write` handles it is given, so tests capture the
 //! output (golden strings) and the binary passes locked stdout and stderr. The session
-//! comes from a [`Connector`], which is the seam the WebSocket client plugs into later.
+//! comes from a [`Connector`]: the WebSocket client in the binary, or a `MockEngine`.
 
 use crate::args::{self, Command, Connection, Invocation, USAGE};
 use crate::block::{block_on, next_event};
@@ -11,7 +11,7 @@ use jstream_control::protocol::{
     Action, Call, CallResult, Event, Hello, ItemInfo, PROTOCOL_VERSION, QueryResult, Response,
     SourceInfo, SourceKind, Welcome,
 };
-use jstream_control::{Control, ControlError, EventStream};
+use jstream_control::{Control, ControlError, EventStream, WsConfig, WsControl};
 use serde_json::json;
 use std::io::{self, Write};
 
@@ -21,8 +21,8 @@ pub const CLIENT_NAME: &str = "jstream-cli";
 /// Opens a `Control` session for a [`Connection`].
 pub type Connector<'a> = &'a dyn Fn(&Connection) -> Result<Box<dyn Control>, CliError>;
 
-/// The real connector: a fresh mock engine for `--mock` (feature `mock`); no remote
-/// transport yet.
+/// The real connector: the engine's WebSocket API (`--url`, with the token read from the
+/// token file), or a fresh mock engine for `--mock` (feature `mock`).
 pub fn connect(connection: &Connection) -> Result<Box<dyn Control>, CliError> {
     match connection {
         #[cfg(feature = "mock")]
@@ -40,13 +40,45 @@ pub fn connect(connection: &Connection) -> Result<Box<dyn Control>, CliError> {
              (`cargo build -p jstream-cli --features mock`)"
                 .into(),
         )),
-        Connection::Remote => Err(ControlError::Disconnected {
-            reason: "the WebSocket client is not built yet; \
-                     pass `--mock` to use the in-memory mock engine"
-                .into(),
+        Connection::Remote { url, token_file } => {
+            let url = url.as_deref().ok_or_else(|| {
+                CliError::Usage(
+                    "no engine to talk to: pass `--url ws://127.0.0.1:<port>` \
+                     (or `--mock`)"
+                        .into(),
+                )
+            })?;
+            let token = read_token(
+                token_file
+                    .clone()
+                    .or_else(|| std::env::var(TOKEN_FILE_ENV).ok()),
+            )?;
+            let control = block_on(WsControl::connect(WsConfig::new(url, token)))?;
+            Ok(Box::new(control))
         }
-        .into()),
     }
+}
+
+/// The environment variable naming the token file when `--token-file` is not given.
+pub const TOKEN_FILE_ENV: &str = "JSTREAM_TOKEN_FILE";
+
+/// Reads the control token from `path`: the file's text without surrounding whitespace.
+/// The token is never taken from the command line, which other users can see in the
+/// process list (ADR-0006: the token lives in a user-only file).
+fn read_token(path: Option<String>) -> Result<String, CliError> {
+    let path = path.ok_or_else(|| {
+        CliError::Usage(format!(
+            "no control token: pass `--token-file <path>` or set {TOKEN_FILE_ENV}"
+        ))
+    })?;
+    let text = std::fs::read_to_string(&path).map_err(|error| {
+        CliError::Usage(format!("could not read the token file `{path}`: {error}"))
+    })?;
+    let token = text.trim();
+    if token.is_empty() {
+        return Err(CliError::Usage(format!("the token file `{path}` is empty")));
+    }
+    Ok(token.to_owned())
 }
 
 /// Parses `args`, runs the command, writes its output to `out` and any error to `err`,
