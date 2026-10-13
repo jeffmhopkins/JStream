@@ -168,7 +168,8 @@ fn audio_input_reports_device_position_and_clock_time() {
 fn audio_output_is_filled_by_the_handler() {
     let clock = FakeClock::new(Timebase::MILLIS);
     let io = FakeAudioIo::new(clock, 48_000, ChannelLayout::Mono).unwrap();
-    let _stream = io
+    let shared: Arc<dyn AudioIo> = Arc::new(io.clone());
+    let _stream = shared
         .open_output(&AudioOutputTarget::DefaultOutput, Box::new(Tone(0.25)))
         .unwrap();
     assert_eq!(io.render(4), vec![vec![0.25; 4]]);
@@ -178,8 +179,9 @@ fn audio_output_is_filled_by_the_handler() {
 fn audio_unplug_reports_once_and_closes() {
     let clock = FakeClock::new(Timebase::MILLIS);
     let io = FakeAudioIo::new(clock, 48_000, ChannelLayout::Stereo).unwrap();
+    let shared: Arc<dyn AudioIo> = Arc::new(io.clone());
     let rec = Recorder::default();
-    let _stream = io
+    let _stream = shared
         .open_input(
             &AudioInputTarget::DefaultOutputLoopback,
             Box::new(rec.clone()),
@@ -363,9 +365,41 @@ fn video_decoder_returns_one_frame_per_packet() {
 }
 
 #[test]
+fn video_decoder_reorders_frames_into_presentation_order() {
+    let (_, b) = setup();
+    let mut dec = b
+        .codecs
+        .video_decoder(&VideoDecoderConfig {
+            codec: Codec::H264,
+            output_format: PixelFormat::Nv12,
+            hardware: HardwarePreference::Prefer,
+        })
+        .unwrap();
+    // I P B B in decode order, presented I B B P: (pts, dts) in ms.
+    let packets = [(33, 0), (132, 33), (66, 66), (99, 99)];
+    let mut out = Vec::new();
+    let mut ready_after_each = Vec::new();
+    for (pts, dts) in packets {
+        let packet = Packet::new(Codec::H264, pts == 33, ms(pts), ms(dts), vec![0, 0, 0, 1]);
+        dec.decode(&packet.unwrap()).unwrap();
+        dec.poll(&mut out).unwrap();
+        ready_after_each.push(out.len());
+    }
+    assert_eq!(
+        ready_after_each,
+        vec![0, 1, 2, 3],
+        "each frame waits until no later packet can present before it"
+    );
+    dec.finish(&mut out).unwrap();
+    let pts: Vec<_> = out.iter().map(|f| f.info().pts).collect();
+    assert_eq!(pts, vec![ms(33), ms(66), ms(99), ms(132)]);
+}
+
+#[test]
 fn vcam_sink_needs_start_and_a_matching_format() {
-    let probe = FakeVcamSink::new();
-    let mut sink: Box<dyn VcamSink> = Box::new(probe.clone());
+    let fake = FakeVcamSink::new();
+    let probe = fake.probe();
+    let mut sink: Box<dyn VcamSink> = Box::new(fake);
     assert!(matches!(
         sink.publish(nv12(ms(0))),
         Err(PlatformError::InvalidState { .. })
@@ -384,6 +418,25 @@ fn vcam_sink_needs_start_and_a_matching_format() {
     sink.stop().unwrap();
     assert_eq!(sink.format(), None);
     sink.stop().unwrap();
+}
+
+#[test]
+fn dropping_a_started_vcam_sink_stops_it() {
+    let fake = FakeVcamSink::new();
+    let probe = fake.probe();
+    let mut sink: Box<dyn VcamSink> = Box::new(fake);
+    let format = VcamFormat {
+        size: size(),
+        pixel_format: PixelFormat::Nv12,
+        frame_period: Timebase::new(1, 30).unwrap(),
+    };
+    sink.start(format).unwrap();
+    sink.publish(nv12(ms(33))).unwrap();
+    assert_eq!(probe.format(), Some(format));
+    drop(sink);
+    assert_eq!(probe.format(), None, "dropping the sink stops the camera");
+    assert_eq!(probe.published(), 1, "the probe still reads the record");
+    assert_eq!(probe.last_pts(), Some(ms(33)));
 }
 
 #[test]

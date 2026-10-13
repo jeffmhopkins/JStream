@@ -390,8 +390,14 @@ pub const FAKE_DECODE_SIZE: (u32, u32) = (16, 16);
 /// keyframes every `keyframe_interval` frames, and no B-frames. The audio encoder emits
 /// one packet per [`FAKE_AAC_FRAME`] sample frames, timed from the first buffer and
 /// ignoring gaps in later timestamps. The decoder turns each packet into one all-zero frame
-/// of [`FAKE_DECODE_SIZE`]. The video encoder and decoder hold up to
-/// [`FAKE_CODEC_QUEUE`] unpolled outputs; the audio encoder has no limit.
+/// of [`FAKE_DECODE_SIZE`] and returns the frames in presentation order: it holds each
+/// frame until a packet whose `dts` reaches the frame's `pts` has been decoded (no later
+/// packet can then present earlier, since decode timestamps never decrease and
+/// `dts <= pts`), and [`finish`](VideoDecoder::finish) releases the rest. Packets from the
+/// fake encoder have `dts == pts`, so their frames are released at once; packets with
+/// B-frame reordering are held only as deep as their `dts` lag needs. The video encoder
+/// and decoder hold up to [`FAKE_CODEC_QUEUE`] unpolled outputs (frames still held for
+/// reordering don't count); the audio encoder has no limit.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FakeCodecs;
 
@@ -481,6 +487,7 @@ impl Codecs for FakeCodecs {
             info: fake_info(Codec::H264, CodecRole::VideoDecoder),
             config: *config,
             size: FrameSize::new(w, h)?,
+            held: Vec::new(),
             pending: VecDeque::new(),
             finished: false,
         }))
@@ -636,8 +643,25 @@ struct FakeVideoDecoder {
     info: CodecInfo,
     config: VideoDecoderConfig,
     size: FrameSize,
+    /// Decoded frames waiting for reordering, in decode order.
+    held: Vec<VideoSurface>,
+    /// Frames ready for [`poll`](VideoDecoder::poll), in presentation order.
     pending: VecDeque<VideoSurface>,
     finished: bool,
+}
+
+impl FakeVideoDecoder {
+    /// Moves every held frame presented at or before `until` (every frame when `None`) to
+    /// `pending`, earliest first.
+    fn release(&mut self, until: Option<MediaTime>) {
+        // Stable, so frames with equal pts keep their decode order.
+        self.held.sort_by_key(|f| f.info().pts);
+        let n = match until {
+            Some(until) => self.held.partition_point(|f| f.info().pts <= until),
+            None => self.held.len(),
+        };
+        self.pending.extend(self.held.drain(..n));
+    }
 }
 
 impl VideoDecoder for FakeVideoDecoder {
@@ -669,7 +693,9 @@ impl VideoDecoder for FakeVideoDecoder {
             color: ColorInfo::default(),
             pts: packet.pts(),
         })?;
-        self.pending.push_back(frame.into());
+        self.held.push(frame.into());
+        // Every later packet has `dts >= packet.dts()`, so its frame's pts is too.
+        self.release(Some(packet.dts()));
         Ok(())
     }
 
@@ -680,6 +706,7 @@ impl VideoDecoder for FakeVideoDecoder {
 
     fn finish(&mut self, out: &mut Vec<VideoSurface>) -> Result<(), PlatformError> {
         self.finished = true;
+        self.release(None);
         self.poll(out)
     }
 }
@@ -687,11 +714,38 @@ impl VideoDecoder for FakeVideoDecoder {
 // ---------------------------------------------------------------------------------------
 // Virtual camera
 
-/// A virtual-camera sink that records what it was given. Clones share the record, so a
-/// test keeps a clone after handing one to the engine.
-#[derive(Clone, Debug, Default)]
+/// A virtual-camera sink that records what it was given.
+///
+/// It is the engine's handle: dropping it stops the camera, as [`VcamSink`] requires. A
+/// test keeps a [`probe`](Self::probe) to watch the sink after handing it to the engine,
+/// including after the engine drops it.
+#[derive(Debug, Default)]
 pub struct FakeVcamSink {
     state: Arc<Mutex<VcamState>>,
+}
+
+/// A test's view of a [`FakeVcamSink`]: reads what the sink recorded, and outlives it.
+/// Clones share the record.
+#[derive(Clone, Debug)]
+pub struct FakeVcamProbe {
+    state: Arc<Mutex<VcamState>>,
+}
+
+impl FakeVcamProbe {
+    /// Frames published since the sink was created.
+    pub fn published(&self) -> u64 {
+        lock(&self.state).published
+    }
+
+    /// The pts of the last frame published.
+    pub fn last_pts(&self) -> Option<MediaTime> {
+        lock(&self.state).last_pts
+    }
+
+    /// The format the sink is started with, or `None` when it is stopped or dropped.
+    pub fn format(&self) -> Option<VcamFormat> {
+        lock(&self.state).format
+    }
 }
 
 #[derive(Debug, Default)]
@@ -715,6 +769,20 @@ impl FakeVcamSink {
     /// The pts of the last frame published.
     pub fn last_pts(&self) -> Option<MediaTime> {
         lock(&self.state).last_pts
+    }
+
+    /// A probe on this sink's record, for the test to keep.
+    pub fn probe(&self) -> FakeVcamProbe {
+        FakeVcamProbe {
+            state: Arc::clone(&self.state),
+        }
+    }
+}
+
+impl Drop for FakeVcamSink {
+    fn drop(&mut self) {
+        // Dropping a started sink stops it (`VcamSink`).
+        lock(&self.state).format = None;
     }
 }
 
