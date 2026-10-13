@@ -1,0 +1,27 @@
+[package]
+name = "jstream-mcp"
+version = "0.0.0"
+description = "The JStream MCP server: tools generated from the protocol, served over any `Control` session."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 3
+summary = "MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+jstream-control.workspace = true
+jstream-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+jstream-control = { workspace = true, features = ["mock"] }

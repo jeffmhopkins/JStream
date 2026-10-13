@@ -205,6 +205,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-mcp"
+version = "0.0.0"
+dependencies = [
+ "insta",
+ "jstream-control",
+ "jstream-protocol",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "jstream-media"
 version = "0.0.0"
 dependencies = [
