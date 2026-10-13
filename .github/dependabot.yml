@@ -1,5 +1,7 @@
 # Dependabot: weekly grouped update PRs. Policy: docs/adr/0018-ci-supply-chain-policy.md
 # Titles follow Conventional Commits so the pr-title check passes (R-GIT-002).
+# Cooldown: new releases wait 5 days before Dependabot proposes them, so a freshly published
+# compromised release is likely to be caught upstream first (maintainer decision on PR #7).
 # Editing this file is a governance change (R-GOV-001).
 version: 2
 updates:
@@ -7,6 +9,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 5
     groups:
       github-actions:
         patterns: ["*"]
@@ -18,6 +22,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 5
     groups:
       cargo:
         patterns: ["*"]
