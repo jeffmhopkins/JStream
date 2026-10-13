@@ -1,0 +1,27 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/jeffmhopkins/JStream"
+publish = false
+
+[workspace.dependencies]
+# Shared dependency versions live here (R-DEP-003). Member crates use `dep.workspace = true`.
+
+# Editing this table is a governance change (R-GOV-001). See docs/RULES.md for each rule.
+[workspace.lints.rust]
+unsafe_code = "forbid"   # R-UNSAFE-001; platform crates declare their own [lints] table
+missing_docs = "warn"    # R-RS-006 (blocking under -D warnings)
+
+[workspace.lints.clippy]
+unwrap_used = "deny"                      # R-RS-004
+print_stdout = "deny"                     # R-RS-005
+print_stderr = "deny"                     # R-RS-005
+allow_attributes_without_reason = "deny"  # R-RS-009
+undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
+
+[profile.release]
+panic = "unwind"   # R-UNSAFE-005: catch_unwind at FFI boundaries needs unwinding
