@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:f3b7cbebddb3617e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added Reading paragraph for read.rs (Graph::query over state.get/scene.list/source.list/item.list, None for output.status, not_found for missing scene, ordering, to_info helpers); edit semantics in apply.rs untouched so Model/Applying text holds; Tests line mentions read tests; protocol#design dependency re-read (new Queries subsection consistent)" }
+verified = { hash = "b3:f78c10be7991b250", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Tests line now names the parity cases from jstream_protocol::parity (reads and rejected batches) that read.rs runs; Reading paragraph unchanged and still matches Graph::query; graph() helper now builds the shared collection; apply.rs untouched" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -67,7 +67,10 @@ display order, items bottom first; `Source::to_info`, `Scene::to_info` and
 
 **Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
 edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds), exact inverses,
-what each query reports, and a property test: a seeded generator applies 6000 random
+what each query reports, and parity with `jstream-control`'s mock: the reads and
+rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
+feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
+property test: a seeded generator applies 6000 random
 batches. After each successful one, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged.
