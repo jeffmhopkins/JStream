@@ -43,8 +43,11 @@ function Pause-For([string]$Text) { Say $Text 'Yellow'; [void](Read-Host 'Press 
 # Runs a spike, shows its output live, and saves its stdout (the JSON report) as UTF-8.
 function Run-Saving([string]$File, [scriptblock]$Command) {
     & $Command | Tee-Object -Variable captured | Out-Host
-    $captured | Set-Content -Path $File -Encoding UTF8
+    # UTF-8 without a byte-order mark (Set-Content -Encoding UTF8 adds one in PowerShell 5.1).
+    [IO.File]::WriteAllLines($File, [string[]]@($captured), (New-Object Text.UTF8Encoding $false))
 }
+# Quotes a path for a single-quoted PowerShell string (doubles any apostrophe).
+function Quote([string]$Path) { "'" + ($Path -replace "'", "''") + "'" }
 
 # Keeps the PC (and display) awake while this script runs, so S3's hour isn't cut short.
 Add-Type -Namespace JStream -Name Power -MemberDefinition @'
@@ -113,6 +116,7 @@ if (Test-Path (Join-Path $candidate 'spikes\s1-gpu\Cargo.toml')) {
 } else {
     Say "Cloning $RepoUrl to $RepoDir"
     git clone $RepoUrl $RepoDir
+    if ($LASTEXITCODE -ne 0) { throw "git clone of $RepoUrl failed (exit $LASTEXITCODE)" }
     $Repo = $RepoDir
 }
 Push-Location $Repo
@@ -139,6 +143,7 @@ New-Item -ItemType Directory -Force -Path $Out | Out-Null
 $script:Notes = Join-Path $Out 'notes.md'
 Set-Content -Path $Notes -Value "# Spike run $stamp`n`nRepo commit: $commit`n"
 
+try {
 Step 'Collecting system info'
 $sys = [ordered]@{
     windows   = (Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version, BuildNumber)
@@ -200,7 +205,7 @@ if ($Only -contains 'S2') {
         if (-not $hkcuWorked) {
             & $exe --unregister
             if (YesNo 'Try machine-wide (HKLM) registration? This needs one UAC prompt.') {
-                $cmd = "net stop FrameServer; & '$exe' --register hklm; Start-Sleep -Seconds 3"
+                $cmd = "net stop FrameServer; & $(Quote $exe) --register hklm; Start-Sleep -Seconds 3"
                 $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
                 Start-Process powershell -Verb RunAs -Wait -ArgumentList "-NoProfile -EncodedCommand $enc"
                 $usedHklm = $true
@@ -216,7 +221,7 @@ if ($Only -contains 'S2') {
     } finally {
         Say 'Cleaning up the S2 registration.'
         if ($usedHklm) {
-            $cmd = "& '$exe' --unregister; Start-Sleep -Seconds 2"
+            $cmd = "& $(Quote $exe) --unregister; Start-Sleep -Seconds 2"
             $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
             Start-Process powershell -Verb RunAs -Wait -ArgumentList "-NoProfile -EncodedCommand $enc"
         } elseif (Test-Path $exe) { & $exe --unregister }
@@ -240,7 +245,8 @@ if ($Only -contains 'S3') {
         Run-Saving (Join-Path $Out 's3-smoke.json') { & $exe --minutes 2 --json --csv (Join-Path $Out 's3-smoke.csv') }
         $smoke = Get-Content (Join-Path $Out 's3-smoke.json') -Raw
         if ($smoke -match '"error"') { Say 'The smoke test reported an error; see s3-smoke.json.' 'Yellow' }
-        if (YesNo "Run the full $S3Minutes-minute measurement now? (Ctrl+C stops early and still saves results)") {
+        Say "Don't press Ctrl+C: it stops this whole script and loses the S3 report. To run shorter, answer N here and rerun with -S3Minutes 10." 'Yellow'
+        if (YesNo "Run the full $S3Minutes-minute measurement now?") {
             Say "Running for $S3Minutes minutes. The PC is kept awake. Progress prints every 10 s."
             Run-Saving (Join-Path $Out 's3.json') { & $exe --minutes $S3Minutes --json --csv (Join-Path $Out 'drift.csv') }
         }
@@ -254,7 +260,11 @@ if ($Only -contains 'S3') {
     }
 }
 
+} finally {
 # ---------------------------------------------------------------------------------------
+# Runs even if the script is stopped early (Ctrl+C, an error), so partial results still
+# get zipped.
+Keep-Awake $false
 Step 'Packaging results'
 $zip = "$Out.zip"
 # The raw H.264 files can be large; leave them out of the zip (they're only for you to watch).
@@ -264,3 +274,4 @@ Say "Results folder: $Out" 'Green'
 Say "Zip to send back: $zip" 'Green'
 Say 'Attach the zip in the chat (or paste notes.md plus the .json files).' 'Green'
 Start-Process explorer.exe "/select,`"$zip`""
+}
