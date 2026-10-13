@@ -6,11 +6,12 @@ use crate::block::block_on;
 use crate::exit::{self, CliError};
 use jstream_control::protocol::{
     Batch, Call, ClientId, Edit, Event, Hello, ItemId, OutputId, OutputState, PROTOCOL_VERSION,
-    Rev, SceneId, SourceId, SourceKind,
+    Response, Rev, SceneId, SourceId, SourceKind, Welcome,
 };
-use jstream_control::{Control, ControlError, MockControl, MockEngine};
+use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
+use serde_json::{Value, json};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -26,10 +27,21 @@ fn strings(line: &[&str]) -> Vec<String> {
     line.iter().map(|s| (*s).to_owned()).collect()
 }
 
-/// Runs the CLI with `line`, connecting through `connector`.
+/// Runs the CLI with `line`, connecting through `connector`, with empty input.
 fn run_with(connector: Connector<'_>, line: &[&str]) -> Outcome {
+    run_with_input(connector, line, "")
+}
+
+/// Runs the CLI with `line` and `input` as its stdin, connecting through `connector`.
+fn run_with_input(connector: Connector<'_>, line: &[&str], input: &str) -> Outcome {
     let (mut out, mut err) = (Vec::new(), Vec::new());
-    let code = run(&strings(line), connector, &mut out, &mut err);
+    let code = run(
+        &strings(line),
+        connector,
+        &mut input.as_bytes(),
+        &mut out,
+        &mut err,
+    );
     Outcome {
         code,
         out: String::from_utf8(out).expect("utf-8 output"),
@@ -680,4 +692,173 @@ fn the_token_file_is_read_without_surrounding_whitespace() {
     let empty = read_token(Some(path)).err().map(|e| e.to_string());
     assert!(empty.is_some_and(|m| m.contains("is empty")));
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// MCP requests for the handshake-based revision, one per line, as a client writes them.
+fn mcp_input(requests: &[Value]) -> String {
+    requests.iter().map(|r| format!("{r}\n")).collect()
+}
+
+fn mcp_initialize(id: u64) -> Value {
+    json!({
+        "jsonrpc": "2.0", "id": id, "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "test-agent", "version": "1"}
+        }
+    })
+}
+
+fn mcp_call(id: u64, tool: &str, arguments: Value) -> Value {
+    json!({
+        "jsonrpc": "2.0", "id": id, "method": "tools/call",
+        "params": {"name": tool, "arguments": arguments}
+    })
+}
+
+/// Every line of `out` as JSON: stdout carries nothing but MCP messages.
+fn mcp_replies(out: &str) -> Vec<Value> {
+    out.lines()
+        .map(|line| serde_json::from_str(line).expect("every stdout line is JSON-RPC"))
+        .collect()
+}
+
+#[test]
+fn mcp_serves_initialize_list_and_call_over_one_session() {
+    let engine = MockEngine::new();
+    let sessions = AtomicUsize::new(0);
+    let connector = |_: &Connection| -> Result<Box<dyn Control>, CliError> {
+        sessions.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new(engine.connect()))
+    };
+    let input = mcp_input(&[
+        mcp_initialize(1),
+        json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+        mcp_call(
+            3,
+            "scene",
+            json!({"op": {"type": "scene.create", "scene_id": "main", "name": "Main"}}),
+        ),
+        mcp_call(4, "scene", json!({"op": {"type": "scene.list"}})),
+    ]);
+    let outcome = run_with_input(&connector, &["mcp"], &input);
+    assert_eq!((outcome.code, outcome.err.as_str()), (exit::OK, ""));
+    let replies = mcp_replies(&outcome.out);
+    let ids: Vec<&Value> = replies.iter().map(|r| &r["id"]).collect();
+    assert_eq!(ids, [1, 2, 3, 4], "the notification gets no reply");
+    assert_eq!(replies[0]["result"]["serverInfo"]["name"], "jstream-mcp");
+    let tools: Vec<&str> = replies[1]["result"]["tools"]
+        .as_array()
+        .expect("a tool list")
+        .iter()
+        .filter_map(|tool| tool["name"].as_str())
+        .collect();
+    for tool in ["scene", "batch", "describe_api"] {
+        assert!(tools.contains(&tool), "{tool} in {tools:?}");
+    }
+    let created = &replies[2]["result"];
+    assert_eq!(created["isError"], false, "{created}");
+    assert_eq!(created["structuredContent"]["result"]["rev"], 1);
+    let listed = &replies[3]["result"]["structuredContent"]["result"]["result"];
+    assert_eq!(listed["scenes"][0]["scene_id"], "main", "{listed}");
+    // One session for the whole run, and the edit reached the engine.
+    assert_eq!(sessions.load(Ordering::SeqCst), 1);
+    assert_eq!(engine.rev(), Rev(1));
+}
+
+#[test]
+fn mcp_connection_failures_exit_before_serving() {
+    let input = mcp_input(&[mcp_initialize(1)]);
+    assert_eq!(
+        run_with_input(&refuse, &["mcp"], &input),
+        failed(
+            exit::DISCONNECTED,
+            "error: no connection to the engine: refused\n"
+        )
+    );
+    assert_eq!(
+        run_with_input(&connect, &["mcp"], &input),
+        failed(
+            exit::USAGE,
+            "error: no engine to talk to: pass `--url ws://127.0.0.1:<port>` (or `--mock`)\n"
+        )
+    );
+    assert_eq!(
+        run_with_input(&refuse, &["--json", "mcp"], &input),
+        failed(
+            exit::DISCONNECTED,
+            "{\"error\":{\"code\":\"disconnected\",\"message\":\"no connection to the \
+             engine: refused\"}}\n"
+        )
+    );
+}
+
+/// A session whose engine has gone away: every call fails with `Disconnected`.
+struct Lost;
+
+fn lost<T: Send + 'static>() -> BoxFuture<'static, Result<T, ControlError>> {
+    Box::pin(std::future::ready(Err(ControlError::Disconnected {
+        reason: "socket closed".into(),
+    })))
+}
+
+impl Control for Lost {
+    fn hello(&self, _: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        lost()
+    }
+
+    fn call(&self, _: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        lost()
+    }
+
+    fn events(&self) -> EventStream {
+        // Never read: `jstream-mcp` doesn't subscribe to events.
+        MockEngine::new().connect().events()
+    }
+}
+
+#[test]
+fn mcp_keeps_serving_after_the_engine_is_lost() {
+    let connector = |_: &Connection| -> Result<Box<dyn Control>, CliError> { Ok(Box::new(Lost)) };
+    let list = json!({"op": {"type": "scene.list"}});
+    let input = mcp_input(&[
+        mcp_initialize(1),
+        mcp_call(2, "scene", list.clone()),
+        mcp_call(3, "scene", list),
+        mcp_call(4, "describe_api", json!({})),
+    ]);
+    let outcome = run_with_input(&connector, &["mcp"], &input);
+    // Lost calls are tool errors, not a reason to stop: the proxy serves until stdin ends.
+    assert_eq!((outcome.code, outcome.err.as_str()), (exit::OK, ""));
+    let replies = mcp_replies(&outcome.out);
+    assert_eq!(replies.len(), 4);
+    for reply in &replies[1..3] {
+        let result = &reply["result"];
+        assert_eq!(result["isError"], true, "{result}");
+        assert_eq!(result["structuredContent"]["error"]["code"], "disconnected");
+    }
+    assert_eq!(replies[3]["result"]["isError"], false);
+}
+
+/// With the `mock` feature, `--mock mcp` serves over the real connector's mock.
+#[cfg(feature = "mock")]
+#[test]
+fn mcp_over_the_mock_connection() {
+    let input = mcp_input(&[
+        mcp_initialize(1),
+        mcp_call(
+            2,
+            "output",
+            json!({"op": {"type": "output.status", "output_id": "o"}}),
+        ),
+    ]);
+    let outcome = run_with_input(&connect, &["--mock", "--mock-output", "o", "mcp"], &input);
+    assert_eq!((outcome.code, outcome.err.as_str()), (exit::OK, ""));
+    let replies = mcp_replies(&outcome.out);
+    assert_eq!(
+        replies[1]["result"]["structuredContent"]["result"]["result"]["state"],
+        "stopped"
+    );
 }
