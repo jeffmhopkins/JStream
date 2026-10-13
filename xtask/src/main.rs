@@ -1,6 +1,6 @@
 //! `cargo xtask`: repository automation.
 //!
-//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap
+//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap, docs/DOCS.md#governance
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -9,16 +9,11 @@
 )]
 
 mod docs;
+mod governance;
 mod lint_deps;
 
 use std::path::Path;
 use std::process::ExitCode;
-
-/// Subcommands planned for M0 (ROADMAP.md#m0) that are not implemented yet.
-const PLANNED: &[(&str, &str)] = &[(
-    "governance",
-    "label + justification for governance changes (R-GOV-001)",
-)];
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -32,6 +27,14 @@ fn main() -> ExitCode {
                 ExitCode::from(2)
             }
         },
+        Some("governance") => match governance::run(&args[1..], &root) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("xtask governance: {e:#}");
+                ExitCode::from(2)
+            }
+        },
         Some("lint-deps") => match lint_deps::run(&args[1..], &root) {
             Ok(true) => ExitCode::SUCCESS,
             Ok(false) => ExitCode::FAILURE,
@@ -40,10 +43,6 @@ fn main() -> ExitCode {
                 ExitCode::from(2)
             }
         },
-        Some(name) if PLANNED.iter().any(|(n, _)| *n == name) => {
-            eprintln!("xtask {name}: not implemented yet (planned for M0)");
-            ExitCode::from(2)
-        }
         _ => {
             eprintln!("usage: cargo xtask <command>\n\ncommands:");
             for (name, what) in [
@@ -54,14 +53,15 @@ fn main() -> ExitCode {
                 ),
                 ("docs for", "what governs a file: <repo-relative path>"),
                 (
+                    "governance",
+                    "governance changes since a base (R-GOV-001): --base <rev> [--event <json>]",
+                ),
+                (
                     "lint-deps",
                     "crate layering, unsafe declarations, links= allowlist, workspace deps",
                 ),
             ] {
                 eprintln!("  {name:<12} {what}");
-            }
-            for (name, what) in PLANNED {
-                eprintln!("  {name:<12} {what} [planned]");
             }
             ExitCode::from(2)
         }

@@ -83,7 +83,7 @@ verified = { hash = "b3:4c21fdca01d95b25", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:4f16a7cf1d554cd5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs now dispatches lint-deps to the new lint_deps module and lists it in usage; tree entry 'xtask/: docs, lint-deps, governance, ...' still describes the command set, layout unchanged" }
+verified = { hash = "b3:f6ac5ad6f491f1b4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: main.rs dispatches both governance and lint-deps, PLANNED removed, usage lists both; tree line 'xtask/: docs, lint-deps, governance, ...' and .github/ line (CI, governance, review-gate) still accurate" }
 -->
 
 ```
@@ -107,7 +107,7 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md)
 │   └── guides/
-└── .github/                # workflows (CI, review-gate), Dependabot config, PR template
+└── .github/                # workflows (CI, governance, review-gate), Dependabot config, PR template
 ```
 
 <a id="crate-map"></a>
