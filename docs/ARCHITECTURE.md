@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:0ca32909d3e71279", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#41): jstream-cli row names the jstream-cli mcp proxy (main's text) and still holds with the WebSocket connection: remote client through Control only, no engine link; re-flagged by the CLI README verified lines" }
+verified = { hash = "b3:08a0af2c4c0f96c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): re-flagged only by the CLI README's verified line (covers apps/**); jstream-cli row (remote client via Control, WsControl connection, jstream-cli mcp later) still holds" }
 -->
 
 ```
@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:42fd141117335ba3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crates/jstream-server/Cargo.toml: layer 4, summary matches the jstream-server row verbatim, depends on L2 jstream-control and L1 jstream-protocol (dev: control with mock+ws), all strictly lower; jstream-control gains the optional ws feature (external deps only); jstream-cli (L6) enables control/ws; table and client-stack paragraph unchanged" }
+verified = { hash = "b3:07ed98827a755dac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): manifests: jstream-control keeps ws deps plus the jstream-protocol fixtures dev-dependency (L1, strictly lower); jstream-server L4 unchanged; table text unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -242,7 +242,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:3afeecae401963f4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-verified after the covered READMEs (jstream-server, jstream-control) got their verified lines and wording fixes: Transport bullet (WsControl behind ws, jstream-server at /api/v1/ws on 127.0.0.1 with token and Origin/Host checks, ws:// only) still matches; no protocol type change" }
+verified = { hash = "b3:37ba47d237ddd162", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): covered changes are the parity fixture (test-only, no wire change, 0.3 unchanged) and this PR's Transport bullet; text holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

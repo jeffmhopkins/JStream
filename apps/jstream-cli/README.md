@@ -137,7 +137,7 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f8be2923ddcb9a30", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#41): open question 1 now says both halves exist (jstream-mcp, WsControl) so jstream-cli mcp is a follow-up; connection/token-file bullets from this PR unchanged against run.rs/args.rs" }
+verified = { hash = "b3:125fb729752d6cdb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream control#design gained main's parity paragraph only; CLI design (connection, token file, mock feature) unaffected" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

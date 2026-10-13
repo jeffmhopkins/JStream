@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1090c9e5f526902c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: admission table checked against gate.rs (Host set incl. bound addr, own Origin = http:// + accepted Host, Bearer constant-time, 403/401, single headers); session bullets against session.rs (hello subscribes then welcome, 1008 on refused first hello, concurrent calls, malformed with readable id, binary, 4 MiB, ID remapping with 1024 caps, close codes 1001/1011); shutdown against lib.rs; deps against Cargo.toml; R-SEC-002, ADR-0006, ARCH#protocol and control#design re-read" }
+verified = { hash = "b3:08b8605edb8c79f3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream control#design gained main's parity paragraph only; server design (admission gate, session, request-id remap, shutdown) unaffected" }
 -->
 
 ### Listening and admission

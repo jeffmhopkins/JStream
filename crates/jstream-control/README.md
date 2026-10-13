@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:817eb04d7375ba27", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Contents list gains ws.rs (WsControl, WsConfig, WS_PATH shared with jstream-server); 'not here yet' narrowed to the wasm32 client; runtime sentence now says callers need none while the native client runs its own; lib.rs/control.rs doc comments updated to match" }
+verified = { hash = "b3:00c14f0f8cc72c6f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): contents list keeps ws.rs (WsControl, feature ws) and mock.rs; Cargo.toml now has both the native-only ws deps and the jstream-protocol fixtures dev-dependency" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -42,7 +42,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:d17834ab59d5a81b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Replaced 'WebSocket client (deferred)' with the implemented design, checked against ws.rs and Cargo.toml: native-only optional deps behind feature ws, tokio-tungstenite without TLS, one thread per connection with a current-thread runtime, Authorization Bearer plus the server's own Origin by default, req_N IDs, routing by ID with welcome/ID-less errors to the oldest hello, Disconnected for URL/connect/401/403/close; open questions add browser client, TLS, timeouts; ARCH#protocol edit re-read" }
+verified = { hash = "b3:f1811ac0efb8c61a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): design holds both main's parity paragraph (shared jstream_protocol::parity fixture) and this PR's WebSocket client section; checked both against mock.rs, ws.rs and Cargo.toml" }
 -->
 
 ### The trait
@@ -129,8 +129,11 @@ The mock re-implements these checks and reads rather than calling
 `jstream_graph::Graph::apply` and `Graph::query`. `jstream-graph` is also layer 2, and
 [R-ARCH-002](../../docs/RULES.md#R-ARCH-002) allows only strictly lower layers, even
 for dev-dependencies, so the dependency would need a layering change. The duplication
-is small, and the mock's tests pin the shared error paths, and the query results for
-the same batch that `jstream-graph`'s read test checks.
+is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
+dev-dependency with the `fixtures` feature): one batch that builds a collection, the
+exact answer to every read of it, and the exact error for batches rejected against it.
+If the mock and the graph drift apart on any of those, one of the two tests fails. The
+mock's own tests pin the remaining shared error paths.
 
 ### WebSocket client
 

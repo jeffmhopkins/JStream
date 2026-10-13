@@ -35,3 +35,6 @@ futures-util = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, features = ["macros", "net", "rt", "sync"] }
 tokio-tungstenite = { workspace = true, optional = true }
+
+[dev-dependencies]
+jstream-protocol = { workspace = true, features = ["fixtures"] }

@@ -13,6 +13,8 @@ mod error;
 mod event;
 mod finite;
 mod id;
+#[cfg(feature = "fixtures")]
+pub mod parity;
 mod query;
 mod schema;
 mod version;

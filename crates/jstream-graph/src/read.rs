@@ -116,179 +116,50 @@ impl Item {
 #[cfg(test)]
 mod tests {
     use crate::Graph;
-    use jstream_protocol::{
-        Crop, Edit, EntityKind, ItemId, ItemInfo, ItemTransform, OutputId, ProtocolError, Query,
-        QueryResult, Rev, SceneId, SceneInfo, SceneSummary, SourceId, SourceInfo, SourceKind, Vec2,
-    };
+    use jstream_protocol::{Edit, ItemId, OutputId, Query, QueryResult, Rev, parity};
 
-    fn cam() -> SourceInfo {
-        SourceInfo {
-            source_id: SourceId::new("cam"),
-            name: "Camera".into(),
-            kind: SourceKind::Builtin {
-                kind: "webcam".into(),
-            },
-        }
-    }
-
-    fn nested_b() -> SourceInfo {
-        SourceInfo {
-            source_id: SourceId::new("b_src"),
-            name: "Scene B".into(),
-            kind: SourceKind::Scene {
-                scene_id: SceneId::new("b"),
-            },
-        }
-    }
-
-    fn moved() -> ItemTransform {
-        ItemTransform {
-            position: Vec2::new(10.0, 20.0).expect("finite"),
-            ..ItemTransform::IDENTITY
-        }
-    }
-
-    const CROP: Crop = Crop {
-        left: 1,
-        top: 2,
-        right: 3,
-        bottom: 4,
-    };
-
-    /// Scenes `b` then `a` (reordered), source `cam` placed twice in `a` (the second one
-    /// moved, cropped, hidden and reordered to the bottom) and scene `b` nested in `a`.
+    /// The shared parity collection (`jstream_protocol::parity::collection`), which
+    /// `jstream-control`'s mock engine is tested against too.
     fn graph() -> Graph {
-        let source = |s: &SourceInfo| Edit::SourceCreate {
-            source_id: s.source_id.clone(),
-            name: s.name.clone(),
-            kind: s.kind.clone(),
-        };
-        let add = |item: &str, source: &str| Edit::ItemAdd {
-            scene_id: SceneId::new("a"),
-            item_id: ItemId::new(item),
-            source_id: SourceId::new(source),
-            transform: None,
-        };
-        let edits = vec![
-            Edit::SceneCreate {
-                scene_id: SceneId::new("a"),
-                name: "A".into(),
-            },
-            Edit::SceneCreate {
-                scene_id: SceneId::new("b"),
-                name: "B".into(),
-            },
-            source(&nested_b()),
-            source(&cam()),
-            add("i1", "cam"),
-            add("i2", "b_src"),
-            add("i3", "cam"),
-            Edit::ItemSetTransform {
-                item_id: ItemId::new("i3"),
-                transform: moved(),
-            },
-            Edit::ItemSetCrop {
-                item_id: ItemId::new("i3"),
-                crop: CROP,
-            },
-            Edit::ItemSetVisible {
-                item_id: ItemId::new("i3"),
-                visible: false,
-            },
-            Edit::ItemReorder {
-                item_id: ItemId::new("i3"),
-                index: 0,
-            },
-            Edit::SceneReorder {
-                scene_id: SceneId::new("b"),
-                index: 0,
-            },
-        ];
+        let setup = parity::collection();
         let mut graph = Graph::new();
-        graph.apply(&edits, None).expect("applies");
+        let applied = graph
+            .apply(&setup.edits, setup.expected_rev)
+            .expect("applies");
+        assert_eq!(applied.rev, parity::COLLECTION_REV);
         graph
     }
 
-    /// Scene `a`'s items in `graph()`, bottom first.
-    fn items() -> Vec<ItemInfo> {
-        let plain = |item: &str, source: &str| ItemInfo {
-            item_id: ItemId::new(item),
-            source_id: SourceId::new(source),
-            transform: ItemTransform::IDENTITY,
-            crop: Crop::NONE,
-            visible: true,
-        };
-        vec![
-            ItemInfo {
-                item_id: ItemId::new("i3"),
-                source_id: SourceId::new("cam"),
-                transform: moved(),
-                crop: CROP,
-                visible: false,
-            },
-            plain("i1", "cam"),
-            plain("i2", "b_src"),
-        ]
-    }
-
+    /// Every read in the shared parity fixture gets exactly the answer the fixture
+    /// expects, the same one the mock engine is held to.
     #[test]
     fn reads_report_the_model_at_its_rev() {
         let graph = graph();
-        // Sources by ID, whatever order they were created in.
-        assert_eq!(
-            graph.query(&Query::SourceList),
-            Some(Ok(QueryResult::SourceList {
-                rev: Rev(1),
-                sources: vec![nested_b(), cam()],
-            }))
-        );
-        assert_eq!(
-            graph.query(&Query::ItemList {
-                scene_id: SceneId::new("a")
-            }),
-            Some(Ok(QueryResult::ItemList {
-                rev: Rev(1),
-                scene_id: SceneId::new("a"),
-                items: items(),
-            }))
-        );
-        assert_eq!(
-            graph.query(&Query::SceneList),
-            Some(Ok(QueryResult::SceneList {
-                rev: Rev(1),
-                scenes: vec![
-                    SceneSummary {
-                        scene_id: SceneId::new("b"),
-                        name: "B".into(),
-                        item_count: 0,
-                    },
-                    SceneSummary {
-                        scene_id: SceneId::new("a"),
-                        name: "A".into(),
-                        item_count: 3,
-                    },
-                ],
-            }))
-        );
-        assert_eq!(
-            graph.query(&Query::StateGet),
-            Some(Ok(QueryResult::StateGet {
-                rev: Rev(1),
-                sources: vec![nested_b(), cam()],
-                scenes: vec![
-                    SceneInfo {
-                        scene_id: SceneId::new("b"),
-                        name: "B".into(),
-                        items: vec![],
-                    },
-                    SceneInfo {
-                        scene_id: SceneId::new("a"),
-                        name: "A".into(),
-                        items: items(),
-                    },
-                ],
-            }))
-        );
+        for (query, expected) in parity::reads() {
+            assert_eq!(graph.query(&query), Some(expected), "{query:?}");
+        }
+    }
+
+    /// Every batch the shared parity fixture rejects fails with exactly the expected
+    /// error and changes nothing, so every read still holds afterwards.
+    #[test]
+    fn rejected_batches_match_the_parity_fixture() {
+        let mut graph = graph();
+        let before = graph.clone();
+        for (batch, expected) in parity::rejected() {
+            assert_eq!(
+                graph.apply(&batch.edits, batch.expected_rev),
+                Err(expected),
+                "{batch:?}"
+            );
+            assert_eq!(
+                graph, before,
+                "a rejected batch changed the graph: {batch:?}"
+            );
+        }
+        for (query, expected) in parity::reads() {
+            assert_eq!(graph.query(&query), Some(expected), "{query:?}");
+        }
     }
 
     #[test]
@@ -312,21 +183,11 @@ mod tests {
     }
 
     #[test]
-    fn missing_scene_is_not_found_and_runtime_reads_are_not_answered() {
-        let graph = graph();
-        assert_eq!(
-            graph.query(&Query::ItemList {
-                scene_id: SceneId::new("ghost")
-            }),
-            Some(Err(ProtocolError::NotFound {
-                entity: EntityKind::Scene,
-                id: "ghost".into(),
-            }))
-        );
+    fn runtime_reads_are_not_answered() {
         let status = Query::OutputStatus {
             output_id: OutputId::new("out"),
         };
-        assert_eq!(graph.query(&status), None);
+        assert_eq!(graph().query(&status), None);
     }
 
     #[test]

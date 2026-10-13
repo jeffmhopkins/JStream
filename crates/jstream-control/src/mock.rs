@@ -705,10 +705,9 @@ mod tests {
     use super::MockEngine;
     use crate::{Control, ControlError, EventStream};
     use jstream_protocol::{
-        Action, Batch, Call, CallResult, ClientId, Crop, Edit, EntityKind, Event, Hello,
-        IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputState, PROTOCOL_VERSION,
-        ProtocolError, ProtocolVersion, Query, QueryResult, Rev, SceneId, SceneInfo, SourceId,
-        SourceInfo, SourceKind, Vec2,
+        Action, Batch, Call, CallResult, ClientId, Edit, EntityKind, Event, Hello, IdempotencyKey,
+        ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query,
+        QueryResult, Rev, SceneId, SourceId, SourceKind, parity,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -1005,158 +1004,29 @@ mod tests {
         }
     }
 
-    /// The same collection, built by the same batch, as `jstream-graph`'s read test
-    /// (`read::tests::reads_report_the_model_at_its_rev`), so the expected results below
-    /// are exactly what `Graph::query` returns for it. It can't be called here: it is in
-    /// the same layer (R-ARCH-002).
-    #[test]
-    fn queries_report_what_the_edits_set() {
+    /// The shared parity collection (`jstream_protocol::parity`), which `jstream-graph`'s
+    /// read tests build too. `jstream-graph` can't be called here: it is in the same
+    /// layer (R-ARCH-002), even as a dev-dependency.
+    fn parity_engine() -> (MockEngine, Box<dyn Control>) {
         let engine = MockEngine::new();
         let control = connected(&engine);
-        let moved = ItemTransform {
-            position: Vec2::new(10.0, 20.0).expect("finite"),
-            ..ItemTransform::IDENTITY
-        };
-        let crop = Crop {
-            left: 1,
-            top: 2,
-            right: 3,
-            bottom: 4,
-        };
-        let cam = SourceInfo {
-            source_id: SourceId::new("cam"),
-            name: "Camera".into(),
-            kind: SourceKind::Builtin {
-                kind: "webcam".into(),
-            },
-        };
-        let nested_b = SourceInfo {
-            source_id: SourceId::new("b_src"),
-            name: "Scene B".into(),
-            kind: SourceKind::Scene {
-                scene_id: SceneId::new("b"),
-            },
-        };
-        let source = |s: &SourceInfo| Edit::SourceCreate {
-            source_id: s.source_id.clone(),
-            name: s.name.clone(),
-            kind: s.kind.clone(),
-        };
-        let edits = vec![
-            Edit::SceneCreate {
-                scene_id: SceneId::new("a"),
-                name: "A".into(),
-            },
-            Edit::SceneCreate {
-                scene_id: SceneId::new("b"),
-                name: "B".into(),
-            },
-            source(&nested_b),
-            source(&cam),
-            add("a", "i1", "cam"),
-            add("a", "i2", "b_src"),
-            add("a", "i3", "cam"),
-            Edit::ItemSetTransform {
-                item_id: ItemId::new("i3"),
-                transform: moved,
-            },
-            Edit::ItemSetCrop {
-                item_id: ItemId::new("i3"),
-                crop,
-            },
-            Edit::ItemSetVisible {
-                item_id: ItemId::new("i3"),
-                visible: false,
-            },
-            Edit::ItemReorder {
-                item_id: ItemId::new("i3"),
-                index: 0,
-            },
-            Edit::SceneReorder {
-                scene_id: SceneId::new("b"),
-                index: 0,
-            },
-        ];
-        let setup = Batch {
-            edits,
-            expected_rev: None,
-            idempotency_key: None,
-        };
-        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        assert_eq!(
+            batch(&*control, parity::collection()),
+            Ok(parity::COLLECTION_REV)
+        );
+        (engine, control)
+    }
 
-        let plain = |item: &str, source: &str| ItemInfo {
-            item_id: ItemId::new(item),
-            source_id: SourceId::new(source),
-            transform: ItemTransform::IDENTITY,
-            crop: Crop::NONE,
-            visible: true,
-        };
-        let items = vec![
-            ItemInfo {
-                item_id: ItemId::new("i3"),
-                source_id: SourceId::new("cam"),
-                transform: moved,
-                crop,
-                visible: false,
-            },
-            plain("i1", "cam"),
-            plain("i2", "b_src"),
-        ];
-        // Sources by ID, whatever order they were created in.
-        assert_eq!(
-            query(&*control, Query::SourceList),
-            Ok(QueryResult::SourceList {
-                rev: Rev(1),
-                sources: vec![nested_b.clone(), cam.clone()],
-            })
-        );
-        assert_eq!(
-            query(
-                &*control,
-                Query::ItemList {
-                    scene_id: SceneId::new("a")
-                }
-            ),
-            Ok(QueryResult::ItemList {
-                rev: Rev(1),
-                scene_id: SceneId::new("a"),
-                items: items.clone(),
-            })
-        );
-        assert_eq!(
-            query(&*control, Query::StateGet),
-            Ok(QueryResult::StateGet {
-                rev: Rev(1),
-                sources: vec![nested_b, cam],
-                scenes: vec![
-                    SceneInfo {
-                        scene_id: SceneId::new("b"),
-                        name: "B".into(),
-                        items: vec![],
-                    },
-                    SceneInfo {
-                        scene_id: SceneId::new("a"),
-                        name: "A".into(),
-                        items,
-                    },
-                ],
-            })
-        );
+    /// Every read in the shared parity fixture gets exactly the answer the fixture
+    /// expects, the same one `Graph::query` is held to.
+    #[test]
+    fn queries_report_what_the_edits_set() {
+        let (_engine, control) = parity_engine();
+        for (call, expected) in parity::reads() {
+            let got = query(&*control, call.clone()).map_err(|error| error.protocol().cloned());
+            assert_eq!(got, expected.map_err(Some), "{call:?}");
+        }
 
-        let missing = query(
-            &*control,
-            Query::ItemList {
-                scene_id: SceneId::new("ghost"),
-            },
-        )
-        .expect_err("no such scene");
-        assert_eq!(
-            missing.protocol(),
-            Some(&ProtocolError::NotFound {
-                entity: EntityKind::Scene,
-                id: "ghost".into()
-            })
-        );
         // A duplicate takes the new name and the original's kind; removing an item
         // leaves its source.
         let more = Batch {
@@ -1192,6 +1062,22 @@ mod tests {
             ]
         );
         assert_eq!(sources[2].kind, sources[1].kind);
+    }
+
+    /// Every batch the shared parity fixture rejects fails with exactly the error
+    /// `Graph::apply` returns for it, and applies nothing.
+    #[test]
+    fn rejected_batches_match_the_parity_fixture() {
+        let (engine, control) = parity_engine();
+        for (rejected, expected) in parity::rejected() {
+            let error = batch(&*control, rejected.clone()).expect_err("rejected");
+            assert_eq!(error.protocol(), Some(&expected), "{rejected:?}");
+            assert_eq!(engine.rev(), parity::COLLECTION_REV, "{rejected:?}");
+        }
+        for (call, expected) in parity::reads() {
+            let got = query(&*control, call.clone()).map_err(|error| error.protocol().cloned());
+            assert_eq!(got, expected.map_err(Some), "{call:?}");
+        }
     }
 
     #[test]
