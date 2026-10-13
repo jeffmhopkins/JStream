@@ -92,6 +92,6 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: step 6 no
 <!-- @section
 -->
 
-Nothing is runnable yet: the Cargo workspace arrives in M0. From then on: `cargo fmt`, `cargo clippy`,
-`cargo test`, `cargo doc`, `cargo deny check`, `cargo xtask docs check|verify|for|log`,
+Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo deny check`
+and `cargo xtask docs check`. Coming during M0: `cargo xtask docs verify|for|log`,
 `cargo xtask lint-deps` and `cargo xtask governance`.

@@ -10,6 +10,9 @@ publish = false
 
 [workspace.dependencies]
 # Shared dependency versions live here (R-DEP-003). Member crates use `dep.workspace = true`.
+anyhow = "1"
+pulldown-cmark = { version = "0.13", default-features = false }
+toml = "1"
 
 # Editing this table is a governance change (R-GOV-001). See docs/RULES.md for each rule.
 [workspace.lints.rust]

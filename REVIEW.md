@@ -196,7 +196,9 @@ verdict.
 <!-- @section
 -->
 
-Until `cargo xtask docs` and CI exist, do their checks by hand and say so in your summary:
-every link and anchor in changed docs resolves, every external URL is registered in
-`docs/external.toml`, sections touched by the PR have `hash = "bootstrap"` with a real
-note, and no file stores revisions, dates or history tables.
+`cargo xtask docs check` (the `docs` CI job) now checks links, anchors, registered
+external URLs, facts, metadata schema and history tables. Read its result on the PR. Until
+hashing and glob coverage land ([DOCS › Bootstrap status](docs/DOCS.md#bootstrap)), check
+by hand and say so in your summary that every section the PR touches has
+`hash = "bootstrap"` with a real note, and that sections whose `covers` match changed
+files were re-read.

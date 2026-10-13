@@ -1,5 +1,5 @@
 # review-gate: turns the reviewer agent's verdict comment into a required commit status.
-# Spec: REVIEW.md#output and docs/adr/0015-review-and-governance.md.
+# Spec: REVIEW.md#output and docs/adr/0019-review-gate-v2.md.
 #
 # Security: runs on pull_request_target / issue_comment, so it always uses the workflow
 # file from the default branch, and it never checks out PR code. A PR cannot change the gate

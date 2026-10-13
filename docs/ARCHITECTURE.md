@@ -83,7 +83,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: added edit/act
 ## Repository layout
 <!-- @section
 covers = ["xtask/**"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: .github/ line now names the Dependabot config; covers narrowed per ADR-0018" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read for xtask docs check: xtask/ still listed as tooling (docs, lint-deps, governance, ...); tree unchanged" }
 -->
 
 ```

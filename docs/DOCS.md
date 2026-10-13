@@ -21,18 +21,22 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Spec written before the tool exists" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against xtask/src/docs: check covers identity, schema, sections, rules, references, facts; hashing/globs/back-refs not yet" }
 -->
 
-The checker (`cargo xtask docs`) is built in M0 ([ROADMAP](../ROADMAP.md#m0)). Until it
-exists:
+The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
 
-- Rules are enforced by review.
-- Every `verified` hash is the placeholder `"bootstrap"`. The PR that lands the tool
+- **Available now:** `cargo xtask docs check` validates doc identity and metadata
+  schema, sections and rules (anchors, blocks, `enforced_by` vocabulary and check names),
+  references (links, anchors, registered external URLs, superseded ADRs, `depends_on`), and
+  facts. It runs as the `docs` CI check.
+- **Not yet:** hash-bound verification, glob coverage (`covers`, `applies_to`), code
+  back-references, and the `verify`, `for` and `log` commands. Until they land, those
+  rules are enforced by review.
+- Every `verified` hash is still the placeholder `"bootstrap"`. The PR that adds hashing
   must replace every placeholder with a real hash, which forces a genuine re-read of
   every section.
-- IDs, anchors and rule numbers become permanent at the **first merge to `main`**.
-  Before that, they may be renamed freely.
+- IDs, anchors and rule numbers became permanent at the first merge to `main` (#1).
 
 <a id="identity"></a>
 ## Document identity
