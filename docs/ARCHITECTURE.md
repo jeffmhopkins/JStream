@@ -82,8 +82,8 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: added edit/act
 <a id="repo-layout"></a>
 ## Repository layout
 <!-- @section
-covers = ["xtask/**", ".github/workflows/**"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read for action SHA pinning: workflows changed only in uses: refs; tree and layout unchanged" }
+covers = ["xtask/**"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: tree unchanged apart from .github/dependabot.yml (config, not shown); covers narrowed per ADR-0018" }
 -->
 
 ```

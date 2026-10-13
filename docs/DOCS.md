@@ -368,6 +368,9 @@ section saying what is loosened or tightened, and why:
   `[workspace.lints]`, `.github/**`, `xtask/src/docs/**`, `docs/DOCS.md`, or `REVIEW.md`;
 - new `#[allow(…)]` / `#[expect(…)]` attributes (these must also carry `reason = "…"`).
 
+**Pre-approved:** a Dependabot PR that only changes pinned `uses:` references is justified by
+[ADR-0018](adr/0018-ci-supply-chain-policy.md) and needs no label.
+
 Agents and the maintainer may both apply the label. The weekly sweep lists every PR
 merged with it, so the maintainer can audit them
 ([ADR-0015](adr/0015-review-and-governance.md)).

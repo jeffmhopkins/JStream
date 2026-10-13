@@ -62,7 +62,10 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Added step 6: ADR 
 4. Non-blocking findings: fix them if cheap, or say they're deferred. Pre-existing problems
    become issues.
 5. A `needs-human` label means the maintainer decides. Stop arguing that point.
-6. **Writing an ADR:** set its `tier` per [R-GOV-005](docs/RULES.md#R-GOV-005). For
+6. **Dependabot PRs** (`ci(deps): …`, `build(deps): …`): enable auto-merge (squash) on them,
+   and handle CI failures as if they were your own PRs. Action-pin-only bumps are
+   pre-approved governance ([ADR-0018](docs/adr/0018-ci-supply-chain-policy.md)).
+7. **Writing an ADR:** set its `tier` per [R-GOV-005](docs/RULES.md#R-GOV-005). For
    `maintainer` (product and platforms, process and governance, superseding any ADR):
    open it as `proposed`, add `needs-human`, and wait for the maintainer's `/accept` or
    `/reject` decision, then set `status` to match. You may post a decision **only** to relay
