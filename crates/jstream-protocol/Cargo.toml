@@ -15,6 +15,13 @@ unsafe_allowed = false
 [lints]
 workspace = true
 
+[features]
+# The `parity` module: a shared fixture (one batch that builds a collection, and the exact
+# answers to reads of it and to batches rejected against it) that `jstream-graph` and
+# `jstream-control`'s mock both test against, so they can't drift apart. Off by default;
+# those crates enable it in dev-dependencies only.
+fixtures = []
+
 [dependencies]
 schemars.workspace = true
 serde.workspace = true

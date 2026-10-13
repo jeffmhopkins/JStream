@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:7ba96d70baaa7109", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "mock.rs grew query answers and stored item properties; contents list (trait, errors, mock behind feature, protocol re-export) still matches src/; layer and WASM claims unchanged" }
+verified = { hash = "b3:fdbec1aef930f798", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "mock.rs tests now run jstream_protocol::parity instead of a hand-copied batch; contents list (trait, errors, mock behind feature, protocol re-export) still matches src/, no API change" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -39,7 +39,7 @@ Not here yet: the WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:6ebb5e81ad536765", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Mock: new bullet for the 0.3 queries (state.get, scene.list, source.list by ID, item.list bottom first with not_found, output.status) answered as Graph::query does; mock now stores source names and item transform/crop/visible; parity paragraph names Graph::query and the shared-batch test queries_report_what_the_edits_set; checked against mock.rs" }
+verified = { hash = "b3:dc95c490a12c3ffd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the parity paragraph: queries_report_what_the_edits_set and the new rejected_batches_match_the_parity_fixture run jstream_protocol::parity (dev-dep with fixtures feature) instead of a hand-copied batch; R-ARCH-002 reasoning unchanged since protocol is L1; Mock bullets (check order, codes, field paths, query results) still match mock.rs" }
 -->
 
 ### The trait
@@ -126,8 +126,11 @@ The mock re-implements these checks and reads rather than calling
 `jstream_graph::Graph::apply` and `Graph::query`. `jstream-graph` is also layer 2, and
 [R-ARCH-002](../../docs/RULES.md#R-ARCH-002) allows only strictly lower layers, even
 for dev-dependencies, so the dependency would need a layering change. The duplication
-is small, and the mock's tests pin the shared error paths, and the query results for
-the same batch that `jstream-graph`'s read test checks.
+is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
+dev-dependency with the `fixtures` feature): one batch that builds a collection, the
+exact answer to every read of it, and the exact error for batches rejected against it.
+If the mock and the graph drift apart on any of those, one of the two tests fails. The
+mock's own tests pin the remaining shared error paths.
 
 ### WebSocket client (deferred)
 

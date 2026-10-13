@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:268b9ef305501757", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Queries bullet now lists state.get, scene.list, source.list, item.list, output.status and the SceneSummary/SceneInfo/SourceInfo/ItemInfo shapes, matching query.rs and lib.rs re-exports; rest of contents unchanged" }
+verified = { hash = "b3:fed98921e9cf3c5e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New Parity fixture bullet for parity.rs behind the non-default fixtures feature (collection batch, reads at COLLECTION_REV, rejected batches; test support only, no wire change, so PROTOCOL_VERSION unchanged); layer 1, no I/O and WASM-safe claims still hold: the module is plain data built from existing types" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -47,13 +47,20 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
+- **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
+  support, not wire types. One batch that builds a small collection, the exact answer
+  to every collection read of it, and the exact error for batches rejected against it.
+  `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
+  test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
+  the feature in dev-dependencies only and are held to these answers. It changes no
+  message, so it never changes `PROTOCOL_VERSION`.
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:9faf06707f250c34", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added Queries subsection (collection reads carry rev, source.list by ID, item.list bottom first or not_found, state.get whole state, output.status without rev, ItemInfo carries every edit-set property) matching query.rs; handshake example bumped to 0.3 per R-API-001 minor bump for added queries; protocol.snap and examples.snap diffs reviewed: only added oneOf entries and defs, plus title and version 0.3" }
+verified = { hash = "b3:3a40f7f3e243c258", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against parity.rs and the fixtures feature: no message, tag, schema or compatibility change (protocol.snap and examples.snap untouched); fixture's reads agree with the Queries subsection (scene display order, sources by ID, items bottom first, not_found for a missing scene, rev on each read) and its rejections with Batches (rev_conflict before empty_batch, atomic rollback)" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

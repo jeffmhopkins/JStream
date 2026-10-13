@@ -24,3 +24,6 @@ mock = []
 futures-core.workspace = true
 jstream-protocol.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+jstream-protocol = { workspace = true, features = ["fixtures"] }

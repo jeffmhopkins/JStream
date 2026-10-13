@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:139dd629a921dd22", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "CLI gained read commands over the new protocol queries; the jstream-cli row still holds: a remote client through Control only, no engine link; jstream mcp still an open question" }
+verified = { hash = "b3:fea9d6aea2c3d694", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only change under apps/ is the re-verified line in apps/jstream-cli/README.md; no CLI code or manifest change, so the jstream-cli row (remote client through Control, no engine link) and diagram still hold" }
 -->
 
 ```
@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:2d97a518d048471c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#33): table text is main's; manifests now include L6 apps/jstream-cli (depends on L2 control) alongside this PR's L3 jstream-mcp (L2 control, L1 protocol), all strictly lower; one shared jstream-control workspace entry" }
+verified = { hash = "b3:5f751f76aad903f4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only manifest change: jstream-protocol gains a fixtures feature, and jstream-graph and jstream-control (L2) gain a dev-dependency on jstream-protocol (L1), strictly lower; table rows and summaries unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -242,7 +242,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:7b834723f1d93aba", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Queries bullet now names the 0.3 reads (state.get, scene.list, source.list, item.list, output.status) and marks video.snapshot/audio.levels as later; envelope, edits, actions, versioning bullets hold; control mock changes covered by CRATE-jstream-control#design" }
+verified = { hash = "b3:8d0bf20f0daa8349", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered changes are the test-only parity fixture in jstream-protocol and the mock tests and README in jstream-control; no envelope, edit, action, query, event, error or schema change, so every bullet holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

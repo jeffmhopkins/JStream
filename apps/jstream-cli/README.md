@@ -124,7 +124,7 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:26b56fe42751b8b7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Open question 2 (more queries) resolved by protocol 0.3 and replaced with the persistent-mock question; parser, block_on, connector seam, opt-in mock and writer bullets unchanged against src/ and Cargo.toml; control#design dependency re-read" }
+verified = { hash = "b3:c14bb54066e55731", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: only its dependency control#design changed (parity paragraph now names the shared jstream_protocol::parity fixture); block_on, connector seam, opt-in mock feature, writers and typed errors bullets still match unchanged apps/jstream-cli src and Cargo.toml" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

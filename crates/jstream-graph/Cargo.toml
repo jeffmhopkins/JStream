@@ -17,3 +17,6 @@ workspace = true
 
 [dependencies]
 jstream-protocol.workspace = true
+
+[dev-dependencies]
+jstream-protocol = { workspace = true, features = ["fixtures"] }
