@@ -15,8 +15,8 @@ that runs from a clean checkout.
 <a id="m0"></a>
 ## M0: Foundation and risk spikes
 <!-- @section
-depends_on = ["docs/adr/0011-docs-as-checked-graph.md", "docs/adr/0015-review-and-governance.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: spikes run in parallel with docs tooling MVP" }
+depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0015-review-and-governance.md"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read after ADR-0016 superseded ADR-0011: M0 docs MVP scope unchanged, dependency repointed" }
 -->
 
 Two tracks run in parallel.
