@@ -196,11 +196,24 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
 }
 
 /// `arg` as a repo-relative path with `/` separators. Absolute paths must be inside `root`.
+/// They are compared after canonicalizing both sides, so Windows verbatim paths and
+/// symlinks work; the argument may not exist yet, so its deepest existing ancestor is
+/// canonicalized and the rest re-appended (review N1 on #14).
 fn repo_path(root: &Path, arg: &str) -> Result<String> {
     let p = Path::new(arg);
     let rel = if p.is_absolute() {
         let root = root.canonicalize().context("resolving the repo root")?;
-        p.strip_prefix(&root)
+        let mut existing = p;
+        let mut rest = Vec::new();
+        let base = loop {
+            if let Ok(c) = existing.canonicalize() {
+                break c;
+            }
+            rest.push(existing.file_name().context("no existing ancestor")?);
+            existing = existing.parent().context("no existing ancestor")?;
+        };
+        let full = rest.iter().rev().fold(base, |acc, part| acc.join(part));
+        full.strip_prefix(&root)
             .with_context(|| format!("`{arg}` is outside the repository"))?
             .to_path_buf()
     } else {
@@ -256,6 +269,15 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             let l = load(root)?;
             let g = govern::governing(root, &l.docs, &l.files, &path);
             eprint!("{}", govern::render(&path, &g, &l.docs));
+            // Paths are repo-relative wherever you run from; flag the likely mistake of
+            // passing a path relative to a subdirectory (review N2 on #14).
+            let parent = Path::new(&path).parent().unwrap_or(Path::new(""));
+            if !l.files.contains(&path) && !root.join(parent).is_dir() {
+                eprintln!(
+                    "\nnote: `{path}` is not tracked and its directory does not exist; paths are \
+                     relative to the repository root"
+                );
+            }
             Ok(true)
         }
         _ => bail!(
@@ -409,7 +431,7 @@ mod tests {
             ),
             (
                 "crates/x/src/m.rs",
-                "//! Docs: A.md#a, A.md#gone, adr/0002.md\n",
+                "//! Docs: A.md#a, A.md#gone, adr/0002.md, R.md#r\n",
             ),
             ("crates/y/Cargo.toml", ""),
             ("crates/y/src/main.rs", "//! Docs: A.md#a\n"),
@@ -422,6 +444,7 @@ mod tests {
             got,
             vec![
                 "crates/x/src/m.rs:1: `Docs:` reference `A.md#gone`: no anchor `gone` in A.md",
+                "crates/x/src/m.rs:1: `Docs:` reference `R.md#r` cites a retired doc",
                 "crates/x/src/m.rs:1: `Docs:` reference `adr/0002.md` cites a superseded doc",
                 "crates/y/src/main.rs:1: `Docs:` is missing `B.md#b`, whose `covers` match this crate",
                 "crates/y/src/main.rs:1: `Docs:` lists `A.md#a`, which does not cover this crate",
@@ -485,6 +508,44 @@ mod tests {
             Some("crates/x/a.rs")
         );
         assert!(repo_path(&f.0, "../outside").is_err());
+        // Absolute paths, including ones that don't exist yet, resolve inside the repo.
+        let abs = f.0.join("crates/x/src/not-yet/new.rs");
+        assert_eq!(
+            repo_path(&f.0, &abs.to_string_lossy()).ok().as_deref(),
+            Some("crates/x/src/not-yet/new.rs")
+        );
+    }
+
+    /// DOCS#gate reports, without failing: crates no section covers, and `applies_to`
+    /// globs naming a crate that neither exists nor is planned in ARCHITECTURE#crate-map.
+    #[test]
+    fn uncovered_crates_and_applies_to_typos_warn() {
+        let arch = "<!-- @doc\nid = \"ARCH\"\n-->\n<a id=\"crate-map\"></a>\n## Crate map\n<!-- @section\n-->\n| `jstream-planned` | later |\n";
+        let rules = "<!-- @doc\nid = \"R\"\n-->\n<a id=\"R-A-001\"></a>\n### R-A-001: Globs\n<!-- @rule\nstatus = \"active\"\napplies_to = [\"crates/jstream-x/**\", \"crates/jstream-planned/**\", \"crates/jstrem-typo/**\", \"crates/*/src/**\"]\n-->\nText.\n";
+        let f = Fixture::new(
+            "warnings",
+            &[
+                ("docs/external.toml", ""),
+                ("docs/facts.toml", ""),
+                ("docs/RULES.md", rules),
+                ("docs/ARCHITECTURE.md", arch),
+                ("crates/jstream-x/Cargo.toml", ""),
+                ("crates/jstream-x/src/lib.rs", "//! X.\n"),
+            ],
+        );
+        let all = check_repo(&f.0).expect("invariant: the fixture is readable");
+        let warnings: Vec<String> = all
+            .iter()
+            .filter(|d| d.warning)
+            .map(|d| format!("{}: {}", d.path, d.msg))
+            .collect();
+        assert_eq!(
+            warnings,
+            vec![
+                "crates/jstream-x/src/lib.rs: crate `crates/jstream-x` is not covered by any section",
+                "docs/RULES.md: rule `R-A-001`: `applies_to` names crate `jstrem-typo`, which neither exists nor appears in ARCHITECTURE#crate-map (typo?)",
+            ]
+        );
     }
 
     /// The repository's own docs must pass. This is what the `docs` CI job enforces.

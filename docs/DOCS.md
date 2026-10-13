@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:59598d0063893c7f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against xtask/src/docs incl. new govern.rs: docs for listed as available (report on stderr); not-yet is uncovered-crate report, review, log; backrefs retired/superseded messages match" }
+verified = { hash = "b3:7f5a40bab35400ab", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against xtask/src/docs: uncovered-crate and applies_to-typo warnings now listed as reports; retired/superseded Docs refs fail; docs for path handling; not-yet is review and log" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -40,10 +40,12 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `covers`.
 - **Code back-references** ([Code back-references](#back-references)): crate roots are
   checked in both directions, and every `Docs:` reference must resolve (sections, or whole
-  docs such as ADRs; superseded ADRs fail).
+  docs such as ADRs; superseded and retired docs fail).
 - **`cargo xtask docs for <path>`** ([Code back-references](#back-references)): prints
   what governs a file.
-- **Not yet:** the uncovered-crate report, and the `review` and `log` commands.
+- **Reports (warnings):** crates no section covers, and `applies_to` globs naming an
+  unknown crate ([PR gate](#gate)).
+- **Not yet:** the `review` and `log` commands.
   Until they land, those rules are enforced by review.
 - IDs, anchors and rule numbers became permanent at the first merge to `main` (#1).
 
@@ -172,13 +174,16 @@ checked: each listed section must actually cover the crate.
   comma-separated, written as in [References](#references): `path#anchor` for a section,
   or a bare `path` for a whole doc such as an ADR.
 - **What counts:** only section references take part in the two-way check. Whole-doc
-  references add context and only have to resolve. Sections in retired docs create no
+  references add context and only have to resolve. A reference to a superseded or retired
+  doc fails. Sections in retired docs create no
   obligations ([R-DOC-012](RULES.md#R-DOC-012)). A crate that no section covers needs no
   line.
 - **Module-level lines** are optional. When present, every reference must resolve.
 
 `cargo xtask docs for <path>` prints what governs a file. Agents run it before editing
-unfamiliar code. The path doesn't have to exist yet. It lists:
+unfamiliar code. The path is relative to the repository root, wherever you run the
+command, and doesn't have to exist yet. Absolute paths inside the repository also work.
+It lists:
 
 - **Sections** whose `covers` match the path (not in retired docs).
 - **Rules** whose `applies_to` match it (not retired).
@@ -264,8 +269,10 @@ so it never causes merge conflicts.
    and has no tombstone. See [Lifecycle](#lifecycle).
 9. **Rule metadata:** see [Rules](#rules).
 
-It also **reports**, without failing: crates that no section covers. The reviewer agent
-([REVIEW.md](../REVIEW.md)) reads this report.
+It also **reports**, without failing (as `warning:` lines), crates that no section covers,
+and `applies_to` globs naming a crate (`crates/<name>/…`, `apps/<name>/…`) that neither
+exists nor appears in [ARCHITECTURE › Crate map](ARCHITECTURE.md#crate-map), which is
+probably a typo. The reviewer agent ([REVIEW.md](../REVIEW.md)) reads this report.
 
 CI posts one PR comment listing every verification in the PR (section, by, note)
 so a reviewer reads all of them in one place.

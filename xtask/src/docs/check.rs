@@ -65,6 +65,7 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
         ));
     }
 
+    let known = super::backrefs::known_crates(repo.docs, repo.files.paths());
     let mut ids: BTreeMap<&str, &str> = BTreeMap::new();
     for doc in repo.docs {
         check_doc_meta(doc, &mut out);
@@ -90,7 +91,7 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
         }
         for r in &doc.rules {
             if let Some(meta) = &r.meta {
-                check_rule_meta(doc, r.line, &r.id, meta, &ci_checks, &mut out);
+                check_rule_meta(doc, r.line, &r.id, meta, &ci_checks, &known, &mut out);
             }
         }
         for link in &doc.links {
@@ -316,6 +317,7 @@ fn check_rule_meta(
     id: &str,
     meta: &toml::Table,
     ci_checks: &BTreeSet<String>,
+    known_crates: &BTreeSet<String>,
     out: &mut Vec<Diag>,
 ) {
     for k in meta.keys() {
@@ -343,6 +345,22 @@ fn check_rule_meta(
                 line,
                 format!("rule `{id}`: invalid `applies_to` glob `{g}`: {e}"),
             ));
+        }
+        // An unknown crate name is probably a typo: it would silently govern nothing.
+        if let Some(name) = super::backrefs::glob_crate(&g)
+            && !known_crates.contains(name)
+        {
+            out.push(Diag {
+                warning: true,
+                ..diag(
+                    &doc.path,
+                    line,
+                    format!(
+                        "rule `{id}`: `applies_to` names crate `{name}`, which neither exists \
+                         nor appears in ARCHITECTURE#crate-map (typo?)"
+                    ),
+                )
+            });
         }
     }
     for e in string_array(meta, "enforced_by", doc, line, out) {

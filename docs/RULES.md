@@ -630,7 +630,7 @@ dependency or performance claim (`.github/pull_request_template.md`).
 ## Documentation
 <!-- @section
 depends_on = ["docs/DOCS.md#gate"]
-verified = { hash = "b3:1a88cdaaeb2f97be", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012: R-DOC-008 now enforced by docs check (backrefs.rs) with applies_to widened to all .rs and module-line wording; R-DOC-012 reflowed, unchanged in meaning" }
+verified = { hash = "b3:b9a96ce23f4a55b1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against DOCS#gate: R-DOC-012 now names the applies_to typo report (unknown crate vs crate map), matching check.rs; other rules unchanged" }
 -->
 
 <a id="R-DOC-001"></a>
@@ -758,7 +758,9 @@ applies_to = ["**/*.md"]
 A section's `covers` glob that matches no tracked file is an error in active docs (a
 warning in drafts; retired docs are exempt): a section must not describe code that
 doesn't exist. A rule's `applies_to` glob must be valid but may match nothing, so a rule
-can govern a crate before it exists. Empty `applies_to = []` is allowed for process rules.
+can govern a crate before it exists. Naming a crate that neither exists nor appears in the
+crate map is reported as a likely typo. Empty `applies_to = []` is allowed for process
+rules.
 
 <a id="governance"></a>
 ## Governance
