@@ -22,7 +22,6 @@
 //!
 //! Docs: crates/jstream-outputs/README.md#purpose
 
-mod amf0;
 mod chunk;
 mod error;
 mod handshake;

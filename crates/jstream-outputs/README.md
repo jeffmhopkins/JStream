@@ -13,15 +13,16 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md", "docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:b31d9fdd868c29b4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only: this PR's jstream-sources (browser) and jstream-platform-windows (CEF backend) rows; this crate's row and purpose text are main's, unchanged" }
+verified = { hash = "b3:1083ce1a6b07f6cf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: crate-private amf0 module removed; intro names jstream-mux (L2) as a dependency for amf0 and flv::to_ms; Commands/Media/AMF0 bullets describe RtmpError::Amf0(MuxError) and timestamp_ms built on to_ms (nearest, negative rejected, wrap 2^32); Tests paragraph adds the one-@setDataFrame wire test and moves AMF0 tests to mux; threading and Not-yet text unchanged" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
 first piece is a pure-Rust **RTMP publish client** in the `rtmp` module, written in Rust
 as [ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md) requires and needed for the
 generic RTMP output of [ADR-0009](../../docs/adr/0009-youtube-rtmps-and-api.md). The
-`Output` trait, recording and the virtual-camera output come later. The only JStream
-dependency is `jstream-media` (for `MediaTime` conversion); it has no third-party
+`Output` trait, recording and the virtual-camera output come later. Its JStream
+dependencies are `jstream-media` (for `MediaTime`) and the layer-2 `jstream-mux`, whose
+public `amf0` codec and `flv::to_ms` conversion the client uses; it has no third-party
 dependencies besides `thiserror`.
 
 **What the client does.** The RTMP layer only carries bytes: callers hand it
@@ -42,23 +43,27 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   before `connect`; applies the server's Set Chunk Size and Abort; acknowledges each
   Window Acknowledgement Size worth of received bytes; answers Set Peer Bandwidth with
   its own Window Acknowledgement Size; and answers User Control ping requests.
-- **Commands** (`publisher`, `amf0`): `connect` (`app`, `type`, `flashVer`, `tcUrl`), then
+- **Commands** (`publisher`): `connect` (`app`, `type`, `flashVer`, `tcUrl`), then
   `releaseStream`, `FCPublish`, `createStream`, and `publish(key, "live")` on the new
   stream. `_error` to `connect`, `createStream` or `publish`, or an `onStatus` of level
   `error`, becomes `RtmpError::Rejected` with the server's code (for example
   `NetStream.Publish.BadName`). Publishing has started once `NetStream.Publish.Start`
   arrives. `finish` sends `FCUnpublish` and `deleteStream`.
 - **Media** (`publisher`): `send_metadata` prefixes `@setDataFrame` to an `onMetaData`
-  script-tag body; `send_video` and `send_audio` send VIDEODATA and AUDIODATA tag bodies
-  on their own chunk streams. `timestamp_ms` converts a `MediaTime`.
+  script-tag body, so it takes a `jstream-mux` tag built with `MetadataStyle::File`;
+  `send_video` and `send_audio` send VIDEODATA and AUDIODATA tag bodies on their own
+  chunk streams. `timestamp_ms` converts a `MediaTime` with `jstream_mux::flv::to_ms`
+  (rounded to nearest, as the muxer's tag timestamps are), then rejects negative times
+  and wraps at 2^32.
 - **URLs and keys** (`url`): `rtmp(s)://host[:port]/app[/...]`, with the whole path as the
   application name and the stream key separate. `StreamKey` prints as `***`, and no error
   carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The server's
   status code and description are untrusted text, so `RtmpError::Rejected` replaces any
   echo of the key in them with `***`.
-- **AMF0** (`amf0`): a minimal, crate-private encoder and decoder for the command
-  messages, with a nesting limit on decoding. **Unify it with `jstream-mux`'s AMF0
-  encoder once both crates have landed.**
+- **AMF0:** commands are encoded and server replies decoded with `jstream-mux`'s
+  `amf0::Amf0Value`, the same codec that writes FLV script tags. Its decoder treats
+  server input as untrusted (nesting limit, no allocation from claimed counts). Its
+  errors reach callers as `RtmpError::Amf0`, with the `MuxError` as the source.
 
 **Why blocking I/O over `Read + Write`.** [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)
 puts network outputs on the control plane, whose rules allow allocating and waiting.
@@ -82,9 +87,11 @@ client.
 - Enhanced RTMP (HEVC/AV1), AMF3 payloads, and the signed ("complex") handshake.
 
 **Tests** are hermetic ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): exact handshake
-and chunk bytes, chunking across chunk-size boundaries, extended timestamps, AMF0 round
-trips, and full publish sessions against fake servers over in-memory pipes, which check
-the order of every message the client sends.
+and chunk bytes, chunking across chunk-size boundaries, extended timestamps, and full
+publish sessions against fake servers over in-memory pipes, which check the order of
+every message the client sends. One sends a `jstream-mux` `onMetaData` tag and checks
+that exactly one `@setDataFrame` prefix reaches the wire. AMF0 tests live in
+`jstream-mux`.
 
 <a id="open-questions"></a>
 ## Open questions
