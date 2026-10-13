@@ -2,7 +2,7 @@
 id = "ADR-0018"
 title = "CI supply-chain policy: pinned actions, Dependabot, current runtimes"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
