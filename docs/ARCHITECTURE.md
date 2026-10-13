@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:43d2fc2e00537d95", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#27): table is main's (control L2, mcp L3, server L4, client-stack paragraph, graph/mux/outputs rows) plus this PR's two edits only: browser built-in in jstream-sources and CEF browser backend in jstream-platform-windows (ADR-0021); layers and unsafe column consistent" }
+verified = { hash = "b3:29b6f0cc6cf102e0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New jstream-platform crate: its Cargo.toml declares layer 1, the row's summary verbatim and unsafe_allowed = false, and depends only on jstream-media (L0), so the L1 row and R-ARCH-002 hold; the row still lists GpuInterop as the crate's responsibility, which the crate README records as deferred, not dropped" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
