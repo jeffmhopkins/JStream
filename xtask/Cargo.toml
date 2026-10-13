@@ -11,5 +11,10 @@ layer = 99
 summary = "Repository automation (cargo xtask): docs, lint-deps, governance, gen-schema, golden"
 unsafe_allowed = false
 
+[dependencies]
+anyhow.workspace = true
+pulldown-cmark.workspace = true
+toml.workspace = true
+
 [lints]
 workspace = true
