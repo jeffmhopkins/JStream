@@ -242,7 +242,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:37ba47d237ddd162", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): covered changes are the parity fixture (test-only, no wire change, 0.3 unchanged) and this PR's Transport bullet; text holds" }
+verified = { hash = "b3:ad39205686c679a3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #44 N1/N2 in jstream-server (length-independent token compare in config.rs, portless Host accepted only on port 80 in gate.rs): Transport bullet (token required, Origin/Host validated, 127.0.0.1 default, plain ws://) still holds; no wire, envelope or versioning change" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
