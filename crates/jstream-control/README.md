@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:ac061e81fd1ff6fa", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1 (B1, N1, N2) changed only mock.rs internals; purpose's contents bullets (trait, ControlError, mock behind the mock feature, protocol re-export) and L2 placement still hold" }
+verified = { hash = "b3:e223e42024f8ef2d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after the B2 emit fix in src/mock.rs: purpose text (Control trait, ControlError, mock feature, deferred WebSocket client) unaffected" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -39,7 +39,7 @@ Not here yet: the WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:50a67018f9801b86", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: Mock subsection edited. B1: lists graph's empty-ID checks (scene.create scene_id, item.add item_id, source.create source_id, source.duplicate new_source_id) now ported in the same position per edit; re-read all of graph apply.rs and the per-edit check order matches. N1: rev_conflict before empty_batch, as in Graph::apply. N2: streams end when their MockControl or the engine is dropped; trait text (streams end when the session or engine goes away) now holds for the mock. Tests cover each" }
+verified = { hash = "b3:e3e9b603ddd6aece", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B2 on #27: State::emit now skips and forgets closed queues, so a dropped session's stream stays ended; the Mock bullet says so and the test emits (directly and via another session's batch) after the drop; rest of #design unchanged against src/" }
 -->
 
 ### The trait
@@ -112,7 +112,8 @@ protocol's rules for them:
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
 - event streams that end, after what they have buffered, when their `MockControl` or
-  the engine is dropped, the way a socket's streams end when it closes.
+  the engine is dropped, the way a socket's streams end when it closes. An ended stream
+  stays ended: later events, including those other sessions cause, never reach it.
 
 Its futures are always ready. It has no undo, persistence or real outputs, and answers a
 protocol variant it doesn't know with `internal`.

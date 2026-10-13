@@ -299,7 +299,8 @@ impl State {
         Ok(CallResult::Query { result })
     }
 
-    /// Queues `event` for every live subscriber and drops the closed ones.
+    /// Queues `event` for every live subscriber, and forgets subscriptions that were
+    /// dropped or closed (their session went away), so a closed stream stays ended.
     fn emit(&mut self, event: Event) {
         self.subscribers.retain(|weak| {
             let Some(queue) = weak.upgrade() else {
@@ -307,6 +308,9 @@ impl State {
             };
             let waker = {
                 let mut queue = lock(&queue);
+                if queue.closed {
+                    return false;
+                }
                 queue.events.push_back(event.clone());
                 queue.waker.take()
             };
@@ -1004,6 +1008,16 @@ mod tests {
             poll_event(&mut staying_events, Waker::noop()),
             Poll::Pending
         );
+        // Events after the drop, including those caused by another session's call,
+        // never reach the ended stream (review B2 on #27).
+        engine.emit(Event::Unknown);
+        block_on(staying.hello(hello())).expect("handshake");
+        batch(&staying, Batch::single(create("a"))).expect("batch");
+        assert_eq!(
+            poll_event(&mut leaving_events, Waker::noop()),
+            Poll::Ready(None)
+        );
+        assert_eq!(drain(&mut staying_events).len(), 2);
     }
 
     #[test]
