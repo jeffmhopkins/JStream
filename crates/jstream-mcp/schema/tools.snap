@@ -1,0 +1,1232 @@
+---
+source: crates/jstream-mcp/src/tests.rs
+---
+{
+  "tools": [
+    {
+      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `item`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "Crop": {
+            "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
+            "properties": {
+              "bottom": {
+                "description": "Pixels cut from the bottom edge.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "left": {
+                "description": "Pixels cut from the left edge.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "right": {
+                "description": "Pixels cut from the right edge.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "top": {
+                "description": "Pixels cut from the top edge.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "left",
+              "top",
+              "right",
+              "bottom"
+            ],
+            "type": "object"
+          },
+          "Edit": {
+            "description": "A change to the collection state: undoable, batchable and atomic.\n\nSerialized with an internal `type` tag holding the command name (`noun.verb`,\nR-API-002). Every variant documents its inverse. The engine (`jstream-graph`)\ncomputes the inverse from the state *before* the edit, so the protocol has to be\nclosed under inversion: every inverse must itself be a sequence of edits, and it is.\n\nPositions are indexes: scenes in display order (0 is first), items in stacking order\nwithin their scene (0 is the bottom).",
+            "oneOf": [
+              {
+                "description": "Creates an empty scene. Inverse: `scene.delete`.",
+                "properties": {
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The new scene's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "scene.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Renames a scene. Inverse: `scene.rename` back to the previous name.",
+                "properties": {
+                  "name": {
+                    "description": "The new display name.",
+                    "type": "string"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to rename."
+                  },
+                  "type": {
+                    "const": "scene.rename",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it: delete those sources first (in\nthe same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to delete."
+                  },
+                  "type": {
+                    "const": "scene.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The new item's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to add to."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source the item shows."
+                  },
+                  "transform": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ItemTransform"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Initial transform. Omitted means [`ItemTransform::IDENTITY`]."
+                  },
+                  "type": {
+                    "const": "item.add",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID, source and transform, then `item.reorder` to its old\nstacking position (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to remove."
+                  },
+                  "type": {
+                    "const": "item.remove",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an item's transform. Inverse: `item.set_transform` with the previous one.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to move."
+                  },
+                  "transform": {
+                    "$ref": "#/$defs/ItemTransform",
+                    "description": "The new transform."
+                  },
+                  "type": {
+                    "const": "item.set_transform",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "transform"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows or hides an item. Inverse: `item.set_visible` with the previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show or hide."
+                  },
+                  "type": {
+                    "const": "item.set_visible",
+                    "type": "string"
+                  },
+                  "visible": {
+                    "description": "Whether the item is drawn. Items are visible when added.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "visible"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves an item to another stacking position in its scene. Inverse: `item.reorder`\nback to its previous index.",
+                "properties": {
+                  "index": {
+                    "description": "The new position, counted from the bottom (0). Must be less than the number of\nitems in the scene, else `invalid_argument`. The other items keep their\nrelative order.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to move."
+                  },
+                  "type": {
+                    "const": "item.reorder",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "index"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an item's crop. Inverse: `item.set_crop` with the previous one.",
+                "properties": {
+                  "crop": {
+                    "$ref": "#/$defs/Crop",
+                    "description": "The new crop. Items are added uncropped ([`Crop::NONE`])."
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to crop."
+                  },
+                  "type": {
+                    "const": "item.set_crop",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "crop"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Adds a source to the collection. It appears in no scene until an `item.add`\nplaces it. Inverse: `source.delete`.",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/$defs/SourceKind",
+                    "description": "What the source shows. A `scene` source must name an existing scene."
+                  },
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The new source's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "source.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "name",
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Copies a source under a new ID: a separate instance with the same kind and\nsettings, which changes independently from then on. Placing the *same* source again\nis `item.add` with its existing `source_id`. Inverse: `source.delete` of the copy.",
+                "properties": {
+                  "name": {
+                    "description": "The copy's display name.",
+                    "type": "string"
+                  },
+                  "new_source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The copy's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to copy."
+                  },
+                  "type": {
+                    "const": "source.duplicate",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "new_source_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it:\nremove those items first (in the same batch if needed). Inverse: `source.create`\nwith its name and kind.",
+                "properties": {
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to delete."
+                  },
+                  "type": {
+                    "const": "source.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a scene to another display position. Inverse: `scene.reorder` back to its\nprevious index.",
+                "properties": {
+                  "index": {
+                    "description": "The new position, counted from the first scene (0). Must be less than the\nnumber of scenes, else `invalid_argument`. The other scenes keep their\nrelative order.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to move."
+                  },
+                  "type": {
+                    "const": "scene.reorder",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "index"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "Finite32": {
+            "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
+            "format": "float",
+            "type": "number"
+          },
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "ItemId": {
+            "description": "A scene item: one placement of a source inside a scene. Unique across scenes.",
+            "type": "string"
+          },
+          "ItemTransform": {
+            "description": "Where a scene item sits in its scene.\n\nA deliberately small first cut: position, scale and rotation about the item's\ntop-left corner. The full 3D transform and crop (ARCH data model) replace it in a\nlater minor version, as added fields with defaults.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
+            "properties": {
+              "position": {
+                "$ref": "#/$defs/Vec2",
+                "description": "Top-left corner, in pixels of the scene's canvas."
+              },
+              "rotation_deg": {
+                "$ref": "#/$defs/Finite32",
+                "description": "Clockwise rotation, in degrees."
+              },
+              "scale": {
+                "$ref": "#/$defs/Vec2",
+                "description": "Scale factors; 1.0 is the source's native size."
+              }
+            },
+            "required": [
+              "position",
+              "scale",
+              "rotation_deg"
+            ],
+            "type": "object"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "SceneId": {
+            "description": "A scene in the collection.",
+            "type": "string"
+          },
+          "SourceId": {
+            "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
+            "type": "string"
+          },
+          "SourceKind": {
+            "description": "What a source shows.\n\nSerialized with an internal `type` tag. A source is one shared instance: every item\nthat places it shows the same capture, and (once filters land) the same filters.",
+            "oneOf": [
+              {
+                "description": "Another scene, composited as one layer (a nested scene). An `item.add` that would\nmake a scene contain itself, directly or through other scenes, is rejected with\n`invalid_argument` naming the cycle.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene shown."
+                  },
+                  "type": {
+                    "const": "scene",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). Its settings come with `jstream-sources`;\nuntil then the kind is only a name.",
+                "properties": {
+                  "kind": {
+                    "description": "The kind's name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "builtin",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kind"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "Vec2": {
+            "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).\n\nBoth components are [`Finite32`]: a non-finite or out-of-`f32`-range number (`1e39`)\nfails deserialization, so the message is rejected as `malformed`, and in-process code\ncan't build a non-finite value.",
+            "properties": {
+              "x": {
+                "$ref": "#/$defs/Finite32",
+                "description": "Horizontal component."
+              },
+              "y": {
+                "$ref": "#/$defs/Finite32",
+                "description": "Vertical component."
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "edits": {
+            "description": "The edits, in order. An empty list is rejected with `empty_batch`.",
+            "items": {
+              "$ref": "#/$defs/Edit"
+            },
+            "minItems": 1,
+            "type": "array"
+          },
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          }
+        },
+        "required": [
+          "edits"
+        ],
+        "type": "object"
+      },
+      "name": "batch"
+    },
+    {
+      "description": "Returns the full JSON Schema of the JStream control protocol: every command, query, result, event and error code. Use it for details the other tools' schemas leave out.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "type": "object"
+      },
+      "name": "describe_api"
+    },
+    {
+      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.set_transform` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_crop` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "Crop": {
+            "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
+            "properties": {
+              "bottom": {
+                "description": "Pixels cut from the bottom edge.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "left": {
+                "description": "Pixels cut from the left edge.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "right": {
+                "description": "Pixels cut from the right edge.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "top": {
+                "description": "Pixels cut from the top edge.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "left",
+              "top",
+              "right",
+              "bottom"
+            ],
+            "type": "object"
+          },
+          "Finite32": {
+            "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
+            "format": "float",
+            "type": "number"
+          },
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "ItemId": {
+            "description": "A scene item: one placement of a source inside a scene. Unique across scenes.",
+            "type": "string"
+          },
+          "ItemTransform": {
+            "description": "Where a scene item sits in its scene.\n\nA deliberately small first cut: position, scale and rotation about the item's\ntop-left corner. The full 3D transform and crop (ARCH data model) replace it in a\nlater minor version, as added fields with defaults.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
+            "properties": {
+              "position": {
+                "$ref": "#/$defs/Vec2",
+                "description": "Top-left corner, in pixels of the scene's canvas."
+              },
+              "rotation_deg": {
+                "$ref": "#/$defs/Finite32",
+                "description": "Clockwise rotation, in degrees."
+              },
+              "scale": {
+                "$ref": "#/$defs/Vec2",
+                "description": "Scale factors; 1.0 is the source's native size."
+              }
+            },
+            "required": [
+              "position",
+              "scale",
+              "rotation_deg"
+            ],
+            "type": "object"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "SceneId": {
+            "description": "A scene in the collection.",
+            "type": "string"
+          },
+          "SourceId": {
+            "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
+            "type": "string"
+          },
+          "Vec2": {
+            "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).\n\nBoth components are [`Finite32`]: a non-finite or out-of-`f32`-range number (`1e39`)\nfails deserialization, so the message is rejected as `malformed`, and in-process code\ncan't build a non-finite value.",
+            "properties": {
+              "x": {
+                "$ref": "#/$defs/Finite32",
+                "description": "Horizontal component."
+              },
+              "y": {
+                "$ref": "#/$defs/Finite32",
+                "description": "Vertical component."
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `item` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Places an existing source in a scene as a new item, on top. The item refers to the\nsource, it doesn't copy it: one source can be placed in many scenes, or several\ntimes in one, and every placement shows the same instance (`source.duplicate`\nmakes a separate copy). Inverse: `item.remove`.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The new item's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to add to."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source the item shows."
+                  },
+                  "transform": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ItemTransform"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Initial transform. Omitted means [`ItemTransform::IDENTITY`]."
+                  },
+                  "type": {
+                    "const": "item.add",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID, source and transform, then `item.reorder` to its old\nstacking position (unless it was on top), `item.set_crop` if it was cropped, and\n`item.set_visible` if it was hidden.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to remove."
+                  },
+                  "type": {
+                    "const": "item.remove",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an item's transform. Inverse: `item.set_transform` with the previous one.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to move."
+                  },
+                  "transform": {
+                    "$ref": "#/$defs/ItemTransform",
+                    "description": "The new transform."
+                  },
+                  "type": {
+                    "const": "item.set_transform",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "transform"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows or hides an item. Inverse: `item.set_visible` with the previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show or hide."
+                  },
+                  "type": {
+                    "const": "item.set_visible",
+                    "type": "string"
+                  },
+                  "visible": {
+                    "description": "Whether the item is drawn. Items are visible when added.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "visible"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves an item to another stacking position in its scene. Inverse: `item.reorder`\nback to its previous index.",
+                "properties": {
+                  "index": {
+                    "description": "The new position, counted from the bottom (0). Must be less than the number of\nitems in the scene, else `invalid_argument`. The other items keep their\nrelative order.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to move."
+                  },
+                  "type": {
+                    "const": "item.reorder",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "index"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an item's crop. Inverse: `item.set_crop` with the previous one.",
+                "properties": {
+                  "crop": {
+                    "$ref": "#/$defs/Crop",
+                    "description": "The new crop. Items are added uncropped ([`Crop::NONE`])."
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to crop."
+                  },
+                  "type": {
+                    "const": "item.set_crop",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "crop"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "item"
+    },
+    {
+      "description": "Runs one `output` operation: set `op.type` to one of `output.start` (action), `output.stop` (action), `output.status` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "OutputId": {
+            "description": "An output (RTMP(S), recording, virtual camera).",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `output` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Starts an output (stream, recording or virtual camera).",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output to start."
+                  },
+                  "type": {
+                    "const": "output.start",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Stops an output.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output to stop."
+                  },
+                  "type": {
+                    "const": "output.stop",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Reports an output's current state.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output to report on."
+                  },
+                  "type": {
+                    "const": "output.status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "output"
+    },
+    {
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "SceneId": {
+            "description": "A scene in the collection.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `scene` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Creates an empty scene. Inverse: `scene.delete`.",
+                "properties": {
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The new scene's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "scene.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Renames a scene. Inverse: `scene.rename` back to the previous name.",
+                "properties": {
+                  "name": {
+                    "description": "The new display name.",
+                    "type": "string"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to rename."
+                  },
+                  "type": {
+                    "const": "scene.rename",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it: delete those sources first (in\nthe same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to delete."
+                  },
+                  "type": {
+                    "const": "scene.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a scene to another display position. Inverse: `scene.reorder` back to its\nprevious index.",
+                "properties": {
+                  "index": {
+                    "description": "The new position, counted from the first scene (0). Must be less than the\nnumber of scenes, else `invalid_argument`. The other scenes keep their\nrelative order.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to move."
+                  },
+                  "type": {
+                    "const": "scene.reorder",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "index"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists the collection's scenes, in display order.",
+                "properties": {
+                  "type": {
+                    "const": "scene.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "scene"
+    },
+    {
+      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.duplicate` (edit), `source.delete` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "SceneId": {
+            "description": "A scene in the collection.",
+            "type": "string"
+          },
+          "SourceId": {
+            "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
+            "type": "string"
+          },
+          "SourceKind": {
+            "description": "What a source shows.\n\nSerialized with an internal `type` tag. A source is one shared instance: every item\nthat places it shows the same capture, and (once filters land) the same filters.",
+            "oneOf": [
+              {
+                "description": "Another scene, composited as one layer (a nested scene). An `item.add` that would\nmake a scene contain itself, directly or through other scenes, is rejected with\n`invalid_argument` naming the cycle.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene shown."
+                  },
+                  "type": {
+                    "const": "scene",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). Its settings come with `jstream-sources`;\nuntil then the kind is only a name.",
+                "properties": {
+                  "kind": {
+                    "description": "The kind's name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "builtin",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kind"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `source` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Adds a source to the collection. It appears in no scene until an `item.add`\nplaces it. Inverse: `source.delete`.",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/$defs/SourceKind",
+                    "description": "What the source shows. A `scene` source must name an existing scene."
+                  },
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The new source's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "source.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "name",
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Copies a source under a new ID: a separate instance with the same kind and\nsettings, which changes independently from then on. Placing the *same* source again\nis `item.add` with its existing `source_id`. Inverse: `source.delete` of the copy.",
+                "properties": {
+                  "name": {
+                    "description": "The copy's display name.",
+                    "type": "string"
+                  },
+                  "new_source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The copy's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to copy."
+                  },
+                  "type": {
+                    "const": "source.duplicate",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "new_source_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it:\nremove those items first (in the same batch if needed). Inverse: `source.create`\nwith its name and kind.",
+                "properties": {
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to delete."
+                  },
+                  "type": {
+                    "const": "source.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "source"
+    }
+  ]
+}

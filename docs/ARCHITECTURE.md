@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:f1d4e4ac0fcfec6b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only covered change is jstream-outputs/Cargo.toml adding jstream-mux: L4 -> L2 is strictly lower per R-ARCH-002, and the outputs row already says it uses mux; no row, layer or unsafe column changes needed" }
+verified = { hash = "b3:d9f4c0aa00acc558", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased on main (#32: jstream-outputs L4 now depends on jstream-mux L2, already in its row). New jstream-mcp manifest: layer 3, summary verbatim from its row, unsafe_allowed false, deps jstream-control (L2) and jstream-protocol (L1), strictly lower; table text unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -274,13 +274,16 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:ff3144be4aced675", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: grouped tools, R-API-002 name pattern, snapshot cap, token + Origin (MCP transports spec link registered) match ADR-0006 and ADR-0013 per-client undo" }
+verified = { hash = "b3:da2c6ccebcc83e37", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the tools bullet: one tool per protocol noun (scene, item, source, output so far; audio/studio/youtube/state later), batch now and script later, link to jstream-mcp Design; names (R-API-002), access via the session's token (ADR-0006), per-client undo still match the new crate; snapshots bullet is still future work" }
 -->
 
-- **Tools are grouped by noun**, not one per command (`scene`, `item`, `audio`, `output`,
-  `studio`, `youtube`, `state`, plus `batch` and `script`). Each takes an `op` argument whose
+- **Tools are grouped by noun**, not one per command: one tool per protocol noun
+  (`scene`, `item`, `source`, `output` so far; `audio`, `studio`, `youtube`, `state` as
+  those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. `describe_api` returns detailed schemas on demand
-  (progressive discovery), so the agent's context stays small.
+  (progressive discovery), so the agent's context stays small. The first cut, the MCP
+  revisions it serves and its transports are in
+  [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show.

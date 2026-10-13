@@ -85,6 +85,22 @@ status = "ok"
 checked_note = "Re-read: 'Servers MUST validate the Origin header on all incoming connections'"
 
 [[external]]
+id = "mcp-spec-2026-07-28"
+url = "https://modelcontextprotocol.io/specification/2026-07-28"
+relied_on = "Current MCP revision (stateless): required _meta protocolVersion and clientCapabilities on every request (-32602 if missing); -32022 UnsupportedProtocolVersion with data.supported/requested; server/discover; resultType on results; ttlMs/cacheScope on discover and tools/list; tools/call input errors as isError results, unknown tool -32602; dual-era servers may answer initialize; stdio is newline-delimited with nothing else on stdout"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read versioning, basic, server/discover, tools, caching and stdio pages and schema.ts against relied_on"
+
+[[external]]
+id = "mcp-spec-2025-11-25"
+url = "https://modelcontextprotocol.io/specification/2025-11-25"
+relied_on = "Handshake-based MCP revision: initialize answers the requested version if supported, else the server's latest; initialize result carries protocolVersion, capabilities, serverInfo, instructions; ping is allowed before initialization completes"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read basic/lifecycle: version negotiation, initialize request and result, pings before initialize"
+
+[[external]]
 id = "anthropic-tool-use"
 url = "https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use"
 relied_on = "Tool names must match ^[a-zA-Z0-9_-]{1,128}$"

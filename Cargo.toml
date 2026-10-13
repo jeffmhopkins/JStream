@@ -15,6 +15,7 @@ blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 futures-core = { version = "0.3", default-features = false }
 globset = { version = "0.4", default-features = false }
 insta = { version = "1", default-features = false }
+jstream-control = { path = "crates/jstream-control" }
 jstream-media = { path = "crates/jstream-media" }
 jstream-mux = { path = "crates/jstream-mux" }
 jstream-protocol = { path = "crates/jstream-protocol" }
