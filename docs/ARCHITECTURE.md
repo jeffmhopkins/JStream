@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:07ab0d9cbc223ab0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New apps/jstream-cli (code and README) matches the jstream-cli row and diagram: a remote client through Control and the protocol only, no engine link; the stdio 'jstream mcp' proxy is not built yet and is an open question in the CLI README, so the row still describes the target" }
+verified = { hash = "b3:d75fd5a7179de0f1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: CLI changes (mock behind an opt-in feature, JSON flag parsing, request IDs on action output, README) keep the jstream-cli row true: a remote client through Control only, no engine link; jstream mcp still an open question" }
 -->
 
 ```
@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:97fa0f00dc469754", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#32, outputs -> mux L4 -> L2, already covered by main's verify); this PR adds apps/jstream-cli/Cargo.toml: layer 6, summary is the cli part of the apps/* row, unsafe_allowed false, depends only on jstream-control (L2, strictly lower) and never jstream-core (R-ARCH-002/003); table unchanged" }
+verified = { hash = "b3:d8c08c8f007f5fa2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: apps/jstream-cli/Cargo.toml gains an opt-in mock feature and a jstream-control dev-dependency; both are jstream-control (L2, strictly below L6), still no jstream-core; layer 6, summary and unsafe_allowed unchanged; table unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

@@ -10,7 +10,7 @@ use crate::exit::{self, CliError};
 use jstream_control::protocol::{
     Action, Call, CallResult, Event, Hello, PROTOCOL_VERSION, QueryResult, Response, Welcome,
 };
-use jstream_control::{Control, ControlError, EventStream, MockEngine};
+use jstream_control::{Control, ControlError, EventStream};
 use serde_json::json;
 use std::io::{self, Write};
 
@@ -18,22 +18,33 @@ use std::io::{self, Write};
 pub const CLIENT_NAME: &str = "jstream-cli";
 
 /// Opens a `Control` session for a [`Connection`].
-pub type Connector<'a> = &'a dyn Fn(&Connection) -> Result<Box<dyn Control>, ControlError>;
+pub type Connector<'a> = &'a dyn Fn(&Connection) -> Result<Box<dyn Control>, CliError>;
 
-/// The real connector: a fresh mock engine for `--mock`; no remote transport yet.
-pub fn connect(connection: &Connection) -> Result<Box<dyn Control>, ControlError> {
+/// The real connector: a fresh mock engine for `--mock` (feature `mock`); no remote
+/// transport yet.
+pub fn connect(connection: &Connection) -> Result<Box<dyn Control>, CliError> {
     match connection {
+        #[cfg(feature = "mock")]
         Connection::Mock { outputs } => {
-            let engine = outputs.iter().fold(MockEngine::new(), |engine, id| {
-                engine.with_output(id.clone())
-            });
+            let engine = outputs
+                .iter()
+                .fold(jstream_control::MockEngine::new(), |engine, id| {
+                    engine.with_output(id.clone())
+                });
             Ok(Box::new(engine.connect()))
         }
+        #[cfg(not(feature = "mock"))]
+        Connection::Mock { .. } => Err(CliError::Usage(
+            "`--mock` needs a build with the `mock` feature \
+             (`cargo build -p jstream-cli --features mock`)"
+                .into(),
+        )),
         Connection::Remote => Err(ControlError::Disconnected {
             reason: "the WebSocket client is not built yet; \
                      pass `--mock` to use the in-memory mock engine"
                 .into(),
-        }),
+        }
+        .into()),
     }
 }
 
@@ -45,12 +56,11 @@ pub fn run(
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> u8 {
-    // Known before parsing succeeds, so even a usage error is reported as JSON.
-    let json = args
-        .iter()
-        .take_while(|a| a.starts_with('-'))
-        .any(|a| a == "--json");
-    let result = args::parse(args).and_then(|invocation| execute(&invocation, connector, out));
+    let (result, json) = match args::parse(args) {
+        Ok(invocation) => (execute(&invocation, connector, out), invocation.json),
+        // A usage error is reported as JSON too if the global options asked for it.
+        Err(error) => (Err(error), args::json_requested(args)),
+    };
     match result {
         Ok(()) => exit::OK,
         Err(error) => {
@@ -104,7 +114,7 @@ pub fn execute(
             if json {
                 line(out, &response)
             } else {
-                write_action(out, action)
+                write_action(out, action, &response)
             }
         }
         Command::Edit(batch) => {
@@ -168,12 +178,13 @@ fn write_welcome(out: &mut dyn Write, welcome: &Welcome, json: bool) -> Result<(
     Ok(())
 }
 
-fn write_action(out: &mut dyn Write, action: &Action) -> Result<(), CliError> {
+fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Result<(), CliError> {
+    let id = &response.id;
     match action {
         Action::OutputStart { output_id } | Action::OutputStop { output_id } => {
-            writeln!(out, "{} accepted for {output_id}", action.name())?;
+            writeln!(out, "{} accepted for {output_id} ({id})", action.name())?;
         }
-        other => writeln!(out, "{} accepted", other.name())?,
+        other => writeln!(out, "{} accepted ({id})", other.name())?,
     }
     Ok(())
 }

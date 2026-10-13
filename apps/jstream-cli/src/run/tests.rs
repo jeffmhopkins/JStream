@@ -40,9 +40,7 @@ fn run_with(connector: Connector<'_>, line: &[&str]) -> Outcome {
 /// Runs the CLI with `line` against a new session of `engine`.
 fn run_on(engine: &MockEngine, line: &[&str]) -> Outcome {
     run_with(
-        &|_: &Connection| -> Result<Box<dyn Control>, ControlError> {
-            Ok(Box::new(engine.connect()))
-        },
+        &|_: &Connection| -> Result<Box<dyn Control>, CliError> { Ok(Box::new(engine.connect())) },
         line,
     )
 }
@@ -115,10 +113,10 @@ fn populated() -> MockEngine {
     engine
 }
 
-fn refuse(_: &Connection) -> Result<Box<dyn Control>, ControlError> {
-    Err(ControlError::Disconnected {
+fn refuse(_: &Connection) -> Result<Box<dyn Control>, CliError> {
+    Err(CliError::Control(ControlError::Disconnected {
         reason: "refused".into(),
-    })
+    }))
 }
 
 #[test]
@@ -309,7 +307,7 @@ fn outputs_golden() {
     );
     assert_eq!(
         run_on(&engine, &["--mock", "output", "start", "out_1"]),
-        ok("output.start accepted for out_1\n")
+        ok("output.start accepted for out_1 (req_1)\n")
     );
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "output", "status", "out_1"]),
@@ -430,7 +428,51 @@ fn connection_and_usage_failures() {
             "error: wrong arguments for `scene`; try `jstream-cli help`\n"
         )
     );
-    // The real connector's mock knows the outputs it was given.
+    // Regression (review round 1, B1): `--json` after `--mock-output <id>` counts, for
+    // usage errors too.
+    assert_eq!(
+        run_with(
+            &connect,
+            &["--mock", "--mock-output", "o", "--json", "scene"]
+        ),
+        failed(
+            exit::USAGE,
+            "{\"error\":{\"code\":\"usage\",\"message\":\"wrong arguments for `scene`; \
+             try `jstream-cli help`\"}}\n"
+        )
+    );
+    assert_eq!(CLIENT_NAME, "jstream-cli");
+}
+
+#[test]
+fn json_after_mock_output_reports_engine_errors_as_json() {
+    // Regression (review round 1, B1).
+    let engine = populated();
+    assert_eq!(
+        run_on(
+            &engine,
+            &[
+                "--mock",
+                "--mock-output",
+                "out_1",
+                "--json",
+                "output",
+                "stop",
+                "out_1"
+            ]
+        ),
+        failed(
+            18,
+            "{\"error\":{\"code\":\"action_failed\",\"message\":\"action failed: output \
+             `out_1` is not running\",\"reason\":\"output `out_1` is not running\"}}\n"
+        )
+    );
+}
+
+/// With the `mock` feature, the real connector's mock knows the outputs it was given.
+#[cfg(feature = "mock")]
+#[test]
+fn mock_connection_with_the_feature() {
     assert_eq!(
         run_with(
             &connect,
@@ -438,5 +480,18 @@ fn connection_and_usage_failures() {
         ),
         ok("o: stopped\n")
     );
-    assert_eq!(CLIENT_NAME, "jstream-cli");
+}
+
+/// Without the `mock` feature, `--mock` is a usage error that says how to get it.
+#[cfg(not(feature = "mock"))]
+#[test]
+fn mock_connection_without_the_feature() {
+    assert_eq!(
+        run_with(&connect, &["--mock", "scene", "list"]),
+        failed(
+            exit::USAGE,
+            "error: `--mock` needs a build with the `mock` feature \
+             (`cargo build -p jstream-cli --features mock`)\n"
+        )
+    );
 }

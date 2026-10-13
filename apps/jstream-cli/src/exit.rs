@@ -1,8 +1,9 @@
 //! Exit codes, and the errors that produce them.
 //!
 //! Every failure has its own exit code, so scripts can branch on it without parsing
-//! output. The table is documented in apps/jstream-cli/README.md#usage; the codes are part
-//! of the CLI's interface, so a released code keeps its meaning.
+//! output. The table is documented in apps/jstream-cli/README.md#usage. The numbering is
+//! provisional until the maintainer confirms it; after that, a released code keeps its
+//! meaning.
 
 use jstream_control::ControlError;
 use jstream_control::protocol::ProtocolError;

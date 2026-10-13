@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:8490c58c1bf9d243", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: checked each Contents bullet against args.rs, run.rs, exit.rs and block.rs; dependencies are jstream-control (mock), serde, serde_json only, layer 6 as in ARCH#crate-map; mcp proxy and remote connection stated as not built" }
+verified = { hash = "b3:0aa9a96a24814da7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: purpose now says --mock needs the mock cargo feature; Contents bullets still match args.rs, run.rs (connector now returns CliError), exit.rs and block.rs" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -35,13 +35,14 @@ Contents (a first cut):
 Not here yet: a connection to a real engine (it needs the WebSocket client in
 `jstream-control`), and `jstream mcp`, the stdio MCP proxy
 ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)). Until then every command that talks
-to an engine needs `--mock`.
+to an engine needs `--mock`, which needs a build with the `mock` cargo feature
+(`cargo run -p jstream-cli --features mock -- --mock …`).
 
 <a id="usage"></a>
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs"]
-verified = { hash = "b3:da71bc0d26e90102", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: command table, edit grammar (all 13 protocol 0.2 edits), JSON shapes, stderr error format and the exit-code table checked against args.rs USAGE, run.rs and exit.rs and their golden tests" }
+verified = { hash = "b3:fa7fdaf174f46912", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: B3 error format corrected (human 'error: <msg>' plus ' (<code>)' only for engine errors; usage/disconnected/io codes only in JSON), --json found after --mock-output (B1), request ID on action lines (N2), mock feature noted, exit codes marked provisional (N3); checked against run.rs, args.rs and the golden tests" }
 -->
 
 ```sh
@@ -53,7 +54,8 @@ jstream-cli --mock edit --expected-rev 0 scene.create main Main \
 
 Global options come before the command: `--json`, `--mock`, `--mock-output <id>`
 (repeatable; adds a stopped output to the mock) and `--help`. `jstream-cli help` prints
-the full grammar.
+the full grammar. `--mock` needs the `mock` cargo feature; without it, `--mock` is a
+usage error that says so.
 
 | Command | Protocol call |
 |---|---|
@@ -72,18 +74,23 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
   protocol is supported. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
-- **Output:** human-readable by default. With `--json`, each result is one line of JSON
+- **Output:** human-readable by default; a call's line ends with its request ID
+  (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
+  the `state.changed` event it causes. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
   protocol version doesn't know are skipped, as the protocol asks.
-- **Errors** go to stderr: `error: <message> (<code>)`, or with `--json` an object
+- **Errors** go to stderr. For people: `error: <message>`, with ` (<code>)` appended
+  when it is an engine error (``error: scene `x` does not exist (not_found)``). With
+  `--json` (found among the global options even when parsing fails): an object
   `{"error": {"code": …, "message": …}}`. For an engine error it is the protocol's wire
-  error, with its detail fields. The CLI's own codes are `usage`, `disconnected` and
-  `io`.
+  error, with its detail fields; otherwise the code is one of the CLI's own, `usage`,
+  `disconnected` or `io`, which appear only in JSON output.
 - **Events** are printed and flushed one by one until `--count` is reached or the
   stream ends. A stream that ends means the engine went away, so it exits with code 3.
 
-**Exit codes.** Stable: scripts may rely on them.
+**Exit codes.** Provisional until the maintainer confirms the scheme
+([open question 4](#design)); after that, a released code keeps its meaning.
 
 | Code | Meaning |
 |---|---|
@@ -108,7 +115,7 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:18e302927628148a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: hand-rolled parser, thread-parking block_on, connector seam returning Disconnected without --mock, writer-based output and typed CliError all match src/ and Cargo.toml; consistent with jstream-control#design (boxed executor-free futures, mock always ready)" }
+verified = { hash = "b3:3539cfea69d0af53", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1 (B2): new opt-in mock bullet matches Cargo.toml (feature mock off by default enabling jstream-control/mock, dev-dependency with mock for unit tests, exit_codes test required-features) and the cfg'd connect branches; connector type now CliError; open questions 3 and 4 updated; jstream-control#design's 'clients enable it in dev-dependencies' holds for default builds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -124,11 +131,17 @@ verified = { hash = "b3:18e302927628148a", by = "agent:claude@session_01QBbMRwRu
   polls; a transport that completes a future from another thread wakes it through the
   waker. The mock's futures are always ready.
 - **The connection is a seam.** `run` takes a connector, `Fn(&Connection) ->
-  Result<Box<dyn Control>, ControlError>`, and everything after it sees only
-  `dyn Control`. `--mock` builds a fresh `MockEngine` (from `jstream-control`'s `mock`
-  feature, a normal dependency for now), so its state lasts one run. Without `--mock`
-  the connector answers `Disconnected`, until the WebSocket client lands; then that
-  branch opens it, with the address and token file as new global options.
+  Result<Box<dyn Control>, CliError>`, and everything after it sees only
+  `dyn Control`. `--mock` builds a fresh `MockEngine`, so its state lasts one run.
+  Without `--mock` the connector answers `Disconnected`, until the WebSocket client
+  lands; then that branch opens it, with the address and token file as new global
+  options.
+- **The mock is opt-in.** This crate's `mock` feature (off by default) enables
+  `jstream-control/mock` and the `--mock` branch; without it, `--mock` is a usage error,
+  so a default or release build carries no mock. The unit tests get `MockEngine`
+  through a dev-dependency with `mock` on, whatever the features, and test both
+  branches of `--mock`; the binary-level test (`tests/exit_codes.rs`) needs the feature
+  (`required-features`) and runs under `--all-features`.
 - **Output through writers.** Clippy denies `print!` ([R-RS-005](../../docs/RULES.md#R-RS-005)),
   so `run` writes to the `Write` handles it is given: locked stdout and stderr in
   `main`, byte buffers in tests, which compare the exact human and JSON output.
@@ -142,5 +155,7 @@ verified = { hash = "b3:18e302927628148a", by = "agent:claude@session_01QBbMRwRu
 2. **More queries.** The protocol has only `scene.list` and `output.status`. Listing
    sources or items, or reading the full state, needs new protocol queries first
    ([R-ARCH-001](../../docs/RULES.md#R-ARCH-001)).
-3. **The mock in release builds.** `--mock` ships in the binary. Once a real connection
-   exists it could move behind a cargo feature.
+3. **The `mock` feature after the WebSocket client.** Keep it as a scripting sandbox,
+   or remove it once a real engine can be reached.
+4. **Exit codes.** The numbering (2 usage, 3 disconnected, 10 and up for protocol
+   codes) is provisional until the maintainer confirms it.

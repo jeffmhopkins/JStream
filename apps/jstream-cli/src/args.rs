@@ -21,7 +21,8 @@ Global options (before the command):
   --json               machine output: one JSON value per line on stdout,
                        errors as JSON on stderr
   --mock               use an in-memory mock engine (no real engine connection
-                       exists yet); it starts empty at rev 0 for each run
+                       exists yet); it starts empty at rev 0 for each run.
+                       Needs a build with the `mock` cargo feature
   --mock-output <id>   with --mock: add a stopped output (repeatable)
   -h, --help           print this help
 
@@ -104,6 +105,24 @@ pub enum Command {
 
 fn usage(message: impl Into<String>) -> CliError {
     CliError::Usage(message.into())
+}
+
+/// Whether the global options ask for `--json`, read the way [`parse`] reads them (the
+/// value after `--mock-output` is skipped; reading stops at the command, at `--help` and
+/// at an unknown option). Lets a usage error be reported as JSON when parsing fails.
+pub fn json_requested(args: &[String]) -> bool {
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        match arg.as_str() {
+            "--json" => return true,
+            "--mock" => {}
+            "--mock-output" => {
+                rest.next();
+            }
+            _ => return false,
+        }
+    }
+    false
 }
 
 /// Parses the arguments after the program name.
@@ -584,6 +603,32 @@ mod tests {
         );
         assert_eq!(batch.expected_rev, None);
         assert_eq!(batch.idempotency_key, None);
+    }
+
+    #[test]
+    fn json_is_found_where_parse_finds_it() {
+        use super::json_requested;
+        let yes = |line: &[&str]| {
+            assert!(json_requested(&args(line)), "{line:?}");
+            assert!(parse(&args(line)).map_or(true, |inv| inv.json), "{line:?}");
+        };
+        yes(&["--json", "hello"]);
+        // Regression (review round 1, B1): `--mock-output`'s value is not a command.
+        yes(&[
+            "--mock",
+            "--mock-output",
+            "out_1",
+            "--json",
+            "output",
+            "stop",
+            "out_1",
+        ]);
+        yes(&["--mock", "--mock-output", "out_1", "--json", "scene"]);
+        let no = |line: &[&str]| assert!(!json_requested(&args(line)), "{line:?}");
+        no(&["hello", "--json"]);
+        no(&["--mock-output", "--json", "hello"]);
+        no(&["--verbose", "--json", "hello"]);
+        no(&["--help", "--json"]);
     }
 
     #[test]

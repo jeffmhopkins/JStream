@@ -15,9 +15,22 @@ unsafe_allowed = false
 [lints]
 workspace = true
 
+[features]
+# `--mock`: run against jstream-control's in-memory engine, the only connection until
+# the WebSocket client lands in jstream-control. Off by default, so a release binary
+# doesn't carry the mock; without it `--mock` is a usage error.
+mock = ["jstream-control/mock"]
+
 [dependencies]
-# `mock`: the in-memory engine behind `--mock`, the only connection until the WebSocket
-# client lands in jstream-control.
-jstream-control = { workspace = true, features = ["mock"] }
+jstream-control.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+# The unit tests drive whole runs against a `MockEngine` they populate themselves.
+jstream-control = { workspace = true, features = ["mock"] }
+
+# Runs the binary with `--mock`.
+[[test]]
+name = "exit_codes"
+required-features = ["mock"]

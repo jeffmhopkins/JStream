@@ -2,7 +2,7 @@
 //! through `jstream_control::Control` and `jstream-protocol` only (ADR-0001, R-ARCH-003):
 //! queries, batches of edits, actions and the event stream, with human or `--json`
 //! output and one exit code per failure kind. Until the WebSocket client exists it talks
-//! to `jstream-control`'s in-memory mock (`--mock`).
+//! to `jstream-control`'s in-memory mock (`--mock`, with the `mock` cargo feature).
 //!
 //! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-cli/README.md#purpose, apps/jstream-cli/README.md#usage, apps/jstream-cli/README.md#design, docs/adr/0001-library-first-engine.md
 
