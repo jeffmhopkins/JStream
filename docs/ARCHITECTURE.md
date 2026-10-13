@@ -83,7 +83,7 @@ verified = { hash = "b3:4c21fdca01d95b25", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:d92ee1f43a6e92a4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs only gained usage lines for docs verify/for; tree comment (xtask: docs, lint-deps, governance, ...) still describes the command set" }
+verified = { hash = "b3:4f16a7cf1d554cd5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs now dispatches lint-deps to the new lint_deps module and lists it in usage; tree entry 'xtask/: docs, lint-deps, governance, ...' still describes the command set, layout unchanged" }
 -->
 
 ```

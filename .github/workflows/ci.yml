@@ -1,5 +1,5 @@
 # CI: the required checks from docs/RULES.md#R-GIT-003 that exist so far.
-# Not yet here (later M0 PRs): lint-deps, docs, governance, cargo-hack feature checks.
+# Not yet here (later M0 PRs): governance, cargo-hack feature checks.
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
@@ -98,6 +98,15 @@ jobs:
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo xtask docs check
+
+  # Crate layering, unsafe declarations, links= allowlist, workspace deps (xtask/src/lint_deps.rs).
+  lint-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo xtask lint-deps
 
   # The merge gate's decision logic (ADR-0019), tested against the deployed workflow file.
   gate-test:
