@@ -16,7 +16,7 @@ that runs from a clean checkout.
 ## M0: Foundation and risk spikes
 <!-- @section
 depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:60a349bd4c560080", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added spike S4 (WebView2 page via WGC + process-loopback audio) per proposed ADR-0021; S1-S3 and Track A unchanged" }
+verified = { hash = "b3:a54a321936b4ef31", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "S4 now proves CEF off-screen rendering via accelerated-paint shared textures into wgpu plus per-browser audio handler, and picks bindings/helper layout, per ADR-0021 decision changed to CEF" }
 -->
 
 Two tracks run in parallel.
@@ -45,8 +45,9 @@ Two tracks run in parallel.
   ([ADR-0020](docs/adr/0020-portable-windows-distribution.md)).
 - **S3 Clock:** WASAPI mic + loopback timestamps mapped to QPC, drift measured over an hour,
   adaptive resampler validated.
-- **S4 Browser source:** a hidden WebView2 page captured with WGC into a GPU texture
-  (transparent, 1080p60, no CPU copy), and its audio through process loopback
+- **S4 Browser source:** a CEF off-screen page delivered as a shared GPU texture
+  through accelerated paint (transparent, 1080p60, no CPU copy) into wgpu, with its audio
+  from CEF's audio handler. Also picks the Rust CEF bindings and the helper-process layout
   ([ADR-0021](docs/adr/0021-browser-source.md)).
 
 **Demo:** CI green with all required checks. A PR that changes covered code without

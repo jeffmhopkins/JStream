@@ -332,12 +332,13 @@ verified = { hash = "b3:233514b2be0b9df3", by = "agent:claude@session_01QBbMRwRu
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:bb220b835e3ff5b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rewritten for ADR-0020: portable zip, crt-static, state in APPDATA or beside exe via portable marker, vcam registered by app on first use (HKCU or one UAC prompt, S2 decides); covers dropped with installer/" }
+verified = { hash = "b3:bb081c51d8417c30", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Portable zip contents now include the CEF runtime folder for browser sources (ADR-0021, CEF); state location and vcam registration text unchanged and still match ADR-0020" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
-`jstream-daemon.exe`, `jstream-cli.exe` and the `jstream-vcam-windows` DLL. Release builds
+`jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
+runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder. Release builds
 link the C runtime statically and need only OS components (WebView2, Media Foundation,
 Direct3D 12).
 

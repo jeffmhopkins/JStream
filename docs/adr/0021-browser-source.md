@@ -48,39 +48,54 @@ Options on Windows:
 
 <a id="decision"></a>
 ## Decision
-- **Engine (Windows):** WebView2 (option 1).
-  - It costs no download and no native dependency, and it fits the portable zip.
-  - It reuses the capture and process-loopback paths that spikes S1 and S3 already
-    exercise.
-  - CEF stays the fallback if WebView2 can't meet the frame-pacing or audio-isolation
-    needs.
+- **Engine: CEF (option 2).** The maintainer chose the Chromium Embedded Framework over
+  WebView2. CEF gives exact control of frame rate, off-screen rendering into shared GPU
+  textures, and per-browser audio callbacks. It is the proven OBS approach.
+- **Rendering:** CEF off-screen rendering with accelerated paint (shared D3D11 texture
+  handles). Those textures are opened on the engine's device and imported into wgpu, using
+  the same interop path as capture (ADR-0004 and spike S1). There is no CPU copy, the
+  background is transparent, and each source sets its own frame-rate cap.
+- **Audio:** CEF's per-browser audio handler delivers PCM. It feeds the source's audio
+  stream directly, so process loopback isn't needed and every source is isolated (ADR-0007).
+- **Packaging (fits ADR-0020):** the CEF runtime (`libcef.dll` and its resources, about
+  150–250 MB) ships inside the portable zip, in its own folder next to the exes. It needs no
+  installer and no admin. CEF's helper subprocesses run as the same exe with a
+  subprocess flag, or as a small `jstream-browser-helper.exe` in the zip.
+- **Dependency:** Rust bindings to CEF (to be picked in spike S4). The prebuilt CEF runtime
+  is native code, so its addition must come with a lint-deps native-code allowlist entry
+  and a declared governance change.
+- **Security updates:** the CEF version is pinned. Release builds track CEF stable for
+  Chromium security fixes, and a scheduled check flags when the pinned CEF falls behind.
 - **Prove it first:** spike **S4** must show both of these before the source is built:
-  - a transparent 1080p60 page reaching the compositor with no CPU copy;
-  - per-source audio.
+  - a transparent 1080p60 page reaching the compositor through accelerated paint, with no
+    CPU copy;
+  - per-source audio through the audio handler.
 
-  If either fails, a new ADR revisits CEF.
-- **The source:** `jstream-sources` gains a `browser` source kind with these settings:
-  URL or local file, width, height, frame-rate cap, custom CSS, "shut down when not
-  visible" and "refresh when shown".
-  - Page interaction goes through protocol actions such as `source.interact`.
-  - Pages run sandboxed. They get no access to the JStream control API unless the user
-    grants it to that source.
-- **Other platforms:** macOS (WKWebView) and Linux (WebKitGTK) get the equivalent when
-  their platform crates land (M3). Each needs its own note in ARCHITECTURE, not a new ADR,
-  unless the approach changes.
+  If it fails, a new ADR revisits the choice.
+- **The source:** `jstream-sources` gains a `browser` source kind with these settings: URL
+  or local file, width, height, frame-rate cap, custom CSS, "shut down when not visible"
+  and "refresh when shown". Page interaction goes through protocol actions such as
+  `source.interact`.
+- **Isolation:** pages run with no access to the JStream control API unless the user
+  grants it to that source.
+- **Other platforms:** CEF also supports macOS and Linux off-screen rendering, so the same
+  approach carries over when those platform crates land (M3).
+- **The UI is unaffected:** the desktop UI keeps using WebView2 through Tauri (ADR-0002).
+  CEF is only for browser sources.
 
 <a id="consequences"></a>
 ## Consequences
 - **Roadmap:** browser source moves from "Later" into the plan. Spike S4 comes first, and
   the source ships with the M1b sources.
-- **Security:** pages are untrusted content inside a process with stream credentials.
-  This means:
-  - sandboxed WebView2 profiles;
-  - no automatic control-API access;
-  - a per-source "allow page to control JStream" opt-in, off by default;
-  - no file access outside an explicit local file or folder.
-- **Frame pacing:** pacing tied to the compositor means a browser source may deliver
-  uneven frame timing under load. The compositor already handles sources at independent
-  rates.
-- **Audio:** per-source audio isolation may cost one WebView2 environment, and so one set
-  of browser processes, per audio-producing browser source.
+- **Download size:** the portable zip grows by about 150–250 MB for the CEF runtime. That is
+  the price of exact frame pacing and isolated per-source audio.
+- **Upkeep:** CEF needs regular updates for Chromium security fixes, which is an ongoing
+  maintenance duty.
+- **Security:** pages are untrusted content inside a process that holds stream
+  credentials. This means:
+  - CEF runs sandboxed where supported;
+  - there is no automatic control-API access;
+  - a per-source "allow page to control JStream" opt-in exists, off by default;
+  - there is no file access outside an explicit local file or folder.
+- **A second large native dependency** joins the build. It is declared through lint-deps
+  and governance, not hidden.
