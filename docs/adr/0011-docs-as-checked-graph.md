@@ -1,52 +1,44 @@
----
-id: ADR-0011
-title: "Documentation as a checked graph"
-kind: adr
-status: accepted
-decided: 2026-10-13
-rev: 1
-review_every: 180d
-depends_on: [ext:adr-practice]
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version, recorded from design Q&A with the maintainer"}
----
++++
+id = "ADR-0011"
+title = "Documentation as a hash-checked graph"
+kind = "adr"
+status = "accepted"
++++
 
-# 0011: Documentation as a checked graph
+# ADR-0011: Documentation as a hash-checked graph
 
+<a id="context"></a>
 ## Context
-Most of JStream's code will be written by AI agents directed by one maintainer.
-Agents rely heavily on docs, so a stale doc is worse than a missing one: it
-gets followed confidently. Docs drift from three sources: code changes, changes
-to other docs they rely on, and changes outside the repo (external APIs, OS
-lifecycles, dependencies).
+Most code will be written by AI agents directed by one maintainer. Agents follow docs
+confidently, so a stale doc is worse than a missing one. Docs drift from three sources:
+code changes, changes to the docs they rely on, and the outside world. A first design
+stored revisions and histories in the files. Independent review showed that it was
+inconsistent from its first commit and would conflict on every pair of parallel PRs.
 
+<a id="decision"></a>
 ## Decision
-Documentation is a graph of identified, versioned sections, checked by CI
-(`cargo xtask docs`), as specified in [[DOCS]]:
+Documentation is a graph of anchored sections, checked by `cargo xtask docs`, as specified
+in [DOCS](../DOCS.md):
 
-1. Every doc has front matter with a permanent ID; `##` sections carry IDs, `covers`
-   (code globs), `depends_on`, and a `verified` record.
-2. All references use a single checked syntax (`[[ID#section]]`, `[[ext:…]]`,
-   `[[fact:…]]`, `[[sym:…]]`, `[[cmd:…]]`) and must resolve. External URLs live only in
-   `docs/external.toml`; repeated facts only in `docs/facts.toml`.
-3. **Hard coverage gate:** a PR that changes covered code must edit or re-verify the
-   covering sections. Content changes propagate one hop to dependents.
-4. Revs, dates and histories are tool-written; staleness is computed from git history.
-5. Verification is allowed by humans and agents, but needs a note saying what was
-   checked; CI collects all attestations into one PR comment for review.
-6. Tracking is per section, so a change only re-verifies the sections it touches.
-7. Code carries checked module-level back-references (`Docs:` lines) to the sections and
-   ADRs that govern it.
-8. Rules have permanent IDs (`R-<AREA>-NNN`) with a lifecycle (active → retired), and
-   each declares how it is enforced.
-9. Time-based review: each doc and external has a `review_every`; CI warns at 1× and
-   fails at 2×; a weekly sweep link-checks externals and re-checks facts.
+1. TOML front matter. Every `##` section has a permanent anchor plus `covers` and
+   section-level `depends_on`.
+2. A section's verification is a **content hash** over its own text, its covered files and
+   the sections it depends on. Any change makes it stale. Propagation is exactly one hop.
+3. **No history in files.** Revisions, dates and authors come from git.
+4. References are standard Markdown links, checked. External URLs are registered with
+   what we rely on. Facts are registered once and marked in prose.
+5. Time-based review never blocks PRs. A weekly sweep keeps one pinned issue up to date.
+6. Rules have permanent IDs and declare their enforcement, using a fixed vocabulary
+   that the tool checks.
+7. Weakening the checks is a governance change ([ADR-0015](0015-review-and-governance.md)).
 
+The [ADR practice](https://adr.github.io/) is followed for decisions.
+
+<a id="consequences"></a>
 ## Consequences
-- Every code PR has some doc overhead, kept small by per-section tracking and one-hop
-  propagation.
-- `xtask docs` must be built before any other code (first item of M0); until then the
-  rules are enforced by review and metadata is maintained by hand.
-- Rubber-stamp verification is still possible; the evidence note plus the PR summary
-  table is the defense, and false verifications are treated as bugs.
-- Docs are less pleasant to read raw (metadata comments, `[[…]]` refs); the generated
-  `docs/INDEX.md` provides navigation.
+- Every code PR carries some doc overhead. Narrow `covers`, section-level edges and
+  verify-to-edit ratios keep it small.
+- `xtask docs` must exist early. Its MVP is built in M0 alongside the technical spikes.
+- Docs are slightly noisier to read raw (anchors, metadata comments).
+- Tighter `LINT.IfChange`-style pairing between code regions and doc sections was
+  considered, and deferred until the glob-based gate shows it's needed.

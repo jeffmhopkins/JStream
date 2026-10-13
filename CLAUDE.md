@@ -1,99 +1,64 @@
----
-id: CLAUDE
-title: Agent instructions
-kind: normative
-status: active
-rev: 2
-review_every: 90d
-depends_on: [RULES, DOCS, ARCH]
-verified: {date: 2026-10-13, by: "agent:claude", rev: 2, note: "Added documentation workflow and rule-ID citations"}
----
++++
+id = "CLAUDE"
+title = "Agent instructions"
+kind = "normative"
+status = "active"
+review_every = "90d"
++++
 
 # CLAUDE.md
 
-Instructions for AI agents working in this repo. Humans: this is a good summary too.
-This file summarizes; when they disagree, [[RULES]] and [[DOCS]] win, and this file
-gets fixed.
+The entry point for AI agents. It deliberately does **not** restate rules. It tells you
+where they are and how to find the ones that apply to your change.
 
-## Read first
+<a id="orient"></a>
+## Before you change anything
 <!-- @section
-id: read-first
-rev: 1
 -->
-- `docs/ARCHITECTURE.md` [[ARCH]]: crate map and layering. Know which layer you're in before you edit.
-- `docs/RULES.md` [[RULES]]: every rule has a permanent ID. Cite IDs in PRs and reviews.
-- `docs/DOCS.md` [[DOCS]]: how docs are tracked. **Read it before your first PR.**
-- `docs/adr/`: check before proposing a design change. If you contradict an accepted ADR,
-  write a new ADR that supersedes it ([[RULES#R-ARCH-004]]).
-- Before editing an unfamiliar file: `cargo xtask docs for <path>` lists the sections,
-  rules and ADRs that govern it. Read them.
 
-## Non-negotiables
+1. Read [docs/DOCS.md](docs/DOCS.md) once. It explains how docs, rules and verification work here.
+2. For every file you will touch, run `cargo xtask docs for <path>`. It lists the rules,
+   doc sections and ADRs that govern that file. Read them.
+   *Until `xtask docs` exists (M0):* search [docs/RULES.md](docs/RULES.md) for rules whose
+   `applies_to` matches your paths, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for
+   sections whose `covers` do.
+3. If your change contradicts an accepted ADR, stop and propose a new ADR
+   ([R-ARCH-004](docs/RULES.md#R-ARCH-004)).
+
+<a id="docs-duty"></a>
+## Your documentation duty
 <!-- @section
-id: non-negotiables
-rev: 1
+depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "v2: hash-bound verify workflow" }
 -->
-1. New capability → protocol first ([[RULES#R-ARCH-001]]).
-2. `unsafe` only in platform/sys crates, always with `// SAFETY:` ([[RULES#R-UNSAFE-001]], [[RULES#R-UNSAFE-002]]).
-3. No allocation, locks, blocking or `.await` on real-time threads ([[RULES#R-RT-001]]).
-4. No FFmpeg, no GPL/LGPL dependencies ([[RULES#R-DEP-001]], [[RULES#R-DEP-002]]).
-5. `jstream-ui` never depends on `jstream-core` ([[RULES#R-ARCH-003]]).
-6. Secrets never in logs, files, events or MCP responses ([[RULES#R-SEC-001]]).
-7. No `unwrap()` in non-test code ([[RULES#R-RS-004]]).
-8. Docs change in the same PR as the code that makes them wrong ([[RULES#R-DOC-013]]).
 
-## Documentation workflow
+- `cargo xtask docs check` lists the sections your change made stale. Re-read each one
+  against your diff. If it's wrong, **edit it**. If it still holds,
+  `cargo xtask docs verify <ID#anchor> --note "<what you checked>"`.
+- Never type dates, revisions or history into docs; git provides them. Never edit
+  `@generated` blocks.
+- New external URL → register it in `docs/external.toml`. Repeated value → `docs/facts.toml`.
+- New crate root → add its `//! Docs:` line.
+- *Before the tool exists:* set `hash = "bootstrap"` on any section you edit or re-read,
+  and put your note in `note`.
+
+<a id="limits"></a>
+## Things you never do
 <!-- @section
-id: docs-workflow
-rev: 1
-depends_on: [DOCS#coverage-gate, DOCS#verification-notes]
 -->
-For every PR:
-1. `cargo xtask docs check` tells you which sections cover the files you changed, and which
-   sections depend on docs you edited.
-2. For each one, **re-read it against your change**:
-   - if it is now wrong or incomplete, edit it, then run `cargo xtask docs sync --note "<what changed>"`;
-   - if it still holds, run `cargo xtask docs verify <ID#section> --note "<what you checked>"`.
-3. Never type revs, dates or history rows by hand. Never edit `@generated` blocks.
-4. Cite with `[[…]]` only. New external URL → add it to `docs/external.toml`.
-   A value that is repeated elsewhere → add it to `docs/facts.toml`.
-5. New crate or module root → add its `//! Docs:` line ([[RULES#R-DOC-009]]).
-6. A false verification is a bug. If you didn't re-read it, don't verify it.
 
-Until `xtask docs` exists ([[DOCS#bootstrap]]), do these steps by hand.
+- Apply the `governance-approved` or `ai-review-override` labels, or change repository
+  settings ([R-GOV-002](docs/RULES.md#R-GOV-002)).
+- Weaken a check to make CI pass (`#[allow]` without a reason, narrowing `covers`, editing
+  lint or deny config) without saying so in the PR as a governance change.
+- Verify a section you did not re-read.
+- Claim a test ran when it didn't. List what wasn't run ([R-TEST-005](docs/RULES.md#R-TEST-005)).
 
-## Before you push
+<a id="commands"></a>
+## Commands
 <!-- @section
-id: before-push
-rev: 1
 -->
-```sh
-cargo fmt --all
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo deny check
-cargo xtask lint-deps
-cargo xtask docs check
-```
-If you changed the protocol: `cargo insta review` and include the schema diff in the PR.
-If you changed rendering: `cargo xtask golden` and describe any image changes.
 
-## Working style
-<!-- @section
-id: working-style
-rev: 1
--->
-- Small PRs, one logical change, Conventional Commit title with the crate as scope ([[RULES#R-GIT-003]]).
-- Don't add a crate when a module will do. Don't add a dependency without saying why.
-- Platform work you can't run on this machine (e.g. Windows APIs from Linux): make sure it
-  compiles for the target (`cargo check --target x86_64-pc-windows-msvc` where possible),
-  put hardware tests behind `hw-tests`, and say clearly in the PR what was not run.
-
-## Revision history
-
-<!-- @generated begin history by="xtask docs sync" -->
-| rev | date | by | sections | note |
-|---|---|---|---|---|
-| 1 | 2026-10-13 | agent:claude | all | Initial version |
-| 2 | 2026-10-13 | agent:claude | all | Documentation workflow; rules cited by ID |
-<!-- @generated end history -->
+Nothing is runnable yet: the Cargo workspace arrives in M0. From then on: `cargo fmt`, `cargo clippy`,
+`cargo test`, `cargo doc`, `cargo deny check`, `cargo xtask docs check|verify|for|log`,
+`cargo xtask lint-deps` and `cargo xtask governance`.

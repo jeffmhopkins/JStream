@@ -1,27 +1,27 @@
----
-id: ADR-0004
-title: "wgpu compositor with native interop"
-kind: adr
-status: accepted
-decided: 2026-10-13
-rev: 1
-review_every: 180d
-depends_on: [ADR-0003, ext:wgpu]
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version, recorded from design Q&A with the maintainer"}
----
++++
+id = "ADR-0004"
+title = "wgpu compositor with native interop"
+kind = "adr"
+status = "accepted"
++++
 
-# 0004: wgpu compositor with native interop
+# ADR-0004: wgpu compositor with native interop
 
-
+<a id="context"></a>
 ## Context
-Capture → composite → encode must be zero-copy at 1080p60/4K60, on three OSes.
+Capture → composite → encode must avoid CPU copies at 1080p60 and above, across three OSes.
 
+<a id="decision"></a>
 ## Decision
-`jstream-render` uses wgpu (D3D12 / Metal / Vulkan) with WGSL shaders. Platform crates
-use wgpu-hal escape hatches to import capture surfaces and export textures to
-hardware encoders without CPU copies. A CPU path exists only as a fallback.
+`jstream-render` uses [wgpu](https://github.com/gfx-rs/wgpu) (D3D12 / Metal / Vulkan) with
+WGSL shaders. Platform crates use wgpu-hal escape hatches to import shared capture
+textures and export NV12 textures to encoders, synchronized with shared fences. The
+Windows sync protocol is specified in [ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)
+and must be proven by spike S1 in M0 before M1 depends on it. wgpu is pinned exactly.
 
+<a id="consequences"></a>
 ## Consequences
-- One shader language, portable effects.
-- Interop code is platform-specific `unsafe` and must be well tested on real hardware.
-- We track wgpu releases; hal APIs may change between versions.
+- One shader language and portable effects.
+- Interop is platform-specific `unsafe` code that needs testing on real hardware.
+  Upgrading wgpu means re-running the interop spike tests.
+- WGC textures can't be shared, so capture costs one GPU copy per frame.

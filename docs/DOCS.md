@@ -1,316 +1,360 @@
----
-id: DOCS
-title: Documentation system
-kind: normative
-status: active
-rev: 1
-review_every: 90d
-depends_on: [ADR-0011, RULES]
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
----
++++
+id = "DOCS"
+title = "Documentation system"
+kind = "normative"
+status = "active"
+review_every = "90d"
++++
 
 # Documentation system
 
-How JStream keeps documentation accurate as the code changes. The binding rules are
-`R-DOC-*` in [[RULES#documentation]]. This file explains the format and the
-mechanics behind them. The rationale is in [[ADR-0011]].
+How JStream keeps documentation accurate as the code and the outside world change.
+The binding rules are `R-DOC-*` in [RULES](RULES.md#documentation). The rationale is in
+[ADR-0011](adr/0011-docs-as-checked-graph.md).
 
-The idea: **documentation is a graph of identified, versioned sections, linked to
-the code they describe and to each other, and CI keeps the graph consistent.**
+**Idea:** docs are a graph of anchored sections. Each section is bound by a content hash
+to the code it describes and to the sections it relies on. When anything in that set
+changes, the hash no longer matches and CI asks for the section to be re-checked.
+History, revisions and dates come from git and are never stored in files.
 
+<a id="bootstrap"></a>
 ## Bootstrap status
 <!-- @section
-id: bootstrap
-rev: 1
-covers: [xtask/src/docs/**]
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version; tool not yet built"}
+covers = ["xtask/src/docs/**"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Spec written before the tool exists" }
 -->
 
-The checker (`cargo xtask docs`) is the first deliverable of M0 ([[ROADMAP#m0]]).
-Until it exists, every rule here is enforced by review, and the agent or human
-editing a doc performs the tool's steps by hand: bump revs, write `verified`, and
-append history rows. Once the tool lands, the hand-written metadata is
-re-validated by it and any drift is fixed in that PR.
+The checker (`cargo xtask docs`) is built in M0 ([ROADMAP](../ROADMAP.md#m0)). Until it
+exists:
 
-## Document identity: front matter
+- Rules are enforced by review.
+- Every `verified` hash is the placeholder `"bootstrap"`. The PR that lands the tool
+  must replace every placeholder with a real hash, which forces a genuine re-read of
+  every section.
+- IDs, anchors and rule numbers become permanent at the **first merge to `main`**.
+  Before that, they may be renamed freely.
+
+<a id="identity"></a>
+## Document identity
 <!-- @section
-id: front-matter
-rev: 1
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
 -->
 
-Every tracked Markdown file starts with YAML front matter:
+Every tracked Markdown file starts with TOML front matter:
 
-```yaml
----
-id: ARCH                 # permanent, unique, UPPER-KEBAB. Never reused.
-title: Architecture
-kind: normative          # normative | adr | guide | plan | reference | generated
-status: active           # active | draft | retired   (ADRs: proposed | accepted | superseded | rejected)
-rev: 4                   # tool-managed, see "Revisions"
-review_every: 90d        # TTL, see "Time-based review"
-depends_on: [ADR-0001, RULES]       # whole-doc dependencies (optional)
-superseded_by: ADR-0014             # ADRs only, when superseded
-verified: {date: 2026-10-13, by: "agent:claude", rev: 4, note: "what was checked"}
----
+```toml
++++
+id = "ARCH"                  # permanent, unique, UPPER-KEBAB; never reused
+title = "Architecture"
+kind = "normative"           # normative | adr | guide | plan | reference | generated
+status = "active"            # active | draft | retired  (ADRs: proposed | accepted | superseded | rejected)
+review_every = "90d"         # omitted for ADRs and generated docs
+reviewed = { by = "human:jeffmhopkins", note = "what was re-read and why it still holds" }
+replaced_by = "docs/NEW.md"  # retired docs only
+retired_sections = { "old-id" = ["new-id-a", "new-id-b"] }   # tombstones, see Lifecycle
++++
 ```
 
-Tracked files: everything under `docs/`, plus `README.md`, `CLAUDE.md`, `ROADMAP.md`,
-and each crate's `README.md` (ID `CRATE-<crate-name>`).
+**Tracked:** everything under `docs/` and `crates/*/README.md`, plus `README.md`,
+`CLAUDE.md` and `ROADMAP.md`.
+**Not tracked:** `docs/adr/TEMPLATE.md` and `.github/**`.
 
-| kind | Meaning | Default `review_every` |
+**Why TOML:** one parser for everything in the repo, explicit string types (globs and
+dates can't be mis-typed), and no archived YAML crates.
+
+| kind | Meaning | `review_every` |
 |---|---|---|
-| `normative` | Says how things are or must be (ARCH, RULES, DOCS, CLAUDE, crate READMEs) | 90d |
-| `adr` | A decision record. Immutable once accepted (`R-DOC-011`) | 180d |
-| `guide` | How-tos and tutorials | 180d |
-| `plan` | ROADMAP and other forward-looking docs | 30d |
-| `reference` | Hand-written reference material | 90d |
+| `normative` | How things are or must be (ARCH, RULES, DOCS, CLAUDE, crate READMEs) | 90d |
+| `plan` | ROADMAP | 30d |
+| `guide` | How-tos | 180d |
+| `reference` | Hand-written reference | 90d |
+| `adr` | Decision record, immutable once accepted | none (see [TTL](#ttl)) |
 | `generated` | Produced by `xtask`; never edited by hand | none (drift-checked) |
 
-## Sections: the unit of tracking
+<a id="sections"></a>
+## Sections
 <!-- @section
-id: sections
-rev: 1
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
 -->
 
-A `##` heading followed by a metadata comment is a **tracked section**. The comment
-must come directly after the heading:
+Every `##` heading in a tracked doc (except ADRs) is a **section**. It is written like this:
 
 ```markdown
+<a id="gpu-pipeline"></a>
 ## GPU pipeline
 <!-- @section
-id: gpu-pipeline                       # permanent within the doc; lowercase-kebab
-rev: 3
-covers: [crates/jstream-render/**]     # code this section describes (globs)
-depends_on: [ADR-0004, RULES#R-RT-001] # docs/sections this section relies on
-verified: {date: 2026-10-13, by: "agent:claude", rev: 3, note: "..."}
+covers = ["crates/jstream-render/src/compositor/**"]
+depends_on = ["docs/adr/0004-wgpu-with-native-interop.md#decision", "docs/RULES.md#R-RT-002"]
+verified = { hash = "b3:4f1c9a0e7d2b8c61", by = "agent:claude@<session-url>", note = "…" }
 -->
 ```
 
-- `covers` is optional. Sections without it are tracked for revisions and
-  references, but not tied to code.
-- `verified` is required on a section that has `covers`. Other sections rely on the
-  doc-level `verified`.
-- Headings are **not numbered**, and they can be renamed freely, because references
-  use the `id`, never the heading text.
-- A section ends at the next `##` heading. `###` subsections belong to their parent.
-- Rules in [[RULES]] use `<!-- @rule ... -->` instead (see "Rules").
+- The `<a id>` anchor is the section's permanent ID. It is independent of the heading
+  text, so the heading can be renamed freely.
+- `covers`: code globs, relative to the repo root, that this section describes. Optional.
+- `depends_on`: the **sections** this one relies on, as `path#anchor` or
+  `path` for a whole ADR. These are section-level edges only. Docs never depend on whole
+  docs, because coarse edges create re-verification storms.
+- `verified` is required when either `covers` or `depends_on` is set.
+- A `###` belongs to its `##`. Rules are the exception: they are `###` headings with their
+  own anchor and an `@rule` block (see [Rules](#rules)).
+- ADRs use the fixed anchored headings `context`, `decision` and `consequences`, with
+  no `@section` blocks. An ADR is a single immutable unit.
+- The text before the first `##` belongs to the doc as a whole (covered by its [TTL](#ttl)).
+- Metadata values must not contain `-->`.
 
+<a id="references"></a>
 ## References
 <!-- @section
-id: references
-rev: 1
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
 -->
 
-All cross-references use one checked syntax, in docs **and** in code comments:
+References are **standard Markdown links**. They are clickable on GitHub and checked by the tool.
 
-| Form | Points at | Resolved against |
+| Target | Write it as | Checked against |
 |---|---|---|
-| `[[ARCH]]` | a document | front matter `id` |
-| `[[ARCH#gpu-pipeline]]` | a section | section `id` |
-| `[[RULES#R-RT-001]]` | a rule | rule ID |
-| `[[ADR-0004]]` | an ADR | ADR front matter |
-| `[[ext:yt-live-api]]` | an external resource | [`external.toml`](external.toml) |
-| `[[fact:min-windows]]` | a pinned fact | [`facts.toml`](facts.toml) |
-| `[[path:crates/jstream-render/src/lib.rs]]` | a file or directory | the working tree |
-| `[[sym:jstream_render::Compositor]]` | a Rust item | rustdoc JSON of the workspace |
-| `[[cmd:scene.create]]` | a protocol command/query/event | the generated protocol schema |
+| Section | `[GPU pipeline](ARCHITECTURE.md#gpu-pipeline)` | the `<a id>` anchors in that file |
+| Rule | `[R-RT-001](RULES.md#R-RT-001)` | rule anchors |
+| ADR | `[ADR-0004](adr/0004-wgpu-with-native-interop.md)` | the file exists; superseded ADRs are flagged |
+| File in the repo | `` [`compositor.rs`](../crates/jstream-render/src/compositor.rs) `` | the working tree |
+| External page | `[YouTube Live API](https://developers.google.com/…)` | must be registered in [`external.toml`](external.toml) |
+| Pinned fact | `build 22000<!--fact:min-windows-build-->` | [`facts.toml`](facts.toml): the value must appear right before the marker |
 
-Rules:
-- A reference that doesn't resolve fails CI.
-- References inside inline code spans and fenced code blocks are examples and are not
-  checked. TOML files are checked only in the fields that hold references
-  (`used_by`, `source`).
-- A reference to a **superseded ADR** or a **retired rule** fails CI, except inside
-  ADRs and revision histories (historical context is allowed).
-- External URLs live **only** in `external.toml`. Docs cite `[[ext:…]]`.
-- Plain relative Markdown links (`[text](other.md)`) are allowed for convenience, and are
-  also checked, but `[[…]]` is the canonical form.
-- `docs/INDEX.md` (generated) lists every ID with a clickable link, since GitHub does
-  not render `[[…]]` as links.
-
-## Code back-references
-<!-- @section
-id: back-references
-rev: 1
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
--->
-
-The graph runs both ways. The root module of each crate (`lib.rs` / `main.rs`) carries a
-`Docs:` line in its module docs, naming every section whose `covers` matches files in
-that crate, plus the ADRs and rules that govern it:
+In code, refs are plain repo-root paths (no brackets), so rustdoc never treats them as
+intra-doc links:
 
 ```rust
 //! Wgpu compositor and effect runtime.
 //!
-//! Docs: [[ARCH#gpu-pipeline]] [[ADR-0004]] [[RULES#R-RT-001]]
+//! Docs: docs/ARCHITECTURE.md#gpu-pipeline, docs/adr/0004-wgpu-with-native-interop.md
 ```
 
-- **Required** at crate roots: if section S covers files in crate C, C's root must cite S.
-  The reverse is also checked: a crate root that cites S must be covered by S.
-- **Optional** on significant modules (`mod.rs` or `foo.rs` module docs), and checked when present.
-- Not used on individual lines; keep citations at module level.
-- `cargo xtask docs for <path>` prints every section, rule (via `applies_to`) and ADR
-  that governs a file. Agents run it before editing unfamiliar code.
+Checks:
+- A link to a missing file or anchor fails.
+- A link to a **retired anchor** fails, with a hint naming its replacements.
+- A link from a normative doc or from code to a **superseded ADR** fails. ADRs may cite
+  anything, since history is legitimate there.
+- An external URL that isn't registered in `external.toml` fails.
+- Examples inside code spans and fenced blocks are not checked.
 
-## Revisions and dates
+<a id="back-references"></a>
+## Code back-references
 <!-- @section
-id: revisions
-rev: 1
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
 -->
 
-**Nobody types a date or a revision number.** The tooling writes them, and git history
-is the source of truth.
+The crate root (`lib.rs` / `main.rs`) of every crate carries a `Docs:` line listing
+every section whose `covers` matches files in that crate. The reverse is also checked:
+each listed section must actually cover the crate. Module-level `Docs:` lines are
+optional, and checked when present.
 
-- **Section `rev`** increments when the section's content (anything other than its
-  metadata block) changes. It increments **at most once per PR**, relative to the
-  merge base.
-- **Doc `rev`** increments once per PR in which any of its sections' content changed.
-- **`verified`** records `{date, by, rev, note}`. Editing content also counts as
-  verifying it, so the tool sets `verified` along with the rev bump.
-- **`by`** is `human:<github-user>` or `agent:<name>`.
-- **Revision history**: every doc ends with a generated `## Revision history` table,
-  with one row per content change or verification:
-  `| rev | date | by | sections | note |`. PR numbers are not written; `xtask docs log <ID>`
-  resolves them from the squash-merge commits.
-- The staleness check compares **git history** (the last commit touching a section
-  vs. the last commit touching its covered paths), not the written dates. A wrong
-  date can't hide staleness.
+`cargo xtask docs for <path>` prints the sections, rules (via `applies_to`) and ADRs that
+govern a file. Agents run it before editing unfamiliar code.
+
+<a id="verification"></a>
+## Hash-bound verification
+<!-- @section
+-->
+
+`verified.hash` is a BLAKE3 digest (16 hex chars, `b3:` prefix) over:
+
+1. the section's body text, normalized (metadata comment removed, LF line endings,
+   trailing whitespace stripped);
+2. for each file matched by `covers`, in sorted order: its path plus a hash of its
+   contents;
+3. for each `depends_on` target: its reference plus a hash of its normalized body.
+
+So the verification is stale as soon as **any** of these change: the section, a covered
+file (including a file being added, removed or renamed), or a section it depends on.
+That means:
+- **No merge-base logic is needed.** Staleness is a pure function of the tree, so squash
+  merges, rebases and merges from `main` all behave the same.
+- **An edit made after a verify is caught**, because the hash no longer matches.
+- **Propagation is exactly one hop.** A dependent's hash includes its target's text,
+  but not the target's covered files. A verify-only change edits only metadata, which
+  is excluded from the hash, so it never cascades.
+- **Parallel PRs only conflict when they re-verify the same section**, which is a real
+  semantic conflict. After merging `main`, the hash is recomputed and the section may
+  need re-verifying against the combined change. That is correct.
 
 Commands:
 
 ```sh
-cargo xtask docs sync   --note "what changed"     # after editing docs: bump revs, set verified, add history rows
-cargo xtask docs verify ARCH#gpu-pipeline --note "what you checked and why it still holds"
+cargo xtask docs check                                     # what is stale, and why
+cargo xtask docs verify ARCH#gpu-pipeline --note "…"       # re-read, still holds: write new hash
+cargo xtask docs verify ARCH#gpu-pipeline --edited --note "…"  # after editing the text
+cargo xtask docs review ARCH --note "…"                    # doc-level TTL review
+cargo xtask docs log ARCH#gpu-pipeline                     # history, derived from git
+cargo xtask docs for crates/jstream-render/src/lib.rs      # what governs this file
 ```
 
-## The coverage gate
+<a id="history"></a>
+## History, revisions and dates
 <!-- @section
-id: coverage-gate
-rev: 1
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
 -->
 
-In a PR, `xtask docs check` computes the changed files against the merge base and then:
+Nothing about history is stored in the files. `xtask docs log` derives it from git:
 
-1. **Coverage.** For each section whose `covers` matches a changed file, the PR must
-   either change that section's content (rev bump) or re-verify it (`verified`
-   updated in this PR). Otherwise CI fails and lists the sections.
-2. **Propagation (one hop).** For each section or doc whose **content** changed, every
-   section or doc that `depends_on` it must also be edited or re-verified in this PR.
-   Verification alone does **not** propagate, which stops cascades.
-3. **Rev integrity.** A content change without a rev bump fails, and so does a rev bump
-   without a content change. Hand-edited generated blocks fail.
-4. **Back-references** (see above) are consistent.
-5. **ADR immutability.** Content changes to an `accepted` ADR fail. Only `status` and
+- **Revision n** of a section is the n-th commit on `main` that changed its normalized
+  body.
+- **Date, author and PR** come from that squash-merge commit.
+- **Verifications** are the commits that changed its `verified` line, with the note.
+
+`xtask docs index` renders an index (every ID, link, revision count, last change, last
+verification, TTL status). It is published as a CI artifact and is **not committed**,
+so it never causes merge conflicts.
+
+<a id="gate"></a>
+## The PR gate
+<!-- @section
+-->
+
+`xtask docs check` runs on every PR (required check `docs`) and fails on:
+
+1. **Stale verifications:** any section whose computed hash differs from its stored one.
+2. **Unmatched globs:** any `covers` or `applies_to` glob that matches nothing, unless
+   the doc is `status = "draft"` (a warning then).
+3. **Broken references:** see [References](#references).
+4. **Back-reference mismatches:** see [Code back-references](#back-references).
+5. **Generated drift:** regenerated content differs from what is committed.
+6. **Fact mismatches** for file-sourced facts.
+7. **Accepted-ADR edits:** content changes to an accepted ADR. Only `status` and
    `superseded_by` may change.
-6. **Rule IDs.** Every rule ID on the base branch still exists on the PR head (as active
-   or retired).
+8. **Identity violations:** a rule or section anchor that existed on `main` is missing
+   and has no tombstone. See [Lifecycle](#lifecycle).
+9. **Rule metadata:** see [Rules](#rules).
 
-CI then posts a **verification summary** comment on the PR, a table of every
-section edited or verified, with rev, by and note, so the reviewer reads every
-attestation in one place.
+It also **reports**, without failing: crates that no section covers. The `ai-review`
+check ([governance](#governance)) reads this report.
 
+CI posts one PR comment listing every verification in the PR (section, by, note)
+so a reviewer reads all of them in one place.
+
+<a id="notes"></a>
 ## Verification notes
 <!-- @section
-id: verification-notes
-rev: 1
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
 -->
 
-A verification is a claim that a section was **re-read against the change and still
-holds**. The note must say what was checked:
+A verification claims that the section was **re-read against the change and still
+holds**. The note says what was checked and why it still holds, e.g.:
+`"Added P010 output; pipeline order, device ownership and interop unchanged"`.
 
-- Good: `"P010 conversion added; pipeline order, device ownership and interop unchanged"`
-- Rejected by CI: empty notes, notes under 20 characters, and stock phrases
-  (`ok`, `lgtm`, `no change`, `still accurate`, `n/a`, `verified`).
-- Agents must actually re-read the section. When a section is wrong, edit it, don't
-  verify it. A verification that later turns out to be false is a bug like any other.
+- If the section is wrong, edit it. Do not verify a section you know is wrong.
+- The `ai-review` check judges each verification against the diff, and flags notes
+  that don't engage with what changed. A stock-phrase list alone is too easy to game.
+- A false verification is a bug, and gets fixed and noted like one.
+- The sweep reports each section's verify-to-edit ratio from git. A section that gets
+  re-verified far more often than it is edited has `covers` that are too broad, so
+  narrow them.
 
+<a id="ttl"></a>
 ## Time-based review
 <!-- @section
-id: ttl
-rev: 1
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
 -->
 
-Docs also go stale when nothing in the repo changes.
+Docs also go stale when nothing in the repo changes. **Time-based checks never fail a PR.**
 
-- **TTL.** When `verified.date + review_every` has passed, CI **warns** on every PR.
-  Past twice that, CI **fails** until the doc or section is re-verified or edited.
-- **External resources** ([`external.toml`](external.toml)): each entry records the URL,
-  *what we rely on* from it, when it was last checked, and its own `review_every`.
-- **Pinned facts** ([`facts.toml`](facts.toml)): values that are easy to repeat and go
-  stale (minimum OS, toolchain version, API versions). Each fact has exactly one
-  source. Facts whose source is a file are checked automatically against it. Prose
-  may restate a fact only next to its reference, e.g. `Windows 11 22H2 [[fact:min-windows]]`;
-  the checker verifies that the value written on that line matches.
-- **Weekly sweep** (scheduled CI, `xtask docs sweep`): link-checks every external
-  resource, reports TTLs that are due within 14 days, re-checks facts, and opens one
-  issue with the results. An agent can pick that issue up and open PRs with edits or
-  verifications, each of which still goes through review.
+- **Docs:** a doc's TTL clock restarts at the last git commit that changed its content
+  or its `reviewed` line. Once `review_every` has passed, it is due.
+- **ADRs** have no TTL, because they are immutable. The external resources they cite do
+  have TTLs. A decision that no longer holds gets a new superseding ADR.
+- **External resources** ([`external.toml`](external.toml)): each entry records its URL,
+  *what we rely on from it*, `review_every`, and `checked`/`status`.
+  - `checked` is only changed in a PR by someone who re-read the page against `relied_on`.
+  - A link check proves the page loads, not that `relied_on` is still true.
+  - `status = "unverified"` means nobody has checked it yet.
+- **Facts** ([`facts.toml`](facts.toml)), by source:
+  - `file`: checked on every PR.
+  - `ext`: the sweep fetches the page and checks the value still appears.
+  - `manual`: listed for re-check when due.
+- **Weekly sweep** (scheduled workflow `sweep`):
+  - link-checks every external with lychee (cached, authenticated; 403 and 429 count
+    as *unknown*, not broken);
+  - lists due docs and externals, fact drift, verify-to-edit ratios, and `planned`
+    enforcement past its milestone;
+  - **updates one pinned issue, "Docs due for review"**, instead of opening new ones.
+  - A scheduled agent may pick items from that issue and open PRs. Those PRs go
+    through the normal gate.
 
-## Rules
+<a id="lifecycle"></a>
+## Lifecycle of IDs
 <!-- @section
-id: rules-format
-rev: 1
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
 -->
 
-Each rule in [[RULES]] is a `###` heading with a permanent ID, followed by a
-`@rule` block:
+- **Permanence:** IDs, anchors and rule numbers are permanent from the first merge to `main`.
+- **Split or merge:** a section that is split, merged or removed leaves a tombstone in
+  `retired_sections`, e.g. `{ "old-id" = ["new-id"] }` (or `[]` when it's simply
+  gone). Its anchor is never reused.
+- **Deleted docs:** a removed doc stays as a stub with `status = "retired"` and
+  `replaced_by`.
+- **Rules:** a rule is retired, never deleted (see [Rules](#rules)).
+- **Renames:** a renamed file appears in the hash of every section whose `covers` match
+  it, under both its old and new path, so the gate fires.
+
+<a id="rules"></a>
+## Rules format
+<!-- @section
+-->
 
 ```markdown
-### R-RT-001: No blocking work on real-time threads
+<a id="R-RT-001"></a>
+### R-RT-001: Audio thread does not allocate or block
 <!-- @rule
-status: active                 # active | retired
-rev: 1
-since: 2026-10-13
-enforced_by: [test:assert_no_alloc, review]
-applies_to: [crates/jstream-audio/**, crates/jstream-render/**]
-replaced_by: R-RT-009          # retired rules only
+status = "active"                                  # active | retired
+enforced_by = ["test:jstream_audio::rt::no_alloc", "ai-review"]
+applies_to = ["crates/jstream-audio/src/rt/**"]
+replaced_by = "R-RT-009"                           # retired rules only, with a reason in the text
 -->
 ```
 
-- IDs are `R-<AREA>-NNN` and are **never reused or renumbered**. A rule is retired by
-  setting `status: retired`, with a reason and `replaced_by` when there is one. Its
-  text stays.
-- `enforced_by` lists how the rule is enforced: `lint:<name>`, `ci:<check>`,
-  `test:<name>`, `deny:<section>`, or `review`. The checker verifies that every
-  `lint:` is configured in the workspace lints and every `ci:` names a real required
-  check. A rule enforced only by `review` is allowed, but it is listed in
-  `docs/INDEX.md` so weakly enforced rules stay visible.
-- `applies_to` drives `cargo xtask docs for <path>`.
+`enforced_by` vocabulary. The tool checks every entry:
 
+| Entry | Meaning | Checked how |
+|---|---|---|
+| `ci:<check>` | A required CI check | Must be in [the check list](RULES.md#R-GIT-003). Once that check's milestone has passed, the workflow must contain it. |
+| `lint:<lint>` | A rustc or clippy lint | Must be configured in `[workspace.lints]` |
+| `deny:<section>` | A cargo-deny policy | Section exists in `deny.toml` |
+| `test:<path>` | A named test | Must appear in `cargo test -- --list` once its crate exists. Until then it is *pending*. |
+| `ai-review` | Judged by the AI review check | — |
+| `human` | Needs the maintainer's judgment | — |
+
+A rule enforced only by `ai-review`/`human` is allowed, but is listed in the index.
+
+<a id="facts"></a>
+## Facts
+<!-- @section
+-->
+
+A value that appears in more than one place, or comes from outside the repo (minimum OS
+build, toolchain version), is registered once in `facts.toml`. In prose, it is
+written next to its marker (`build 22000<!--fact:min-windows-build-->`) so the tool can
+check it. ADRs are exempt from this rule (they are immutable records). Their facts are
+covered by the TTLs of their external resources.
+
+<a id="generated"></a>
 ## Generated content
 <!-- @section
-id: generated
-rev: 1
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
 -->
 
-Anything that can be derived is generated, never hand-written. That includes the
-protocol reference, the MCP tool list, the crate map and layer diagram (from
-`[package.metadata.jstream]` in each crate's `Cargo.toml`), `docs/INDEX.md`, and the
-revision histories.
+Anything derivable is generated, never hand-written: the crate map (from
+`[package.metadata.jstream]`), the protocol reference, the MCP tool list, and the
+index. Generated blocks in committed docs are fenced as
+`<!-- @generated begin <name> -->` … `<!-- @generated end <name> -->` and are
+drift-checked.
 
-Generated regions are fenced:
+<a id="governance"></a>
+## Governance: protecting the checks themselves
+<!-- @section
+depends_on = ["docs/adr/0015-review-and-governance.md"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Spec written before the tool exists" }
+-->
 
-```markdown
-<!-- @generated begin crate-map by="xtask docs gen" -->
-...
-<!-- @generated end crate-map -->
-```
+An agent could pass the gate by weakening it. These changes are **governance changes**,
+and the `governance` check fails on them unless the maintainer has applied the label
+`governance-approved`:
 
-CI regenerates them and fails on any difference.
+- edits to `covers`, `applies_to`, `enforced_by` or `status` in any metadata block;
+- retiring a rule; deleting or retiring a doc or section;
+- edits to `deny.toml`, `clippy.toml`, `rustfmt.toml`, `rust-toolchain.toml`,
+  `[workspace.lints]`, `.github/**`, `xtask/src/docs/**`, or `docs/DOCS.md`;
+- new `#[allow(…)]` / `#[expect(…)]` attributes (these must also carry `reason = "…"`).
 
-## Revision history
-
-<!-- @generated begin history by="xtask docs sync" -->
-| rev | date | by | sections | note |
-|---|---|---|---|---|
-| 1 | 2026-10-13 | agent:claude | all | Initial version |
-<!-- @generated end history -->
+**Agents never apply that label.** See
+[ADR-0015](adr/0015-review-and-governance.md) for how this works, and its limits, when
+agents act under the maintainer's GitHub account.

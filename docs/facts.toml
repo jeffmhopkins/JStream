@@ -1,34 +1,24 @@
-# Pinned facts: values that get repeated and go stale. See [[DOCS#ttl]].
-# Each fact has exactly one source. File-sourced facts are checked automatically.
-# Docs cite [[fact:<id>]]; prose may restate the value only on the same line as the citation.
+# Pinned facts. See docs/DOCS.md#facts.
+# In prose, write the value immediately followed by its marker: 1.97.0<!--fact:rust-toolchain-->
+# check = "file"   → verified on every PR against `source.file` / `source.key`
+# check = "ext"    → weekly sweep fetches the external page and checks `value` still appears
+# check = "manual" → listed in the sweep issue when the external's review is due
 
 [[fact]]
 id = "rust-toolchain"
 value = "1.97.0"
+check = "file"
 source = { file = "rust-toolchain.toml", key = "toolchain.channel" }
 
 [[fact]]
-id = "rust-edition"
-value = "2024"
-source = { file = "rustfmt.toml", key = "edition" }
-
-[[fact]]
-id = "min-windows"
-value = "Windows 11 22H2"
-source = { doc = "ADR-0008" }
-
-[[fact]]
-id = "mf-vcam-min-build"
+id = "min-windows-build"
 value = "22000"
+check = "ext"
 source = { ext = "mf-virtual-camera" }
 
 [[fact]]
-id = "min-macos"
-value = "macOS 13"
-source = { doc = "ROADMAP#m3" }
-note = "Provisional until the macOS platform ADR"
-
-[[fact]]
-id = "license"
-value = "MIT OR Apache-2.0"
-source = { doc = "README#license" }
+id = "win11-serviced"
+value = "25H2, 26H2"
+check = "manual"
+source = { ext = "win11-lifecycle" }
+note = "Home/Pro editions currently in servicing; changes yearly"

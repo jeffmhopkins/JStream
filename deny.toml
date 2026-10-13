@@ -1,8 +1,11 @@
-# cargo-deny policy. Enforces R-DEP-001, R-DEP-002, R-DEP-005 (docs/RULES.md).
+# cargo-deny policy. Enforces R-DEP-001, R-DEP-002, R-DEP-005, R-RS-003 (docs/RULES.md).
+# Editing this file is a governance change (R-GOV-001).
 
 [advisories]
 version = 2
 yanked = "deny"
+# Every `ignore` entry needs a RUSTSEC id, a reason and an expiry milestone; adding one is a governance change.
+ignore = []
 
 [licenses]
 version = 2
@@ -21,17 +24,30 @@ allow = [
 ]
 
 [bans]
-multiple-versions = "warn"   # becomes "deny" at M1 (R-DEP-005)
+multiple-versions = "warn"   # switches to "deny" in M1 (R-DEP-005)
 wildcards = "deny"
-# R-DEP-002 / ADR-0003: no FFmpeg or bundled C media frameworks.
+allow-wildcard-paths = true  # workspace path deps; all members are publish = false
 deny = [
-    { name = "ffmpeg-next", reason = "R-DEP-002" },
-    { name = "ffmpeg-sys-next", reason = "R-DEP-002" },
-    { name = "ffmpeg-sys", reason = "R-DEP-002" },
-    { name = "rsmpeg", reason = "R-DEP-002" },
-    { name = "rusty_ffmpeg", reason = "R-DEP-002" },
-    { name = "gstreamer", reason = "R-DEP-002" },
-    { name = "gstreamer-sys", reason = "R-DEP-002" },
+    # R-DEP-002 / ADR-0003: no FFmpeg, GStreamer or bundled C codec libraries.
+    # Name lists are incomplete by nature; xtask lint-deps also checks `links =` crates.
+    { crate = "ffmpeg-next", reason = "R-DEP-002" },
+    { crate = "ffmpeg-sys-next", reason = "R-DEP-002" },
+    { crate = "ffmpeg-the-third", reason = "R-DEP-002" },
+    { crate = "ffmpeg-sidecar", reason = "R-DEP-002" },
+    { crate = "rsmpeg", reason = "R-DEP-002" },
+    { crate = "rusty_ffmpeg", reason = "R-DEP-002" },
+    { crate = "gstreamer", reason = "R-DEP-002" },
+    { crate = "gstreamer-sys", reason = "R-DEP-002" },
+    { crate = "openh264", reason = "R-DEP-002" },
+    { crate = "openh264-sys2", reason = "R-DEP-002" },
+    { crate = "fdk-aac", reason = "R-DEP-002" },
+    { crate = "fdk-aac-sys", reason = "R-DEP-002" },
+    { crate = "x264", reason = "R-DEP-002" },
+    { crate = "x264-sys", reason = "R-DEP-002" },
+    # R-DEP-006: rustls with the ring provider.
+    { crate = "aws-lc-sys", reason = "R-DEP-006" },
+    # R-RS-003: anyhow only in apps and xtask.
+    { crate = "anyhow", wrappers = ["jstream-desktop", "jstream-daemon", "jstream-cli", "xtask"], reason = "R-RS-003" },
 ]
 
 [sources]

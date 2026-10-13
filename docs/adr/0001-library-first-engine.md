@@ -1,28 +1,27 @@
----
-id: ADR-0001
-title: "Library-first engine with thin hosts"
-kind: adr
-status: accepted
-decided: 2026-10-13
-rev: 1
-review_every: 180d
-depends_on: []
-verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version, recorded from design Q&A with the maintainer"}
----
++++
+id = "ADR-0001"
+title = "Library-first engine with thin hosts"
+kind = "adr"
+status = "accepted"
++++
 
-# 0001: Library-first engine with thin hosts
+# ADR-0001: Library-first engine with thin hosts
 
-
+<a id="context"></a>
 ## Context
-JStream must run as a desktop app, headless (daemon), and be controlled by a web UI,
-a CLI and AI agents over MCP.
+JStream must run as a desktop app and headless, and be controlled by a web UI, a CLI and
+AI agents over MCP.
 
+<a id="decision"></a>
 ## Decision
 `jstream-core` is a library exposing an `Engine`. All control goes through the typed
-`jstream-protocol` command/event API, accessed through the `Control` trait
-(`jstream-client`) either in-process or over WebSocket. Hosts (`apps/*`) are thin.
+`jstream-protocol` API via the `Control` trait (`jstream-control`), either in-process or over
+an authenticated WebSocket. The interfaces (server, MCP, CLI, UI) depend only on
+`jstream-control`. The host apps wire them to the engine.
 
+<a id="consequences"></a>
 ## Consequences
 - Headless operation and remote control come from the same code.
-- MCP, UI and CLI cannot drift: they share one API.
-- The protocol must be designed carefully and versioned ([[RULES#R-API-001]]).
+- MCP, UI and CLI can't drift apart, because they share one API.
+- Remote-only clients (CLI, stdio MCP proxy) don't compile the engine.
+- The protocol must be designed and versioned carefully ([R-API-001](../RULES.md#R-API-001)).

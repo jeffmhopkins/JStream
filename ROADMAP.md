@@ -1,86 +1,104 @@
----
-id: ROADMAP
-title: Roadmap
-kind: plan
-status: active
-rev: 2
-review_every: 30d
-depends_on: [ADR-0010, ADR-0011]
-verified: {date: 2026-10-13, by: "agent:claude", rev: 2, note: "M0 reordered: docs tooling first"}
----
++++
+id = "ROADMAP"
+title = "Roadmap"
+kind = "plan"
+status = "active"
+review_every = "30d"
++++
 
 # Roadmap
 
-Windows first. Engine and MCP before GUI ([[ADR-0010]]). Each milestone ends with a
-demo that runs from a clean checkout.
+Windows first. Engine and MCP before the GUI ([ADR-0010](docs/adr/0010-headless-first-milestone.md)).
+Risks are retired by spikes before anything depends on them. Each milestone ends with a demo
+that runs from a clean checkout.
 
-## M0: Foundation
+<a id="m0"></a>
+## M0: Foundation and risk spikes
 <!-- @section
-id: m0
-rev: 2
+depends_on = ["docs/adr/0011-docs-as-checked-graph.md", "docs/adr/0015-review-and-governance.md"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "v2: spikes run in parallel with docs tooling MVP" }
 -->
-- **First:** `xtask docs` (check, sync, verify, for, gen, sweep) per [[DOCS]] and
-  [[ADR-0011]], then re-validate all hand-written doc metadata with it
-- Cargo workspace, toolchain pin, lints, `cargo-deny`, CI on Windows/Linux/macOS
-  (required checks per [[RULES#R-GIT-006]]), weekly docs sweep job
-- `xtask`: `lint-deps`, `gen-schema`, `golden`; generated crate map and `docs/INDEX.md`
-- `jstream-types`, `jstream-media`, first cut of `jstream-protocol` (+ schema snapshot tests)
-- **Demo:** CI green, including `docs`; a PR that touches covered code without verifying
-  its docs is rejected; `cargo xtask gen-schema` prints the API schema
 
-## M1: Headless engine driven by agents (Windows)
+Two tracks run in parallel.
+
+**Track A: repo machinery**
+- Cargo workspace, toolchain, `[workspace.lints]`, `cargo-deny`, and the required CI checks
+  from [R-GIT-003](docs/RULES.md#R-GIT-003): `fmt`, `clippy`, `test`, `doc`, `deny`,
+  `lint-deps`, `docs`, `governance`, `pr-title`, `ai-review`. `macos` runs but isn't required.
+- `xtask docs` **MVP**: front matter and anchor parsing, link resolution (internal plus the
+  external registry), hash-bound verification, unmatched-glob errors, the uncovered-crate
+  report, generated-block drift, `docs for`, `docs verify`. It replaces every `bootstrap`
+  hash with a real one.
+- `xtask lint-deps` (layers, `unsafe` declarations, `links=` allowlist, workspace deps),
+  `xtask governance`.
+- `jstream-types`, `jstream-media`, first cut of `jstream-protocol` (edit/action
+  classification, schema snapshot tests), `jstream-control`.
+
+**Track B: technical spikes** (in `spikes/`, throwaway code; each ends with an ADR or ARCH update)
+- **S1 GPU interop:** WGC capture → shared texture + fence → wgpu (D3D12) → NV12 → Media
+  Foundation H.264 encode, at 1080p60 with no CPU copy. Measured on named hardware.
+- **S2 Virtual camera:** Rust COM media source loaded by Frame Server, fed cross-process
+  through a shared texture. Also answers whether MSIX can register it, and what registration
+  needs on dev machines.
+- **S3 Clock:** WASAPI mic + loopback timestamps mapped to QPC, drift measured over an hour,
+  adaptive resampler validated.
+
+**Demo:** CI green with all required checks. A PR that changes covered code without
+re-verifying is rejected. S1–S3 each have a written result.
+
+<a id="m1"></a>
+## M1: Headless engine, driven by agents (Windows)
 <!-- @section
-id: m1
-rev: 1
+depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0012-virtual-camera-windows.md"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "v2: vertical slice first; hardening and packaging made explicit" }
 -->
-- **M1a Compositor:** `jstream-graph` scenes/items/sources; `jstream-render` wgpu compositor
-  with 2D transform + crop; color/image/text sources; display capture (WGC) and webcam (MF).
-  Golden-frame tests.
-- **M1b Control:** `jstream-core` Engine, `jstream-client`, `jstream-server` (WS),
-  `jstream-mcp` (stdio + HTTP), `jstream-cli`, `video.snapshot` so agents can see the output.
-  Undo/redo, audit log, batches.
-- **M1c Virtual camera:** MF virtual camera output fed from any video mix.
-- **M1d Audio + stream:** WASAPI capture + process loopback, bus-matrix mixer, metering;
-  NVENC/AMF/QSV H.264 with zero-copy input; FLV mux; RTMPS out to YouTube via stream key; recording to fragmented MP4.
-- **Demo:** an agent builds a two-scene setup over MCP, checks it with snapshots, starts the
-  virtual cam, then goes live on YouTube, all with no GUI.
 
+- **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
+  MF AAC (WASAPI mic + desktop loopback) → FLV → RTMPS to YouTube with a stream key. Minimal
+  `jstream-core`, `jstream-server`, `jstream-mcp`, `jstream-cli`, `video.snapshot`.
+- **M1b Scenes and mixing:** scene graph, sources (window, webcam incl. MJPEG decode, image,
+  color, text), 2D transform + crop, golden tests; bus-matrix mixer with filters and meters;
+  per-client undo, `expected_rev`, audit log; recording to fMP4; encoder sharing.
+- **M1c Virtual camera:** `jstream-vcam-windows` + signed MSI installer (from spike S2).
+- **M1d Hardening:** RTMP reconnect with backoff, log rotation, local minidumps, `stats.tick`,
+  N-edition detection, `multiple-versions = "deny"` in `deny.toml`, the weekly `sweep` job.
+
+**Demo:** an agent builds a two-scene setup over MCP, checks it with snapshots, starts the
+virtual camera, then goes live on YouTube, all without a GUI.
+
+<a id="m2"></a>
 ## M2: UI
 <!-- @section
-id: m2
-rev: 1
+depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "v2: preview transport named" }
 -->
-- `jstream-ui` (Leptos→WASM): scenes, sources, properties, transform gizmo, mixer, outputs
-- Low-latency preview stream into `<canvas>`
-- `jstream-desktop` (Tauri, engine in-process) and `jstream-daemon` serving the same UI
-- Studio mode (Preview/Program) + transitions
-- **Demo:** do everything from M1 by hand in the desktop app and in a browser
 
+- Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
+- `jstream-ui`: scenes, sources, properties, transform gizmo, mixer, outputs.
+- Preview as low-res H.264 over binary WebSocket frames → WebCodecs → `<canvas>`, with a JPEG fallback.
+- `jstream-desktop` (Tauri) and `jstream-daemon` serving the same UI. Token pairing for
+  remote browsers.
+- Studio mode (Preview/Program) and transitions.
+
+**Demo:** everything from M1, done by hand in the desktop app and in a browser.
+
+<a id="m3"></a>
 ## M3: Depth and reach
 <!-- @section
-id: m3
-rev: 1
 -->
-- Full 3D transforms (perspective, rotation about X/Y), effect packs (WGSL + manifest, hot reload)
-- `jstream-youtube`: OAuth, create/schedule broadcasts, title/description, health, chat → MCP tools
-- HEVC/AV1 via enhanced RTMP
-- WASM automation plugins
-- macOS (minimum macOS 13 [[fact:min-macos]], provisional) and Linux platform crates reach M1 parity
 
+- Full 3D transforms; WGSL effect packs with hot reload.
+- `jstream-youtube`: OAuth, broadcasts, metadata, health, chat, all exposed over MCP.
+- Direct NVENC/AMF encoders where measurements justify them; HEVC/AV1 via enhanced RTMP.
+- WASM automation plugins.
+- macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).
+- Linux: codec-path ADR first, then the platform crate (virtual camera via v4l2loopback,
+  which needs root, so it gets its own ADR too).
+
+<a id="later"></a>
 ## Later
 <!-- @section
-id: later
-rev: 1
 -->
-- Media file source, browser source (needs an ADR: embedded webview vs CEF-free approach)
-- Replay buffer, multi-output (simultaneous stream + record at different settings)
-- SRT / WHIP outputs, OBS scene-collection import
 
-## Revision history
-
-<!-- @generated begin history by="xtask docs sync" -->
-| rev | date | by | sections | note |
-|---|---|---|---|---|
-| 1 | 2026-10-13 | agent:claude | all | Initial version |
-| 2 | 2026-10-13 | agent:claude | m0, m3 | Docs tooling first in M0; facts cited |
-<!-- @generated end history -->
+- Media-file source, browser source (needs an ADR), replay buffer.
+- Virtual microphone (needs a kernel-driver ADR), SRT/WHIP outputs, OBS scene-collection import.

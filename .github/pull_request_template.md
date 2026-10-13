@@ -2,17 +2,14 @@
 
 ## Why
 
-## How it was tested
+## Not run / not verified
+<!-- Platform tests not run on real hardware, targets not checked, anything you could not verify. "Nothing" is a valid answer. -->
 
-- [ ] `cargo fmt`, `clippy -D warnings`, `test`, `deny`, `xtask lint-deps`, `xtask docs check`
-- [ ] Protocol schema diff reviewed (if API changed)
-- [ ] Golden images reviewed (if rendering changed)
-- [ ] Not run / needs hardware: <!-- say what -->
+## Only if applicable
+- **New crate:** why it isn't a module in an existing crate (R-ARCH-005)
+- **New dependency:** why, maintenance status, transitive weight (R-DEP-004)
+- **Hot-loop change:** "measured on <hardware, OS>: …" or "not measured" (R-RT-005)
+- **Bug fix:** the regression test that fails without the fix (R-TEST-001)
+- **Governance change:** what is being loosened or tightened, and why (R-GOV-001)
 
-## Docs
-
-<!-- CI posts the verification summary. Here, name any doc you edited (not just verified) and why. -->
-
-## Rules and ADRs
-
-<!-- Cite rule IDs / ADRs this change relies on or touches, e.g. [[RULES#R-RT-001]], [[ADR-0004]]. -->
+<!-- CI posts the verification summary and the AI review; don't restate CI results here. -->
