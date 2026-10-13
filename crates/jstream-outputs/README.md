@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md", "docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:5982d30573db8b4d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: checked each bullet against src/rtmp (handshake, chunk header choice and limits, control handling, command sequence and errors, media send, URL/key redaction, AMF0) and the blocking-I/O rationale against ARCH#threading, ADR-0003 and ADR-0009" }
+verified = { hash = "b3:4d84f812b7c6ddb1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after review B1 on #29: URL/key bullet now states Rejected redacts key echoes from the server's code and description, matching publisher::rejected and the bad_stream_key_is_rejected test; other bullets unchanged against src/rtmp" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -53,7 +53,9 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   on their own chunk streams. `timestamp_ms` converts a `MediaTime`.
 - **URLs and keys** (`url`): `rtmp(s)://host[:port]/app[/...]`, with the whole path as the
   application name and the stream key separate. `StreamKey` prints as `***`, and no error
-  carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+  carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The server's
+  status code and description are untrusted text, so `RtmpError::Rejected` replaces any
+  echo of the key in them with `***`.
 - **AMF0** (`amf0`): a minimal, crate-private encoder and decoder for the command
   messages, with a nesting limit on decoding. **Unify it with `jstream-mux`'s AMF0
   encoder once both crates have landed.**
@@ -89,8 +91,9 @@ the order of every message the client sends.
 <!-- @section
 -->
 
-- **TLS:** rustls + `ring` vs rustls + `aws-lc-rs` vs Windows SChannel through the
-  `windows` crate. Each needs a native-code allowlist entry or a platform-crate boundary,
-  so the maintainer decides.
+- **TLS:** [R-DEP-006](../../docs/RULES.md#R-DEP-006) fixes the stack as rustls with
+  `ring` (`aws-lc-rs` is excluded). `ring` compiles C and assembly, so adding it needs a
+  lint-deps native-code allowlist entry, a declared governance change. Using SChannel
+  instead would mean revising R-DEP-006 first.
 - **Threading:** whether [ARCH › Threads](../../docs/ARCHITECTURE.md#threading) should
   list "one blocking thread per network output" explicitly once the `Output` layer lands.

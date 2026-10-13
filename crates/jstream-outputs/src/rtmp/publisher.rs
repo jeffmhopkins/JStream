@@ -65,9 +65,9 @@ impl Default for PublishOptions {
 /// crates/jstream-outputs/README.md#purpose). [`RtmpError::Io`] when name resolution
 /// or every connection attempt fails.
 pub fn connect_tcp(url: &RtmpUrl, timeout: Option<Duration>) -> Result<TcpStream, RtmpError> {
-    // TODO(TLS): rtmps:// needs a TLS stream here. Every Rust TLS option compiles C or
-    // assembly, so the choice (rustls + ring, rustls + aws-lc-rs, or SChannel through the
-    // `windows` crate) needs a native-code allowlist entry and the maintainer's decision.
+    // TODO(TLS): rtmps:// needs a TLS stream here: rustls with `ring` (R-DEP-006). `ring`
+    // compiles C and assembly, so adding it needs a native-code allowlist entry, which is
+    // a declared governance change.
     if url.scheme() == Scheme::Rtmps {
         return Err(RtmpError::TlsUnsupported);
     }
@@ -305,12 +305,16 @@ fn status_info(values: &[Amf0Value]) -> (&str, &str, &str) {
     (field("level"), field("code"), field("description"))
 }
 
-fn rejected(command: &'static str, values: &[Amf0Value]) -> RtmpError {
+/// A [`RtmpError::Rejected`] from a status reply. The server's text is untrusted and may
+/// echo the stream key, so every occurrence of `key` is replaced with `***`
+/// (docs/RULES.md#R-SEC-001).
+fn rejected(command: &'static str, values: &[Amf0Value], key: &StreamKey) -> RtmpError {
     let (_, code, description) = status_info(values);
+    let redact = |text: &str| text.replace(key.expose(), "***");
     RtmpError::Rejected {
         command,
-        code: code.to_owned(),
-        description: description.to_owned(),
+        code: redact(code),
+        description: redact(description),
     }
 }
 
@@ -392,7 +396,7 @@ impl<S: Read + Write> RtmpPublisher<S> {
             0,
             &[s("connect"), Amf0Value::Number(TXN_CONNECT), connect_obj],
         )?;
-        wait_result(&mut conn, TXN_CONNECT, "connect")?;
+        wait_result(&mut conn, TXN_CONNECT, "connect", key)?;
 
         let key_v = s(key.expose());
         for (name, txn) in [
@@ -419,7 +423,7 @@ impl<S: Read + Write> RtmpPublisher<S> {
                 Amf0Value::Null,
             ],
         )?;
-        let reply = wait_result(&mut conn, TXN_CREATE_STREAM, "createStream")?;
+        let reply = wait_result(&mut conn, TXN_CREATE_STREAM, "createStream", key)?;
         let stream_id = reply
             .get(3)
             .and_then(Amf0Value::as_number)
@@ -452,11 +456,11 @@ impl<S: Read + Write> RtmpPublisher<S> {
                         break;
                     }
                     if level == "error" {
-                        return Err(rejected("publish", &values));
+                        return Err(rejected("publish", &values, key));
                     }
                 }
                 (Some("_error"), Some(t)) if t == TXN_PUBLISH => {
-                    return Err(rejected("publish", &values));
+                    return Err(rejected("publish", &values, key));
                 }
                 _ => {}
             }
@@ -583,7 +587,7 @@ impl<S: Read + Write> RtmpPublisher<S> {
                 && name_and_txn(&values).0 == Some("onStatus")
                 && status_info(&values).0 == "error"
             {
-                return Err(rejected("publish", &values));
+                return Err(rejected("publish", &values, &self.key));
             }
         }
         Ok(())
@@ -626,6 +630,7 @@ fn wait_result<S: Read + Write>(
     conn: &mut Connection<S>,
     txn: f64,
     command: &'static str,
+    key: &StreamKey,
 ) -> Result<Vec<Amf0Value>, RtmpError> {
     loop {
         let m = conn.recv(command)?;
@@ -634,7 +639,7 @@ fn wait_result<S: Read + Write>(
         };
         match name_and_txn(&values) {
             (Some("_result"), Some(t)) if t == txn => return Ok(values),
-            (Some("_error"), Some(t)) if t == txn => return Err(rejected(command, &values)),
+            (Some("_error"), Some(t)) if t == txn => return Err(rejected(command, &values, key)),
             _ => {}
         }
     }

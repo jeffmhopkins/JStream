@@ -221,7 +221,12 @@ fn fake_server(mut io: Duplex, mode: Mode) -> Vec<String> {
                                     s("onStatus"),
                                     n(0.0),
                                     Amf0Value::Null,
-                                    status("error", "NetStream.Publish.BadName"),
+                                    // A hostile server echoes the key in both fields.
+                                    obj(&[
+                                        ("level", s("error")),
+                                        ("code", s(&format!("NetStream.Publish.BadName.{KEY}"))),
+                                        ("description", s(&format!("bad stream name {KEY}"))),
+                                    ]),
                                 ],
                             );
                         } else {
@@ -330,11 +335,14 @@ fn bad_stream_key_is_rejected() {
         .err()
         .unwrap();
     assert!(
-        matches!(&err, RtmpError::Rejected { command: "publish", code, .. } if code == "NetStream.Publish.BadName"),
+        matches!(&err, RtmpError::Rejected { command: "publish", code, description }
+            if code == "NetStream.Publish.BadName.***" && description == "bad stream name ***"),
         "{err:?}"
     );
-    // The error text never includes the key.
+    // Neither the error text nor its debug form includes the key, even when the server
+    // echoes it (R-SEC-001).
     assert!(!err.to_string().contains(KEY));
+    assert!(!format!("{err:?}").contains(KEY));
     server.join().unwrap();
 }
 
