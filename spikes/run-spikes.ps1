@@ -14,8 +14,8 @@
 #   S1  An animated test page plays full screen in Edge (kiosk mode) while S1 captures and
 #       encodes it, at 1920x1080 and at the display's native size. The first few MB of each
 #       H.264 output go into the zip so the picture can be checked without you.
-#   S2  Only with -Only S2. Registers the camera per user, then machine-wide (one UAC
-#       prompt), and each time a small Edge window opens "JStream S2" as a webcam while
+#   S2  Only with -Only S2. Registers the camera per user, then machine-wide (a UAC
+#       prompt, and one more to remove it at the end), and each time a small Edge window opens "JStream S2" as a webcam while
 #       the producer runs. The producer's report says whether frames reached it.
 #   S3  The spike plays silence on the default output itself (its keep-alive), so nothing
 #       needs to play. A 2-minute smoke run, then the full run. The PC is kept awake.
@@ -386,7 +386,7 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
         [void](S2-Attempt 'hkcu')
         & $exe --unregister | Out-Null
 
-        Say 'Machine-wide registration needs administrator rights: approve the UAC prompt.' 'Yellow'
+        Say 'Machine-wide registration needs administrator rights: approve the UAC prompt (and the one at the end that removes it).' 'Yellow'
         $log = Join-Path $Out 's2-register-hklm.txt'
         $cmd = "Stop-Service FrameServer -Force -ErrorAction SilentlyContinue; & $(Quote $exe) --register hklm *> $(Quote $log); Start-Sleep -Seconds 2"
         $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
@@ -401,8 +401,15 @@ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
         if ($usedHklm) {
             $cmd = "& $(Quote $exe) --unregister; Start-Sleep -Seconds 1"
             $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($cmd))
-            Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -EncodedCommand $enc" -ErrorAction SilentlyContinue
+            try {
+                Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList "-NoProfile -EncodedCommand $enc" -ErrorAction Stop
+            } catch {
+                Say "Removing the machine-wide registration failed (UAC declined?): $_" 'Red'
+                Note "- cleanup: removing the HKLM registration FAILED ($_); run 's2-vcam --unregister' as administrator"
+            }
         } elseif (Test-Path $exe) { & $exe --unregister | Out-Null }
+        # What is still registered after cleanup (should be nothing).
+        if (Test-Path $exe) { & $exe --status 2>&1 | ForEach-Object { "$_" } | Out-File -Encoding utf8 (Join-Path $Out 's2-status-after.txt') }
         Copy-Item 'C:\ProgramData\JStreamS2\*.log' $Out -ErrorAction SilentlyContinue
     }
 }
