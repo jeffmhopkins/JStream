@@ -352,8 +352,8 @@ drift-checked.
 <a id="governance"></a>
 ## Governance: protecting the checks themselves
 <!-- @section
-depends_on = ["docs/adr/0015-review-and-governance.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: added pre-approved Dependabot pin-only exemption (ADR-0018); governance list otherwise unchanged" }
+depends_on = ["docs/adr/0019-review-gate-v2.md"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against ADR-0019 (supersedes 0015): governance labels and audit unchanged; list and ADR-0018 exemption unchanged" }
 -->
 
 An agent could pass the gate by weakening it. These changes are **governance changes**,
@@ -373,4 +373,4 @@ section saying what is loosened or tightened, and why:
 
 Agents and the maintainer may both apply the label. The weekly sweep lists every PR
 merged with it, so the maintainer can audit them
-([ADR-0015](adr/0015-review-and-governance.md)).
+([ADR-0019](adr/0019-review-gate-v2.md)).
