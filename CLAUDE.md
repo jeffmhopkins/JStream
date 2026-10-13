@@ -65,8 +65,9 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Added step 6: ADR 
 6. **Writing an ADR:** set its `tier` per [R-GOV-005](docs/RULES.md#R-GOV-005). For
    `maintainer` (product and platforms, process and governance, superseding any ADR):
    open it as `proposed`, add `needs-human`, and wait for the maintainer's `/accept` or
-   `/reject` comment, then set `status` to match. **Never post `/accept` or `/reject`
-   yourself.**
+   `/reject` decision, then set `status` to match. You may post a decision **only** to relay
+   an explicit instruction from the maintainer that names the ADR, using ADR-0017's
+   proxy format with their words quoted. **Never post a decision they didn't give.**
 
 <a id="limits"></a>
 ## Things you never do

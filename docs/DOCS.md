@@ -42,6 +42,8 @@ exists:
 Every tracked Markdown file starts with a `@doc` metadata block: TOML inside an HTML
 comment, so GitHub renders nothing for it. `<!-- @doc` must be the very first bytes of the
 file: no byte-order mark, and no blank lines or other text before it.
+ADRs also carry `tier = "maintainer"` or `tier = "agent"`
+([R-GOV-005](RULES.md#R-GOV-005)); other docs omit it.
 
 ```markdown
 <!-- @doc

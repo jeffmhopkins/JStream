@@ -55,7 +55,7 @@ to the interfaces.
 <!-- @rule
 status = "active"
 enforced_by = ["review", "human"]
-applies_to = ["Cargo.toml", "crates/**", "apps/**"]
+applies_to = ["Cargo.toml", "crates/**", "apps/**", "REVIEW.md", "docs/DOCS.md", "docs/RULES.md", "docs/adr/**"]
 -->
 Changes to structure, dependency boundaries, protocol compatibility, platform support,
 codec policy, the review process or the docs system are recorded as an ADR (template:
@@ -811,5 +811,7 @@ applies_to = ["docs/adr/**"]
 Every new ADR declares `tier = "maintainer"` or `tier = "agent"`, following
 [ADR-0017](adr/0017-adr-decision-tiers.md). A Tier-1 ADR (product and platforms, process
 and governance, or superseding any ADR) lands as `proposed` with `needs-human`. It becomes
-`accepted` or `rejected` only when the maintainer comments `/accept` or `/reject` on the
-PR. Agents never post those comments.
+`accepted` or `rejected` only on the maintainer's `/accept` or `/reject` decision on the
+PR, either directly or relayed by an agent with a quoted instruction from the maintainer that
+names the ADR ([ADR-0017](adr/0017-adr-decision-tiers.md)). Agents never post a decision the
+maintainer did not give.
