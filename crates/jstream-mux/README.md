@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:bb09c197b865eb80", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: checked each bullet against src/flv.rs, h264.rs, aac.rs, amf0.rs (tagger/writer split, onMetaData fields and @setDataFrame, lazy AVC record from first keyframe, nearest-ms dts timestamps with 32-bit wrap and extended byte, cts, error cases with no state change on rejection, FFmpeg-style high-profile record tail); Annex B/raw AAC decision matches the jstream-media README; ADR-0003/0009 hold, enhanced RTMP listed as not yet" }
+verified = { hash = "b3:ca05f09ea414759b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after review B1 on #30, now also against jstream-outputs on this branch: RtmpPublisher::send_metadata adds @setDataFrame itself so the README directs it to MetadataStyle::File (SetDataFrame only for clients that send the body unchanged); send_video/send_audio take FLV tag bodies as stated; amf0 is public for reuse but jstream-outputs has its own private copy, unification recorded as follow-up; FlvWriter::new now rejects bad config before writing; other bullets unchanged against src/" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md):
@@ -38,7 +38,9 @@ Contents:
   file header and tag framing and writes to any `std::io::Write`.
   - The first tags are `onMetaData` (AMF0 ECMA array: size, frame rate, bitrates, codec
     IDs, audio rate, sample size and stereo flag), then the AVC and AAC sequence headers.
-    For RTMP, `MetadataStyle::SetDataFrame` prefixes `@setDataFrame`.
+    `MetadataStyle::SetDataFrame` prefixes `@setDataFrame`, for an RTMP client that
+    sends the tag body as is. `jstream-outputs`' `RtmpPublisher::send_metadata` adds
+    `@setDataFrame` itself, so with it use `MetadataStyle::File`.
   - Without a configured `AvcDecoderConfig`, the record is built from the SPS and PPS of
     the first video packet, which must be a keyframe.
   - Timestamps are each packet's dts, rescaled to milliseconds with
@@ -55,8 +57,10 @@ Contents:
 - **`aac`:** `AudioSpecificConfig`, built from object type, rate and channels, or kept as
   the encoder produced it.
 - **`amf0`:** an AMF0 encoder and decoder (number, boolean, string and long string,
-  object, null, undefined, ECMA and strict arrays), shared with the RTMP client. The
-  decoder treats input as untrusted and limits nesting depth.
+  object, null, undefined, ECMA and strict arrays). It is public so the RTMP client can
+  reuse it; today `jstream-outputs` has its own crate-private copy, and unifying the two
+  is a recorded follow-up. The decoder treats input as untrusted and limits nesting
+  depth.
 - **Errors:** one `thiserror` enum, `MuxError`.
 
 **Not yet:** enhanced RTMP (HEVC and AV1 through FourCC video tags, which ADR-0009 calls

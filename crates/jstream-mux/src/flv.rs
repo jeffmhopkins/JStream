@@ -232,8 +232,10 @@ pub enum MetadataStyle {
     /// `"onMetaData", {…}`, as stored in FLV files.
     #[default]
     File,
-    /// `"@setDataFrame", "onMetaData", {…}`, as an RTMP publisher sends it in a data
-    /// message; the server strips `@setDataFrame` and stores the rest.
+    /// `"@setDataFrame", "onMetaData", {…}`, the data message an RTMP publisher sends;
+    /// the server strips `@setDataFrame` and stores the rest. Use it only with a client
+    /// that sends the tag body unchanged. `jstream_outputs`' `RtmpPublisher::send_metadata`
+    /// adds `@setDataFrame` itself, so it takes [`MetadataStyle::File`].
     SetDataFrame,
 }
 
@@ -512,12 +514,14 @@ pub struct FlvWriter<W: Write> {
 
 impl<W: Write> FlvWriter<W> {
     /// Writes the file header, `onMetaData` and the known sequence headers to `out`.
+    /// An invalid configuration is rejected before anything is written.
     ///
     /// # Errors
     /// As [`FlvTagger::new`] and [`FlvTagger::start`], and [`MuxError::Io`].
     pub fn new(mut out: W, config: FlvConfig) -> Result<Self, MuxError> {
-        out.write_all(&file_header(config.audio.is_some(), config.video.is_some()))?;
+        let header = file_header(config.audio.is_some(), config.video.is_some());
         let mut tagger = FlvTagger::new(config)?;
+        out.write_all(&header)?;
         for tag in tagger.start()? {
             tag.write_to(&mut out)?;
         }
@@ -902,6 +906,23 @@ mod tests {
                 (66, vec![0x27, 0x01, 0x00, 0x00, 0x00]),
             ]
         );
+    }
+
+    #[test]
+    fn writer_rejects_a_bad_origin_before_writing() {
+        // i64::MAX seconds overflows i64 milliseconds, so the origin is rejected.
+        let seconds = Timebase::new(1, 1).unwrap();
+        let mut out = Vec::new();
+        let result = FlvWriter::new(
+            &mut out,
+            FlvConfig {
+                audio: Some(audio_track()),
+                origin: Some(MediaTime::new(i64::MAX, seconds)),
+                ..FlvConfig::default()
+            },
+        );
+        assert!(matches!(result, Err(MuxError::Media(_))), "{result:?}");
+        assert!(out.is_empty());
     }
 
     #[test]
