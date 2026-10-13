@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:1e85f22958c7a4bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: client/engine/platform/vcam diagram and hosts table match ADR-0001, ADR-0002 (desktop UI over authenticated WS); no apps/ code exists yet" }
+verified = { hash = "b3:1d1af9c564242e87", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Diagram vcam box now says registered by the app on first use (ADR-0020) instead of by the installer; rest of the shape unchanged" }
 -->
 
 ```
@@ -48,7 +48,7 @@ verified = { hash = "b3:1e85f22958c7a4bd", by = "agent:claude@session_01QBbMRwRu
                    │ cross-process frames (shared texture + fence)
      ┌─────────────┴────────────────────────────────────┐
      │ jstream-vcam-windows (COM media source DLL,      │  loaded by the Windows
-     │ registered by the installer)                     │  Frame Server service
+     │ registered by the app on first use)              │  Frame Server service
      └──────────────────────────────────────────────────┘
 ```
 
@@ -83,7 +83,7 @@ verified = { hash = "b3:4c21fdca01d95b25", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:23b36fb9fc47552a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only main.rs's Docs: line changed (adds DOCS#dependency-lint); tree line 'xtask/: docs, lint-deps, governance, ...' and .github/ line still accurate" }
+verified = { hash = "b3:fa786f1fcb4dcfc6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Removed installer/ line (ADR-0020: no MSI); tree otherwise matches repo and xtask command set" }
 -->
 
 ```
@@ -95,7 +95,6 @@ JStream/
 ├── ROADMAP.md
 ├── crates/                 # all library crates, flat, every name prefixed `jstream-`
 ├── apps/                   # host binaries (thin)
-├── installer/              # Windows installer (MSI): registers the vcam COM source
 ├── effects/                # built-in WGSL effect packs (data)
 ├── assets/                 # icons, fonts, test media
 ├── tests/                  # cross-crate scenario + golden tests
@@ -115,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:9c6114286b86bf9f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for the new crates/jstream-protocol/Cargo.toml: layer 1, summary identical to the L1 jstream-protocol row, unsafe_allowed = false matches 'no'; it depends on no JStream crate (only serde, serde_json, schemars, thiserror, dev insta), so strict-lower layering (R-ARCH-002) holds; lint-deps passes" }
+verified = { hash = "b3:485e151244ba4ecf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main (#22): table holds both the jstream-protocol L1 metadata from this PR and the vcam row citing ADR-0020; layers, summaries and unsafe column consistent, lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -140,7 +139,7 @@ it is maintained by hand. `xtask` is repository tooling and sits outside the lay
 | 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
-| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0012](adr/0012-virtual-camera-windows.md)). Depends only on L0 and `windows`. | **yes** |
+| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
 | 3 | `jstream-encode` | Shared encoder sessions keyed by (mix, settings); rate control; fan-out of packet streams | no |
 | 3 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; serves UI assets; mounts MCP over HTTP; token and Origin checks | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
@@ -325,12 +324,19 @@ verified = { hash = "b3:233514b2be0b9df3", by = "agent:claude@session_01QBbMRwRu
 <a id="packaging"></a>
 ## Packaging
 <!-- @section
-covers = ["installer/**"]
-depends_on = ["docs/adr/0012-virtual-camera-windows.md"]
-verified = { hash = "b3:fcc16249e3a4dfb4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: signed MSI registering the vcam COM source machine-wide matches ADR-0012; MSIX question still open for spike S2" }
+depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
+verified = { hash = "b3:bb220b835e3ff5b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rewritten for ADR-0020: portable zip, crt-static, state in APPDATA or beside exe via portable marker, vcam registered by app on first use (HKCU or one UAC prompt, S2 decides); covers dropped with installer/" }
 -->
 
-Windows ships as a signed MSI. It installs the apps, and registers the
-`jstream-vcam-windows` COM media source machine-wide (HKLM, admin required), because the
-Frame Server service loads it. Whether MSIX packaging can register it instead is an open
-question for spike S2. Unsigned development builds register the source with a dev script.
+Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
+admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
+`jstream-daemon.exe`, `jstream-cli.exe` and the `jstream-vcam-windows` DLL. Release builds
+link the C runtime statically and need only OS components (WebView2, Media Foundation,
+Direct3D 12).
+
+- **State:** in `%APPDATA%\JStream`, or beside the exe when a `portable` marker file is
+  present.
+- **Virtual camera:** the app registers the COM media source from its own folder the first
+  time the camera is enabled. That is silent if per-user registration works with Frame
+  Server, and otherwise one UAC prompt. Spike S2 decides which, and its result is recorded
+  here. The app can unregister the source and detects a moved folder.

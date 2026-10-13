@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:744e97c8eac34a06", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after round-2 fix: added finite.rs/Finite32 and ClientMessage::parse to the contents list; deps unchanged (no new crates), forbid(unsafe_code), wasm32 clippy clean" }
+verified = { hash = "b3:624920fce117fbd9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main: depends_on ARCH#crate-map only gained the vcam row ADR-0020 link; protocol crate purpose, modules and L1 placement unaffected" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
