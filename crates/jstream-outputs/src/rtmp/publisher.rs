@@ -4,9 +4,10 @@ use std::io::{self, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use jstream_media::{MediaTime, Rounding, Timebase};
+use jstream_media::MediaTime;
+use jstream_mux::amf0::Amf0Value;
+use jstream_mux::flv;
 
-use super::amf0::{self, Amf0Value};
 use super::chunk::{ChunkDecoder, ChunkEncoder, Message, msg_type};
 use super::{RtmpError, RtmpUrl, Scheme, StreamKey, handshake};
 
@@ -89,16 +90,24 @@ pub fn connect_tcp(url: &RtmpUrl, timeout: Option<Duration>) -> Result<TcpStream
     Err(io(last))
 }
 
-/// Converts a media timestamp to RTMP milliseconds (rounded to the nearest), wrapping at
-/// 2^32 as RTMP timestamps do.
+/// Converts a media timestamp to RTMP milliseconds, wrapping at 2^32 as RTMP timestamps
+/// do. The conversion is `jstream_mux::flv::to_ms` (rounded to the nearest), the same one
+/// the FLV muxer uses for tag timestamps.
 ///
 /// # Errors
 /// [`RtmpError::NegativeTimestamp`] for times before zero, and [`RtmpError::Timestamp`]
 /// when rescaling overflows.
 pub fn timestamp_ms(t: MediaTime) -> Result<u32, RtmpError> {
-    let ms = t.rescale(Timebase::MILLIS, Rounding::Nearest)?.ticks();
-    let ms = u64::try_from(ms).map_err(|_| RtmpError::NegativeTimestamp { ms })?;
-    Ok((ms & u64::from(u32::MAX)) as u32)
+    let ms = flv::to_ms(t)?;
+    if ms < 0 {
+        return Err(RtmpError::NegativeTimestamp { ms });
+    }
+    Ok(flv::wrap_timestamp(ms))
+}
+
+/// An AMF0 string value.
+fn amf_str(s: &str) -> Amf0Value {
+    Amf0Value::String(s.to_owned())
 }
 
 /// The transport plus both chunk-stream directions and acknowledgement bookkeeping.
@@ -163,10 +172,7 @@ impl<S: Read + Write> Connection<S> {
         stream_id: u32,
         values: &[Amf0Value],
     ) -> Result<(), RtmpError> {
-        let mut body = Vec::new();
-        for v in values {
-            amf0::encode(v, &mut body)?;
-        }
+        let body = Amf0Value::encode_all(values).map_err(RtmpError::Amf0)?;
         self.send(csid, 0, msg_type::COMMAND_AMF0, stream_id, &body)
     }
 
@@ -282,7 +288,9 @@ fn command_values(m: &Message) -> Result<Option<Vec<Amf0Value>>, RtmpError> {
         },
         _ => return Ok(None),
     };
-    amf0::decode_all(body).map(Some)
+    Amf0Value::decode_all(body)
+        .map(Some)
+        .map_err(RtmpError::Amf0)
 }
 
 /// The name and transaction ID of a decoded command.
@@ -298,7 +306,7 @@ fn status_info(values: &[Amf0Value]) -> (&str, &str, &str) {
     let field = |k| {
         values
             .get(3)
-            .and_then(|info| info.get(k))
+            .and_then(|info| info.property(k))
             .and_then(Amf0Value::as_str)
             .unwrap_or("")
     };
@@ -384,7 +392,7 @@ impl<S: Read + Write> RtmpPublisher<S> {
         conn.send_control(msg_type::SET_CHUNK_SIZE, &options.chunk_size.to_be_bytes())?;
         conn.encoder.set_chunk_size(options.chunk_size)?;
 
-        let s = Amf0Value::str;
+        let s = amf_str;
         let connect_obj = Amf0Value::Object(vec![
             ("app".into(), s(url.app())),
             ("type".into(), s("nonprivate")),
@@ -511,7 +519,9 @@ impl<S: Read + Write> RtmpPublisher<S> {
             return Err(RtmpError::PayloadSize { len: 0 });
         }
         let mut body = Vec::with_capacity(16 + on_metadata.len());
-        amf0::encode(&Amf0Value::str("@setDataFrame"), &mut body)?;
+        amf_str("@setDataFrame")
+            .encode(&mut body)
+            .map_err(RtmpError::Amf0)?;
         body.extend_from_slice(on_metadata);
         self.conn
             .send(CSID_STREAM, 0, msg_type::DATA_AMF0, self.stream_id, &body)
@@ -599,7 +609,7 @@ impl<S: Read + Write> RtmpPublisher<S> {
     /// # Errors
     /// Transport errors while sending.
     pub fn finish(mut self) -> Result<S, RtmpError> {
-        let s = Amf0Value::str;
+        let s = amf_str;
         self.conn.send_command(
             CSID_COMMAND,
             0,

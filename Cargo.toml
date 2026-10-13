@@ -16,6 +16,7 @@ futures-core = { version = "0.3", default-features = false }
 globset = { version = "0.4", default-features = false }
 insta = { version = "1", default-features = false }
 jstream-media = { path = "crates/jstream-media" }
+jstream-mux = { path = "crates/jstream-mux" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 pulldown-cmark = { version = "0.13", default-features = false }
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }

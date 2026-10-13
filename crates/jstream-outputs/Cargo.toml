@@ -17,4 +17,5 @@ workspace = true
 
 [dependencies]
 jstream-media.workspace = true
+jstream-mux.workspace = true
 thiserror.workspace = true
