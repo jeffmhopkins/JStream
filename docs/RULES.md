@@ -57,8 +57,9 @@ status = "active"
 enforced_by = ["review", "human"]
 applies_to = ["Cargo.toml", "crates/**", "apps/**"]
 -->
-Changes to structure, dependency boundaries, protocol compatibility, platform support
-or codec policy are recorded as an ADR (template: `docs/adr/TEMPLATE.md`).
+Changes to structure, dependency boundaries, protocol compatibility, platform support,
+codec policy, the review process or the docs system are recorded as an ADR (template:
+`docs/adr/TEMPLATE.md`), with a decision tier per [R-GOV-005](#R-GOV-005).
 Contradicting an accepted ADR requires a new ADR that supersedes it.
 
 <a id="R-ARCH-005"></a>
@@ -799,3 +800,16 @@ For each blocking finding (`B<n>`), the builder either pushes a fix and replies 
 commit, or replies with a concrete rebuttal (a code path, test or doc that shows the
 finding is wrong). Disputes that last three rounds go to the maintainer through
 `needs-human` ([REVIEW › Re-review rounds](../REVIEW.md#rounds)).
+
+<a id="R-GOV-005"></a>
+### R-GOV-005: Tier-1 decisions need the maintainer
+<!-- @rule
+status = "active"
+enforced_by = ["review"]
+applies_to = ["docs/adr/**"]
+-->
+Every new ADR declares `tier = "maintainer"` or `tier = "agent"`, following
+[ADR-0017](adr/0017-adr-decision-tiers.md). A Tier-1 ADR (product and platforms, process
+and governance, or superseding any ADR) lands as `proposed` with `needs-human`. It becomes
+`accepted` or `rejected` only when the maintainer comments `/accept` or `/reject` on the
+PR. Agents never post those comments.

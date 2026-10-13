@@ -50,6 +50,7 @@ title = "Architecture"
 kind = "normative"           # normative | adr | guide | plan | reference | generated
 status = "active"            # active | draft | retired  (ADRs: proposed | accepted | superseded | rejected)
 review_every = "90d"         # omitted for ADRs and generated docs
+tier = "maintainer"          # ADRs only: maintainer | agent (R-GOV-005)
 reviewed = { by = "human:jeffmhopkins", note = "what was re-read and why it still holds" }
 replaced_by = "docs/NEW.md"  # retired docs only
 retired_sections = { "old-id" = ["new-id-a", "new-id-b"] }   # tombstones, see Lifecycle

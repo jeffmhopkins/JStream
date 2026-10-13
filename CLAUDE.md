@@ -46,7 +46,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: hash-bound ver
 ## The PR loop (you are a builder)
 <!-- @section
 depends_on = ["REVIEW.md#output", "REVIEW.md#rounds"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Added the exact commands for enabling auto-merge; loop steps unchanged" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Added step 6: ADR tiers (ADR-0017); steps 1-5 unchanged" }
 -->
 
 1. Open the PR with **auto-merge (squash) enabled**. It merges by itself once every required
@@ -62,6 +62,11 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Added the exact co
 4. Non-blocking findings: fix them if cheap, or say they're deferred. Pre-existing problems
    become issues.
 5. A `needs-human` label means the maintainer decides. Stop arguing that point.
+6. **Writing an ADR:** set its `tier` per [R-GOV-005](docs/RULES.md#R-GOV-005). For
+   `maintainer` (product and platforms, process and governance, superseding any ADR):
+   open it as `proposed`, add `needs-human`, and wait for the maintainer's `/accept` or
+   `/reject` comment, then set `status` to match. **Never post `/accept` or `/reject`
+   yourself.**
 
 <a id="limits"></a>
 ## Things you never do
