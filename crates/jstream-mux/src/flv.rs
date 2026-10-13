@@ -7,7 +7,7 @@
 
 use std::io::Write;
 
-use jstream_media::{Codec, MediaTime, Packet, Rounding, Timebase};
+use jstream_media::{Codec, MediaError, MediaTime, Packet, Rounding, Timebase};
 
 use crate::MuxError;
 use crate::aac::AudioSpecificConfig;
@@ -497,7 +497,14 @@ fn avc_sequence_header(avc: &AvcDecoderConfig, timestamp: u32) -> FlvTag {
     }
 }
 
-fn to_ms(t: MediaTime) -> Result<i64, MuxError> {
+/// A media time in whole milliseconds, rounded to the nearest. This is the one dts-to-ms
+/// conversion: [`FlvTagger`] uses it for every timestamp, and the RTMP client's
+/// `timestamp_ms` in `jstream-outputs` builds on it. The result may be negative; wrap it
+/// with [`wrap_timestamp`] for an FLV or RTMP timestamp.
+///
+/// # Errors
+/// [`MediaError`] when the time can't be expressed in `i64` milliseconds.
+pub fn to_ms(t: MediaTime) -> Result<i64, MediaError> {
     Ok(t.rescale(Timebase::MILLIS, Rounding::Nearest)?.ticks())
 }
 
@@ -521,8 +528,10 @@ impl<W: Write> FlvWriter<W> {
     pub fn new(mut out: W, config: FlvConfig) -> Result<Self, MuxError> {
         let header = file_header(config.audio.is_some(), config.video.is_some());
         let mut tagger = FlvTagger::new(config)?;
+        // Every fallible step that doesn't touch `out` comes first.
+        let start = tagger.start()?;
         out.write_all(&header)?;
-        for tag in tagger.start()? {
+        for tag in start {
             tag.write_to(&mut out)?;
         }
         Ok(Self { out, tagger })

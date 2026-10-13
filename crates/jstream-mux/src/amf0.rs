@@ -2,9 +2,11 @@
 //! command and data messages.
 //!
 //! Only the types FLV metadata and RTMP commands use are supported: number, boolean,
-//! string (short and long), object, null, undefined, ECMA array and strict array. The
-//! decoder is here so that the RTMP client can read server replies with the same types;
-//! it treats its input as untrusted and limits nesting depth.
+//! string (short and long), object, null, undefined, ECMA array, strict array and date.
+//! This is the workspace's one AMF0 codec: `jstream-mux` writes FLV script tags with it,
+//! and the RTMP client in `jstream-outputs` encodes its commands and decodes server
+//! replies with it. The decoder treats its input as untrusted: it limits nesting depth
+//! and never allocates from a count the input claims.
 
 use crate::MuxError;
 
@@ -17,10 +19,12 @@ const UNDEFINED: u8 = 0x06;
 const ECMA_ARRAY: u8 = 0x08;
 const OBJECT_END: u8 = 0x09;
 const STRICT_ARRAY: u8 = 0x0A;
+const DATE: u8 = 0x0B;
 const LONG_STRING: u8 = 0x0C;
 
-/// How deeply [`Amf0Value::decode`] lets objects and arrays nest.
-pub const MAX_DEPTH: usize = 64;
+/// How deeply [`Amf0Value::decode`] lets objects and arrays nest, so hostile input can't
+/// exhaust the stack.
+pub const MAX_DEPTH: usize = 32;
 
 /// One AMF0 value.
 ///
@@ -56,6 +60,9 @@ pub enum Amf0Value {
     EcmaArray(Vec<(String, Amf0Value)>),
     /// A dense array of values (marker `0x0A`).
     StrictArray(Vec<Amf0Value>),
+    /// A date: milliseconds since the Unix epoch (marker `0x0B`). The time-zone field is
+    /// written as zero and ignored when decoding.
+    Date(f64),
 }
 
 impl Amf0Value {
@@ -104,6 +111,11 @@ impl Amf0Value {
                     item.encode(out)?;
                 }
             }
+            Self::Date(ms) => {
+                out.push(DATE);
+                out.extend_from_slice(&ms.to_be_bytes());
+                out.extend_from_slice(&0i16.to_be_bytes());
+            }
         }
         Ok(())
     }
@@ -124,7 +136,8 @@ impl Amf0Value {
     ///
     /// # Errors
     /// [`MuxError::Amf0Truncated`], [`MuxError::Amf0UnsupportedMarker`],
-    /// [`MuxError::Amf0InvalidUtf8`] or [`MuxError::Amf0TooDeep`].
+    /// [`MuxError::Amf0InvalidUtf8`] or [`MuxError::Amf0TooDeep`]. Offsets count from the
+    /// start of `input`.
     pub fn decode(input: &mut &[u8]) -> Result<Self, MuxError> {
         let mut r = Reader {
             data: input,
@@ -135,16 +148,37 @@ impl Amf0Value {
         Ok(v)
     }
 
-    /// Decodes every value in `input`, which must end exactly after the last one.
+    /// Decodes every value in `input`, which must end exactly after the last one, as in
+    /// an RTMP command message.
     ///
     /// # Errors
-    /// As [`Amf0Value::decode`].
-    pub fn decode_all(mut input: &[u8]) -> Result<Vec<Self>, MuxError> {
+    /// As [`Amf0Value::decode`]. Offsets count from the start of `input`.
+    pub fn decode_all(input: &[u8]) -> Result<Vec<Self>, MuxError> {
+        let mut r = Reader {
+            data: input,
+            pos: 0,
+        };
         let mut values = Vec::new();
-        while !input.is_empty() {
-            values.push(Self::decode(&mut input)?);
+        while r.pos < input.len() {
+            values.push(r.value(0)?);
         }
         Ok(values)
+    }
+
+    /// The string, if this is one.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// The number, if this is one.
+    pub fn as_number(&self) -> Option<f64> {
+        match self {
+            Self::Number(n) => Some(*n),
+            _ => None,
+        }
     }
 
     /// The value of property `key` when this is an object or ECMA array.
@@ -192,9 +226,7 @@ impl Reader<'_> {
             .pos
             .checked_add(n)
             .filter(|&end| end <= self.data.len())
-            .ok_or(MuxError::Amf0Truncated {
-                offset: self.data.len(),
-            })?;
+            .ok_or(MuxError::Amf0Truncated { offset: self.pos })?;
         let bytes = &self.data[self.pos..end];
         self.pos = end;
         Ok(bytes)
@@ -231,9 +263,8 @@ impl Reader<'_> {
             STRING => Amf0Value::String(self.short_string()?),
             LONG_STRING => {
                 let len = u32::from_be_bytes(self.array()?);
-                let len = usize::try_from(len).map_err(|_| MuxError::Amf0Truncated {
-                    offset: self.data.len(),
-                })?;
+                let len = usize::try_from(len)
+                    .map_err(|_| MuxError::Amf0Truncated { offset: self.pos })?;
                 Amf0Value::String(self.string(len)?)
             }
             OBJECT => Amf0Value::Object(self.properties(depth)?),
@@ -251,6 +282,12 @@ impl Reader<'_> {
                     items.push(self.value(depth + 1)?);
                 }
                 Amf0Value::StrictArray(items)
+            }
+            DATE => {
+                let ms = f64::from_be_bytes(self.array()?);
+                // The time-zone field is reserved and ignored.
+                self.array::<2>()?;
+                Amf0Value::Date(ms)
             }
             other => return Err(MuxError::Amf0UnsupportedMarker { marker: other }),
         })
@@ -343,6 +380,54 @@ mod tests {
     }
 
     #[test]
+    fn date() {
+        let v = Amf0Value::Date(1.0);
+        assert_eq!(enc(&v), [0x0B, 0x3F, 0xF0, 0, 0, 0, 0, 0, 0, 0x00, 0x00]);
+        // A non-zero time zone is ignored.
+        let bytes = [0x0B, 0x3F, 0xF0, 0, 0, 0, 0, 0, 0, 0xFF, 0x88];
+        assert_eq!(Amf0Value::decode_all(&bytes).unwrap(), vec![v]);
+    }
+
+    #[test]
+    fn round_trips_every_type() {
+        let values = vec![
+            s("_result"),
+            Amf0Value::Number(-2.5),
+            Amf0Value::Boolean(false),
+            Amf0Value::Null,
+            Amf0Value::Undefined,
+            Amf0Value::Object(vec![
+                ("level".into(), s("status")),
+                ("code".into(), s("NetStream.Publish.Start")),
+                (
+                    "nested".into(),
+                    Amf0Value::Object(vec![("x".into(), Amf0Value::Number(1.0))]),
+                ),
+            ]),
+            Amf0Value::EcmaArray(vec![
+                ("width".into(), Amf0Value::Number(1920.0)),
+                ("stereo".into(), Amf0Value::Boolean(true)),
+            ]),
+            Amf0Value::StrictArray(vec![Amf0Value::Number(1.0), s("two")]),
+            Amf0Value::Date(1.7e12),
+            Amf0Value::String("é".repeat(40_000)), // 80 000 bytes: a long string
+        ];
+        let body = Amf0Value::encode_all(&values).unwrap();
+        assert_eq!(Amf0Value::decode_all(&body).unwrap(), values);
+        assert_eq!(body[body.len() - 80_005], 0x0C, "long string marker");
+    }
+
+    #[test]
+    fn accessors() {
+        let o = Amf0Value::Object(vec![("code".into(), s("c"))]);
+        assert_eq!(o.property("code").and_then(Amf0Value::as_str), Some("c"));
+        assert_eq!(o.property("missing"), None);
+        assert_eq!(Amf0Value::Number(3.0).as_number(), Some(3.0));
+        assert_eq!(s("3").as_number(), None);
+        assert_eq!(Amf0Value::Null.as_str(), None);
+    }
+
+    #[test]
     fn rtmp_connect_round_trip() {
         let values = vec![
             s("connect"),
@@ -382,8 +467,16 @@ mod tests {
             Err(MuxError::Amf0Truncated { .. })
         ));
         assert!(matches!(
-            Amf0Value::decode_all(&[0x0B]),
-            Err(MuxError::Amf0UnsupportedMarker { marker: 0x0B })
+            Amf0Value::decode_all(&[0x0D]),
+            Err(MuxError::Amf0UnsupportedMarker { marker: 0x0D })
+        ));
+        // The offset is where the field that didn't fit starts, counted from the start
+        // of the whole input, not of the value.
+        let mut two = enc(&Amf0Value::Null);
+        two.extend_from_slice(&enc(&s("connect"))[..5]);
+        assert!(matches!(
+            Amf0Value::decode_all(&two),
+            Err(MuxError::Amf0Truncated { offset: 4 })
         ));
         assert!(matches!(
             Amf0Value::decode_all(&[0x02, 0x00, 0x01, 0xFF]),

@@ -2,6 +2,9 @@
 
 use std::thread;
 
+use jstream_media::Timebase;
+use jstream_mux::flv::{FlvConfig, FlvTagger, MetadataStyle, TagType, VideoTrack};
+
 use super::*;
 use crate::rtmp::handshake::{HANDSHAKE_SIZE, RTMP_VERSION};
 use crate::rtmp::test_util::{Duplex, Scripted, duplex};
@@ -9,7 +12,7 @@ use crate::rtmp::test_util::{Duplex, Scripted, duplex};
 const KEY: &str = "abcd-1234-efgh-5678";
 
 fn s(v: &str) -> Amf0Value {
-    Amf0Value::str(v)
+    amf_str(v)
 }
 
 fn n(v: f64) -> Amf0Value {
@@ -62,10 +65,7 @@ impl Wire {
     }
 
     fn command(&mut self, stream_id: u32, values: &[Amf0Value]) {
-        let mut body = Vec::new();
-        for v in values {
-            amf0::encode(v, &mut body).unwrap();
-        }
+        let body = Amf0Value::encode_all(values).unwrap();
         self.enc
             .encode(
                 CSID_COMMAND,
@@ -152,20 +152,20 @@ fn fake_server(mut io: Duplex, mode: Mode) -> Vec<String> {
             }
             msg_type::DATA_AMF0 => {
                 assert_eq!(m.stream_id, 1);
-                let v = amf0::decode_all(&m.payload).unwrap();
+                let v = Amf0Value::decode_all(&m.payload).unwrap();
                 let names: Vec<_> = v.iter().filter_map(Amf0Value::as_str).collect();
                 log.push(format!("data {}", names.join(" ")));
             }
             msg_type::COMMAND_AMF0 => {
-                let v = amf0::decode_all(&m.payload).unwrap();
+                let v = Amf0Value::decode_all(&m.payload).unwrap();
                 let name = v[0].as_str().unwrap().to_owned();
                 let txn = v[1].as_number().unwrap();
                 log.push(format!("{name} txn={txn} stream={}", m.stream_id));
                 match name.as_str() {
                     "connect" => {
-                        assert_eq!(v[2].get("app"), Some(&s("live2")));
+                        assert_eq!(v[2].property("app"), Some(&s("live2")));
                         assert_eq!(
-                            v[2].get("tcUrl"),
+                            v[2].property("tcUrl"),
                             Some(&s("rtmp://ingest.example.invalid/live2"))
                         );
                         if mode == Mode::RejectConnect {
@@ -265,12 +265,10 @@ fn full_publish_sequence_in_order() {
             .unwrap();
     assert_eq!(p.stream_id(), 1);
 
-    let mut on_metadata = Vec::new();
-    amf0::encode(&s("onMetaData"), &mut on_metadata).unwrap();
-    amf0::encode(
-        &Amf0Value::EcmaArray(vec![("width".into(), n(1920.0))]),
-        &mut on_metadata,
-    )
+    let on_metadata = Amf0Value::encode_all(&[
+        s("onMetaData"),
+        Amf0Value::EcmaArray(vec![("width".into(), n(1920.0))]),
+    ])
     .unwrap();
     p.send_metadata(&on_metadata).unwrap();
     // A 10 000-byte keyframe spans three 4096-byte chunks.
@@ -308,6 +306,61 @@ fn full_publish_sequence_in_order() {
             "deleteStream txn=7 stream=0",
         ]
     );
+}
+
+/// The `onMetaData` script tag `jstream-mux` builds for a file (no `@setDataFrame`).
+fn mux_metadata_tag_body() -> Vec<u8> {
+    let config = FlvConfig {
+        video: Some(VideoTrack {
+            width: 1280,
+            height: 720,
+            frame_rate: Some(30.0),
+            bitrate_kbps: Some(2500),
+            avc: None,
+        }),
+        metadata_style: MetadataStyle::File,
+        ..FlvConfig::default()
+    };
+    let tags = FlvTagger::new(config).unwrap().start().unwrap();
+    assert_eq!(tags[0].tag_type, TagType::Script);
+    tags[0].body.clone()
+}
+
+#[test]
+fn mux_file_metadata_gets_exactly_one_set_data_frame() {
+    let body = mux_metadata_tag_body();
+
+    // On the wire, through the fake server's message log.
+    let (client, server) = duplex();
+    let server = thread::spawn(move || fake_server(server, Mode::Accept));
+    let mut p =
+        RtmpPublisher::publish_seeded(client, &url(), &key(), &PublishOptions::default(), 7)
+            .unwrap();
+    p.send_metadata(&body).unwrap();
+    drop(p.finish().unwrap());
+    let log = server.join().unwrap();
+    let data: Vec<_> = log.iter().filter(|l| l.starts_with("data ")).collect();
+    assert_eq!(data, ["data @setDataFrame onMetaData"]);
+
+    // Byte for byte: one `@setDataFrame` string, then the tag body unchanged.
+    let mut p = RtmpPublisher::publish_seeded(
+        Scripted::new(accepting_script(|_| {})),
+        &url(),
+        &key(),
+        &PublishOptions::default(),
+        7,
+    )
+    .unwrap();
+    p.send_metadata(&body).unwrap();
+    let sent = client_messages(p.get_ref().written()).pop().unwrap();
+    assert_eq!(sent.type_id, msg_type::DATA_AMF0);
+    let mut expected = b"\x02\x00\x0D@setDataFrame".to_vec();
+    expected.extend_from_slice(&body);
+    assert_eq!(sent.payload, expected);
+    let values = Amf0Value::decode_all(&sent.payload).unwrap();
+    assert_eq!(values.len(), 3);
+    assert_eq!(&values[..2], &[s("@setDataFrame"), s("onMetaData")]);
+    assert_eq!(values[2].property("width"), Some(&n(1280.0)));
 }
 
 #[test]
@@ -570,6 +623,11 @@ fn rtmps_is_refused_until_tls_lands() {
 #[test]
 fn media_time_to_rtmp_milliseconds() {
     let t = |ticks, tb| timestamp_ms(MediaTime::new(ticks, tb));
+    // The same rounding as the FLV muxer's tag timestamps.
+    for (ticks, tb) in [(3003, Timebase::MPEG_90K), (1_500_000, Timebase::NANOS)] {
+        let ms = flv::to_ms(MediaTime::new(ticks, tb)).unwrap();
+        assert_eq!(i64::from(t(ticks, tb).unwrap()), ms);
+    }
     assert_eq!(t(3003, Timebase::MPEG_90K).unwrap(), 33); // 33.37 ms
     assert_eq!(t(1_500_000, Timebase::NANOS).unwrap(), 2); // 1.5 ms rounds up
     assert_eq!(t(1 << 32, Timebase::MILLIS).unwrap(), 0, "wraps at 2^32");
