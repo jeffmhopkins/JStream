@@ -15,12 +15,12 @@ on real hardware, the Windows path that
 shared fence, wgpu on D3D12, NV12, Media Foundation H.264, with no CPU copy of frame data
 at 1080p60.
 
-It follows [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline) except for one
-deliberate deviation in the convert step. ARCH step 4 writes separate R8 and RG8 targets
-in compute shaders and then copies them into an NV12 resource (through hal, or a D3D11
-video processor). This spike tries the simpler path first: render passes that write
-straight into the NV12 texture's plane views. If that fails, ARCH's step 4 is the
-fallback. The results PR must record which convert path was actually proven.
+It follows [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline). Its convert
+step uses render passes that write straight into the NV12 texture's plane views. When the
+spike was written, ARCH's step 4 instead had compute shaders write separate R8 and RG8
+targets and copy them into an NV12 resource, and this spike tested the simpler path. S1
+proved the render-pass path, and ARCH step 4 now names it as the method, with compute +
+copy as the fallback.
 
 The crate is not a workspace member. It has its own `[workspace]` table and its own
 `Cargo.lock`.
@@ -49,7 +49,7 @@ default) runs these steps:
    `Queue::add_wait_fence` and `add_signal_fence`, so wgpu itself issues them around its
    submit.
 3. **Convert:** two WGSL render passes write directly into the Y (`R8Unorm`) and CbCr
-   (`Rg8Unorm`) plane views of an **NV12** texture (the deviation from ARCH step 4
+   (`Rg8Unorm`) plane views of an **NV12** texture (the path ARCH step 4 now names,
    described above), using BT.709 limited range and bilinear scaling to the
    encode size. That NV12 texture is also a shared D3D11 texture, one of a ring of 8.
    The command buffer ends by transitioning both shared textures back to `COMMON`
@@ -150,9 +150,10 @@ first. The parts below were the ones most likely to fail, roughly in order:
 - **NV12 render targets through wgpu.** wgpu only guarantees NV12 for sampling. This code
   wraps a D3D11-created NV12 texture with `RENDER_ATTACHMENT` usage and renders into its
   `Plane0` and `Plane1` views. wgpu-core accepts planar views as render targets, and
-  wgpu-hal creates plane-sliced RTVs. If the driver or wgpu rejects this, the fallback is
-  ARCH's documented step 4: compute shaders write separate R8 and RG8 targets, which are
-  copied into the NV12 resource through hal or the D3D11 video processor.
+  wgpu-hal creates plane-sliced RTVs. This worked on the Radeon 780M. If a driver or wgpu
+  rejects it elsewhere, the fallback in ARCH step 4 is compute shaders that write separate
+  R8 and RG8 targets, which are copied into the NV12 resource through hal or the D3D11
+  video processor.
 - **Creating the shared NV12 texture.** This is D3D11 `CreateTexture2D(NV12,
   SHARED | SHARED_NTHANDLE, RENDER_TARGET)` followed by D3D12 `OpenSharedHandle`. Some
   drivers may refuse this combination. The other option is to create the texture in D3D12
