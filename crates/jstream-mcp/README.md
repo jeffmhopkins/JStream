@@ -41,7 +41,7 @@ Not here yet: the streamable-HTTP transport ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:65b7366b4e487ff1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Group list now item, output, scene, source, state: tools.snap regenerated and reviewed (item.list and source.list ops added to their groups, new state tool with state.get, descriptions gain the query sentence); the 'new noun becomes a new tool' claim held with no tools.rs change; ARCH#mcp edit re-read" }
+verified = { hash = "b3:fafd8c83591ecc47", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#mcp now names the stdio proxy jstream-cli mcp; design text (generated tools, dual-era revisions, stdio, HTTP deferred to jstream-server) unaffected" }
 -->
 
 ### Tools
