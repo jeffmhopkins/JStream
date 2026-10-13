@@ -1,0 +1,54 @@
+//! The JStream control API: the messages that the engine, the web UI, the CLI and MCP
+//! agents all speak. Commands are edits (undoable, batched, revision-checked) or actions
+//! (side effects); queries read; events push changes; errors carry stable codes. The JSON
+//! Schema is generated from these types. Layer 1: plain data, WASM-safe, no I/O.
+//!
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#design, docs/adr/0013-command-model.md
+
+#![forbid(unsafe_code)]
+
+mod command;
+mod envelope;
+mod error;
+mod event;
+mod finite;
+mod id;
+mod query;
+mod schema;
+mod version;
+
+pub use command::{Action, Batch, Command, CommandClass, Edit, ItemTransform, Vec2};
+pub use envelope::{
+    Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request, Response,
+    ServerMessage, Welcome,
+};
+pub use error::{EntityKind, ProtocolError, WireError};
+pub use event::{Event, OutputState};
+pub use finite::Finite32;
+pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};
+pub use query::{Query, QueryResult, SceneSummary};
+pub use schema::json_schema;
+pub use version::{PROTOCOL_VERSION, ProtocolVersion};
+
+#[cfg(test)]
+mod fixtures;
+
+// The two tests below sit at the crate root because RULES.md names them by path:
+// `jstream_protocol::names_are_valid` (R-API-002) and
+// `jstream_protocol::every_command_is_classified` (R-ARCH-006).
+
+/// R-API-002: every command, query and event is named `noun.verb` in snake_case, names
+/// are unique, and the derived MCP tool names are valid.
+#[cfg(test)]
+#[test]
+fn names_are_valid() {
+    fixtures::check_names_are_valid();
+}
+
+/// R-ARCH-006: every command in the schema is classified as exactly one of edit or
+/// action, and every edit is batchable and undoable while no action is.
+#[cfg(test)]
+#[test]
+fn every_command_is_classified() {
+    fixtures::check_every_command_is_classified();
+}

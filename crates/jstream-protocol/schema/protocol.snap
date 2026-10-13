@@ -1,0 +1,1113 @@
+---
+source: crates/jstream-protocol/src/fixtures.rs
+---
+{
+  "$defs": {
+    "Action": {
+      "description": "A command with side effects outside the collection state: never undoable and never\nbatchable.\n\nSerialized with an internal `type` tag holding the command name. The response only\nsays the action was accepted; how it goes is reported by events\n(`output.state_changed`).",
+      "oneOf": [
+        {
+          "description": "Starts an output (stream, recording or virtual camera).",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output to start."
+            },
+            "type": {
+              "const": "output.start",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Stops an output.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output to stop."
+            },
+            "type": {
+              "const": "output.stop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Batch": {
+      "description": "One or more edits, applied atomically.\n\nThe engine checks `expected_rev`, then applies the edits in order, each against the\nstate the previous one left. If any edit fails, nothing is applied and `rev` doesn't\nchange. On success `rev` increases by exactly one, whatever the number of edits, and\nthe batch becomes one undo step for the sending client.",
+      "properties": {
+        "edits": {
+          "description": "The edits, in order. An empty list is rejected with `empty_batch`.",
+          "items": {
+            "$ref": "#/$defs/Edit"
+          },
+          "minItems": 1,
+          "type": "array"
+        },
+        "expected_rev": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rev"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+        },
+        "idempotency_key": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdempotencyKey"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+        }
+      },
+      "required": [
+        "edits"
+      ],
+      "type": "object"
+    },
+    "Call": {
+      "description": "What a request asks for. Tagged by `kind`, so the class of every call (ADR-0013) is\nexplicit on the wire.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Batch",
+          "description": "Apply edits atomically. A single edit is a batch of one.",
+          "properties": {
+            "kind": {
+              "const": "batch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Perform one action.",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/Action",
+              "description": "The action."
+            },
+            "kind": {
+              "const": "action",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Read something.",
+          "properties": {
+            "kind": {
+              "const": "query",
+              "type": "string"
+            },
+            "query": {
+              "$ref": "#/$defs/Query",
+              "description": "The query."
+            }
+          },
+          "required": [
+            "kind",
+            "query"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CallResult": {
+      "description": "The result of a [`Call`], tagged by the same `kind`.",
+      "oneOf": [
+        {
+          "description": "The batch was applied (or had already been applied under its idempotency key).",
+          "properties": {
+            "kind": {
+              "const": "batch",
+              "type": "string"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the batch produced."
+            }
+          },
+          "required": [
+            "kind",
+            "rev"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The action was accepted. Its progress is reported by events.",
+          "properties": {
+            "kind": {
+              "const": "action",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The query's answer.",
+          "properties": {
+            "kind": {
+              "const": "query",
+              "type": "string"
+            },
+            "result": {
+              "$ref": "#/$defs/QueryResult",
+              "description": "The result."
+            }
+          },
+          "required": [
+            "kind",
+            "result"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ClientId": {
+      "description": "A connected client, assigned by the server in `welcome`. Undo history and the\naudit log are keyed by it.",
+      "type": "string"
+    },
+    "ClientMessage": {
+      "description": "A message from a client to the server. Tagged by `type`.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Hello",
+          "description": "Opens the session. Must be the first message.",
+          "properties": {
+            "type": {
+              "const": "hello",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Request",
+          "description": "A batch of edits, an action or a query.",
+          "properties": {
+            "type": {
+              "const": "request",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Edit": {
+      "description": "A change to the collection state: undoable, batchable and atomic.\n\nSerialized with an internal `type` tag holding the command name (`noun.verb`,\nR-API-002). Every variant documents its inverse. The engine (`jstream-graph`)\ncomputes the inverse from the state *before* the edit, so the protocol has to be\nclosed under inversion: every inverse must itself be a sequence of edits.\n\nThis first cut is **not yet** closed: undoing `item.remove` can't restore the item's\nstacking position, and undoing `scene.delete` can't restore the scene's display order.\nOrder edits (`item.reorder`, `scene.reorder`) must land before undo is implemented.",
+      "oneOf": [
+        {
+          "description": "Creates an empty scene. Inverse: `scene.delete`.",
+          "properties": {
+            "name": {
+              "description": "Display name.",
+              "type": "string"
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The new scene's ID, chosen by the client. Rejected if it exists."
+            },
+            "type": {
+              "const": "scene.create",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Renames a scene. Inverse: `scene.rename` back to the previous name.",
+          "properties": {
+            "name": {
+              "description": "The new display name.",
+              "type": "string"
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to rename."
+            },
+            "type": {
+              "const": "scene.rename",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a scene and its items. Inverse: `scene.create` followed by one `item.add`\n(with its transform) per deleted item, in order. Not yet complete: restoring the\nscene's display order needs a `scene.reorder` edit, which is not in this first cut.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to delete."
+            },
+            "type": {
+              "const": "scene.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Places a source in a scene as a new item, on top. Inverse: `item.remove`.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The new item's ID, chosen by the client. Rejected if it exists."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to add to."
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source the item shows."
+            },
+            "transform": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ItemTransform"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Initial transform. Omitted means [`ItemTransform::IDENTITY`]."
+            },
+            "type": {
+              "const": "item.add",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "item_id",
+            "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID, source and transform. Not yet complete: restoring its\nstacking position needs an `item.reorder` edit, which is not in this first cut.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to remove."
+            },
+            "type": {
+              "const": "item.remove",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Replaces an item's transform. Inverse: `item.set_transform` with the previous one.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to move."
+            },
+            "transform": {
+              "$ref": "#/$defs/ItemTransform",
+              "description": "The new transform."
+            },
+            "type": {
+              "const": "item.set_transform",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id",
+            "transform"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EntityKind": {
+      "description": "The kinds of object an error can name.",
+      "oneOf": [
+        {
+          "const": "scene",
+          "description": "A scene.",
+          "type": "string"
+        },
+        {
+          "const": "item",
+          "description": "A scene item.",
+          "type": "string"
+        },
+        {
+          "const": "source",
+          "description": "A source.",
+          "type": "string"
+        },
+        {
+          "const": "output",
+          "description": "An output.",
+          "type": "string"
+        }
+      ]
+    },
+    "ErrorResponse": {
+      "description": "A failed request, a failed handshake, or a message that couldn't be parsed.",
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/WireError",
+          "description": "What went wrong."
+        },
+        "id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RequestId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The failed request's ID. Absent when the failure isn't tied to a request (the\nhandshake, or a message too broken to read an ID from)."
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "type": "object"
+    },
+    "Event": {
+      "description": "Something that happened in the engine.\n\nSerialized with an internal `type` tag holding the event name (`noun.past_tense`).\nClients must ignore events they don't know: a newer server may send new ones in a\nminor version, and they parse as [`Event::Unknown`].",
+      "oneOf": [
+        {
+          "description": "The collection state moved to a new revision: one per applied batch (or undo).\nClients holding a copy of the state re-query, or apply the change if they made it.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose request caused it."
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RequestId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "That client's request ID, so it can match the event to its own response."
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The new revision."
+            },
+            "type": {
+              "const": "state.changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "rev",
+            "client_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An output changed state, for example after `output.start`.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "state": {
+              "$ref": "#/$defs/OutputState",
+              "description": "Its new state."
+            },
+            "type": {
+              "const": "output.state_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "state"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "EventMessage": {
+      "description": "An event, as pushed to clients.",
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/Event",
+          "description": "The event."
+        }
+      },
+      "required": [
+        "event"
+      ],
+      "type": "object"
+    },
+    "Finite32": {
+      "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
+      "format": "float",
+      "type": "number"
+    },
+    "Hello": {
+      "description": "The client's opening message.",
+      "properties": {
+        "client_name": {
+          "description": "A name for the client (`jstream-cli`, `claude-desktop`), shown in the audit log.",
+          "type": "string"
+        },
+        "protocol": {
+          "$ref": "#/$defs/ProtocolVersion",
+          "description": "The protocol version the client speaks."
+        }
+      },
+      "required": [
+        "protocol",
+        "client_name"
+      ],
+      "type": "object"
+    },
+    "IdempotencyKey": {
+      "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+      "type": "string"
+    },
+    "ItemId": {
+      "description": "A scene item: one placement of a source inside a scene. Unique across scenes.",
+      "type": "string"
+    },
+    "ItemTransform": {
+      "description": "Where a scene item sits in its scene.\n\nA deliberately small first cut: position, scale and rotation about the item's\ntop-left corner. The full 3D transform and crop (ARCH data model) replace it in a\nlater minor version, as added fields with defaults.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
+      "properties": {
+        "position": {
+          "$ref": "#/$defs/Vec2",
+          "description": "Top-left corner, in pixels of the scene's canvas."
+        },
+        "rotation_deg": {
+          "$ref": "#/$defs/Finite32",
+          "description": "Clockwise rotation, in degrees."
+        },
+        "scale": {
+          "$ref": "#/$defs/Vec2",
+          "description": "Scale factors; 1.0 is the source's native size."
+        }
+      },
+      "required": [
+        "position",
+        "scale",
+        "rotation_deg"
+      ],
+      "type": "object"
+    },
+    "OutputId": {
+      "description": "An output (RTMP(S), recording, virtual camera).",
+      "type": "string"
+    },
+    "OutputState": {
+      "description": "The lifecycle state of an output.",
+      "oneOf": [
+        {
+          "const": "stopped",
+          "description": "Not running.",
+          "type": "string"
+        },
+        {
+          "const": "starting",
+          "description": "Started and connecting or initializing.",
+          "type": "string"
+        },
+        {
+          "const": "active",
+          "description": "Running: streaming, recording or feeding the virtual camera.",
+          "type": "string"
+        },
+        {
+          "const": "reconnecting",
+          "description": "Lost its connection and is retrying.",
+          "type": "string"
+        },
+        {
+          "const": "stopping",
+          "description": "Stopping: flushing and disconnecting.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "Stopped because of an error. The error is in the audit log.",
+          "type": "string"
+        }
+      ]
+    },
+    "ProtocolVersion": {
+      "description": "A protocol version: `major.minor`. Patch releases never change the wire format, so\nthey are not part of it.",
+      "properties": {
+        "major": {
+          "description": "Incremented by a breaking change (a removal or rename).",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "minor": {
+          "description": "Incremented by an addition.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "major",
+        "minor"
+      ],
+      "type": "object"
+    },
+    "Query": {
+      "description": "A read. Queries change nothing, so they need no classification as edit or action.\n\nSerialized with an internal `type` tag holding the query name (`noun.verb`).",
+      "oneOf": [
+        {
+          "description": "Lists the collection's scenes, in display order.",
+          "properties": {
+            "type": {
+              "const": "scene.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Reports an output's current state.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output to report on."
+            },
+            "type": {
+              "const": "output.status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "QueryResult": {
+      "description": "The result of a [`Query`]. Its `type` tag repeats the query's name.",
+      "oneOf": [
+        {
+          "description": "The result of `scene.list`.",
+          "properties": {
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the list was read at."
+            },
+            "scenes": {
+              "description": "The scenes, in display order.",
+              "items": {
+                "$ref": "#/$defs/SceneSummary"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "scene.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "rev",
+            "scenes"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `output.status`. Output state is runtime state, not collection\nstate, so it carries no `rev`.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output reported on."
+            },
+            "state": {
+              "$ref": "#/$defs/OutputState",
+              "description": "Its current state."
+            },
+            "type": {
+              "const": "output.status",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "state"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "Request": {
+      "description": "One request: a call plus the client-chosen ID its answer will carry.",
+      "properties": {
+        "call": {
+          "$ref": "#/$defs/Call",
+          "description": "What to do."
+        },
+        "id": {
+          "$ref": "#/$defs/RequestId",
+          "description": "Echoed in the matching `response` or `error`."
+        }
+      },
+      "required": [
+        "id",
+        "call"
+      ],
+      "type": "object"
+    },
+    "RequestId": {
+      "description": "Chosen by the client for each request and echoed in its response or error.",
+      "type": "string"
+    },
+    "Response": {
+      "description": "A successful answer to a [`Request`].",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/RequestId",
+          "description": "The request's ID."
+        },
+        "result": {
+          "$ref": "#/$defs/CallResult",
+          "description": "What happened. Its `kind` matches the request's call."
+        }
+      },
+      "required": [
+        "id",
+        "result"
+      ],
+      "type": "object"
+    },
+    "Rev": {
+      "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+      "format": "uint64",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "SceneId": {
+      "description": "A scene in the collection.",
+      "type": "string"
+    },
+    "SceneSummary": {
+      "description": "One scene in a `scene.list` result.",
+      "properties": {
+        "item_count": {
+          "description": "How many items it has.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene's ID."
+        }
+      },
+      "required": [
+        "scene_id",
+        "name",
+        "item_count"
+      ],
+      "type": "object"
+    },
+    "ServerMessage": {
+      "description": "A message from the server to a client. Tagged by `type`.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Welcome",
+          "description": "Accepts the handshake.",
+          "properties": {
+            "type": {
+              "const": "welcome",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/Response",
+          "description": "A request succeeded.",
+          "properties": {
+            "type": {
+              "const": "response",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/ErrorResponse",
+          "description": "A request (or the handshake, or an unparseable message) failed.",
+          "properties": {
+            "type": {
+              "const": "error",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "$ref": "#/$defs/EventMessage",
+          "description": "Something happened in the engine.",
+          "properties": {
+            "type": {
+              "const": "event",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SourceId": {
+      "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
+      "type": "string"
+    },
+    "Vec2": {
+      "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).\n\nBoth components are [`Finite32`]: a non-finite or out-of-`f32`-range number (`1e39`)\nfails deserialization, so the message is rejected as `malformed`, and in-process code\ncan't build a non-finite value.",
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/Finite32",
+          "description": "Horizontal component."
+        },
+        "y": {
+          "$ref": "#/$defs/Finite32",
+          "description": "Vertical component."
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "type": "object"
+    },
+    "Welcome": {
+      "description": "The server's answer to [`Hello`].",
+      "properties": {
+        "client_id": {
+          "$ref": "#/$defs/ClientId",
+          "description": "The identity this connection acts as: its undo history and audit-log entries are\nkeyed by it."
+        },
+        "protocol": {
+          "$ref": "#/$defs/ProtocolVersion",
+          "description": "The protocol version the server speaks."
+        },
+        "rev": {
+          "$ref": "#/$defs/Rev",
+          "description": "The current state revision, so the client knows where it starts."
+        }
+      },
+      "required": [
+        "protocol",
+        "client_id",
+        "rev"
+      ],
+      "type": "object"
+    },
+    "WireError": {
+      "description": "A [`ProtocolError`] as sent on the wire: its `code` and details, plus a message.\n\n```json\n{\"code\": \"rev_conflict\", \"expected\": 4, \"current\": 5,\n \"message\": \"expected rev 4, but the state is at rev 5\"}\n```",
+      "oneOf": [
+        {
+          "description": "The server can't speak the client's protocol version.",
+          "properties": {
+            "client": {
+              "$ref": "#/$defs/ProtocolVersion",
+              "description": "The version the client asked for in `hello`."
+            },
+            "code": {
+              "const": "unsupported_version",
+              "type": "string"
+            },
+            "server": {
+              "$ref": "#/$defs/ProtocolVersion",
+              "description": "The version the server speaks."
+            }
+          },
+          "required": [
+            "code",
+            "client",
+            "server"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A request arrived before the `hello`/`welcome` handshake finished.",
+          "properties": {
+            "code": {
+              "const": "handshake_required",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The message could not be parsed: bad JSON, an unknown `type`, a missing or\nmistyped field, or a number that isn't a finite `f32` (NaN, infinity, or out of\nrange such as `1e39`). `ClientMessage::parse` produces it.",
+          "properties": {
+            "code": {
+              "const": "malformed",
+              "type": "string"
+            },
+            "reason": {
+              "description": "What the parser reported.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A batch had no edits.",
+          "properties": {
+            "code": {
+              "const": "empty_batch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The batch's `expected_rev` was not the current revision. Nothing was applied:\nre-read the state and retry.",
+          "properties": {
+            "code": {
+              "const": "rev_conflict",
+              "type": "string"
+            },
+            "current": {
+              "$ref": "#/$defs/Rev",
+              "description": "The state's revision when the batch was checked."
+            },
+            "expected": {
+              "$ref": "#/$defs/Rev",
+              "description": "The `expected_rev` the batch carried."
+            }
+          },
+          "required": [
+            "code",
+            "expected",
+            "current"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A command named an object that doesn't exist.",
+          "properties": {
+            "code": {
+              "const": "not_found",
+              "type": "string"
+            },
+            "entity": {
+              "$ref": "#/$defs/EntityKind",
+              "description": "What kind of object."
+            },
+            "id": {
+              "description": "The ID given.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "entity",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A creating edit used an ID that is already taken.",
+          "properties": {
+            "code": {
+              "const": "already_exists",
+              "type": "string"
+            },
+            "entity": {
+              "$ref": "#/$defs/EntityKind",
+              "description": "What kind of object."
+            },
+            "id": {
+              "description": "The ID given.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "entity",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A field had a value the engine can't accept.",
+          "properties": {
+            "code": {
+              "const": "invalid_argument",
+              "type": "string"
+            },
+            "field": {
+              "description": "The field, as a dotted path into the command (`edits.2.name`).",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Why it was rejected.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "field",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An action was accepted for processing but could not be carried out.",
+          "properties": {
+            "code": {
+              "const": "action_failed",
+              "type": "string"
+            },
+            "reason": {
+              "description": "What went wrong.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The engine hit a bug or an unexpected condition. The request may be retried.",
+          "properties": {
+            "code": {
+              "const": "internal",
+              "type": "string"
+            },
+            "reason": {
+              "description": "What went wrong.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "message": {
+          "description": "A human-readable explanation, for logs and for agents. Not stable: match on\n`code`, never on this.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/ClientMessage"
+    },
+    {
+      "$ref": "#/$defs/ServerMessage"
+    }
+  ],
+  "description": "Any message on a JStream control connection: client to server, or server to client.",
+  "title": "JStream protocol 0.1"
+}
