@@ -57,9 +57,13 @@ that unit as its media clock. Then, per stream:
    nominal rate) against QPC time gives the device's real rate. Its drift is reported in
    ppm, with a standard error and the timestamp jitter around the line. Each segment gets
    its own intercept, so a glitch never biases the slope. A point more than 20 ms off the
-   line is an outlier and isn't fitted. A run of 50 outliers restarts the segment.
+   line is an outlier and isn't fitted. A run of 50 outliers restarts the segment, with
+   the 50th as its first point. Only stamps the fit accepted are used for timing below:
+   an outlier, like a flagged stamp, still has its samples resampled, but the resampler
+   extrapolates its time from the last good stamp.
 3. **Mapping.** The fitted line maps any sample position onto the QPC media clock. The
-   report shows how far that smoothed mapping sits from the raw packet stamps.
+   report shows how far that smoothed mapping sits from the raw packet stamps that the
+   fit accepted.
 4. **Adaptive resampler.** The stream's first one or two channels go through rubato's
    asynchronous sinc resampler (128 taps, cubic) to the engine rate (`--rate`, default
    48 kHz) on the QPC clock. After each 10 ms chunk, the timing error is
@@ -76,8 +80,9 @@ are steered to QPC.
 
 Once a second the main thread writes one row of `drift.csv`. Every `--progress` seconds
 it prints a line to stderr. At the end it prints the report to stdout (`--json` for one
-JSON object). The residual statistics skip the first `--settle` seconds, which defaults
-to 60, or a quarter of a shorter run.
+JSON object). The residual statistics, per stream and relative, skip the first
+`--settle` seconds, which defaults to 60, or a quarter of a shorter run. Both count
+from one QPC origin, taken just before the streams open.
 
 <a id="run"></a>
 ## How to run it (Windows)

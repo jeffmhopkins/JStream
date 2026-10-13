@@ -268,9 +268,14 @@ impl StreamState {
             }
         }
 
-        let x = stamp_hns.map(|t| hns_to_sec(t - self.origin_hns));
+        // Only a stamp the drift fit accepted is timing information. A flagged or zero
+        // stamp (`stamp_hns` is `None`) and an outlier the fit rejected both reach the
+        // tracker as `None`: the samples are still resampled, and the tracker keeps
+        // extrapolating from the last good stamp at the nominal rate.
+        let x = stamp_hns
+            .map(|t| hns_to_sec(t - self.origin_hns))
+            .filter(|&x| self.add_point(x, p.device_position));
         if let Some(x) = x {
-            self.add_point(x, p.device_position);
             self.tracker.measuring = x >= self.settle_s;
             if self.tracker.measuring
                 && self.fit.current_points() >= OUTLIER_MIN_POINTS
@@ -298,7 +303,10 @@ impl StreamState {
         self.outlier_run = 0;
     }
 
-    fn add_point(&mut self, x: f64, pos: u64) {
+    /// Fits the point at QPC time `x` for position `pos`; returns whether it was
+    /// accepted. An outlier is rejected, except the one that ends a run of outliers: that
+    /// one restarts the segment and becomes its first point.
+    fn add_point(&mut self, x: f64, pos: u64) -> bool {
         let pos0 = *self.pos0.get_or_insert(pos);
         let y = (pos as f64 - pos0 as f64) / f64::from(self.rate);
         if self.fit.current_points() >= OUTLIER_MIN_POINTS
@@ -307,17 +315,18 @@ impl StreamState {
         {
             self.snap.outliers += 1;
             self.outlier_run += 1;
-            if self.outlier_run >= OUTLIER_RUN_RESET {
-                self.snap.resets_outliers += 1;
-                self.restart_segment();
+            if self.outlier_run < OUTLIER_RUN_RESET {
+                return false;
             }
-            return;
+            self.snap.resets_outliers += 1;
+            self.restart_segment();
         }
         self.outlier_run = 0;
         self.fit.add(x, y);
         self.seg_first.get_or_insert((x, y));
         self.seg_last = Some((x, y));
         self.snap.last_stamp_s = Some(x);
+        true
     }
 
     /// The current counters and estimates.
@@ -512,6 +521,65 @@ mod tests {
         let snap = s.snapshot();
         assert_eq!(snap.resets_outliers, 1);
         assert_eq!(snap.fit_segments, 2);
+        // 301 packets; the run's first 49 outliers were rejected, and the 50th, which
+        // ended the run, is the new segment's first point.
+        assert_eq!(snap.outliers, 50);
+        assert_eq!(snap.fit_points, 301 - 49);
         assert!(snap.drift_ppm.unwrap().abs() < 1.0);
+    }
+
+    /// Runs a jitter-free 48 kHz stream at 42 ppm for 200 s (settling 60 s); `stamp`
+    /// may shift packet `i`'s QPC stamp, in seconds.
+    fn run_42ppm(stamp: impl Fn(u64) -> f64) -> Snapshot {
+        let mut s = StreamState::new(&info(48_000, 1), 48_000, 0, 60.0).unwrap();
+        let samples = vec![0.0f32; 480];
+        let true_rate = 48_000.0 * (1.0 + 42e-6);
+        let mut pos = 0u64;
+        for i in 0..20_000u64 {
+            let t = 1.0 + pos as f64 / true_rate + stamp(i);
+            s.on_packet(&Packet {
+                device_position: pos,
+                frames: 480,
+                qpc_hns: (t * 1e7).round() as u64,
+                flags: 0,
+                samples: &samples,
+            })
+            .unwrap();
+            pos += 480;
+        }
+        s.snapshot()
+    }
+
+    /// Review round 1, B1: one stamp 100 ms off after settling is rejected by the fit
+    /// and must not reach the resampler's timing error either.
+    #[test]
+    fn single_outlier_stamp_does_not_fail_the_resampler() {
+        for offset in [0.1, -0.1] {
+            let snap = run_42ppm(|i| if i == 15_000 { offset } else { 0.0 });
+            assert_eq!(snap.outliers, 1);
+            assert!((snap.drift_ppm.unwrap() - 42.0).abs() < 0.01);
+            assert!(snap.residual.n > 10_000);
+            assert!(
+                snap.residual.max() <= crate::report::BOUND_MS,
+                "offset {offset}: residual max {} ms",
+                snap.residual.max()
+            );
+            // The rejected stamp is not in the mapping statistic either.
+            assert!(snap.mapping_ms.max() < 0.01, "{}", snap.mapping_ms.max());
+        }
+    }
+
+    /// The other side of B1's fix: real misbehaviour still fails the bound. The
+    /// device's stamps step by 10 ms for good (under the outlier threshold, so it is
+    /// timing information); the resampler cannot follow a step instantly.
+    #[test]
+    fn real_timing_step_still_fails_the_bound() {
+        let snap = run_42ppm(|i| if i >= 15_000 { 0.010 } else { 0.0 });
+        assert_eq!(snap.outliers, 0);
+        assert!(
+            snap.residual.max() > crate::report::BOUND_MS,
+            "residual max {} ms",
+            snap.residual.max()
+        );
     }
 }

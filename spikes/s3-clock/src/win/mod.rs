@@ -114,7 +114,12 @@ pub fn run(args: &Args) -> Result<Report> {
             if rows.is_multiple_of(10) {
                 csv.flush().context("flush CSV")?;
             }
-            if t >= settle_s
+            // Settling counts from the same QPC origin the streams use, not from
+            // `started` (which is after the streams opened).
+            let since_origin = sys::qpc_now_hns()
+                .map(|now| crate::clock::hns_to_sec(now - origin_hns))
+                .unwrap_or(t);
+            if since_origin >= settle_s
                 && let Some(r) = report::relative_residual(&m, &l)
             {
                 relative.add(r);
