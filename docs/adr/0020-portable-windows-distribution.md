@@ -2,7 +2,7 @@
 id = "ADR-0020"
 title = "Portable Windows distribution: run the exe, no installer"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
