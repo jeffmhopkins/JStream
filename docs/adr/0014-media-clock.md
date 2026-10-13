@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0014"
 title = "Monotonic media clock with adaptive resampling"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0014: Monotonic media clock with adaptive resampling
 

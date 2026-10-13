@@ -1,10 +1,10 @@
-+++
+<!-- @doc
 id = "CRATE-jstream-types"
 title = "jstream-types"
 kind = "normative"
 status = "active"
 review_every = "90d"
-+++
+-->
 
 # jstream-types
 

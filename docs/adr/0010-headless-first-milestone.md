@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0010"
 title = "Build the headless engine and MCP before the GUI"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0010: Build the headless engine and MCP before the GUI
 

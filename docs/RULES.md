@@ -1,10 +1,10 @@
-+++
+<!-- @doc
 id = "RULES"
 title = "Engineering rules"
 kind = "normative"
 status = "active"
 review_every = "90d"
-+++
+-->
 
 # Engineering rules
 
@@ -627,7 +627,7 @@ status = "active"
 enforced_by = ["ci:docs"]
 applies_to = ["**/*.md"]
 -->
-Every tracked doc has TOML front matter, and every `##` section has an anchor and an
+Every tracked doc starts with a `@doc` metadata block, and every `##` section has an anchor and an
 `@section` block ([DOCS › Sections](DOCS.md#sections)).
 
 <a id="R-DOC-002"></a>
@@ -707,7 +707,11 @@ enforced_by = ["ci:docs"]
 applies_to = ["docs/adr/**"]
 -->
 After acceptance, only `status` and `superseded_by` may change. A changed decision is
-recorded in a new ADR.
+recorded in a new ADR. **One exception:** the delimiter syntax of the `@doc` metadata
+block is a container, not content. It may change in every doc, accepted ADRs included,
+but only through a repo-wide format ADR, as a declared governance change, with each ADR's
+Context, Decision and Consequences left byte-identical
+([ADR-0016](adr/0016-docs-as-checked-graph-v2.md)).
 
 <a id="R-DOC-010"></a>
 ### R-DOC-010: IDs are permanent

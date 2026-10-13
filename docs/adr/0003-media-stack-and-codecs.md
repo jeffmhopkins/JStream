@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0003"
 title = "Rust media stack on OS codecs, no FFmpeg"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0003: Rust media stack on OS codecs, no FFmpeg
 

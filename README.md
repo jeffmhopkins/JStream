@@ -1,10 +1,10 @@
-+++
+<!-- @doc
 id = "README"
 title = "JStream"
 kind = "normative"
 status = "active"
 review_every = "90d"
-+++
+-->
 
 # JStream
 

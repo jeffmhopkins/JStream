@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0004"
 title = "wgpu compositor with native interop"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0004: wgpu compositor with native interop
 

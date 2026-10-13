@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0013"
 title = "Command model: edits, actions, revisions, per-client undo"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0013: Command model: edits, actions, revisions, per-client undo
 

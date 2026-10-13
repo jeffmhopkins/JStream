@@ -1,9 +1,10 @@
-+++
+<!-- @doc
 id = "ADR-0011"
 title = "Documentation as a hash-checked graph"
 kind = "adr"
-status = "accepted"
-+++
+status = "superseded"
+superseded_by = "docs/adr/0016-docs-as-checked-graph-v2.md"
+-->
 
 # ADR-0011: Documentation as a hash-checked graph
 

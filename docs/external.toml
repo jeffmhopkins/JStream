@@ -130,7 +130,7 @@ url = "https://embarkstudios.github.io/cargo-deny/"
 relied_on = "deny.toml schema: licenses, bans (deny/wrappers/skip), advisories, sources"
 review_every = "180d"
 status = "ok"
-checked_note = "Page loads; bans `crate`/`wrappers` syntax to be confirmed when cargo-deny first runs in M0"
+checked_note = "deny.toml syntax (bans crate/wrappers, allow-wildcard-paths) accepted by cargo-deny 0.20.2 locally and in CI on PR #3"
 
 [[external]]
 id = "adr-practice"

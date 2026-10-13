@@ -1,16 +1,16 @@
-+++
+<!-- @doc
 id = "DOCS"
 title = "Documentation system"
 kind = "normative"
 status = "active"
 review_every = "90d"
-+++
+-->
 
 # Documentation system
 
 How JStream keeps documentation accurate as the code and the outside world change.
 The binding rules are `R-DOC-*` in [RULES](RULES.md#documentation). The rationale is in
-[ADR-0011](adr/0011-docs-as-checked-graph.md).
+[ADR-0016](adr/0016-docs-as-checked-graph-v2.md).
 
 **Idea:** docs are a graph of anchored sections. Each section is bound by a content hash
 to the code it describes and to the sections it relies on. When anything in that set
@@ -39,10 +39,12 @@ exists:
 <!-- @section
 -->
 
-Every tracked Markdown file starts with TOML front matter:
+Every tracked Markdown file starts with a `@doc` metadata block: TOML inside an HTML
+comment, so GitHub renders nothing for it. `<!-- @doc` must be the very first bytes of the
+file: no byte-order mark, and no blank lines or other text before it.
 
-```toml
-+++
+```markdown
+<!-- @doc
 id = "ARCH"                  # permanent, unique, UPPER-KEBAB; never reused
 title = "Architecture"
 kind = "normative"           # normative | adr | guide | plan | reference | generated
@@ -51,15 +53,17 @@ review_every = "90d"         # omitted for ADRs and generated docs
 reviewed = { by = "human:jeffmhopkins", note = "what was re-read and why it still holds" }
 replaced_by = "docs/NEW.md"  # retired docs only
 retired_sections = { "old-id" = ["new-id-a", "new-id-b"] }   # tombstones, see Lifecycle
-+++
+-->
 ```
 
 **Tracked:** everything under `docs/` and `crates/*/README.md`, plus `README.md`,
-`CLAUDE.md` and `ROADMAP.md`.
+`CLAUDE.md`, `REVIEW.md` and `ROADMAP.md`.
 **Not tracked:** `docs/adr/TEMPLATE.md` and `.github/**`.
 
-**Why TOML:** one parser for everything in the repo, explicit string types (globs and
-dates can't be mis-typed), and no archived YAML crates.
+**Why TOML in a comment:** one parser for everything in the repo (`@doc`, `@section` and
+`@rule` blocks are all TOML), explicit string types so globs and dates can't be mistyped,
+and nothing visible on GitHub. GitHub only renders YAML (`---`) front matter; TOML (`+++`)
+front matter would show up as raw text ([ADR-0016](adr/0016-docs-as-checked-graph-v2.md)).
 
 | kind | Meaning | `review_every` |
 |---|---|---|
@@ -215,7 +219,8 @@ so it never causes merge conflicts.
 5. **Generated drift:** regenerated content differs from what is committed.
 6. **Fact mismatches** for file-sourced facts.
 7. **Accepted-ADR edits:** content changes to an accepted ADR. Only `status` and
-   `superseded_by` may change.
+   `superseded_by` may change, plus `@doc` delimiter changes made under a repo-wide
+   format ADR ([R-DOC-009](RULES.md#R-DOC-009)).
 8. **Identity violations:** a rule or section anchor that existed on `main` is missing
    and has no tombstone. See [Lifecycle](#lifecycle).
 9. **Rule metadata:** see [Rules](#rules).
@@ -353,6 +358,7 @@ and the `governance` check fails on them unless the PR carries the label
 section saying what is loosened or tightened, and why:
 
 - edits to `covers`, `applies_to`, `enforced_by` or `status` in any metadata block;
+- any edit to an accepted ADR, including a metadata-container change under R-DOC-009's exception;
 - retiring a rule; deleting or retiring a doc or section;
 - edits to `deny.toml`, `clippy.toml`, `rustfmt.toml`, `rust-toolchain.toml`,
   `[workspace.lints]`, `.github/**`, `xtask/src/docs/**`, `docs/DOCS.md`, or `REVIEW.md`;

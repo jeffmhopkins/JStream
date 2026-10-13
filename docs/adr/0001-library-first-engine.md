@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0001"
 title = "Library-first engine with thin hosts"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0001: Library-first engine with thin hosts
 

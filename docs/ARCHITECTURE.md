@@ -1,10 +1,10 @@
-+++
+<!-- @doc
 id = "ARCH"
 title = "Architecture"
 kind = "normative"
 status = "draft"
 review_every = "90d"
-+++
+-->
 
 # Architecture
 
@@ -83,7 +83,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: added edit/act
 ## Repository layout
 <!-- @section
 covers = ["xtask/**", ".github/workflows/**"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read for workspace skeleton: Cargo.toml, .cargo alias, xtask/ and ci.yml match the tree shown; .cargo/ omitted as config-only" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: .github/ comment no longer milestone-dependent (review N1 on #3); tree otherwise unchanged" }
 -->
 
 ```
@@ -107,7 +107,7 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md)
 │   └── guides/
-└── .github/                # workflows (review-gate now; CI in M0), PR template
+└── .github/                # workflows (CI, review-gate), PR template
 ```
 
 <a id="crate-map"></a>
