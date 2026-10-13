@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:5b35055780c135c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: generation now 'planned for M0' (was 'from M0'), xtask noted as outside layers; L0-L6 table re-read against R-ARCH-002/003, layering consistent" }
+verified = { hash = "b3:18b02f3415d2116c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against new crates/jstream-media/Cargo.toml: metadata layer 0, summary and unsafe_allowed=false match the existing L0 jstream-media row verbatim; it has no deps, so strict-lower layering (R-ARCH-002) holds and lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

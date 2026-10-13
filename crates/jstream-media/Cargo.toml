@@ -1,0 +1,16 @@
+[package]
+name = "jstream-media"
+version = "0.0.0"
+description = "Media value types: timestamps, pixel formats, video frames, audio buffers, encoded packets."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 0
+summary = "Frame, packet and audio-buffer types, pixel formats, timestamps"
+unsafe_allowed = false
+
+[lints]
+workspace = true
