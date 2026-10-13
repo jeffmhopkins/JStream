@@ -587,11 +587,11 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `deny` | `cargo deny check` | yes | M0 |
 | `lint-deps` | `cargo xtask lint-deps` (layering, unsafe, `links=` allowlist, workspace deps) | yes | M0 |
 | `docs` | `cargo xtask docs check` | yes | M0 |
-| `governance` | `cargo xtask governance` (label required for governance changes) | yes | M0 |
+| `governance` | `cargo xtask governance` (label plus justification for governance changes and overrides) | yes | M0 |
 | `pr-title` | Conventional Commit title | yes | M0 |
 | `ai-review` | AI review against the applicable rules and sections ([R-GOV-003](#R-GOV-003)) | yes | M0 |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
-| `sweep` | weekly docs/external/facts sweep (scheduled) | n/a | M1 |
+| `sweep` | weekly docs/external/facts sweep plus override audit list (scheduled) | n/a | M1 |
 
 <a id="R-GIT-004"></a>
 ### R-GIT-004: One logical change per PR
@@ -747,24 +747,28 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "New section from r
 -->
 
 <a id="R-GOV-001"></a>
-### R-GOV-001: Governance changes need the maintainer's label
+### R-GOV-001: Governance changes are labeled and justified
 <!-- @rule
 status = "active"
 enforced_by = ["ci:governance"]
 applies_to = ["**"]
 -->
 Changes listed in [DOCS › Governance](DOCS.md#governance) fail the `governance` check
-unless the maintainer has applied the `governance-approved` label.
+unless the PR carries the `governance-approved` label and has a non-empty "Governance
+change" section in its description. Agents may apply the label.
 
 <a id="R-GOV-002"></a>
-### R-GOV-002: Agents never approve their own governance or overrides
+### R-GOV-002: Overrides are declared, justified and audited
 <!-- @rule
 status = "active"
-enforced_by = ["human"]
+enforced_by = ["ci:governance", "ci:sweep"]
 applies_to = []
 -->
-Agents never apply the `governance-approved` or `ai-review-override` labels, never change
-branch protection or repository settings, and never retire a rule unless asked.
+Anyone, agents included, may apply `governance-approved` or `ai-review-override`, but only
+with the matching justification section in the PR description. Never apply them just to
+get past a check you haven't examined. Every PR merged with either label is listed in the
+weekly sweep issue for the maintainer to audit. Agents never change branch protection or
+repository settings.
 
 <a id="R-GOV-003"></a>
 ### R-GOV-003: Independent AI review
@@ -775,5 +779,6 @@ applies_to = []
 -->
 The `ai-review` check runs in a fresh context that did not author the PR. Its input is
 the diff, the rules and sections that `xtask docs for` returns for each changed path, and
-every verification note. Blocking findings fail the check. Only the maintainer can
-override it, with the `ai-review-override` label.
+every verification note. Blocking findings fail the check. It can be overridden with the
+`ai-review-override` label plus an "AI review override" section explaining why the findings
+are wrong or acceptable ([R-GOV-002](#R-GOV-002)).

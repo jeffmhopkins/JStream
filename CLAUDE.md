@@ -47,10 +47,13 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: hash-bound ver
 <!-- @section
 -->
 
-- Apply the `governance-approved` or `ai-review-override` labels, or change repository
-  settings ([R-GOV-002](docs/RULES.md#R-GOV-002)).
-- Weaken a check to make CI pass (`#[allow]` without a reason, narrowing `covers`, editing
-  lint or deny config) without saying so in the PR as a governance change.
+- Apply `governance-approved` or `ai-review-override` without writing the matching
+  justification section in the PR description. Apply them only after you have examined
+  what the check flagged ([R-GOV-002](docs/RULES.md#R-GOV-002)). Every use goes to
+  the maintainer's weekly audit.
+- Change branch protection or repository settings.
+- Weaken a check silently. `#[allow]` without a reason, narrowing `covers`, or editing lint
+  or deny config is always a declared governance change.
 - Verify a section you did not re-read.
 - Claim a test ran when it didn't. List what wasn't run ([R-TEST-005](docs/RULES.md#R-TEST-005)).
 

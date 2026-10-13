@@ -106,7 +106,7 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md)
 │   └── guides/
-└── .github/                # workflows, PR template, MAINTAINERS
+└── .github/                # workflows, PR template
 ```
 
 <a id="crate-map"></a>

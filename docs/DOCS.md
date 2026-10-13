@@ -266,8 +266,9 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
 - **Weekly sweep** (scheduled workflow `sweep`):
   - link-checks every external with lychee (cached, authenticated; 403 and 429 count
     as *unknown*, not broken);
-  - lists due docs and externals, fact drift, verify-to-edit ratios, and `planned`
-    enforcement past its milestone;
+  - lists due docs and externals, fact drift, verify-to-edit ratios, pending
+    enforcement past its milestone, and every PR merged with `governance-approved`
+    or `ai-review-override` (the override audit);
   - **updates one pinned issue, "Docs due for review"**, instead of opening new ones.
   - A scheduled agent may pick items from that issue and open PRs. Those PRs go
     through the normal gate.
@@ -346,8 +347,9 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Spec written befor
 -->
 
 An agent could pass the gate by weakening it. These changes are **governance changes**,
-and the `governance` check fails on them unless the maintainer has applied the label
-`governance-approved`:
+and the `governance` check fails on them unless the PR carries the label
+`governance-approved` **and** its description has a non-empty "Governance change"
+section saying what is loosened or tightened, and why:
 
 - edits to `covers`, `applies_to`, `enforced_by` or `status` in any metadata block;
 - retiring a rule; deleting or retiring a doc or section;
@@ -355,6 +357,6 @@ and the `governance` check fails on them unless the maintainer has applied the l
   `[workspace.lints]`, `.github/**`, `xtask/src/docs/**`, or `docs/DOCS.md`;
 - new `#[allow(…)]` / `#[expect(…)]` attributes (these must also carry `reason = "…"`).
 
-**Agents never apply that label.** See
-[ADR-0015](adr/0015-review-and-governance.md) for how this works, and its limits, when
-agents act under the maintainer's GitHub account.
+Agents and the maintainer may both apply the label. The weekly sweep lists every PR
+merged with it, so the maintainer can audit them
+([ADR-0015](adr/0015-review-and-governance.md)).
