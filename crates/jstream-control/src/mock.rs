@@ -58,6 +58,7 @@ impl MockEngine {
             shared: Arc::clone(&self.shared),
             client_id: Mutex::new(None),
             next_request: AtomicU64::new(1),
+            subscriptions: Mutex::new(Vec::new()),
         }
     }
 
@@ -78,6 +79,8 @@ pub struct MockControl {
     shared: Arc<Mutex<State>>,
     client_id: Mutex<Option<ClientId>>,
     next_request: AtomicU64,
+    /// This session's event subscriptions, closed when it is dropped.
+    subscriptions: Mutex<Vec<Weak<Mutex<Queue>>>>,
 }
 
 impl Control for MockControl {
@@ -126,7 +129,18 @@ impl Control for MockControl {
     fn events(&self) -> EventStream {
         let queue = Arc::new(Mutex::new(Queue::default()));
         lock(&self.shared).subscribers.push(Arc::downgrade(&queue));
+        let mut mine = lock(&self.subscriptions);
+        mine.retain(|weak| weak.strong_count() > 0);
+        mine.push(Arc::downgrade(&queue));
         Box::pin(Subscription(queue))
+    }
+}
+
+impl Drop for MockControl {
+    /// Ends this session's event streams: the session is gone, as when a socket closes.
+    fn drop(&mut self) {
+        let mine = std::mem::take(&mut *lock(&self.subscriptions));
+        close_all(mine);
     }
 }
 
@@ -195,14 +209,15 @@ impl State {
         {
             return Ok(CallResult::Batch { rev: *rev });
         }
-        if batch.edits.is_empty() {
-            return Err(ProtocolError::EmptyBatch);
-        }
+        // Same order as `jstream_graph::Graph::apply`: the revision check comes first.
         let current = self.collection.rev;
         if let Some(expected) = batch.expected_rev
             && expected != current
         {
             return Err(ProtocolError::RevConflict { expected, current });
+        }
+        if batch.edits.is_empty() {
+            return Err(ProtocolError::EmptyBatch);
         }
         let mut next = self.collection.clone();
         for (at, edit) in batch.edits.into_iter().enumerate() {
@@ -306,15 +321,21 @@ impl State {
 impl Drop for State {
     /// Ends every subscription when the engine goes away.
     fn drop(&mut self) {
-        for queue in self.subscribers.drain(..).filter_map(|weak| weak.upgrade()) {
-            let waker = {
-                let mut queue = lock(&queue);
-                queue.closed = true;
-                queue.waker.take()
-            };
-            if let Some(waker) = waker {
-                waker.wake();
-            }
+        close_all(self.subscribers.drain(..));
+    }
+}
+
+/// Ends the subscriptions still alive among `queues`: each yields what it has buffered,
+/// then `None`.
+fn close_all(queues: impl IntoIterator<Item = Weak<Mutex<Queue>>>) {
+    for queue in queues.into_iter().filter_map(|weak| weak.upgrade()) {
+        let waker = {
+            let mut queue = lock(&queue);
+            queue.closed = true;
+            queue.waker.take()
+        };
+        if let Some(waker) = waker {
+            waker.wake();
         }
     }
 }
@@ -328,6 +349,7 @@ impl Collection {
     fn apply(&mut self, edit: Edit, at: usize) -> Result<(), ProtocolError> {
         match edit {
             Edit::SceneCreate { scene_id, name } => {
+                check_id(scene_id.as_str(), at, "scene_id")?;
                 check_name(&name, at)?;
                 if self.scene_index(&scene_id).is_some() {
                     return Err(already_exists(EntityKind::Scene, scene_id.as_str()));
@@ -372,6 +394,7 @@ impl Collection {
                 source_id,
                 ..
             } => {
+                check_id(item_id.as_str(), at, "item_id")?;
                 let index = self.existing_scene(&scene_id)?;
                 let Some(kind) = self.sources.get(&source_id) else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
@@ -425,6 +448,7 @@ impl Collection {
                 name,
                 kind,
             } => {
+                check_id(source_id.as_str(), at, "source_id")?;
                 check_name(&name, at)?;
                 match &kind {
                     SourceKind::Scene { scene_id } => {
@@ -446,6 +470,7 @@ impl Collection {
                 let Some(kind) = self.sources.get(&source_id).cloned() else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
+                check_id(new_source_id.as_str(), at, "new_source_id")?;
                 check_name(&name, at)?;
                 self.create_source(new_source_id, kind)?;
             }
@@ -515,6 +540,14 @@ fn invalid(at: usize, field: &str, reason: impl Into<String>) -> ProtocolError {
         field: format!("edits.{at}.{field}"),
         reason: reason.into(),
     }
+}
+
+/// Rejects an empty ID in a creating edit, as `jstream-graph` does.
+fn check_id(id: &str, at: usize, field: &str) -> Result<(), ProtocolError> {
+    if id.is_empty() {
+        return Err(invalid(at, field, "must not be empty"));
+    }
+    Ok(())
 }
 
 fn check_name(name: &str, at: usize) -> Result<(), ProtocolError> {
@@ -880,6 +913,97 @@ mod tests {
             source_id: SourceId::new("webcam_2"),
         });
         assert_eq!(batch(&*control, unplaced), Ok(Rev(2)));
+    }
+
+    #[test]
+    fn empty_ids_are_rejected_like_the_graph_does() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        assert_eq!(batch(&*control, Batch::single(webcam())), Ok(Rev(1)));
+        let rejected = |edit: Edit| {
+            batch(&*control, Batch::single(edit))
+                .expect_err("empty id")
+                .protocol()
+                .cloned()
+        };
+        // Exactly what `jstream_graph::Graph::apply` returns for this edit (checked
+        // against jstream-graph 0.0.0: check_id runs before check_name). It can't be
+        // called here: it is in the same layer (R-ARCH-002), even as a dev-dependency.
+        assert_eq!(
+            rejected(Edit::SceneCreate {
+                scene_id: SceneId::new(""),
+                name: "x".into(),
+            }),
+            Some(ProtocolError::InvalidArgument {
+                field: "edits.0.scene_id".into(),
+                reason: "must not be empty".into(),
+            })
+        );
+        let field = |edit: Edit| match rejected(edit) {
+            Some(ProtocolError::InvalidArgument { field, .. }) => field,
+            other => panic!("expected invalid_argument, got {other:?}"),
+        };
+        assert_eq!(field(add("missing_scene", "", "webcam")), "edits.0.item_id");
+        let source = Edit::SourceCreate {
+            source_id: SourceId::new(""),
+            name: String::new(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+        };
+        assert_eq!(field(source), "edits.0.source_id");
+        let duplicate = Edit::SourceDuplicate {
+            source_id: SourceId::new("webcam"),
+            new_source_id: SourceId::new(""),
+            name: String::new(),
+        };
+        assert_eq!(field(duplicate), "edits.0.new_source_id");
+        assert_eq!(engine.rev(), Rev(1));
+    }
+
+    #[test]
+    fn rev_conflict_is_checked_before_empty_batch() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let empty_and_stale = Batch {
+            edits: vec![],
+            expected_rev: Some(Rev(5)),
+            idempotency_key: None,
+        };
+        // `jstream_graph::Graph::apply` answers this with `rev_conflict` too.
+        let error = batch(&*control, empty_and_stale).expect_err("stale");
+        assert_eq!(
+            error.protocol(),
+            Some(&ProtocolError::RevConflict {
+                expected: Rev(5),
+                current: Rev(0)
+            })
+        );
+    }
+
+    #[test]
+    fn dropping_a_session_ends_only_its_streams() {
+        let engine = MockEngine::new();
+        let leaving = engine.connect();
+        let staying = engine.connect();
+        let mut leaving_events = leaving.events();
+        let mut staying_events = staying.events();
+        engine.emit(Event::Unknown);
+        drop(leaving);
+        // Buffered events are still delivered, then the stream ends.
+        assert_eq!(
+            poll_event(&mut leaving_events, Waker::noop()),
+            Poll::Ready(Some(Event::Unknown))
+        );
+        assert_eq!(
+            poll_event(&mut leaving_events, Waker::noop()),
+            Poll::Ready(None)
+        );
+        assert_eq!(drain(&mut staying_events), vec![Event::Unknown]);
+        assert_eq!(
+            poll_event(&mut staying_events, Waker::noop()),
+            Poll::Pending
+        );
     }
 
     #[test]

@@ -236,7 +236,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:6d59dcf859f33e5e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "After merging main: protocol 0.2 adds edits (source.*, reorders, set_visible/set_crop) and its README was re-verified; the jstream-control crate's mock now handles those edits; envelope, batches/expected_rev/idempotency, actions, queries, events, errors and the transport bullet (core in-process, WS client in jstream-control, deferred) still hold" }
+verified = { hash = "b3:588d317a02d197ae", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1 changed only jstream-control's mock (empty-ID checks, rev_conflict before empty_batch, session drop closes its streams) and its README; envelope, batches/expected_rev/idempotency, errors and transport bullets unchanged and still accurate" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
