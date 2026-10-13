@@ -13,7 +13,10 @@ publish = false
 anyhow = "1"
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 globset = { version = "0.4", default-features = false }
+insta = { version = "1", default-features = false }
 pulldown-cmark = { version = "0.13", default-features = false }
+schemars = { version = "1", default-features = false, features = ["derive", "std"] }
+serde = { version = "1", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
 thiserror = { version = "2", default-features = false, features = ["std"] }
 toml = "1"

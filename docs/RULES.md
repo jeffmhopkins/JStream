@@ -466,7 +466,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:ace9efb03a78e8d7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-API-001..004 against ARCH#protocol and ARCH#persistence: semver, noun.verb + MCP name pattern, schema_version migrations, expected_rev all consistent" }
+verified = { hash = "b3:bb9f65b08bfebdc5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-API-001..004 against the edited ARCH#protocol: handshake versioning is R-API-001 semver, noun.verb names unchanged, expected_rev and idempotency key now on the batch per R-API-004; ARCH#persistence unchanged" }
 -->
 
 <a id="R-API-001"></a>

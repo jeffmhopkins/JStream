@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:28d1a31526a62c57", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after jstream-media gained a thiserror dependency and main merged: thiserror is external, so the L0 row (summary, layer 0, unsafe no) and strict-lower layering (R-ARCH-002) still hold; lint-deps passes" }
+verified = { hash = "b3:9c6114286b86bf9f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for the new crates/jstream-protocol/Cargo.toml: layer 1, summary identical to the L1 jstream-protocol row, unsafe_allowed = false matches 'no'; it depends on no JStream crate (only serde, serde_json, schemars, thiserror, dev insta), so strict-lower layering (R-ARCH-002) holds; lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -225,18 +225,29 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:3f9e4d79b011fe0a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: edit/action split, expected_rev, binary streams and authenticated WS transport match ADR-0013, ADR-0006 and R-API-001/004" }
+verified = { hash = "b3:5b50fe6ea9208f55", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added the envelope (hello/welcome, request id, response or error, events), edits always sent in a batch carrying expected_rev/idempotency key with rev +1 per batch, stable error codes, generated schema snapshot, binary streams marked not designed; all match crates/jstream-protocol src and README#design, ADR-0013 and ADR-0006 unchanged" }
 -->
 
+The wire format, versioning, error codes and compatibility policy are designed in
+[jstream-protocol › Design](../crates/jstream-protocol/README.md#design). In short:
+
+- **Envelope:** JSON messages tagged by `type`. A `hello`/`welcome` handshake exchanges
+  the protocol version, then each `request` (with a client-chosen `id`) gets exactly one
+  `response` or `error`, and `event`s arrive at any time.
 - **Edits** (`scene.create`, `item.set_transform`, `audio.set_send`, …): typed, undoable,
-  may be batched atomically, carry optional `expected_rev` and idempotency keys
-  ([R-API-004](RULES.md#R-API-004)).
+  always sent in an atomic batch (of one or more), which carries the optional
+  `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
+  batch increments `rev` by one.
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `video.snapshot`, `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `stats.tick`, …).
-- **Binary streams** (WebSocket binary frames): snapshots (PNG/JPEG), preview video, meters.
+- **Errors** carry a stable machine-readable `code`, detail fields and a message.
+- **Binary streams** (WebSocket binary frames): snapshots (PNG/JPEG), preview video,
+  meters. Not designed yet.
+- **Schema:** the JSON Schema is generated from the Rust types, and its snapshot is
+  the API review ([R-TEST-002](RULES.md#R-TEST-002)).
 - **Transport:** the `Control` trait is implemented in-process by core and over WebSocket
   by `jstream-control` (`/api/v1/ws`, token required, `Origin`/`Host` validated).
 - **Versioning:** [R-API-001](RULES.md#R-API-001).
