@@ -1,6 +1,6 @@
 //! Cross-document checks over the parsed docs (docs/DOCS.md#gate). This module covers
 //! identity, metadata schema, references, rules, facts, hash-bound verification and glob
-//! coverage. Code back-references are added in a later M0 PR.
+//! coverage. Code back-references live in `backrefs.rs`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};

@@ -356,21 +356,34 @@ mod tests {
         assert_eq!(unmatched, vec![("A.md", false), ("D.md", true)]);
     }
 
-    /// R-DOC-008: crate roots list exactly the sections covering the crate; module-level
-    /// references must resolve.
+    /// R-DOC-008: crate roots list exactly the sections covering the crate; whole-doc
+    /// references (ADRs) are allowed anywhere; every reference must resolve; retired docs
+    /// create no obligations.
     #[test]
     fn back_references_both_directions() {
         let mut files = REGISTRIES.to_vec();
-        let (a, b) = (
+        let (a, b, r) = (
             doc("A", "active", "a", "crates/x/**"),
             doc("B", "active", "b", "crates/y/**"),
+            doc("R", "retired", "r", "crates/x/**"),
         );
+        let adr = "<!-- @doc\nid = \"ADR-0001\"\nkind = \"adr\"\nstatus = \"accepted\"\n-->\n";
+        let old = "<!-- @doc\nid = \"ADR-0002\"\nkind = \"adr\"\nstatus = \"superseded\"\n-->\n";
         files.extend([
             ("A.md", &*a),
             ("B.md", &*b),
+            ("R.md", &*r),
+            ("adr/0001.md", adr),
+            ("adr/0002.md", old),
             ("crates/x/Cargo.toml", ""),
-            ("crates/x/src/lib.rs", "//! X.\n//!\n//! Docs: A.md#a\n"),
-            ("crates/x/src/m.rs", "//! Docs: A.md#a, A.md#gone\n"),
+            (
+                "crates/x/src/lib.rs",
+                "//! X.\n//!\n//! Docs: A.md#a, adr/0001.md\n",
+            ),
+            (
+                "crates/x/src/m.rs",
+                "//! Docs: A.md#a, A.md#gone, adr/0002.md\n",
+            ),
             ("crates/y/Cargo.toml", ""),
             ("crates/y/src/main.rs", "//! Docs: A.md#a\n"),
             ("crates/z/Cargo.toml", ""),
@@ -381,7 +394,8 @@ mod tests {
         assert_eq!(
             got,
             vec![
-                "crates/x/src/m.rs:1: `Docs:` reference `A.md#gone` is not a tracked doc section",
+                "crates/x/src/m.rs:1: `Docs:` reference `A.md#gone`: no anchor `gone` in A.md",
+                "crates/x/src/m.rs:1: `Docs:` reference `adr/0002.md` cites a superseded ADR",
                 "crates/y/src/main.rs:1: `Docs:` is missing `B.md#b`, whose `covers` match this crate",
                 "crates/y/src/main.rs:1: `Docs:` lists `A.md#a`, which does not cover this crate",
             ],

@@ -1,7 +1,8 @@
 //! Code back-references (docs/DOCS.md#back-references, R-DOC-008). Every crate root
 //! (`src/lib.rs`, else `src/main.rs`) carries a `//! Docs:` line listing exactly the sections
-//! whose `covers` match files in that crate. Module-level `Docs:` lines are optional; when
-//! present, each reference must resolve to an existing doc and anchor.
+//! whose `covers` match files in that crate. Module-level `Docs:` lines are optional. Every
+//! reference, on any line, must resolve (docs/DOCS.md#references): `path#anchor` to a
+//! section, or a bare `path` to a whole doc such as an ADR.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -18,12 +19,13 @@ fn diag(path: &str, line: usize, msg: String) -> Diag {
 }
 
 /// The references on the `Docs:` line of a file's leading `//!` comment, with its line
-/// number. Only the leading comment counts, so a `Docs:` in later code is ignored.
+/// number. Only the leading comment counts, so a `Docs:` in later code is ignored. Blank
+/// lines and single-line inner attributes (`#![…]`) may precede or interleave it.
 fn docs_line(text: &str) -> Option<(usize, Vec<String>)> {
     for (i, l) in text.lines().enumerate() {
         let t = l.trim_start();
         let Some(rest) = t.strip_prefix("//!") else {
-            if t.is_empty() {
+            if t.is_empty() || (t.starts_with("#![") && t.ends_with(']')) {
                 continue;
             }
             break;
@@ -55,6 +57,35 @@ fn crates(paths: &[String]) -> Vec<(&str, &str)> {
             })
         })
         .collect()
+}
+
+/// The crate that owns `file`: the deepest crate directory containing it, so files of a
+/// nested crate don't count toward the outer one.
+fn owner<'c>(file: &str, dirs: &[&'c str]) -> Option<&'c str> {
+    dirs.iter()
+        .copied()
+        .filter(|d| file.starts_with(&format!("{d}/")))
+        .max_by_key(|d| d.len())
+}
+
+/// Checks one reference: `path#anchor` must name a section of a tracked doc, a bare `path`
+/// a tracked doc. Code may not cite a superseded ADR (docs/DOCS.md#references).
+fn resolve(r: &str, by_path: &BTreeMap<&str, &Doc>) -> Result<(), String> {
+    let (file, anchor) = r.split_once('#').map_or((r, None), |(f, a)| (f, Some(a)));
+    let Some(doc) = by_path.get(file) else {
+        return Err(format!("`Docs:` reference `{r}` is not a tracked doc"));
+    };
+    if let Some(a) = anchor
+        && !doc.has_anchor(a)
+    {
+        return Err(format!(
+            "`Docs:` reference `{r}`: no anchor `{a}` in {file}"
+        ));
+    }
+    if doc.meta_str("status") == Some("superseded") {
+        return Err(format!("`Docs:` reference `{r}` cites a superseded ADR"));
+    }
+    Ok(())
 }
 
 /// Runs the back-reference checks.
@@ -93,12 +124,13 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
         }
     }
 
-    let roots: BTreeSet<&str> = crates(paths).iter().map(|(_, r)| *r).collect();
-    for (dir, root) in crates(paths) {
-        let prefix = format!("{dir}/");
+    let crates = crates(paths);
+    let dirs: Vec<&str> = crates.iter().map(|(d, _)| *d).collect();
+    let roots: BTreeSet<&str> = crates.iter().map(|(_, r)| *r).collect();
+    for &(dir, root) in &crates {
         let expected: BTreeSet<&str> = covered
             .iter()
-            .filter(|(_, files)| files.iter().any(|f| f.starts_with(&prefix)))
+            .filter(|(_, files)| files.iter().any(|f| owner(f, &dirs) == Some(dir)))
             .map(|(r, _)| r.as_str())
             .collect();
         let text = match std::fs::read_to_string(repo.root.join(root)) {
@@ -121,7 +153,18 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
             }
             continue;
         };
-        let listed: BTreeSet<&str> = listed.iter().map(String::as_str).collect();
+        for r in &listed {
+            if let Err(msg) = resolve(r, &by_path) {
+                out.push(diag(root, line, msg));
+            }
+        }
+        // Whole-doc references (ADRs) add context; only sections take part in the
+        // two-way check.
+        let listed: BTreeSet<&str> = listed
+            .iter()
+            .map(String::as_str)
+            .filter(|r| r.contains('#'))
+            .collect();
         for missing in expected.difference(&listed) {
             out.push(diag(
                 root,
@@ -129,7 +172,10 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
                 format!("`Docs:` is missing `{missing}`, whose `covers` match this crate"),
             ));
         }
-        for extra in listed.difference(&expected) {
+        for extra in listed
+            .difference(&expected)
+            .filter(|r| resolve(r, &by_path).is_ok())
+        {
             out.push(diag(
                 root,
                 line,
@@ -150,15 +196,8 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
             continue;
         };
         for r in refs {
-            let resolves = r.split_once('#').is_some_and(|(file, anchor)| {
-                by_path.get(file).is_some_and(|d| d.has_anchor(anchor))
-            });
-            if !resolves {
-                out.push(diag(
-                    p,
-                    line,
-                    format!("`Docs:` reference `{r}` is not a tracked doc section"),
-                ));
+            if let Err(msg) = resolve(&r, &by_path) {
+                out.push(diag(p, line, msg));
             }
         }
     }
@@ -177,6 +216,21 @@ mod tests {
             Some((3, vec!["a.md#x".to_owned(), "b.md#y".to_owned()]))
         );
         assert_eq!(docs_line("//! Crate.\nfn f() {}\n//! Docs: a.md#x\n"), None);
+        assert_eq!(
+            docs_line("#![forbid(unsafe_code)]\n//! Docs: a.md\n"),
+            Some((2, vec!["a.md".to_owned()]))
+        );
+    }
+
+    #[test]
+    fn nested_crates_own_their_files() {
+        let dirs = ["crates/a", "crates/a/inner"];
+        assert_eq!(owner("crates/a/src/x.rs", &dirs), Some("crates/a"));
+        assert_eq!(
+            owner("crates/a/inner/src/y.rs", &dirs),
+            Some("crates/a/inner")
+        );
+        assert_eq!(owner("crates/ab/src/z.rs", &dirs), None);
     }
 
     #[test]
