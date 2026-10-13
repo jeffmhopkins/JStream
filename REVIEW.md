@@ -200,6 +200,6 @@ verdict.
 URLs, facts, metadata schema, history tables and **stale section hashes**. Read its result
 on the PR. A green `docs` job proves the hashes match; it can't prove the re-read happened.
 So for every section whose `verified` line the PR changes, read the section against the
-diff yourself and judge the note (Step 2 item 4). Until glob errors land
-([DOCS › Bootstrap status](docs/DOCS.md#bootstrap)), also check by hand that no `covers`
-glob in a touched section has stopped matching files.
+diff yourself and judge the note (Step 2 item 4). `docs check` also fails on `covers`
+globs that match no file ([R-DOC-012](docs/RULES.md#R-DOC-012)). `applies_to` globs may
+legitimately match nothing yet, so check that new or edited ones aren't typos.

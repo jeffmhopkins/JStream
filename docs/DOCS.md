@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:bc311b92683db85e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against xtask/src/docs with unmatched-glob check (covers error, draft warn, applies_to validity only) and Diag warnings; available/not-yet lists match the code" }
+verified = { hash = "b3:fc4a3c23a19e3a1d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against xtask/src/docs after N1/N3/N4 from #11: retired docs exempt from covers check, module doc updated, temp-dir drop guard; lists match the code" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -35,7 +35,8 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   dependencies, and `cargo xtask docs verify` records a re-read. Every `bootstrap`
   placeholder was replaced, each after a re-read, in the PR that added hashing.
 - **Unmatched globs** ([R-DOC-012](RULES.md#R-DOC-012)): `covers` globs that match no
-  tracked file fail (warn in drafts); `applies_to` globs are checked for validity only.
+  tracked file fail (warn in drafts; retired docs are exempt); `applies_to` globs are
+  checked for validity only.
   `verify` refuses while untracked files match the section's `covers`.
 - **Not yet:** code back-references, and the `review`, `for` and `log` commands. Until
   they land, those rules are enforced by review.
@@ -225,8 +226,9 @@ so it never causes merge conflicts.
 
 1. **Stale verifications:** any section whose computed hash differs from its stored one.
 2. **Unmatched globs:** any `covers` glob that matches no tracked file, unless the doc is
-   `status = "draft"` (a warning then). `applies_to` globs only need to be valid: rules may
-   name crates that don't exist yet ([R-DOC-012](RULES.md#R-DOC-012)).
+   `status = "draft"` (a warning then) or `status = "retired"` (exempt). `applies_to`
+   globs only need to be valid: rules may name crates that don't exist yet
+   ([R-DOC-012](RULES.md#R-DOC-012)).
 3. **Broken references:** see [References](#references).
 4. **Back-reference mismatches:** see [Code back-references](#back-references).
 5. **Generated drift:** regenerated content differs from what is committed.
