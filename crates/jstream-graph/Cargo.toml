@@ -1,0 +1,19 @@
+[package]
+name = "jstream-graph"
+version = "0.0.0"
+description = "The JStream scene graph: sources, scenes and items, atomic edit batches with inverses for undo, and the state revision."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU."
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+jstream-protocol.workspace = true

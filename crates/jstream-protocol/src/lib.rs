@@ -17,7 +17,9 @@ mod query;
 mod schema;
 mod version;
 
-pub use command::{Action, Batch, Command, CommandClass, Edit, ItemTransform, Vec2};
+pub use command::{
+    Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SourceKind, Vec2,
+};
 pub use envelope::{
     Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request, Response,
     ServerMessage, Welcome,
