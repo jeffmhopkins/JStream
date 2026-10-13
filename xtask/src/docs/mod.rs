@@ -4,6 +4,7 @@
 
 mod backrefs;
 mod check;
+mod govern;
 mod hash;
 mod parse;
 
@@ -194,6 +195,20 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
     Ok(())
 }
 
+/// `arg` as a repo-relative path with `/` separators. Absolute paths must be inside `root`.
+fn repo_path(root: &Path, arg: &str) -> Result<String> {
+    let p = Path::new(arg);
+    let rel = if p.is_absolute() {
+        let root = root.canonicalize().context("resolving the repo root")?;
+        p.strip_prefix(&root)
+            .with_context(|| format!("`{arg}` is outside the repository"))?
+            .to_path_buf()
+    } else {
+        p.to_path_buf()
+    };
+    check::normalize(&rel).with_context(|| format!("`{arg}` escapes the repository"))
+}
+
 /// Entry point for `cargo xtask docs <args>`.
 pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
     match args.first().map(String::as_str) {
@@ -233,7 +248,19 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             verify(root, target, by, note)?;
             Ok(true)
         }
-        _ => bail!("usage: cargo xtask docs check | verify <DOC#anchor> --by <who> --note <text>"),
+        Some("for") => {
+            let [_, arg] = args else {
+                bail!("usage: cargo xtask docs for <path>");
+            };
+            let path = repo_path(root, arg)?;
+            let l = load(root)?;
+            let g = govern::governing(root, &l.docs, &l.files, &path);
+            eprint!("{}", govern::render(&path, &g, &l.docs));
+            Ok(true)
+        }
+        _ => bail!(
+            "usage: cargo xtask docs check | verify <DOC#anchor> --by <who> --note <text> | for <path>"
+        ),
     }
 }
 
@@ -395,7 +422,7 @@ mod tests {
             got,
             vec![
                 "crates/x/src/m.rs:1: `Docs:` reference `A.md#gone`: no anchor `gone` in A.md",
-                "crates/x/src/m.rs:1: `Docs:` reference `adr/0002.md` cites a superseded ADR",
+                "crates/x/src/m.rs:1: `Docs:` reference `adr/0002.md` cites a superseded doc",
                 "crates/y/src/main.rs:1: `Docs:` is missing `B.md#b`, whose `covers` match this crate",
                 "crates/y/src/main.rs:1: `Docs:` lists `A.md#a`, which does not cover this crate",
             ],
@@ -408,6 +435,56 @@ mod tests {
                 "crates/y/src/main.rs:1: crate root has no `//! Docs:` line; sections covering this crate: B.md#b"
             ]
         );
+    }
+
+    /// `docs for`: sections by `covers`, live rules by `applies_to`, and live ADRs cited
+    /// by matched sections and rules or by the file's and its crate root's `Docs:` lines.
+    #[test]
+    fn docs_for_collects_sections_rules_and_adrs() {
+        let adr = |id: &str, status: &str| {
+            format!("<!-- @doc\nid = \"{id}\"\nkind = \"adr\"\nstatus = \"{status}\"\n-->\n")
+        };
+        let arch = "<!-- @doc\nid = \"A\"\n-->\n<a id=\"x\"></a>\n## X\n<!-- @section\ncovers = [\"crates/x/**\"]\ndepends_on = [\"adr/1.md\"]\n-->\nSee [ADR 4](adr/4.md).\n\n<a id=\"y\"></a>\n## Y\n<!-- @section\ncovers = [\"crates/y/**\"]\n-->\nSee [ADR 5](adr/5.md).\n";
+        let rules = "<!-- @doc\nid = \"R\"\n-->\n<a id=\"R-A-001\"></a>\n### R-A-001: Live\n<!-- @rule\nstatus = \"active\"\napplies_to = [\"crates/**\"]\n-->\nPer [ADR 2](adr/2.md) and [old](adr/3.md).\n\n<a id=\"R-A-002\"></a>\n### R-A-002: Gone\n<!-- @rule\nstatus = \"retired\"\napplies_to = [\"crates/**\"]\n-->\nRetired.\n";
+        let (a1, a2, a3, a4, a5, a6) = (
+            adr("ADR-1", "accepted"),
+            adr("ADR-2", "accepted"),
+            adr("ADR-3", "superseded"),
+            adr("ADR-4", "accepted"),
+            adr("ADR-5", "accepted"),
+            adr("ADR-6", "accepted"),
+        );
+        let f = Fixture::new(
+            "for",
+            &[
+                ("A.md", arch),
+                ("R.md", rules),
+                ("adr/1.md", &a1),
+                ("adr/2.md", &a2),
+                ("adr/3.md", &a3),
+                ("adr/4.md", &a4),
+                ("adr/5.md", &a5),
+                ("adr/6.md", &a6),
+                ("crates/x/Cargo.toml", ""),
+                ("crates/x/src/lib.rs", "//! Docs: A.md#x, adr/6.md\n"),
+            ],
+        );
+        let l = load(&f.0).expect("invariant: the fixture is readable");
+        let g = govern::governing(&f.0, &l.docs, &l.files, "crates/x/src/new.rs");
+        let set = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect();
+        assert_eq!(g.sections, set(&["A.md#x"]));
+        assert_eq!(g.rules, set(&["R.md#R-A-001"]));
+        assert_eq!(
+            g.adrs,
+            set(&["adr/1.md", "adr/2.md", "adr/4.md", "adr/6.md"])
+        );
+        let text = govern::render("crates/x/src/new.rs", &g, &l.docs);
+        assert!(text.contains("R.md#R-A-001  (R-A-001: Live)"), "{text}");
+        assert_eq!(
+            repo_path(&f.0, "./crates/x/../x/a.rs").ok().as_deref(),
+            Some("crates/x/a.rs")
+        );
+        assert!(repo_path(&f.0, "../outside").is_err());
     }
 
     /// The repository's own docs must pass. This is what the `docs` CI job enforces.

@@ -21,7 +21,7 @@ fn diag(path: &str, line: usize, msg: String) -> Diag {
 /// The references on the `Docs:` line of a file's leading `//!` comment, with its line
 /// number. Only the leading comment counts, so a `Docs:` in later code is ignored. Blank
 /// lines and single-line inner attributes (`#![…]`) may precede or interleave it.
-fn docs_line(text: &str) -> Option<(usize, Vec<String>)> {
+pub(crate) fn docs_line(text: &str) -> Option<(usize, Vec<String>)> {
     for (i, l) in text.lines().enumerate() {
         let t = l.trim_start();
         let Some(rest) = t.strip_prefix("//!") else {
@@ -45,7 +45,7 @@ fn docs_line(text: &str) -> Option<(usize, Vec<String>)> {
 
 /// Every crate in the repository: `(directory, root file)`, from tracked `Cargo.toml`s
 /// below the workspace root.
-fn crates(paths: &[String]) -> Vec<(&str, &str)> {
+pub(crate) fn crates(paths: &[String]) -> Vec<(&str, &str)> {
     let tracked: BTreeSet<&str> = paths.iter().map(String::as_str).collect();
     paths
         .iter()
@@ -61,7 +61,7 @@ fn crates(paths: &[String]) -> Vec<(&str, &str)> {
 
 /// The crate that owns `file`: the deepest crate directory containing it, so files of a
 /// nested crate don't count toward the outer one.
-fn owner<'c>(file: &str, dirs: &[&'c str]) -> Option<&'c str> {
+pub(crate) fn owner<'c>(file: &str, dirs: &[&'c str]) -> Option<&'c str> {
     dirs.iter()
         .copied()
         .filter(|d| file.starts_with(&format!("{d}/")))
@@ -82,10 +82,12 @@ fn resolve(r: &str, by_path: &BTreeMap<&str, &Doc>) -> Result<(), String> {
             "`Docs:` reference `{r}`: no anchor `{a}` in {file}"
         ));
     }
-    if doc.meta_str("status") == Some("superseded") {
-        return Err(format!("`Docs:` reference `{r}` cites a superseded ADR"));
+    match doc.meta_str("status") {
+        Some("superseded") => Err(format!("`Docs:` reference `{r}` cites a superseded doc")),
+        // Retired docs create no obligations, so citing them is always stale (#13 N5).
+        Some("retired") => Err(format!("`Docs:` reference `{r}` cites a retired doc")),
+        _ => Ok(()),
     }
-    Ok(())
 }
 
 /// Runs the back-reference checks.

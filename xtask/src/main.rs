@@ -43,10 +43,16 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!("usage: cargo xtask <command>\n\ncommands:");
-            eprintln!(
-                "  {:<12} check the documentation graph (docs/DOCS.md)",
-                "docs check"
-            );
+            for (name, what) in [
+                ("docs check", "check the documentation graph (docs/DOCS.md)"),
+                (
+                    "docs verify",
+                    "record a re-read section: <DOC#anchor> --by <who> --note <text>",
+                ),
+                ("docs for", "what governs a file: <repo-relative path>"),
+            ] {
+                eprintln!("  {name:<12} {what}");
+            }
             for (name, what) in PLANNED {
                 eprintln!("  {name:<12} {what} [planned]");
             }

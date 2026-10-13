@@ -455,7 +455,7 @@ fn check_link(
 }
 
 /// Resolves `.` and `..` lexically; `None` if the path escapes the root.
-fn normalize(p: &Path) -> Option<String> {
+pub(crate) fn normalize(p: &Path) -> Option<String> {
     let mut out = PathBuf::new();
     for c in p.components() {
         match c {

@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:a62b41832e390641", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against backrefs.rs after #13 round 1: whole-doc refs resolve, superseded ADRs fail, nested crate ownership, #![] skipping; available/not-yet lists match the code" }
+verified = { hash = "b3:59598d0063893c7f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against xtask/src/docs incl. new govern.rs: docs for listed as available (report on stderr); not-yet is uncovered-crate report, review, log; backrefs retired/superseded messages match" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -41,7 +41,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **Code back-references** ([Code back-references](#back-references)): crate roots are
   checked in both directions, and every `Docs:` reference must resolve (sections, or whole
   docs such as ADRs; superseded ADRs fail).
-- **Not yet:** the uncovered-crate report, and the `review`, `for` and `log` commands.
+- **`cargo xtask docs for <path>`** ([Code back-references](#back-references)): prints
+  what governs a file.
+- **Not yet:** the uncovered-crate report, and the `review` and `log` commands.
   Until they land, those rules are enforced by review.
 - IDs, anchors and rule numbers became permanent at the first merge to `main` (#1).
 
@@ -175,8 +177,14 @@ checked: each listed section must actually cover the crate.
   line.
 - **Module-level lines** are optional. When present, every reference must resolve.
 
-`cargo xtask docs for <path>` prints the sections, rules (via `applies_to`) and ADRs that
-govern a file. Agents run it before editing unfamiliar code.
+`cargo xtask docs for <path>` prints what governs a file. Agents run it before editing
+unfamiliar code. The path doesn't have to exist yet. It lists:
+
+- **Sections** whose `covers` match the path (not in retired docs).
+- **Rules** whose `applies_to` match it (not retired).
+- **ADRs**, other than superseded ones, cited by a matched section's `depends_on`, by a
+  link inside a matched section or rule, or by the `Docs:` line of the file or its crate
+  root.
 
 <a id="verification"></a>
 ## Hash-bound verification
@@ -214,7 +222,7 @@ cargo xtask docs verify ARCH#gpu-pipeline \
     --by agent:claude --note "…"                # re-read (or edited) and it holds: write new hash
 cargo xtask docs review ARCH --note "…"        # doc-level TTL review          (planned)
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git     (planned)
-cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file  (planned)
+cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
 ```
 
 <a id="history"></a>
