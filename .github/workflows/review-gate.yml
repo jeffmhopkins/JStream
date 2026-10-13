@@ -5,6 +5,9 @@
 # file from the default branch, and it never checks out PR code. A PR cannot change the gate
 # to pass itself. Editing this file is a governance change (R-GOV-001).
 
+# Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
+# To update: resolve the new tag with `git ls-remote --tags`, dereferencing annotated tags (^{}).
+
 name: review-gate
 
 on:
@@ -28,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate reviewer verdict
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
             const { owner, repo } = context.repo;
