@@ -230,7 +230,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "Edit": {
-      "description": "A change to the collection state: undoable, batchable and atomic.\n\nSerialized with an internal `type` tag holding the command name (`noun.verb`,\nR-API-002). Every variant documents its inverse. The engine (`jstream-graph`)\ncomputes the inverse from the state *before* the edit, so the protocol only has to be\nclosed under inversion: every inverse is itself a sequence of edits.",
+      "description": "A change to the collection state: undoable, batchable and atomic.\n\nSerialized with an internal `type` tag holding the command name (`noun.verb`,\nR-API-002). Every variant documents its inverse. The engine (`jstream-graph`)\ncomputes the inverse from the state *before* the edit, so the protocol has to be\nclosed under inversion: every inverse must itself be a sequence of edits.\n\nThis first cut is **not yet** closed: undoing `item.remove` can't restore the item's\nstacking position, and undoing `scene.delete` can't restore the scene's display order.\nOrder edits (`item.reorder`, `scene.reorder`) must land before undo is implemented.",
       "oneOf": [
         {
           "description": "Creates an empty scene. Inverse: `scene.delete`.",
@@ -279,7 +279,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a scene and its items. Inverse: `scene.create` followed by one `item.add`\n(with its transform) per deleted item, in order.",
+          "description": "Deletes a scene and its items. Inverse: `scene.create` followed by one `item.add`\n(with its transform) per deleted item, in order. Not yet complete: restoring the\nscene's display order needs a `scene.reorder` edit, which is not in this first cut.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -336,7 +336,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID, source and transform. (Restoring its stacking\nposition needs an item-order edit, which is not in this first cut.)",
+          "description": "Removes an item from its scene. The source itself stays. Inverse: `item.add` with\nthe removed item's scene, ID, source and transform. Not yet complete: restoring its\nstacking position needs an `item.reorder` edit, which is not in this first cut.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -529,7 +529,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "string"
     },
     "ItemTransform": {
-      "description": "Where a scene item sits in its scene.\n\nA deliberately small first cut: position, scale and rotation about the item's\ntop-left corner. The full 3D transform and crop (ARCH data model) replace it in a\nlater minor version, as added fields with defaults.",
+      "description": "Where a scene item sits in its scene.\n\nA deliberately small first cut: position, scale and rotation about the item's\ntop-left corner. The full 3D transform and crop (ARCH data model) replace it in a\nlater minor version, as added fields with defaults.\n\nEvery number must be finite; the engine rejects non-finite input with\n`invalid_argument`.",
       "properties": {
         "position": {
           "$ref": "#/$defs/Vec2",
@@ -595,13 +595,13 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "A protocol version: `major.minor`. Patch releases never change the wire format, so\nthey are not part of it.",
       "properties": {
         "major": {
-          "description": "Incremented by a breaking change.",
+          "description": "Incremented by a breaking change (a removal or rename).",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
         },
         "minor": {
-          "description": "Incremented by an addition (or, while `major` is 0, by any change).",
+          "description": "Incremented by an addition.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
@@ -844,7 +844,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "string"
     },
     "Vec2": {
-      "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).",
+      "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).\n\nBoth components must be finite. JSON has no NaN or infinity, so the wire can't carry\nthem, and the engine rejects a non-finite value built in-process with\n`invalid_argument`.",
       "properties": {
         "x": {
           "description": "Horizontal component.",

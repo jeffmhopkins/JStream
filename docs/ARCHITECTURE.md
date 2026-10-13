@@ -225,7 +225,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5b50fe6ea9208f55", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added the envelope (hello/welcome, request id, response or error, events), edits always sent in a batch carrying expected_rev/idempotency key with rev +1 per batch, stable error codes, generated schema snapshot, binary streams marked not designed; all match crates/jstream-protocol src and README#design, ADR-0013 and ADR-0006 unchanged" }
+verified = { hash = "b3:a3f72d3eef61bdbf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after round-1 fixes in jstream-protocol: versioning bullet still defers to R-API-001, which can_serve now follows at 0.x too; envelope, batch/expected_rev, error and schema bullets unchanged and accurate" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

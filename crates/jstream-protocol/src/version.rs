@@ -6,9 +6,9 @@ use std::fmt;
 
 /// The version of the protocol this crate implements.
 ///
-/// It follows semver independently of the app (R-API-001): an addition bumps `minor`, and
-/// removing or renaming anything bumps `major`. While `major` is 0, a `minor` bump may
-/// also break, as in Cargo's semver.
+/// It follows semver independently of the app (R-API-001), at 0.x as after 1.0: an
+/// addition bumps `minor` and old clients keep working; removing or renaming anything
+/// bumps `major`, needs an ADR, and needs a minor release that deprecates it first.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion { major: 0, minor: 1 };
 
 /// A protocol version: `major.minor`. Patch releases never change the wire format, so
@@ -17,27 +17,20 @@ pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion { major: 0, minor:
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
 )]
 pub struct ProtocolVersion {
-    /// Incremented by a breaking change.
+    /// Incremented by a breaking change (a removal or rename).
     pub major: u32,
-    /// Incremented by an addition (or, while `major` is 0, by any change).
+    /// Incremented by an addition.
     pub minor: u32,
 }
 
 impl ProtocolVersion {
     /// Whether a server speaking `self` can serve a client speaking `client`.
     ///
-    /// The majors must match, and the client must not be newer than the server, because
-    /// it could send commands the server doesn't know. While `major` is 0, every minor is
-    /// its own compatibility line, so the minors must match exactly.
+    /// The majors must match, and the client's minor must be no newer than the server's:
+    /// a newer client could send commands the server doesn't know, while an older one only
+    /// uses what every later minor still has. The rule is the same at 0.x.
     pub fn can_serve(self, client: ProtocolVersion) -> bool {
-        if self.major != client.major {
-            return false;
-        }
-        if self.major == 0 {
-            self.minor == client.minor
-        } else {
-            client.minor <= self.minor
-        }
+        self.major == client.major && client.minor <= self.minor
     }
 }
 
@@ -61,15 +54,21 @@ mod tests {
     }
 
     #[test]
-    fn pre_1_0_minors_must_match() {
-        assert!(!v(0, 2).can_serve(v(0, 1)));
-        assert!(!v(0, 1).can_serve(v(0, 2)));
+    fn older_minor_is_served() {
+        assert!(v(0, 2).can_serve(v(0, 1)));
+        assert!(v(1, 3).can_serve(v(1, 0)));
     }
 
     #[test]
-    fn after_1_0_older_clients_are_served() {
-        assert!(v(1, 3).can_serve(v(1, 0)));
+    fn newer_minor_is_refused() {
+        assert!(!v(0, 1).can_serve(v(0, 2)));
         assert!(!v(1, 0).can_serve(v(1, 3)));
+    }
+
+    #[test]
+    fn different_major_is_refused() {
+        assert!(!v(1, 0).can_serve(v(0, 1)));
+        assert!(!v(0, 5).can_serve(v(1, 0)));
         assert!(!v(2, 0).can_serve(v(1, 0)));
     }
 

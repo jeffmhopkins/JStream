@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:70f139d1eec1581e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: re-read against src/ (envelope, command, query, event, error, id, version, schema modules and their listed types and names); deps are serde, serde_json, schemars, thiserror only, no JStream crates, forbid(unsafe_code), wasm32 clippy clean" }
+verified = { hash = "b3:acea5da72c677fbb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after round-1 fixes (version.rs can_serve rule, command.rs inverse and finiteness docs, description-only schema snapshot diff): module list, types, deps and WASM-safety claims unchanged and still accurate" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -45,7 +45,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:ee89dcf8a63ff0a7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: checked each claim against src and the snapshots: type/kind/code tags, hello/welcome handshake and can_serve rule, Batch-only edits with expected_rev/idempotency_key, Call has exactly batch/action/query, error code table matches ProtocolError::code, Unknown fallbacks for ServerMessage/Event/ProtocolError, per-variant inverses; consistent with ADR-0013, R-API-001/002/004, R-ARCH-006" }
+verified = { hash = "b3:b5f3120c69ed7a4c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1 B1/N1/N2: can_serve is now same major and client minor <= server minor at 0.x too (0.2 serves 0.1, 0.1 refuses 0.2), envelope paragraph and Schema and compatibility now state R-API-001 additive-minor / removal-major-with-ADR-and-deprecation with no 0.x exception; Undo says the edit set is not yet closed (item.remove stacking, scene.delete display order) and order edits must land before undo; finite-number note matches command.rs docs" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -74,9 +74,11 @@ carrying the same `id`. Answers may come out of order. `event`s arrive at any ti
 
 The version is `major.minor` and follows semver independently of the app
 ([R-API-001](../../docs/RULES.md#R-API-001)). A server serves a client with the same
-major and a minor no newer than its own. While the major is 0, every minor is its own
-line and must match exactly. The in-process `Control` implementation has no handshake;
-it is compiled against the same crate.
+major and a minor no newer than its own (`can_serve`): a 0.2 server serves a 0.1
+client, and a 0.1 server refuses a 0.2 client. The rule is the same at 0.x as after 1.0,
+because additions only ever bump the minor (see *Schema and compatibility* below). The
+in-process `Control` implementation has
+no handshake; it is compiled against the same crate.
 
 ### Tagging
 
@@ -125,6 +127,10 @@ Creating edits carry a client-chosen ID (`scene_id`, `item_id`). A batch can the
 to an object it creates earlier in the same batch, a retry can't create a duplicate,
 and an undo can re-create a deleted object under its old ID. IDs are opaque strings.
 
+Numbers in edits (`ItemTransform`, `Vec2`) must be finite. JSON can't carry NaN or
+infinity, and the engine rejects a non-finite value from an in-process client with
+`invalid_argument`.
+
 ### Batches, revisions and `expected_rev`
 
 Edits are only sent inside a `Batch`; a single edit is a batch of one.
@@ -154,8 +160,14 @@ before it, and the per-client undo stacks live in `jstream-core`
 ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)). What the protocol must
 guarantee is that the edit set is **closed under inversion**: every edit's inverse is
 itself a sequence of edits. Each `Edit` variant documents its inverse (for
-`scene.delete`: `scene.create` plus one `item.add` per deleted item). A new edit that
-can't state its inverse in edits needs new edits first. Undo and redo requests, and the
+`scene.delete`: `scene.create` plus one `item.add` per deleted item).
+
+**The first cut is not yet closed under inversion.** Undoing `item.remove` can't restore
+the item's stacking position, and undoing `scene.delete` can't restore the scene's
+display order, because there are no order edits yet. Order edits (`item.reorder`,
+`scene.reorder`) must land before undo is implemented in `jstream-graph` and
+`jstream-core`. A new edit that can't state its inverse in edits needs new edits first,
+in the same way. Undo and redo requests, and the
 `undo_conflict` error for an undo whose inverse conflicts with later edits by another
 client, come with the engine's history ([Open questions](#open-questions)).
 
@@ -204,12 +216,14 @@ change shows up as a diff of those files, and that diff is the API review
 with `INSTA_UPDATE=always cargo test -p jstream-protocol` (or `cargo insta review`), and
 review the diff.
 
-Compatibility follows [R-API-001](../../docs/RULES.md#R-API-001):
+Compatibility follows [R-API-001](../../docs/RULES.md#R-API-001), at 0.x exactly as
+after 1.0:
 
 - **Minor (additive):** a new command, query, event, error code or `Call` kind; a new
-  optional field. Old clients keep working because unknown fields are ignored (no type
-  denies them), and because unknown server messages, events and error codes parse as an
-  `Unknown` variant that clients skip. An unknown error code still has its `message`.
+  optional field. Old clients keep working, and a newer server still serves them
+  (`can_serve`), because unknown fields are ignored (no type denies them), and because
+  unknown server messages, events and error codes parse as an `Unknown` variant that
+  clients skip. An unknown error code still has its `message`.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.

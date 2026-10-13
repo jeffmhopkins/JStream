@@ -16,8 +16,12 @@ use serde::{Deserialize, Serialize};
 ///
 /// Serialized with an internal `type` tag holding the command name (`noun.verb`,
 /// R-API-002). Every variant documents its inverse. The engine (`jstream-graph`)
-/// computes the inverse from the state *before* the edit, so the protocol only has to be
-/// closed under inversion: every inverse is itself a sequence of edits.
+/// computes the inverse from the state *before* the edit, so the protocol has to be
+/// closed under inversion: every inverse must itself be a sequence of edits.
+///
+/// This first cut is **not yet** closed: undoing `item.remove` can't restore the item's
+/// stacking position, and undoing `scene.delete` can't restore the scene's display order.
+/// Order edits (`item.reorder`, `scene.reorder`) must land before undo is implemented.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[non_exhaustive]
@@ -39,7 +43,8 @@ pub enum Edit {
         name: String,
     },
     /// Deletes a scene and its items. Inverse: `scene.create` followed by one `item.add`
-    /// (with its transform) per deleted item, in order.
+    /// (with its transform) per deleted item, in order. Not yet complete: restoring the
+    /// scene's display order needs a `scene.reorder` edit, which is not in this first cut.
     #[serde(rename = "scene.delete")]
     SceneDelete {
         /// The scene to delete.
@@ -59,8 +64,8 @@ pub enum Edit {
         transform: Option<ItemTransform>,
     },
     /// Removes an item from its scene. The source itself stays. Inverse: `item.add` with
-    /// the removed item's scene, ID, source and transform. (Restoring its stacking
-    /// position needs an item-order edit, which is not in this first cut.)
+    /// the removed item's scene, ID, source and transform. Not yet complete: restoring its
+    /// stacking position needs an `item.reorder` edit, which is not in this first cut.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -231,6 +236,10 @@ impl From<Action> for Command {
 }
 
 /// A 2D position or scale, in output pixels (position) or as a factor (scale).
+///
+/// Both components must be finite. JSON has no NaN or infinity, so the wire can't carry
+/// them, and the engine rejects a non-finite value built in-process with
+/// `invalid_argument`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Vec2 {
     /// Horizontal component.
@@ -244,6 +253,9 @@ pub struct Vec2 {
 /// A deliberately small first cut: position, scale and rotation about the item's
 /// top-left corner. The full 3D transform and crop (ARCH data model) replace it in a
 /// later minor version, as added fields with defaults.
+///
+/// Every number must be finite; the engine rejects non-finite input with
+/// `invalid_argument`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ItemTransform {
     /// Top-left corner, in pixels of the scene's canvas.
