@@ -1,0 +1,25 @@
+[package]
+name = "jstream-protocol"
+version = "0.0.0"
+description = "The JStream control API: commands (edits and actions), queries, events, errors and their JSON Schema."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 1
+summary = "**The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
