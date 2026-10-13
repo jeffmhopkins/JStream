@@ -35,8 +35,14 @@ const STOCK_NOTES: &[&str] = &[
 
 /// All files tracked by git under `root`, sorted.
 fn git_files(root: &Path) -> Result<Vec<String>> {
+    git_ls(root, &[])
+}
+
+/// `git ls-files -z <extra>` under `root`, sorted.
+fn git_ls(root: &Path, extra: &[&str]) -> Result<Vec<String>> {
     let out = Command::new("git")
         .args(["ls-files", "-z"])
+        .args(extra)
         .current_dir(root)
         .output()
         .context("running `git ls-files`")?;
@@ -143,6 +149,16 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
             })
             .unwrap_or_default()
     };
+    // Hashes only cover tracked files, so an untracked covered file would make this hash
+    // differ from the one CI computes after the commit (review B1 on #10).
+    let untracked = git_ls(root, &["--others", "--exclude-standard"])?;
+    let pending = hash::Files::new(root, &untracked).matching(&strings("covers"))?;
+    if !pending.is_empty() {
+        bail!(
+            "untracked files match this section's `covers`; `git add` them first: {}",
+            pending.join(", ")
+        );
+    }
     let files = hash::Files::new(root, &l.files);
     let h = hash::section_hash(
         doc,

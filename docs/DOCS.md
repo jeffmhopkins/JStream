@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:f0ec5406c5f6e438", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against final xtask/src/docs (parse, check, hash, verify): available/not-yet lists accurate; all bootstrap hashes replaced in this PR" }
+verified = { hash = "b3:1f46a7b7a507e84f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against final xtask/src/docs (parse, check, hash, verify incl. new untracked-covers guard) with every file tracked; available/not-yet lists accurate" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
