@@ -215,6 +215,7 @@ name = "jstream-outputs"
 version = "0.0.0"
 dependencies = [
  "jstream-media",
+ "jstream-mux",
  "thiserror",
 ]
 

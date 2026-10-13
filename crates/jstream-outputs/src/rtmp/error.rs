@@ -3,6 +3,7 @@
 use std::io;
 
 use jstream_media::MediaError;
+use jstream_mux::MuxError;
 
 /// Why an RTMP operation failed.
 ///
@@ -50,14 +51,11 @@ pub enum RtmpError {
         /// What was wrong.
         reason: String,
     },
-    /// An AMF0 value could not be encoded or decoded.
-    #[error("AMF0 error at byte {offset}: {reason}")]
-    Amf0 {
-        /// Byte offset in the message body.
-        offset: usize,
-        /// What was wrong.
-        reason: &'static str,
-    },
+    /// An AMF0 value could not be encoded, or a server message could not be decoded.
+    /// The source is one of `jstream_mux`'s AMF0 errors, with the byte offset in the
+    /// message body where there is one.
+    #[error("AMF0 value could not be encoded or decoded")]
+    Amf0(#[source] MuxError),
     /// The server answered a command with `_error`, or with a status of level `error`.
     #[error("server rejected `{command}`: {code} ({description})")]
     Rejected {

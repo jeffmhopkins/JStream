@@ -93,7 +93,7 @@ pub enum MuxError {
     /// AMF0 input ended in the middle of a value.
     #[error("AMF0 data truncated at byte {offset}")]
     Amf0Truncated {
-        /// How many bytes had been read.
+        /// How many bytes had been read: where the field that didn't fit starts.
         offset: usize,
     },
     /// An AMF0 type marker this decoder doesn't support.
