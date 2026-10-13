@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:b036665d1d8f73f0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: checked model bullets against model/mod.rs (BTreeMap sources, scenes Vec, items bottom-first), apply bullets against apply.rs (rev_conflict then empty_batch, working copy, edits.<n> fields, reverse-order inverse, reject-not-cascade deletes, item.add-only cycle check), tests against tests.rs (40 seeds x 150 batches = 6000, undo and redo); depends_on crate-map row, data-model and protocol design match" }
+verified = { hash = "b3:9a8b9dc6daa5e148", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging into the control PR: depends_on ARCH#crate-map only moved control to L2, mcp to L3, server to L4 and added the client-stack paragraph; graph's L2, protocol-only dependency (no control) and contents unaffected" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

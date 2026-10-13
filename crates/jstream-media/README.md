@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:ca9bfe6cb96b01ce", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Packets bullet: settles payload framing as a convention (H.264 Annex B, AAC raw without ADTS) that jstream-mux converts; packet.rs Codec variant docs now say the same; no invariant or API change, rest of the section unchanged" }
+verified = { hash = "b3:ac6d474eacc9a18b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#30): Packets bullet (Annex B H.264, raw AAC, muxers convert, link to jstream-mux) taken from main matches src/packet.rs Codec docs; upstream crate-map change only in client rows" }
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,

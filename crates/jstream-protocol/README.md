@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:2768ffd03ed9e3f6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Commands bullet to list all 13 edits plus Crop and SourceKind exported from lib.rs; still no dependency on other JStream crates, L1, no unsafe" }
+verified = { hash = "b3:89a9b050b3da9b3c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main into the control PR: main's 0.2 contents bullets kept; depends_on ARCH#crate-map now has control L2/mcp L3/server L4; purpose's Layer 1 and 'jstream-control compiles it to wasm32' still true" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined

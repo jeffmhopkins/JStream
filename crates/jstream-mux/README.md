@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:ca05f09ea414759b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after review B1 on #30, now also against jstream-outputs on this branch: RtmpPublisher::send_metadata adds @setDataFrame itself so the README directs it to MetadataStyle::File (SetDataFrame only for clients that send the body unchanged); send_video/send_audio take FLV tag bodies as stated; amf0 is public for reuse but jstream-outputs has its own private copy, unification recorded as follow-up; FlvWriter::new now rejects bad config before writing; other bullets unchanged against src/" }
+verified = { hash = "b3:fd1e331af0bad3e0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream change only: crate-map client rows (control/mcp/server layers); jstream-mux row and this section's text unchanged from main" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md):
