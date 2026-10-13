@@ -90,6 +90,41 @@ fn resolve(r: &str, by_path: &BTreeMap<&str, &Doc>) -> Result<(), String> {
     }
 }
 
+/// Crate names known to the repository: every existing crate directory's name, plus every
+/// `jstream-…` name in ARCHITECTURE#crate-map (planned crates). Used to flag likely typos
+/// in `applies_to` globs, which may otherwise name crates that don't exist yet.
+pub(crate) fn known_crates(docs: &[Doc], paths: &[String]) -> BTreeSet<String> {
+    let mut names: BTreeSet<String> = crates(paths)
+        .iter()
+        .filter_map(|(d, _)| d.rsplit('/').next())
+        .map(str::to_owned)
+        .collect();
+    if let Some(doc) = docs.iter().find(|d| d.path == "docs/ARCHITECTURE.md")
+        && let Some(body) = super::hash::body(doc, Some("crate-map"))
+    {
+        for tok in body.split('`').skip(1).step_by(2) {
+            if tok.starts_with("jstream-")
+                && tok
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            {
+                names.insert(tok.to_owned());
+            }
+        }
+    }
+    names
+}
+
+/// The literal crate name a glob targets (`crates/<name>/…` or `apps/<name>/…`), if the
+/// name has no glob syntax.
+pub(crate) fn glob_crate(glob: &str) -> Option<&str> {
+    let rest = glob
+        .strip_prefix("crates/")
+        .or_else(|| glob.strip_prefix("apps/"))?;
+    let name = rest.split('/').next()?;
+    (!name.is_empty() && !name.contains(['*', '?', '[', '{'])).then_some(name)
+}
+
 /// Runs the back-reference checks.
 pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
     let mut out = Vec::new();
@@ -142,6 +177,17 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
                 continue;
             }
         };
+        // DOCS#gate: report, without failing, crates that no section covers.
+        if expected.is_empty() {
+            out.push(Diag {
+                warning: true,
+                ..diag(
+                    root,
+                    1,
+                    format!("crate `{dir}` is not covered by any section"),
+                )
+            });
+        }
         let Some((line, listed)) = docs_line(&text) else {
             if !expected.is_empty() {
                 out.push(diag(
@@ -233,6 +279,18 @@ mod tests {
             Some("crates/a/inner")
         );
         assert_eq!(owner("crates/ab/src/z.rs", &dirs), None);
+    }
+
+    #[test]
+    fn glob_crate_names_literal_targets_only() {
+        assert_eq!(glob_crate("crates/jstream-core/**"), Some("jstream-core"));
+        assert_eq!(
+            glob_crate("apps/jstream-cli/src/main.rs"),
+            Some("jstream-cli")
+        );
+        assert_eq!(glob_crate("crates/jstream-platform-*/src/**"), None);
+        assert_eq!(glob_crate("crates/**"), None);
+        assert_eq!(glob_crate("docs/**"), None);
     }
 
     #[test]

@@ -83,7 +83,7 @@ verified = { hash = "b3:4c21fdca01d95b25", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:d92ee1f43a6e92a4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs only gained usage lines for docs verify/for; tree comment (xtask: docs, lint-deps, governance, ...) still describes the command set" }
+verified = { hash = "b3:2a2a7bfc921bd114", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs now dispatches xtask governance (removed from PLANNED, usage line added); tree comment for .github/ edited to list the new governance workflow; xtask/ line already names governance" }
 -->
 
 ```
@@ -107,7 +107,7 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md)
 │   └── guides/
-└── .github/                # workflows (CI, review-gate), Dependabot config, PR template
+└── .github/                # workflows (CI, governance, review-gate), Dependabot config, PR template
 ```
 
 <a id="crate-map"></a>
