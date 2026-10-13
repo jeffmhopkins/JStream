@@ -1,0 +1,141 @@
+# External resources JStream relies on. See docs/DOCS.md#ttl.
+# Every external URL linked from a tracked doc must be registered here (exact match).
+# No dates: when an entry was last checked comes from git (the commit that changed `status`/`checked_note`).
+# `status` changes only in a PR by someone who re-read the page against `relied_on`; the sweep never writes it.
+# status: ok | unverified (nobody has checked it yet) | broken
+
+[[external]]
+id = "yt-live-api"
+url = "https://developers.google.com/youtube/v3/live/getting-started"
+relied_on = "YouTube Live Streaming API: liveBroadcasts (insert/bind/transition), liveStreams (health), liveChatMessages"
+review_every = "90d"
+status = "ok"
+checked_note = "Page loads; content not yet re-read against relied_on"
+
+[[external]]
+id = "mf-virtual-camera"
+url = "https://learn.microsoft.com/en-us/windows/win32/api/mfvirtualcamera/nf-mfvirtualcamera-mfcreatevirtualcamera"
+relied_on = "sourceId is the CLSID of a custom media source; minimum supported client Windows build 22000"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: sourceId = 'unique CLSID of the custom media source'; minimum client 'Windows Build 22000'"
+
+[[external]]
+id = "win10-lifecycle"
+url = "https://learn.microsoft.com/en-us/lifecycle/products/windows-10-home-and-pro"
+relied_on = "Windows 10 Home/Pro end of support: 2025-10-14"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: October 14, 2025"
+
+[[external]]
+id = "win11-lifecycle"
+url = "https://learn.microsoft.com/en-us/lifecycle/products/windows-11-home-and-pro"
+relied_on = "Per-version servicing end dates for Windows 11 Home/Pro (source of fact win11-serviced)"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read: 24H2 ends 2026-10-14, 25H2 ends 2027-10-13, 26H2 ends 2028-10-10"
+
+[[external]]
+id = "win-graphics-capture"
+url = "https://learn.microsoft.com/en-us/windows/uwp/audio-video-camera/screen-capture"
+relied_on = "Windows.Graphics.Capture for display/window capture"
+review_every = "180d"
+status = "ok"
+checked_note = "Page loads; content not yet re-read against relied_on"
+
+[[external]]
+id = "wasapi-process-loopback"
+url = "https://learn.microsoft.com/en-us/windows/win32/api/audioclientactivationparams/ns-audioclientactivationparams-audioclient_process_loopback_params"
+relied_on = "Per-process audio loopback capture; minimum client Windows 10 build 20348"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: minimum supported client Windows 10 Build 20348"
+
+[[external]]
+id = "enhanced-rtmp"
+url = "https://github.com/veovera/enhanced-rtmp"
+relied_on = "Enhanced RTMP spec: HEVC/AV1 over RTMP/FLV"
+review_every = "180d"
+status = "unverified"
+checked_note = "github.com unreachable from the authoring sandbox"
+
+[[external]]
+id = "wgpu"
+url = "https://github.com/gfx-rs/wgpu"
+relied_on = "wgpu backends (D3D12/Metal/Vulkan); wgpu-hal texture_from_raw / create_texture_from_hal interop"
+review_every = "90d"
+status = "unverified"
+checked_note = "github.com unreachable from the authoring sandbox; interop API to be confirmed by spike S1"
+
+[[external]]
+id = "vcamsample"
+url = "https://github.com/smourier/VCamSample"
+relied_on = "Reference COM media source for MFCreateVirtualCamera; machine-wide registration; frames from another process"
+review_every = "180d"
+status = "unverified"
+checked_note = "Cited by independent review; github.com unreachable from the authoring sandbox"
+
+[[external]]
+id = "mcp-transports"
+url = "https://modelcontextprotocol.io/specification/2025-06-18/basic/transports"
+relied_on = "stdio and Streamable HTTP transports; servers MUST validate Origin; SHOULD bind to localhost"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read: 'Servers MUST validate the Origin header on all incoming connections'"
+
+[[external]]
+id = "anthropic-tool-use"
+url = "https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use"
+relied_on = "Tool names must match ^[a-zA-Z0-9_-]{1,128}$"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: regex ^[a-zA-Z0-9_-]{1,128}$"
+
+[[external]]
+id = "leptos"
+url = "https://leptos.dev/"
+relied_on = "Leptos web framework compiled to WASM"
+review_every = "180d"
+status = "ok"
+checked_note = "Page loads"
+
+[[external]]
+id = "tauri"
+url = "https://v2.tauri.app/"
+relied_on = "Tauri v2 desktop shell with in-process Rust backend"
+review_every = "180d"
+status = "ok"
+checked_note = "Page loads"
+
+[[external]]
+id = "wasmtime"
+url = "https://wasmtime.dev/"
+relied_on = "Sandboxed WASM runtime for plugins"
+review_every = "180d"
+status = "ok"
+checked_note = "Page loads"
+
+[[external]]
+id = "conventional-commits"
+url = "https://www.conventionalcommits.org/en/v1.0.0/"
+relied_on = "PR title format"
+review_every = "365d"
+status = "ok"
+checked_note = "Page loads"
+
+[[external]]
+id = "cargo-deny"
+url = "https://embarkstudios.github.io/cargo-deny/"
+relied_on = "deny.toml schema: licenses, bans (deny/wrappers/skip), advisories, sources"
+review_every = "180d"
+status = "ok"
+checked_note = "Page loads; bans `crate`/`wrappers` syntax to be confirmed when cargo-deny first runs in M0"
+
+[[external]]
+id = "adr-practice"
+url = "https://adr.github.io/"
+relied_on = "ADR conventions (Context/Decision/Consequences)"
+review_every = "365d"
+status = "ok"
+checked_note = "Page loads"

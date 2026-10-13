@@ -1,0 +1,55 @@
+# cargo-deny policy. Enforces R-DEP-001, R-DEP-002, R-DEP-005, R-RS-003 (docs/RULES.md).
+# Editing this file is a governance change (R-GOV-001).
+
+[advisories]
+version = 2
+yanked = "deny"
+# Every `ignore` entry needs a RUSTSEC id, a reason and an expiry milestone; adding one is a governance change.
+ignore = []
+
+[licenses]
+version = 2
+confidence-threshold = 0.9
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "CC0-1.0",
+]
+
+[bans]
+multiple-versions = "warn"   # switches to "deny" in M1 (R-DEP-005)
+wildcards = "deny"
+allow-wildcard-paths = true  # workspace path deps; all members are publish = false
+deny = [
+    # R-DEP-002 / ADR-0003: no FFmpeg, GStreamer or bundled C codec libraries.
+    # Name lists are incomplete by nature; xtask lint-deps also checks `links =` crates.
+    { crate = "ffmpeg-next", reason = "R-DEP-002" },
+    { crate = "ffmpeg-sys-next", reason = "R-DEP-002" },
+    { crate = "ffmpeg-the-third", reason = "R-DEP-002" },
+    { crate = "ffmpeg-sidecar", reason = "R-DEP-002" },
+    { crate = "rsmpeg", reason = "R-DEP-002" },
+    { crate = "rusty_ffmpeg", reason = "R-DEP-002" },
+    { crate = "gstreamer", reason = "R-DEP-002" },
+    { crate = "gstreamer-sys", reason = "R-DEP-002" },
+    { crate = "openh264", reason = "R-DEP-002" },
+    { crate = "openh264-sys2", reason = "R-DEP-002" },
+    { crate = "fdk-aac", reason = "R-DEP-002" },
+    { crate = "fdk-aac-sys", reason = "R-DEP-002" },
+    { crate = "x264", reason = "R-DEP-002" },
+    { crate = "x264-sys", reason = "R-DEP-002" },
+    # R-DEP-006: rustls with the ring provider.
+    { crate = "aws-lc-sys", reason = "R-DEP-006" },
+    # R-RS-003: anyhow only in apps and xtask.
+    { crate = "anyhow", wrappers = ["jstream-desktop", "jstream-daemon", "jstream-cli", "xtask"], reason = "R-RS-003" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
