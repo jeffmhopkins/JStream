@@ -83,7 +83,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: added edit/act
 ## Repository layout
 <!-- @section
 covers = ["xtask/**"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: tree unchanged apart from .github/dependabot.yml (config, not shown); covers narrowed per ADR-0018" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: .github/ line now names the Dependabot config; covers narrowed per ADR-0018" }
 -->
 
 ```
@@ -107,7 +107,7 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md)
 │   └── guides/
-└── .github/                # workflows (CI, review-gate), PR template
+└── .github/                # workflows (CI, review-gate), Dependabot config, PR template
 ```
 
 <a id="crate-map"></a>

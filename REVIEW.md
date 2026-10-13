@@ -64,7 +64,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Written for the ma
 ## Step 2: Review
 <!-- @section
 depends_on = ["docs/RULES.md#R-DOC-004", "docs/RULES.md#R-GOV-001"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Item 3 extended for ADR tiers (ADR-0017); other items unchanged" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: item 5 adds the ADR-0018 Dependabot pin-only pre-approval check; item 3 (tiers) and others unchanged" }
 -->
 
 Work through these in order. For each, cite the rule ID or doc anchor that a finding rests on.
@@ -130,6 +130,8 @@ Don't inflate. A PR with only non-blocking findings gets `pass`.
 <a id="output"></a>
 ## Step 4: Post the review
 <!-- @section
+covers = [".github/workflows/review-gate.yml"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against review-gate.yml: marker regex, newest-marker rule, head-SHA match and recuse/escalate handling all match this section" }
 -->
 
 Post **one summary comment per round**. Inline comments on specific lines are welcome

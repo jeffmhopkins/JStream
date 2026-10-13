@@ -46,7 +46,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: hash-bound ver
 ## The PR loop (you are a builder)
 <!-- @section
 depends_on = ["REVIEW.md#output", "REVIEW.md#rounds"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Added step 6: ADR tiers (ADR-0017); steps 1-5 unchanged" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: step 6 added for Dependabot PRs (ADR-0018); ADR step renumbered to 7; steps 1-5 unchanged" }
 -->
 
 1. Open the PR with **auto-merge (squash) enabled**. It merges by itself once every required

@@ -353,7 +353,7 @@ drift-checked.
 ## Governance: protecting the checks themselves
 <!-- @section
 depends_on = ["docs/adr/0015-review-and-governance.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Spec written before the tool exists" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: added pre-approved Dependabot pin-only exemption (ADR-0018); governance list otherwise unchanged" }
 -->
 
 An agent could pass the gate by weakening it. These changes are **governance changes**,
