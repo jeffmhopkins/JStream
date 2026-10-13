@@ -18,11 +18,10 @@ use serde::{Deserialize, Serialize};
 /// Serialized with an internal `type` tag holding the command name (`noun.verb`,
 /// R-API-002). Every variant documents its inverse. The engine (`jstream-graph`)
 /// computes the inverse from the state *before* the edit, so the protocol has to be
-/// closed under inversion: every inverse must itself be a sequence of edits.
+/// closed under inversion: every inverse must itself be a sequence of edits, and it is.
 ///
-/// This first cut is **not yet** closed: undoing `item.remove` can't restore the item's
-/// stacking position, and undoing `scene.delete` can't restore the scene's display order.
-/// Order edits (`item.reorder`, `scene.reorder`) must land before undo is implemented.
+/// Positions are indexes: scenes in display order (0 is first), items in stacking order
+/// within their scene (0 is the bottom).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[non_exhaustive]
@@ -43,15 +42,20 @@ pub enum Edit {
         /// The new display name.
         name: String,
     },
-    /// Deletes a scene and its items. Inverse: `scene.create` followed by one `item.add`
-    /// (with its transform) per deleted item, in order. Not yet complete: restoring the
-    /// scene's display order needs a `scene.reorder` edit, which is not in this first cut.
+    /// Deletes a scene and its items; the sources they placed stay. Rejected with
+    /// `invalid_argument` while a `scene` source shows it: delete those sources first (in
+    /// the same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old
+    /// display position (unless it was last), then each deleted item's `item.remove`
+    /// inverse, from bottom to top.
     #[serde(rename = "scene.delete")]
     SceneDelete {
         /// The scene to delete.
         scene_id: SceneId,
     },
-    /// Places a source in a scene as a new item, on top. Inverse: `item.remove`.
+    /// Places an existing source in a scene as a new item, on top. The item refers to the
+    /// source, it doesn't copy it: one source can be placed in many scenes, or several
+    /// times in one, and every placement shows the same instance (`source.duplicate`
+    /// makes a separate copy). Inverse: `item.remove`.
     #[serde(rename = "item.add")]
     ItemAdd {
         /// The scene to add to.
@@ -65,8 +69,9 @@ pub enum Edit {
         transform: Option<ItemTransform>,
     },
     /// Removes an item from its scene. The source itself stays. Inverse: `item.add` with
-    /// the removed item's scene, ID, source and transform. Not yet complete: restoring its
-    /// stacking position needs an `item.reorder` edit, which is not in this first cut.
+    /// the removed item's scene, ID, source and transform, then `item.reorder` to its old
+    /// stacking position (unless it was on top), `item.set_crop` if it was cropped, and
+    /// `item.set_visible` if it was hidden.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -80,6 +85,75 @@ pub enum Edit {
         /// The new transform.
         transform: ItemTransform,
     },
+    /// Shows or hides an item. Inverse: `item.set_visible` with the previous value.
+    #[serde(rename = "item.set_visible")]
+    ItemSetVisible {
+        /// The item to show or hide.
+        item_id: ItemId,
+        /// Whether the item is drawn. Items are visible when added.
+        visible: bool,
+    },
+    /// Moves an item to another stacking position in its scene. Inverse: `item.reorder`
+    /// back to its previous index.
+    #[serde(rename = "item.reorder")]
+    ItemReorder {
+        /// The item to move.
+        item_id: ItemId,
+        /// The new position, counted from the bottom (0). Must be less than the number of
+        /// items in the scene, else `invalid_argument`. The other items keep their
+        /// relative order.
+        index: u32,
+    },
+    /// Replaces an item's crop. Inverse: `item.set_crop` with the previous one.
+    #[serde(rename = "item.set_crop")]
+    ItemSetCrop {
+        /// The item to crop.
+        item_id: ItemId,
+        /// The new crop. Items are added uncropped ([`Crop::NONE`]).
+        crop: Crop,
+    },
+    /// Adds a source to the collection. It appears in no scene until an `item.add`
+    /// places it. Inverse: `source.delete`.
+    #[serde(rename = "source.create")]
+    SourceCreate {
+        /// The new source's ID, chosen by the client. Rejected if it exists.
+        source_id: SourceId,
+        /// Display name.
+        name: String,
+        /// What the source shows. A `scene` source must name an existing scene.
+        kind: SourceKind,
+    },
+    /// Copies a source under a new ID: a separate instance with the same kind and
+    /// settings, which changes independently from then on. Placing the *same* source again
+    /// is `item.add` with its existing `source_id`. Inverse: `source.delete` of the copy.
+    #[serde(rename = "source.duplicate")]
+    SourceDuplicate {
+        /// The source to copy.
+        source_id: SourceId,
+        /// The copy's ID, chosen by the client. Rejected if it exists.
+        new_source_id: SourceId,
+        /// The copy's display name.
+        name: String,
+    },
+    /// Deletes a source. Rejected with `invalid_argument` while any item still places it:
+    /// remove those items first (in the same batch if needed). Inverse: `source.create`
+    /// with its name and kind.
+    #[serde(rename = "source.delete")]
+    SourceDelete {
+        /// The source to delete.
+        source_id: SourceId,
+    },
+    /// Moves a scene to another display position. Inverse: `scene.reorder` back to its
+    /// previous index.
+    #[serde(rename = "scene.reorder")]
+    SceneReorder {
+        /// The scene to move.
+        scene_id: SceneId,
+        /// The new position, counted from the first scene (0). Must be less than the
+        /// number of scenes, else `invalid_argument`. The other scenes keep their
+        /// relative order.
+        index: u32,
+    },
 }
 
 impl Edit {
@@ -92,6 +166,13 @@ impl Edit {
             Edit::ItemAdd { .. } => "item.add",
             Edit::ItemRemove { .. } => "item.remove",
             Edit::ItemSetTransform { .. } => "item.set_transform",
+            Edit::ItemSetVisible { .. } => "item.set_visible",
+            Edit::ItemReorder { .. } => "item.reorder",
+            Edit::SceneReorder { .. } => "scene.reorder",
+            Edit::ItemSetCrop { .. } => "item.set_crop",
+            Edit::SourceCreate { .. } => "source.create",
+            Edit::SourceDuplicate { .. } => "source.duplicate",
+            Edit::SourceDelete { .. } => "source.delete",
         }
     }
 }
@@ -296,6 +377,56 @@ impl Default for ItemTransform {
     fn default() -> Self {
         Self::IDENTITY
     }
+}
+
+/// How many source pixels an item cuts off each edge before it is transformed.
+///
+/// Whole pixels of the source's own frame, so every value is valid; cropping more than
+/// the source's size leaves nothing to draw.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct Crop {
+    /// Pixels cut from the left edge.
+    pub left: u32,
+    /// Pixels cut from the top edge.
+    pub top: u32,
+    /// Pixels cut from the right edge.
+    pub right: u32,
+    /// Pixels cut from the bottom edge.
+    pub bottom: u32,
+}
+
+impl Crop {
+    /// No cropping.
+    pub const NONE: Crop = Crop {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+}
+
+/// What a source shows.
+///
+/// Serialized with an internal `type` tag. A source is one shared instance: every item
+/// that places it shows the same capture, and (once filters land) the same filters.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum SourceKind {
+    /// Another scene, composited as one layer (a nested scene). An `item.add` that would
+    /// make a scene contain itself, directly or through other scenes, is rejected with
+    /// `invalid_argument` naming the cycle.
+    Scene {
+        /// The scene shown.
+        scene_id: SceneId,
+    },
+    /// A built-in source kind named by the engine (`display`, `window`, `webcam`,
+    /// `image`, `color`, `text`, `media`). Its settings come with `jstream-sources`;
+    /// until then the kind is only a name.
+    Builtin {
+        /// The kind's name.
+        kind: String,
+    },
 }
 
 #[cfg(test)]

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:624920fce117fbd9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main: depends_on ARCH#crate-map only gained the vcam row ADR-0020 link; protocol crate purpose, modules and L1 placement unaffected" }
+verified = { hash = "b3:2768ffd03ed9e3f6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Commands bullet to list all 13 edits plus Crop and SourceKind exported from lib.rs; still no dependency on other JStream crates, L1, no unsafe" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -29,8 +29,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`.
   `ClientMessage::parse` maps every parse failure to `malformed`.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
-  `item.add`, `item.remove`, `item.set_transform`), `Action` (`output.start`,
-  `output.stop`), `Batch`, and the `Command`/`CommandClass` classification view.
+  `scene.reorder`, `item.add`, `item.remove`, `item.reorder`, `item.set_transform`,
+  `item.set_crop`, `item.set_visible`, `source.create`, `source.duplicate`,
+  `source.delete`), with `ItemTransform`, `Crop` and `SourceKind`; `Action`
+  (`output.start`, `output.stop`); `Batch`; and the `Command`/`CommandClass`
+  classification view.
 - **Queries** (`query.rs`): `scene.list` and `output.status`, with `QueryResult`.
 - **Events** (`event.rs`): `state.changed` and `output.state_changed`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
@@ -48,7 +51,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:69575b64d32ec805", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 2 B2: every float is now Finite32 (Vec2.x/y, ItemTransform.rotation_deg); its Deserialize rejects NaN/inf and out-of-f32-range numbers like 1e39 (serde's as-narrowing), ClientMessage::parse maps that to malformed, Finite32::new/Vec2::new return None so in-process code can't build one; tests cover +-1e39, f32::MAX round trip, no null output. Removed the false 'JSON can't carry NaN' claim; compatibility now notes string enums lack Unknown (OQ8); can_serve rule unchanged" }
+verified = { hash = "b3:e1c93ad96d3ad75d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: Undo section now states the edit set is closed under inversion (reorder/set_visible/set_crop edits, rejected referenced deletes) matching Edit docs and jstream-graph's property test; added sources-as-shared-instances, scene nesting/cycle and index paragraph; handshake example bumped to 0.2 per R-API-001 minor bump; snapshots regenerated and reviewed (only additive oneOf entries, doc text, title 0.2)" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -68,8 +71,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":1},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":1},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":2},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":2},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -130,6 +133,15 @@ Creating edits carry a client-chosen ID (`scene_id`, `item_id`). A batch can the
 to an object it creates earlier in the same batch, a retry can't create a duplicate,
 and an undo can re-create a deleted object under its old ID. IDs are opaque strings.
 
+Sources are shared instances, independent of scenes. `source.create` adds one, and
+`item.add` places an existing source by reference, so one source can appear in many
+scenes, or several times in one, as the same capture. `source.duplicate` makes a
+separate copy under a new ID. A `SourceKind` is `builtin` (a kind named by the engine;
+its settings come with `jstream-sources`) or `scene`, which nests another scene. An
+`item.add` that would make a scene contain itself, at any depth, is rejected with
+`invalid_argument` naming the cycle. Positions are indexes: scenes in display order,
+items in stacking order with 0 at the bottom.
+
 Every float in the protocol (`Vec2`, `ItemTransform`) is a `Finite32`: an `f32` that is
 never NaN or infinite. serde would otherwise narrow an out-of-range JSON number such as
 `1e39` to infinity, which then serializes as `null` and no longer parses. So a
@@ -166,15 +178,19 @@ doesn't carry inverses. `jstream-graph` computes each edit's inverse from the st
 before it, and the per-client undo stacks live in `jstream-core`
 ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)). What the protocol must
 guarantee is that the edit set is **closed under inversion**: every edit's inverse is
-itself a sequence of edits. Each `Edit` variant documents its inverse (for
-`scene.delete`: `scene.create` plus one `item.add` per deleted item).
+itself a sequence of edits. Each `Edit` variant documents its inverse.
 
-**The first cut is not yet closed under inversion.** Undoing `item.remove` can't restore
-the item's stacking position, and undoing `scene.delete` can't restore the scene's
-display order, because there are no order edits yet. Order edits (`item.reorder`,
-`scene.reorder`) must land before undo is implemented in `jstream-graph` and
-`jstream-core`. A new edit that can't state its inverse in edits needs new edits first,
-in the same way. Undo and redo requests, and the
+**The edit set is closed under inversion.** Every property of the state has an edit
+that sets it: `scene.reorder` and `item.reorder` restore positions, and
+`item.set_visible` and `item.set_crop` restore what `item.add` doesn't take. So undoing
+`item.remove` is `item.add` plus whichever of `item.reorder`, `item.set_crop` and
+`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
+`scene.reorder` unless it was last, and each item's restore, bottom to top. Deleting a
+source that items still place, or a scene that a `scene` source still shows, is
+rejected, so no edit removes more than the object it names. `jstream-graph`'s property
+test checks that applying a random batch and then its inverse restores the state
+exactly. A new edit that can't state its inverse in edits needs new edits first. Undo
+and redo requests, and the
 `undo_conflict` error for an undo whose inverse conflicts with later edits by another
 client, come with the engine's history ([Open questions](#open-questions)).
 
@@ -284,3 +300,11 @@ described above.
    also publish a plain `.json` file for non-Rust clients?
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an
     ADR ([R-ARCH-004](../../docs/RULES.md#R-ARCH-004)) once they are settled?
+11. **Source kinds.** `SourceKind::Builtin` names a kind by string, as a placeholder
+    until `jstream-sources` defines typed kinds with settings. Should those replace it
+    (a breaking change), or arrive as more `SourceKind` variants beside it? Like the
+    string enums in question 8, a new `SourceKind` variant breaks older clients today.
+12. **Deleting referenced objects.** `source.delete` and `scene.delete` are rejected
+    while an item or a `scene` source still refers to them, so the client removes those
+    first. Should the protocol also offer a cascading delete (one edit whose inverse
+    restores everything it removed)?
