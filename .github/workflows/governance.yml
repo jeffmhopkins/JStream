@@ -3,6 +3,10 @@
 # It lives in its own workflow so that adding the label or editing the description re-runs
 # only this check, not the whole CI matrix (whose concurrency group would cancel it).
 # Editing this file is a governance change (R-GOV-001).
+#
+# The checker is built from the PR's base commit and then run against the PR head, so a PR
+# cannot weaken its own check by editing xtask. GitHub runs this file as the PR defines it,
+# though, so an edit to this file is only caught by being a listed governance change.
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
 # Dependabot proposes updates (ADR-0018). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
@@ -28,14 +32,27 @@ jobs:
   governance:
     runs-on: ubuntu-latest
     steps:
-      # The PR head itself (not the merge commit), with full history for the merge base.
+      # The PR's base commit, with full history for the merge base.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.base.sha }}
           fetch-depth: 0
+      # The base commit's toolchain and lockfile. No build cache: a cache that an earlier run
+      # of this PR saved could hand the base build a binary the PR made.
       - run: rustup toolchain install
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Build the checker from the base commit
+        run: |
+          cargo build --locked --package xtask
+          install -m 0755 target/debug/xtask "$RUNNER_TEMP/xtask-base"
+      # Then the PR head itself (not the merge commit). The checker reads only git objects
+      # through `git`, so nothing from the head is built or run.
+      - name: Check out the PR head
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git fetch --no-tags origin "$HEAD_SHA"
+          git checkout --quiet --detach "$HEAD_SHA"
       - name: Governance changes are labeled and justified (R-GOV-001)
         env:
           BASE_REF: ${{ github.base_ref }}
-        run: cargo xtask governance --base "origin/$BASE_REF"
+        run: '"$RUNNER_TEMP/xtask-base" governance --base "origin/$BASE_REF"'

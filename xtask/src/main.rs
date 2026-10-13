@@ -1,6 +1,6 @@
 //! `cargo xtask`: repository automation.
 //!
-//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap, docs/DOCS.md#governance
+//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap, docs/DOCS.md#governance, docs/DOCS.md#dependency-lint
 
 #![forbid(unsafe_code)]
 #![allow(

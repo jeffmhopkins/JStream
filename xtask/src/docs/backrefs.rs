@@ -90,39 +90,46 @@ fn resolve(r: &str, by_path: &BTreeMap<&str, &Doc>) -> Result<(), String> {
     }
 }
 
-/// Crate names known to the repository: every existing crate directory's name, plus every
-/// `jstream-…` name in ARCHITECTURE#crate-map (planned crates). Used to flag likely typos
-/// in `applies_to` globs, which may otherwise name crates that don't exist yet.
+/// Crate directories known to the repository, as `crates/<name>` or `apps/<name>`: every
+/// existing crate directory, plus every `jstream-…` name in ARCHITECTURE#crate-map
+/// (planned crates). Names on the crate map's `apps/*` row are apps; all others are under
+/// `crates/`. Used to flag likely typos in `applies_to` globs, which may otherwise name
+/// crates that don't exist yet; keying by directory means `apps/jstream-types/**` is
+/// flagged too (review N2 on #15).
 pub(crate) fn known_crates(docs: &[Doc], paths: &[String]) -> BTreeSet<String> {
-    let mut names: BTreeSet<String> = crates(paths)
-        .iter()
-        .filter_map(|(d, _)| d.rsplit('/').next())
-        .map(str::to_owned)
-        .collect();
+    let mut names: BTreeSet<String> = crates(paths).iter().map(|(d, _)| (*d).to_owned()).collect();
     if let Some(doc) = docs.iter().find(|d| d.path == "docs/ARCHITECTURE.md")
         && let Some(body) = super::hash::body(doc, Some("crate-map"))
     {
-        for tok in body.split('`').skip(1).step_by(2) {
-            if tok.starts_with("jstream-")
-                && tok
-                    .chars()
-                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-            {
-                names.insert(tok.to_owned());
+        for line in body.lines() {
+            let dir = if line.contains("`apps/*`") {
+                "apps"
+            } else {
+                "crates"
+            };
+            for tok in line.split('`').skip(1).step_by(2) {
+                if tok.starts_with("jstream-")
+                    && tok
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+                {
+                    names.insert(format!("{dir}/{tok}"));
+                }
             }
         }
     }
     names
 }
 
-/// The literal crate name a glob targets (`crates/<name>/…` or `apps/<name>/…`), if the
+/// The literal crate directory a glob targets (`crates/<name>` or `apps/<name>`), if the
 /// name has no glob syntax.
 pub(crate) fn glob_crate(glob: &str) -> Option<&str> {
-    let rest = glob
-        .strip_prefix("crates/")
-        .or_else(|| glob.strip_prefix("apps/"))?;
-    let name = rest.split('/').next()?;
-    (!name.is_empty() && !name.contains(['*', '?', '[', '{'])).then_some(name)
+    let prefix = ["crates/", "apps/"]
+        .into_iter()
+        .find(|p| glob.starts_with(p))?;
+    let name = glob[prefix.len()..].split('/').next()?;
+    (!name.is_empty() && !name.contains(['*', '?', '[', '{']))
+        .then(|| &glob[..prefix.len() + name.len()])
 }
 
 /// Runs the back-reference checks.
@@ -283,10 +290,13 @@ mod tests {
 
     #[test]
     fn glob_crate_names_literal_targets_only() {
-        assert_eq!(glob_crate("crates/jstream-core/**"), Some("jstream-core"));
+        assert_eq!(
+            glob_crate("crates/jstream-core/**"),
+            Some("crates/jstream-core")
+        );
         assert_eq!(
             glob_crate("apps/jstream-cli/src/main.rs"),
-            Some("jstream-cli")
+            Some("apps/jstream-cli")
         );
         assert_eq!(glob_crate("crates/jstream-platform-*/src/**"), None);
         assert_eq!(glob_crate("crates/**"), None);
