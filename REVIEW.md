@@ -112,7 +112,9 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
 - a violated active rule;
 - a false or stale doc verification, or a doc the change made wrong;
 - a governance change that is unlabeled or poorly justified;
-- an ADR with too low a tier, or a Tier-1 ADR whose status doesn't match a maintainer decision;
+- an ADR with too low a tier, or a Tier-1 ADR whose status contradicts a valid decision
+  (e.g. `accepted` when the maintainer rejected it). A Tier-1 ADR still **awaiting** a valid
+  decision is not a blocking finding: it gets `escalate` (see the verdict table);
 - a security problem;
 - a red required CI check caused by this PR.
 
@@ -151,7 +153,7 @@ The summary ends with **exactly one** verdict marker line, followed by a human-r
 |---|---|---|
 | `pass` | No open blocking findings | `✅ No issues found at <sha7>` |
 | `fail` | One or more open blocking findings | `❌ <k> blocking issue(s) at <sha7>: B3, B5` |
-| `escalate` | Disputed blocking findings after round 3 (see below). Also apply the `needs-human` label. | `⚠️ Needs the maintainer: B2 disputed` |
+| `escalate` | Disputed blocking findings after round 3 (see below), **or** a Tier-1 ADR awaiting a valid maintainer decision (Step 2 item 3), with no other blocking findings. Also apply the `needs-human` label. | `⚠️ Needs the maintainer: B2 disputed` / `⚠️ Needs the maintainer: ADR-NNNN decision` |
 | `recuse` | You authored commits in this PR | `↩️ Recused: reviewer session authored this PR` |
 
 The `review-gate` check reads only the **newest** marker, and only one whose `sha` matches

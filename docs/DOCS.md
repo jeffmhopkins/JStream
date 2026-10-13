@@ -277,7 +277,8 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
     as *unknown*, not broken);
   - lists due docs and externals, fact drift, verify-to-edit ratios, pending
     enforcement past its milestone, and every PR merged with `governance-approved`
-    or `review-override` (the override audit);
+    or `review-override`, and every Tier-1 ADR decision on merged PRs, marked direct or
+    proxy, with the quoted instruction (the override and decision audit);
   - **updates one pinned issue, "Docs due for review"**, instead of opening new ones.
   - A scheduled agent may pick items from that issue and open PRs. Those PRs go
     through the normal gate.
