@@ -26,7 +26,7 @@ OBS, built to be driven equally well by a human or an AI agent.
 ## Platforms
 <!-- @section
 depends_on = ["docs/adr/0008-windows-support-policy.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: support policy instead of fixed version" }
+verified = { hash = "b3:3c8dacdf807896be", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: Windows build 22000 fact marker, serviced-versions policy (ADR-0008) and macOS/Linux deferrals (ADR-0003) all current" }
 -->
 
 | Platform | Status | Support |

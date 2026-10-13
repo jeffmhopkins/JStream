@@ -5,6 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
+use super::hash::{self, Files};
 use super::parse::{Diag, Doc};
 
 const DOC_KEYS: &[&str] = &[
@@ -45,6 +46,8 @@ pub(crate) struct Repo<'a> {
     pub(crate) facts: toml::Table,
     /// Raw text of `docs/RULES.md`, for the R-GIT-003 check table.
     pub(crate) rules_md: String,
+    /// Every tracked file, for `covers` globs and hashing.
+    pub(crate) files: Files<'a>,
 }
 
 /// Runs every check; returns the diagnostics found.
@@ -82,7 +85,7 @@ pub(crate) fn check(repo: &Repo<'_>) -> Vec<Diag> {
         }
         for s in &doc.sections {
             if let Some(meta) = &s.meta {
-                check_section_meta(doc, s.line, &s.anchor, meta, &by_path, &mut out);
+                check_section_meta(repo, doc, s.line, &s.anchor, meta, &by_path, &mut out);
             }
         }
         for r in &doc.rules {
@@ -198,6 +201,7 @@ fn check_doc_meta(doc: &Doc, out: &mut Vec<Diag>) {
 }
 
 fn check_section_meta(
+    repo: &Repo<'_>,
     doc: &Doc,
     line: usize,
     anchor: &str,
@@ -234,6 +238,21 @@ fn check_section_meta(
                             ),
                         ));
                     }
+                }
+                let stored = v.get("hash").and_then(|x| x.as_str()).unwrap_or_default();
+                match hash::section_hash(doc, anchor, &covers, &deps, &repo.files, by_path) {
+                    Ok(computed) if computed == stored => {}
+                    Ok(computed) => out.push(diag(
+                        &doc.path,
+                        line,
+                        format!(
+                            "section `{anchor}` is stale (stored {stored}, now {computed}): re-read it \
+                             against your change; if it still holds run `cargo xtask docs verify \
+                             {}#{anchor} --by <who> --note \"<what you checked>\"`, otherwise edit it",
+                            doc.meta_str("id").unwrap_or(&doc.path)
+                        ),
+                    )),
+                    Err(e) => out.push(diag(&doc.path, line, format!("section `{anchor}`: {e:#}"))),
                 }
             }
         }

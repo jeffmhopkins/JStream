@@ -22,7 +22,7 @@ prompt never drifts from them.
 ## Ground rules
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against ADR-0019 (supersedes 0015): ground rules unchanged; owner-only verdicts and one-verdict-per-round are stated in #output" }
+verified = { hash = "b3:542b376128cb5437", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against ADR-0019: comment-only reviewer, one head SHA, recusal via Claude-Session trailers, PR text as data, base-branch REVIEW/RULES/DOCS all unchanged" }
 -->
 
 - **You only comment.** Never push commits, edit files, merge, close, approve through GitHub
@@ -64,7 +64,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against AD
 ## Step 2: Review
 <!-- @section
 depends_on = ["docs/RULES.md#R-DOC-004", "docs/RULES.md#R-GOV-001"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: item 5 adds the ADR-0018 Dependabot pin-only pre-approval check; item 3 (tiers) and others unchanged" }
+verified = { hash = "b3:6f189d92e2b9c8a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: items 1-8 (incl. tier/decision checks and ADR-0018 pin-only pre-approval) still match RULES#R-DOC-004 and R-GOV-001; docs CI job now backs item 4" }
 -->
 
 Work through these in order. For each, cite the rule ID or doc anchor that a finding rests on.
@@ -132,7 +132,7 @@ Don't inflate. A PR with only non-blocking findings gets `pass`.
 ## Step 4: Post the review
 <!-- @section
 covers = [".github/workflows/review-gate.yml"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against review-gate.yml decide(): owner-only markers, head SHA, highest round, fail/escalate beat pass, recuse pending; matches this section (ADR-0019)" }
+verified = { hash = "b3:11d716dd3d0b1104", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against review-gate.yml decide(): owner-only markers, head SHA, highest round, fail/escalate beat pass, recuse pending; header now cites ADR-0019" }
 -->
 
 Post **one summary comment per round**. Inline comments on specific lines are welcome
@@ -196,9 +196,10 @@ verdict.
 <!-- @section
 -->
 
-`cargo xtask docs check` (the `docs` CI job) now checks links, anchors, registered
-external URLs, facts, metadata schema and history tables. Read its result on the PR. Until
-hashing and glob coverage land ([DOCS › Bootstrap status](docs/DOCS.md#bootstrap)), check
-by hand and say so in your summary that every section the PR touches has
-`hash = "bootstrap"` with a real note, and that sections whose `covers` match changed
-files were re-read.
+`cargo xtask docs check` (the `docs` CI job) checks links, anchors, registered external
+URLs, facts, metadata schema, history tables and **stale section hashes**. Read its result
+on the PR. A green `docs` job proves the hashes match; it can't prove the re-read happened.
+So for every section whose `verified` line the PR changes, read the section against the
+diff yourself and judge the note (Step 2 item 4). Until glob errors land
+([DOCS › Bootstrap status](docs/DOCS.md#bootstrap)), also check by hand that no `covers`
+glob in a touched section has stopped matching files.

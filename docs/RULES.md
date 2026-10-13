@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Rules rewritten after architecture review: audio-only no-alloc, bounded render/encode" }
+verified = { hash = "b3:a0df5db15a570788", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-RT-001..006 against ARCH#threading (thread table and snapshot/collector model): consistent; no RT code exists yet" }
 -->
 
 <a id="R-RT-001"></a>
@@ -320,7 +320,7 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: R-DEP-007 (action SHA pinning, ADR-0018) added in #7; R-DEP-001..006 unchanged" }
+verified = { hash = "b3:21964fa70eab8ed1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DEP-001..007 against ADR-0003 and deny.toml: allow-list, FFmpeg/C-codec bans, anyhow wrappers, ring/aws-lc ban and SHA-pinned actions all match" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -466,7 +466,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Added MCP tool-name and concurrency rules after review" }
+verified = { hash = "b3:ace9efb03a78e8d7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-API-001..004 against ARCH#protocol and ARCH#persistence: semver, noun.verb + MCP name pattern, schema_version migrations, expected_rev all consistent" }
 -->
 
 <a id="R-API-001"></a>
@@ -630,7 +630,7 @@ dependency or performance claim (`.github/pull_request_template.md`).
 ## Documentation
 <!-- @section
 depends_on = ["docs/DOCS.md#gate"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Rewritten for hash-bound verification and git-derived history" }
+verified = { hash = "b3:81474b4217fcf80a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against DOCS#gate: R-DOC-003 now enforced by docs check hashing; R-DOC-008/012 still pending in xtask as DOCS#bootstrap states" }
 -->
 
 <a id="R-DOC-001"></a>
@@ -761,7 +761,7 @@ warning in drafts). Empty `applies_to = []` is allowed for process rules.
 ## Governance
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: R-GOV-005 (ADR tiers, #5) present; depends_on repointed to ADR-0019; R-GOV-001..004 unchanged" }
+verified = { hash = "b3:35b9b27ed7b49afd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-GOV-001..005 against ADR-0019: owner-only verdicts live in REVIEW/gate, labels+justification, tiers and proxy decisions unchanged" }
 -->
 
 <a id="R-GOV-001"></a>

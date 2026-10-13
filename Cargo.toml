@@ -11,6 +11,8 @@ publish = false
 [workspace.dependencies]
 # Shared dependency versions live here (R-DEP-003). Member crates use `dep.workspace = true`.
 anyhow = "1"
+blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
+globset = { version = "0.4", default-features = false }
 pulldown-cmark = { version = "0.13", default-features = false }
 toml = "1"
 
