@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0015"
 title = "Agent review gate and governance with a single GitHub account"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0015: Agent review gate and governance with a single GitHub account
 

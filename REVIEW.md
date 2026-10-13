@@ -1,10 +1,10 @@
-+++
+<!-- @doc
 id = "REVIEW"
 title = "Reviewer agent instructions"
 kind = "normative"
 status = "active"
 review_every = "90d"
-+++
+-->
 
 # REVIEW.md: instructions for the reviewer agent
 

@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0007"
 title = "Bus-matrix audio and scene-independent outputs"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0007: Bus-matrix audio and scene-independent outputs
 

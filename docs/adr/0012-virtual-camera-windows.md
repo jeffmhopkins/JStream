@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0012"
 title = "Windows virtual camera as a COM media source"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0012: Windows virtual camera as a COM media source
 

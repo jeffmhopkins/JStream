@@ -1,10 +1,10 @@
-+++
+<!-- @doc
 id = "CLAUDE"
 title = "Agent instructions"
 kind = "normative"
 status = "active"
 review_every = "90d"
-+++
+-->
 
 # CLAUDE.md
 

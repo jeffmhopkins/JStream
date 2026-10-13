@@ -1,10 +1,10 @@
-+++
+<!-- @doc
 id = "ADR-NNNN"
 title = "Title"
 kind = "adr"
 status = "proposed"        # proposed | accepted | superseded | rejected
 # superseded_by = "docs/adr/NNNN-….md"
-+++
+-->
 
 # ADR-NNNN: Title
 

@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0002"
 title = "One web UI for desktop and browser"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0002: One web UI for desktop and browser
 

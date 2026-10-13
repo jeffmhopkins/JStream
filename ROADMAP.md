@@ -1,10 +1,10 @@
-+++
+<!-- @doc
 id = "ROADMAP"
 title = "Roadmap"
 kind = "plan"
 status = "active"
 review_every = "30d"
-+++
+-->
 
 # Roadmap
 
@@ -26,7 +26,7 @@ Two tracks run in parallel.
   from [R-GIT-003](docs/RULES.md#R-GIT-003): `fmt`, `clippy`, `test`, `doc`, `deny`,
   `lint-deps`, `docs`, `governance`, `pr-title`. `macos` runs but isn't required.
   (`review-gate` exists already; see [REVIEW.md](REVIEW.md).)
-- `xtask docs` **MVP**: front matter and anchor parsing, link resolution (internal plus the
+- `xtask docs` **MVP**: `@doc`/`@section`/`@rule` block and anchor parsing, link resolution (internal plus the
   external registry), hash-bound verification, unmatched-glob errors, the uncovered-crate
   report, generated-block drift, `docs for`, `docs verify`. It replaces every `bootstrap`
   hash with a real one.

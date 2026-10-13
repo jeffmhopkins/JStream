@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0011"
 title = "Documentation as a hash-checked graph"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0011: Documentation as a hash-checked graph
 

@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0009"
 title = "YouTube via RTMPS plus optional Live API"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0009: YouTube via RTMPS plus optional Live API
 

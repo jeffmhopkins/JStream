@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0008"
 title = "Windows support policy"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0008: Windows support policy
 

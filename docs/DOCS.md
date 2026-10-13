@@ -1,10 +1,10 @@
-+++
+<!-- @doc
 id = "DOCS"
 title = "Documentation system"
 kind = "normative"
 status = "active"
 review_every = "90d"
-+++
+-->
 
 # Documentation system
 
@@ -39,10 +39,11 @@ exists:
 <!-- @section
 -->
 
-Every tracked Markdown file starts with TOML front matter:
+Every tracked Markdown file starts with a `@doc` metadata block: TOML inside an HTML
+comment, so GitHub renders nothing for it.
 
-```toml
-+++
+```markdown
+<!-- @doc
 id = "ARCH"                  # permanent, unique, UPPER-KEBAB; never reused
 title = "Architecture"
 kind = "normative"           # normative | adr | guide | plan | reference | generated
@@ -51,15 +52,17 @@ review_every = "90d"         # omitted for ADRs and generated docs
 reviewed = { by = "human:jeffmhopkins", note = "what was re-read and why it still holds" }
 replaced_by = "docs/NEW.md"  # retired docs only
 retired_sections = { "old-id" = ["new-id-a", "new-id-b"] }   # tombstones, see Lifecycle
-+++
+-->
 ```
 
 **Tracked:** everything under `docs/` and `crates/*/README.md`, plus `README.md`,
-`CLAUDE.md` and `ROADMAP.md`.
+`CLAUDE.md`, `REVIEW.md` and `ROADMAP.md`.
 **Not tracked:** `docs/adr/TEMPLATE.md` and `.github/**`.
 
-**Why TOML:** one parser for everything in the repo, explicit string types (globs and
-dates can't be mis-typed), and no archived YAML crates.
+**Why TOML in a comment:** one parser for everything in the repo (`@doc`, `@section` and
+`@rule` blocks are all TOML), explicit string types so globs and dates can't be mistyped,
+and nothing visible on GitHub. GitHub only renders YAML (`---`) front matter; TOML (`+++`)
+front matter would show up as raw text ([ADR-0016](adr/0016-doc-metadata-in-comments.md)).
 
 | kind | Meaning | `review_every` |
 |---|---|---|

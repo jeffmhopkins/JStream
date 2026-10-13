@@ -1,9 +1,9 @@
-+++
+<!-- @doc
 id = "ADR-0006"
 title = "MCP agents get full, authenticated access"
 kind = "adr"
 status = "accepted"
-+++
+-->
 
 # ADR-0006: MCP agents get full, authenticated access
 

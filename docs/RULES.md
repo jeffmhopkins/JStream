@@ -1,10 +1,10 @@
-+++
+<!-- @doc
 id = "RULES"
 title = "Engineering rules"
 kind = "normative"
 status = "active"
 review_every = "90d"
-+++
+-->
 
 # Engineering rules
 
@@ -627,7 +627,7 @@ status = "active"
 enforced_by = ["ci:docs"]
 applies_to = ["**/*.md"]
 -->
-Every tracked doc has TOML front matter, and every `##` section has an anchor and an
+Every tracked doc starts with a `@doc` metadata block, and every `##` section has an anchor and an
 `@section` block ([DOCS › Sections](DOCS.md#sections)).
 
 <a id="R-DOC-002"></a>
