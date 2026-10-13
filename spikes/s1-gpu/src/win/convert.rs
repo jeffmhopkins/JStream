@@ -56,12 +56,16 @@ fn fs_uv(in: VsOut) -> @location(0) vec2<f32> {
 }
 "#;
 
+// Field order is drop order, and it matters: wgpu-hal loads d3d12.dll itself (libloading)
+// and unloads it when its last instance reference drops. Our raw COM clones must be
+// released while the DLL is still loaded, so they come before the wgpu objects. The first
+// Windows run crashed in D3D12Core.dll at exit when `d3d12` was released last.
 pub struct Gpu {
-    pub adapter: wgpu::Adapter,
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-    pub dxgi_adapter: IDXGIAdapter,
     pub d3d12: ID3D12Device,
+    pub dxgi_adapter: IDXGIAdapter,
+    pub queue: wgpu::Queue,
+    pub device: wgpu::Device,
+    pub adapter: wgpu::Adapter,
     pub selection: String,
 }
 

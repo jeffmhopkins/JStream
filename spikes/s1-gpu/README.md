@@ -140,10 +140,12 @@ How to read the numbers:
 -->
 
 This code was cross-checked from Linux with `cargo check` and `cargo clippy` for
-`x86_64-pc-windows-msvc`. Its first run on Windows (Ryzen 9 8945HS, Radeon 780M, 4K
-display) crashed with an access violation before printing a report, and stderr was not
-kept, so the cause is still open. These are the parts most likely to fail, roughly in
-order:
+`x86_64-pc-windows-msvc`. On Windows (Ryzen 9 8945HS, Radeon 780M, 4K display,
+`AMDh264Encoder`) the pipeline ran: 1800 of 1800 ticks submitted at 1920x1080 and at
+native size, with correct BT.709 limited-range colour in the output. Both runs then
+crashed at exit, before printing the report: the raw `ID3D12Device` clone in `Gpu` was
+released after wgpu had unloaded d3d12.dll. `Gpu` now drops its raw COM references
+first. The parts below were the ones most likely to fail, roughly in order:
 
 - **NV12 render targets through wgpu.** wgpu only guarantees NV12 for sampling. This code
   wraps a D3D11-created NV12 texture with `RENDER_ATTACHMENT` usage and renders into its

@@ -305,7 +305,7 @@ if ($Only -contains 'S1') {
         $page = Join-Path $Scratch 's1-motion.html'
         Write-Text $page @'
 <!doctype html><html><head><meta charset="utf-8"><title>S1 motion</title>
-<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block}</style></head>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{display:block;width:100vw;height:100vh}</style></head>
 <body><canvas id="c"></canvas><script>
 const c=document.getElementById('c'),g=c.getContext('2d');let n=0;
 function size(){c.width=innerWidth*devicePixelRatio;c.height=innerHeight*devicePixelRatio}
