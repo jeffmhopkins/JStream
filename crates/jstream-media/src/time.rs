@@ -1,8 +1,9 @@
 //! Time bases and timestamps.
 //!
 //! Every timestamp is an integer tick count in an explicit time base, so arithmetic is
-//! exact and conversions round only where the caller says how. The engine's media clock
-//! (docs/adr/0014-media-clock.md) counts in [`Timebase::NANOS`].
+//! exact and conversions round only where the caller says how. Media-clock timestamps
+//! (docs/adr/0014-media-clock.md) are carried as [`MediaTime`]; the clock's own unit is
+//! decided with spike S3 and `jstream-core`, not here.
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -12,7 +13,8 @@ use crate::MediaError;
 /// The length of one tick, in seconds, as a reduced fraction `num / den`.
 ///
 /// Both parts are non-zero, so a time base is always positive. Common values have
-/// constants: [`Timebase::NANOS`] (the media clock), [`Timebase::MPEG_90K`] (H.264 and
+/// constants: [`Timebase::NANOS`] (a convenient base for clock values),
+/// [`Timebase::MPEG_90K`] (H.264 and
 /// MP4 video) and [`Timebase::MILLIS`] (FLV). An audio stream usually ticks once per
 /// sample frame: [`Timebase::per_second`]`(48_000)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -22,7 +24,8 @@ pub struct Timebase {
 }
 
 impl Timebase {
-    /// One nanosecond: the media clock's time base.
+    /// One nanosecond: a convenient time base for clock values. It does not fix the
+    /// media clock's unit, which is decided with spike S3 and `jstream-core`.
     pub const NANOS: Self = Self {
         num: 1,
         den: 1_000_000_000,
@@ -93,9 +96,10 @@ pub enum Rounding {
 
 /// A point in time (or a duration): a signed tick count in a [`Timebase`].
 ///
-/// Comparison is by value across time bases: one tick at 1/1000 s equals 90 ticks at
-/// 1/90000 s. Arithmetic needs both operands in the same time base; convert with
-/// [`MediaTime::rescale`] first, choosing how to round.
+/// Equality and ordering compare the instant, across time bases: one tick at 1/1000 s
+/// equals 90 ticks at 1/90000 s. Arithmetic is stricter: [`MediaTime::checked_add`] and
+/// [`MediaTime::checked_sub`] need both operands in the same time base, even when they
+/// compare equal; convert with [`MediaTime::rescale`] first, choosing how to round.
 ///
 /// ```
 /// use jstream_media::{MediaTime, Rounding, Timebase};

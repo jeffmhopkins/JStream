@@ -38,7 +38,8 @@ impl Codec {
 ///
 /// The payload is shared (`Arc<[u8]>`), so fanning one packet out to several outputs
 /// clones a pointer, not the bytes. Invariants, checked by [`Packet::new`]: the payload
-/// is non-empty and `dts <= pts`.
+/// is non-empty and `dts <= pts`, compared as instants, so the two may use different time
+/// bases.
 ///
 /// ```
 /// use jstream_media::{Codec, MediaTime, Packet, Timebase};

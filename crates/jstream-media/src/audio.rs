@@ -101,9 +101,7 @@ impl AudioFormat {
 
     /// One tick per frame: `1 / sample_rate` seconds.
     pub fn timebase(self) -> Timebase {
-        // `sample_rate` is non-zero, so 1/sample_rate is a valid time base; the fallback
-        // is unreachable.
-        Timebase::per_second(self.sample_rate).unwrap_or(Timebase::NANOS)
+        Timebase::per_second(self.sample_rate).expect("invariant: sample_rate is non-zero")
     }
 }
 
