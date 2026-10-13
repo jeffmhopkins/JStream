@@ -253,8 +253,17 @@ mod tests {
     /// committed tree, so the recorded hash would be wrong (review N4 on #10).
     #[test]
     fn verify_refuses_untracked_covered_files() {
-        let dir = std::env::temp_dir().join(format!("xtask-verify-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
+        /// Removes the temp repo even when an assertion fails.
+        struct TempDir(std::path::PathBuf);
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let tmp =
+            TempDir(std::env::temp_dir().join(format!("xtask-verify-{}", std::process::id())));
+        let dir = &tmp.0;
+        let _ = std::fs::remove_dir_all(dir);
         std::fs::create_dir_all(dir.join("src")).expect("invariant: temp dir is writable");
         let doc = "<!-- @doc\nid = \"T\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
         std::fs::write(dir.join("T.md"), doc).expect("invariant: temp dir is writable");
@@ -262,7 +271,7 @@ mod tests {
         let git = |args: &[&str]| {
             let ok = Command::new("git")
                 .args(args)
-                .current_dir(&dir)
+                .current_dir(dir)
                 .output()
                 .is_ok_and(|o| o.status.success());
             assert!(ok, "git {args:?} failed");
@@ -271,13 +280,12 @@ mod tests {
         git(&["add", "T.md", "src/a.rs"]);
         std::fs::write(dir.join("src/b.rs"), "b").expect("invariant: temp dir is writable");
         let note = "checked the section text against src in this test";
-        let err = verify(&dir, "T#a", "agent:test", note).expect_err("untracked src/b.rs");
+        let err = verify(dir, "T#a", "agent:test", note).expect_err("untracked src/b.rs");
         assert!(format!("{err:#}").contains("src/b.rs"), "{err:#}");
         git(&["add", "src/b.rs"]);
-        verify(&dir, "T#a", "agent:test", note).expect("all covered files tracked");
+        verify(dir, "T#a", "agent:test", note).expect("all covered files tracked");
         let written = std::fs::read_to_string(dir.join("T.md")).expect("invariant: just written");
         assert!(written.contains("hash = \"b3:"), "{written}");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// The repository's own docs must pass. This is what the `docs` CI job enforces.

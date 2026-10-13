@@ -1,6 +1,6 @@
 //! Cross-document checks over the parsed docs (docs/DOCS.md#gate). This module covers
-//! identity, metadata schema, references, rules and facts. Hash-bound verification, glob
-//! coverage and code back-references are added in later M0 PRs.
+//! identity, metadata schema, references, rules, facts, hash-bound verification and glob
+//! coverage. Code back-references are added in a later M0 PR.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
@@ -221,11 +221,13 @@ fn check_section_meta(
     }
     let covers = string_array(meta, "covers", doc, line, out);
     let deps = string_array(meta, "depends_on", doc, line, out);
-    // R-DOC-012: a section can't describe code that doesn't exist. Drafts only warn.
-    for g in &covers {
+    // R-DOC-012: a section can't describe code that doesn't exist. Drafts only warn, and
+    // retired docs describe nothing current, so they are exempt.
+    let status = doc.meta_str("status");
+    for g in covers.iter().filter(|_| status != Some("retired")) {
         match repo.files.matching(std::slice::from_ref(g)) {
             Ok(m) if m.is_empty() => out.push(Diag {
-                warning: doc.meta_str("status") == Some("draft"),
+                warning: status == Some("draft"),
                 ..diag(
                     &doc.path,
                     line,
