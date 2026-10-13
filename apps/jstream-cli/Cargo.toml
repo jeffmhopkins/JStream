@@ -1,0 +1,23 @@
+[package]
+name = "jstream-cli"
+version = "0.0.0"
+description = "The JStream command-line client: drives an engine through the Control trait."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 6
+summary = "`jstream-cli` (control and mcp only)"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# `mock`: the in-memory engine behind `--mock`, the only connection until the WebSocket
+# client lands in jstream-control.
+jstream-control = { workspace = true, features = ["mock"] }
+serde.workspace = true
+serde_json.workspace = true

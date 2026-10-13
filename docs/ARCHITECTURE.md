@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:1d1af9c564242e87", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Diagram vcam box now says registered by the app on first use (ADR-0020) instead of by the installer; rest of the shape unchanged" }
+verified = { hash = "b3:07ab0d9cbc223ab0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New apps/jstream-cli (code and README) matches the jstream-cli row and diagram: a remote client through Control and the protocol only, no engine link; the stdio 'jstream mcp' proxy is not built yet and is an open question in the CLI README, so the row still describes the target" }
 -->
 
 ```
@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:43d2fc2e00537d95", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#27): table is main's (control L2, mcp L3, server L4, client-stack paragraph, graph/mux/outputs rows) plus this PR's two edits only: browser built-in in jstream-sources and CEF browser backend in jstream-platform-windows (ADR-0021); layers and unsafe column consistent" }
+verified = { hash = "b3:f24cc80ce9feca13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New apps/jstream-cli/Cargo.toml: layer 6, summary is the cli part of the apps/* row, unsafe_allowed false; depends only on jstream-control (L2, strictly lower), never jstream-core (R-ARCH-002/003); table unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
