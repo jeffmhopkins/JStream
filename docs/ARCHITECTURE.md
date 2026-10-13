@@ -310,7 +310,7 @@ verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:d885d82c122deac5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: WGC -> shared texture + fence -> wgpu D3D12 -> NV12 -> MF path matches ADR-0004; still gated on spike S1, no render code yet" }
+verified = { hash = "b3:7578a712423bbaa7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Recorded spike S1 result from the maintainer's Radeon 780M run (s1.json/s1-native.json): NV12 plane-view render passes proven, compute+copy kept as fallback; drop-order rule for hal objects; open items (other vendors, hybrid laptop, encoder LUID matching)" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -322,15 +322,34 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
    wgpu-hal (`texture_from_raw` → `create_texture_from_hal`, both `unsafe`, so they live in
    `jstream-platform-windows`). Sync uses a **shared fence**: D3D11 signals and the wgpu
    queue waits, then the reverse for release. D3D12 has no keyed mutex, so fences are
-   the only sync mechanism.
+   the only sync mechanism. Raw D3D12 objects taken through hal must be released before
+   the wgpu device: wgpu-hal loads `d3d12.dll` itself and unloads it with the device, so a
+   later `Release` crashes (S1 did, at exit).
 3. **Composite** in FP16 linear light (WGSL).
-4. **Convert** to NV12/P010 in compute shaders, writing R8 + RG8 plane targets, then copied
-   into an NV12 resource through hal (or a D3D11 video processor if S1 shows that's simpler).
+4. **Convert** to NV12/P010 with two render passes that write straight into the Y and UV
+   plane views of the shared NV12 texture (proven by S1). Writing R8 + RG8 targets in
+   compute and copying them into NV12 through hal, or a D3D11 video processor, is the
+   fallback for an adapter that rejects planar render targets.
 5. **Encode:** the NV12 texture is shared back to D3D11 for the Media Foundation encoders
    (fence-synchronized).
 6. **Fallbacks:** CPU readback/upload, counted in stats with a stated budget. On
    hybrid-GPU laptops, capture and render must use the same adapter, or the engine falls
    back and reports it.
+
+**S1 result**, on a Ryzen 9 8945HS with Radeon 780M (driver 32.0.22029.9039), a
+3840x2160 display at 29 Hz and the async `AMDh264Encoder` MFT. The path holds 60 fps with
+no CPU copy of frame data:
+
+| Encode size | Frames encoded | Convert p50 / p95 | Encode p50 / p95 | CPU |
+|---|---|---|---|---|
+| 1920x1080 | 1801 of 1801, none dropped | 2.1 / 10.3 ms | 6.5 / 14.5 ms | 11% of one core |
+| 3840x2160 | 1798 of 1799, 3 ticks dropped | 3.1 / 11.1 ms | 11.2 / 19.0 ms | 10% of one core |
+
+The encoded output decodes to the test page's colours (BT.709 limited range). Still open:
+- NVIDIA and Intel encoders, and a hybrid-GPU laptop.
+- Encoder selection on multi-GPU machines. AMD's MFTs don't report
+  `MFT_ENUM_ADAPTER_LUID`, so the spike took the first hardware encoder, and a multi-GPU
+  machine needs another way to match the encoder to the adapter.
 
 wgpu is pinned exactly, because hal interop can change between releases. Effects are WGSL
 plus an `effect.toml` manifest.
@@ -356,7 +375,7 @@ verified = { hash = "b3:233514b2be0b9df3", by = "agent:claude@session_01QBbMRwRu
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:bb081c51d8417c30", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Portable zip contents now include the CEF runtime folder for browser sources (ADR-0021, CEF); state location and vcam registration text unchanged and still match ADR-0020" }
+verified = { hash = "b3:fe39d2ee37bb88d9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = 'Recorded spike S2 answer per ADR-0020: HKCU fails at IMFVirtualCamera::Start 0x80070003, HKLM works (LOCAL SERVICE svchost, 2463 frames); listed what the elevated step wrote and the Session\<id> naming; matches s2-hkcu.json/s2-hklm.json and spikes/s2-vcam reg.rs/sys.rs' }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -369,6 +388,22 @@ Direct3D 12).
 - **State:** in `%APPDATA%\JStream`, or beside the exe when a `portable` marker file is
   present.
 - **Virtual camera:** the app registers the COM media source from its own folder the first
-  time the camera is enabled. That is silent if per-user registration works with Frame
-  Server, and otherwise one UAC prompt. Spike S2 decides which, and its result is recorded
-  here. The app can unregister the source and detects a moved folder.
+  time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
+  because Frame Server ignores per-user registration. The app can unregister the source and
+  detects a moved folder. Spike S2 (Windows 11 25H2, build 26200) found:
+  - **Per user (`HKCU`) doesn't work.** `MFCreateVirtualCamera` succeeds, but
+    `IMFVirtualCamera::Start` fails with `0x80070003`, and Frame Server never loads the
+    DLL.
+  - **Machine-wide (`HKLM`) works.** Frame Server loaded the DLL in its `svchost` (LOCAL
+    SERVICE, session 0) and served frames from a non-elevated producer.
+  - **What the elevated step wrote:**
+    - `HKLM\Software\Classes\CLSID\{…}` with `InprocServer32` set to the DLL's path
+      and `ThreadingModel = Both`;
+    - read and execute for LOCAL SERVICE on the DLL file. The DLL loaded from inside a
+      user profile; whether this grant is strictly needed wasn't isolated.
+
+    The spike also stopped Frame Server first, so a rebuilt DLL would replace the loaded
+    one.
+  - **Shared-object names:** a non-elevated engine can't create `Global\` objects (access
+    denied). So the hand-off uses the engine's session namespace, and the DLL opens it as
+    `Session\<id>\…`.
