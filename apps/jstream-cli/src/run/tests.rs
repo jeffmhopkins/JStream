@@ -1,6 +1,6 @@
 //! Golden output (human and `--json`) and exit codes of whole CLI runs against the mock.
 
-use super::{CLIENT_NAME, Connector, connect, run, stream_events};
+use super::{CLIENT_NAME, Connector, connect, read_token, run, stream_events};
 use crate::args::Connection;
 use crate::block::block_on;
 use crate::exit::{self, CliError};
@@ -529,19 +529,34 @@ fn connection_and_usage_failures() {
     assert_eq!(
         run_with(&connect, &["scene", "list"]),
         failed(
-            exit::DISCONNECTED,
-            "error: no connection to the engine: the WebSocket client is not built yet; \
-             pass `--mock` to use the in-memory mock engine\n"
+            exit::USAGE,
+            "error: no engine to talk to: pass `--url ws://127.0.0.1:<port>` (or `--mock`)\n"
         )
     );
-    assert_eq!(
-        run_with(&connect, &["--json", "scene", "list"]),
-        failed(
-            exit::DISCONNECTED,
+    // Nothing listens at the address: disconnected (loopback only, R-TEST-004).
+    let dir = std::env::temp_dir().join(format!("jstream-cli-refused-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let token = dir.join("token");
+    std::fs::write(&token, "t0ken").expect("written");
+    let token = token.to_str().expect("a UTF-8 temp path");
+    let addr = std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|listener| listener.local_addr())
+        .expect("a loopback port");
+    let url = format!("ws://{addr}");
+    let refused = run_with(
+        &connect,
+        &["--json", "--url", &url, "--token-file", token, "hello"],
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+    assert_eq!(refused.code, exit::DISCONNECTED);
+    assert!(refused.out.is_empty());
+    assert!(
+        refused.err.starts_with(
             "{\"error\":{\"code\":\"disconnected\",\"message\":\"no connection to the \
-             engine: the WebSocket client is not built yet; pass `--mock` to use the \
-             in-memory mock engine\"}}\n"
-        )
+             engine: could not connect to the engine: "
+        ),
+        "{}",
+        refused.err
     );
     assert_eq!(
         run_with(&connect, &["--json", "scene"]),
@@ -624,4 +639,45 @@ fn mock_connection_without_the_feature() {
              (`cargo build -p jstream-cli --features mock`)\n"
         )
     );
+}
+
+#[test]
+fn a_remote_connection_needs_an_address_and_a_token() {
+    let usage = |result: Result<Box<dyn Control>, CliError>| match result {
+        Err(CliError::Usage(message)) => message,
+        Err(other) => panic!("expected a usage error, got {other}"),
+        Ok(_) => panic!("expected a usage error, got a session"),
+    };
+    let no_url = usage(connect(&Connection::Remote {
+        url: None,
+        token_file: None,
+    }));
+    assert!(no_url.contains("--url"), "{no_url}");
+    let missing = usage(connect(&Connection::Remote {
+        url: Some("ws://127.0.0.1:1".into()),
+        token_file: Some("/nonexistent/jstream-token".into()),
+    }));
+    assert!(
+        missing.contains("could not read the token file"),
+        "{missing}"
+    );
+    let none = read_token(None).err().map(|e| e.to_string());
+    assert!(none.is_some_and(|m| m.contains("JSTREAM_TOKEN_FILE")));
+}
+
+#[test]
+fn the_token_file_is_read_without_surrounding_whitespace() {
+    let dir = std::env::temp_dir().join(format!("jstream-cli-token-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let file = dir.join("token");
+    let path = file.to_str().expect("a UTF-8 temp path").to_owned();
+    std::fs::write(&file, "  s3cret\n").expect("written");
+    assert_eq!(
+        read_token(Some(path.clone())).ok().as_deref(),
+        Some("s3cret")
+    );
+    std::fs::write(&file, "\n").expect("written");
+    let empty = read_token(Some(path)).err().map(|e| e.to_string());
+    assert!(empty.is_some_and(|m| m.contains("is empty")));
+    let _ = std::fs::remove_dir_all(&dir);
 }

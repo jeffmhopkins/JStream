@@ -1,0 +1,31 @@
+[package]
+name = "jstream-server"
+version = "0.0.0"
+description = "The JStream HTTP/WebSocket server: serves the control API over an authenticated localhost WebSocket, in front of any `Control` session."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 4
+summary = "axum HTTP/WebSocket over `dyn Control`; serves UI assets; mounts MCP over HTTP; token and Origin checks"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+axum.workspace = true
+futures-util.workspace = true
+jstream-control.workspace = true
+jstream-protocol.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "net", "rt", "sync"] }
+
+[dev-dependencies]
+# The end-to-end tests: a `MockEngine` behind the server, the WebSocket client in front.
+jstream-control = { workspace = true, features = ["mock", "ws"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "rt-multi-thread", "sync", "time"] }
+tokio-tungstenite.workspace = true

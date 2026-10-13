@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:fdbec1aef930f798", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "mock.rs tests now run jstream_protocol::parity instead of a hand-copied batch; contents list (trait, errors, mock behind feature, protocol re-export) still matches src/, no API change" }
+verified = { hash = "b3:00c14f0f8cc72c6f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): contents list keeps ws.rs (WsControl, feature ws) and mock.rs; Cargo.toml now has both the native-only ws deps and the jstream-protocol fixtures dev-dependency" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -21,7 +21,7 @@ The `Control` trait: the one API through which every client talks to the engine
 web UI and the HTTP server are written against `dyn Control` and never link the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)); the host apps hand them an
 implementation. Layer 2: it builds on `jstream-protocol` (layer 1), is WASM-safe, and
-needs no async runtime.
+needs no async runtime from its callers (the native WebSocket client runs its own).
 
 Contents (a first cut; [Design](#design) explains the choices):
 - **The trait** (`control.rs`): `Control` with `hello`, `call` and `events`, and the
@@ -30,16 +30,19 @@ Contents (a first cut; [Design](#design) explains the choices):
   or a lost connection.
 - **Mock** (`mock.rs`, feature `mock`): `MockEngine` and `MockControl`, an in-memory
   implementation for developing and testing clients before the engine exists.
+- **WebSocket client** (`ws.rs`, feature `ws`, native targets): `WsControl` and
+  `WsConfig`, the `Control` trait over the engine's WebSocket API, and `WS_PATH`, the
+  API's path, shared with `jstream-server`.
 - `jstream_control::protocol` re-exports `jstream-protocol`.
 
-Not here yet: the WebSocket client (see [Design](#design)).
+Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:dc95c490a12c3ffd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the parity paragraph: queries_report_what_the_edits_set and the new rejected_batches_match_the_parity_fixture run jstream_protocol::parity (dev-dep with fixtures feature) instead of a hand-copied batch; R-ARCH-002 reasoning unchanged since protocol is L1; Mock bullets (check order, codes, field paths, query results) still match mock.rs" }
+verified = { hash = "b3:f1811ac0efb8c61a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): design holds both main's parity paragraph (shared jstream_protocol::parity fixture) and this PR's WebSocket client section; checked both against mock.rs, ws.rs and Cargo.toml" }
 -->
 
 ### The trait
@@ -132,27 +135,44 @@ exact answer to every read of it, and the exact error for batches rejected again
 If the mock and the graph drift apart on any of those, one of the two tests fails. The
 mock's own tests pin the remaining shared error paths.
 
-### WebSocket client (deferred)
+### WebSocket client
 
-The remote implementation comes in a later PR, when `jstream-server` exists to talk to.
-The intended design:
+`WsControl` (feature `ws`, off by default) implements `Control` over the engine's
+WebSocket API, served by `jstream-server`. The feature's dependencies are declared for
+native targets only, so a `wasm32` build never pulls tokio, even with `ws` on.
 
-- **Transport:** `tokio-tungstenite` (rustls with the ring provider,
-  [R-DEP-006](../../docs/RULES.md#R-DEP-006)) on native targets, and the browser
-  `WebSocket` through `gloo-net` on `wasm32`, selected by `cfg(target_arch)`. Neither is a
-  dependency until then.
-- **Connection:** `ws://127.0.0.1:<port>/api/v1/ws`, always with the control token
+- **Transport:** `tokio-tungstenite` on native targets, with no TLS feature: plain
+  `ws://` only for now, so no `rustls` or `ring` is in the tree. TLS (rustls with the
+  ring provider, [R-DEP-006](../../docs/RULES.md#R-DEP-006)) and the browser
+  `WebSocket` through `gloo-net` on `wasm32` are open questions below.
+- **No runtime required of the caller.** `WsControl::connect` starts one thread per
+  connection running a single-threaded tokio runtime. Every future and stream it
+  returns is completed through tokio's channels, which work under any executor, so the
+  CLI's thread-parking `block_on` and the MCP stdio loop drive it as they drive the mock.
+- **Connection:** `ws://<host>:<port>`, with `/api/v1/ws` (`WS_PATH`) when the URL has
+  no path, always with the control token
   ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)). It goes in the upgrade request
-  rather than the URL, so it stays out of logs: an `Authorization` header from native
-  clients, and the `Sec-WebSocket-Protocol` header from browsers, which can't set
-  others. Native clients read the token from the user-only token file. The server
-  validates `Origin` and `Host`; browsers set `Origin` themselves, and the native client
-  sends a fixed one.
-- **Session:** `hello` is the first message; a reader task routes each `response` or
-  `error` to its waiting call by request ID and fans `event`s out to the subscriptions.
-  When the socket closes, pending calls fail with `Disconnected` and event streams end.
-  Reconnecting is the caller's choice (a new session, then re-read the state), because
-  a new connection may get a new `client_id`.
+  rather than the URL, so it stays out of logs: an `Authorization: Bearer` header from
+  native clients, and later the `Sec-WebSocket-Protocol` header from browsers, which
+  can't set others. The caller supplies the token (the CLI reads it from a token file).
+  The server validates `Origin` and `Host`; browsers set `Origin` themselves, and the
+  native client sends the server's own origin (`http://<host>:<port>` of the URL) unless
+  `WsConfig::origin` names another.
+- **Session:** `hello` is the caller's first call. Requests get the IDs `req_1`,
+  `req_2`, … per session, and the server reports the `state.changed` event a call
+  causes with that same ID. The connection thread routes each `response` or `error` to
+  its waiting call by request ID (`welcome`, and an error without an ID, answer the
+  oldest pending `hello`) and fans `event`s out to the subscriptions.
+- **Failures are `Disconnected`.** An invalid or `wss://` URL, an unreachable engine, or
+  a refused upgrade (the reason names HTTP 401 for the token, 403 for `Origin` or
+  `Host`) fails `connect`. When the socket closes, pending and later calls fail with
+  `Disconnected` carrying the reason (the server's close reason when it gave one), and
+  every event stream ends after what it buffered. Dropping the `WsControl` closes the
+  socket. Reconnecting is the caller's choice (a new session, then re-read the state),
+  because a new connection may get a new `client_id`.
+
+The end-to-end tests live in `jstream-server`, which runs a `MockEngine` behind a real
+server on a loopback port and drives it with this client.
 
 ### Open questions
 
@@ -162,3 +182,12 @@ The intended design:
    events exist ([protocol open question 7](../jstream-protocol/README.md#open-questions)).
 2. **Request IDs.** The implementation assigns them. A caller that wants its own
    (correlating with an external log) would need `call` to take a `Request`.
+   `jstream-server` works around it by mapping session IDs back to wire IDs
+   ([jstream-server › Design](../jstream-server/README.md#design)).
+3. **Browser client.** The `wasm32` implementation over `gloo-net`, with the token in
+   `Sec-WebSocket-Protocol`, comes with the web UI.
+4. **TLS.** `wss://` needs a TLS feature of `tokio-tungstenite` (rustls with ring), whose
+   `ring` dependency needs a lint-deps native-code allowlist entry, a governance change.
+5. **Timeouts.** `connect` and calls have no timeout of their own; a caller that needs
+   one wraps the future. A connect timeout and keep-alive pings may belong here once
+   remote (non-loopback) use exists.

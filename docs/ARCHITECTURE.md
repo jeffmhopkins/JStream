@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:58acf9dd868b2f07", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#41): text is main's (jstream-cli mcp naming); re-flagged only by the CLI README's verified line, which covers apps/**; the jstream-cli row still holds" }
+verified = { hash = "b3:08a0af2c4c0f96c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): re-flagged only by the CLI README's verified line (covers apps/**); jstream-cli row (remote client via Control, WsControl connection, jstream-cli mcp later) still holds" }
 -->
 
 ```
@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:5f751f76aad903f4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only manifest change: jstream-protocol gains a fixtures feature, and jstream-graph and jstream-control (L2) gain a dev-dependency on jstream-protocol (L1), strictly lower; table rows and summaries unchanged" }
+verified = { hash = "b3:07ed98827a755dac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): manifests: jstream-control keeps ws deps plus the jstream-protocol fixtures dev-dependency (L1, strictly lower); jstream-server L4 unchanged; table text unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -242,7 +242,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:8d0bf20f0daa8349", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered changes are the test-only parity fixture in jstream-protocol and the mock tests and README in jstream-control; no envelope, edit, action, query, event, error or schema change, so every bullet holds" }
+verified = { hash = "b3:37ba47d237ddd162", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): covered changes are the parity fixture (test-only, no wire change, 0.3 unchanged) and this PR's Transport bullet; text holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -267,7 +267,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Schema:** the JSON Schema is generated from the Rust types, and its snapshot is
   the API review ([R-TEST-002](RULES.md#R-TEST-002)).
 - **Transport:** the `Control` trait is implemented in-process by core and over WebSocket
-  by `jstream-control` (`/api/v1/ws`, token required, `Origin`/`Host` validated).
+  by `jstream-control` (`WsControl`, feature `ws`). `jstream-server` serves the
+  WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
+  default, with the token required and `Origin`/`Host` validated
+  ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
+  for now; TLS is an open question there.
 - **Versioning:** [R-API-001](RULES.md#R-API-001).
 
 <a id="mcp"></a>

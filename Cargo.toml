@@ -11,8 +11,10 @@ publish = false
 [workspace.dependencies]
 # Shared dependency versions live here (R-DEP-003). Member crates use `dep.workspace = true`.
 anyhow = "1"
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 futures-core = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 globset = { version = "0.4", default-features = false }
 insta = { version = "1", default-features = false }
 jstream-control = { path = "crates/jstream-control" }
@@ -24,6 +26,9 @@ schemars = { version = "1", default-features = false, features = ["derive", "std
 serde = { version = "1", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
 thiserror = { version = "2", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false }
+# No TLS feature: plain `ws://` only, so no `rustls`/`ring` in the tree yet.
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect"] }
 toml = "1"
 
 # Editing this table is a governance change (R-GOV-001). See docs/RULES.md for each rule.

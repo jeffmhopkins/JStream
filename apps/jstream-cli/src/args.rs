@@ -20,9 +20,13 @@ Usage: jstream-cli [global options] <command> [arguments]
 Global options (before the command):
   --json               machine output: one JSON value per line on stdout,
                        errors as JSON on stderr
-  --mock               use an in-memory mock engine (no real engine connection
-                       exists yet); it starts empty at rev 0 for each run.
-                       Needs a build with the `mock` cargo feature
+  --url <url>          the engine's WebSocket API, `ws://<host>:<port>` (the path
+                       defaults to /api/v1/ws); plain ws:// only, no TLS yet
+  --token-file <path>  the file holding the control token (default: the
+                       JSTREAM_TOKEN_FILE environment variable)
+  --mock               use an in-memory mock engine instead; it starts empty at
+                       rev 0 for each run. Needs a build with the `mock` cargo
+                       feature
   --mock-output <id>   with --mock: add a stopped output (repeatable)
   -h, --help           print this help
 
@@ -63,9 +67,14 @@ Exit codes: 0 ok, 1 output error, 2 usage, 3 disconnected, 10-20 engine errors
 /// Where the CLI gets its `Control` session from.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Connection {
-    /// The engine over its WebSocket API. Not implemented yet: connecting fails as
-    /// disconnected.
-    Remote,
+    /// The engine over its WebSocket API.
+    Remote {
+        /// `--url`: the engine's WebSocket URL. Required to connect.
+        url: Option<String>,
+        /// `--token-file`: the file holding the control token. Without it the connector
+        /// reads `JSTREAM_TOKEN_FILE`.
+        token_file: Option<String>,
+    },
     /// A fresh in-memory `MockEngine` with these outputs, all stopped.
     Mock {
         /// Outputs to create before connecting.
@@ -111,7 +120,8 @@ fn usage(message: impl Into<String>) -> CliError {
 }
 
 /// Whether the global options ask for `--json`, read the way [`parse`] reads them (the
-/// value after `--mock-output` is skipped; reading stops at the command, at `--help` and
+/// values after `--mock-output`, `--url` and `--token-file` are skipped; reading stops at
+/// the command, at `--help` and
 /// at an unknown option). Lets a usage error be reported as JSON when parsing fails.
 pub fn json_requested(args: &[String]) -> bool {
     let mut rest = args.iter();
@@ -119,7 +129,7 @@ pub fn json_requested(args: &[String]) -> bool {
         match arg.as_str() {
             "--json" => return true,
             "--mock" => {}
-            "--mock-output" => {
+            "--mock-output" | "--url" | "--token-file" => {
                 rest.next();
             }
             _ => return false,
@@ -133,6 +143,8 @@ pub fn parse(args: &[String]) -> Result<Invocation, CliError> {
     let mut json = false;
     let mut mock = false;
     let mut outputs = Vec::new();
+    let mut url = None;
+    let mut token_file = None;
     let mut rest = args;
     while let Some((first, tail)) = rest.split_first() {
         if !first.starts_with('-') {
@@ -149,10 +161,27 @@ pub fn parse(args: &[String]) -> Result<Invocation, CliError> {
                 outputs.push(OutputId::new(id.as_str()));
                 rest = tail;
             }
+            "--url" | "--token-file" => {
+                let (value, tail) = rest
+                    .split_first()
+                    .ok_or_else(|| usage(format!("`{first}` needs a value")))?;
+                let slot = if first == "--url" {
+                    &mut url
+                } else {
+                    &mut token_file
+                };
+                if slot.replace(value.clone()).is_some() {
+                    return Err(usage(format!("`{first}` given twice")));
+                }
+                rest = tail;
+            }
             "-h" | "--help" => {
                 return Ok(Invocation {
                     json,
-                    connection: Connection::Remote,
+                    connection: Connection::Remote {
+                        url: None,
+                        token_file: None,
+                    },
                     command: Command::Help,
                 });
             }
@@ -162,10 +191,15 @@ pub fn parse(args: &[String]) -> Result<Invocation, CliError> {
     if !mock && !outputs.is_empty() {
         return Err(usage("`--mock-output` needs `--mock`"));
     }
+    if mock && (url.is_some() || token_file.is_some()) {
+        return Err(usage(
+            "`--mock` can't be combined with `--url` or `--token-file`",
+        ));
+    }
     let connection = if mock {
         Connection::Mock { outputs }
     } else {
-        Connection::Remote
+        Connection::Remote { url, token_file }
     };
     let command = parse_command(rest)?;
     Ok(Invocation {
@@ -450,7 +484,13 @@ mod tests {
         );
         let plain = ok(&["scene", "list"]);
         assert!(!plain.json);
-        assert_eq!(plain.connection, Connection::Remote);
+        assert_eq!(
+            plain.connection,
+            Connection::Remote {
+                url: None,
+                token_file: None
+            }
+        );
         assert_eq!(plain.command, Command::Query(Query::SceneList));
         assert_eq!(ok(&["version"]).command, Command::Version);
         assert_eq!(ok(&["help"]).command, Command::Help);
@@ -664,6 +704,36 @@ mod tests {
         no(&["--mock-output", "--json", "hello"]);
         no(&["--verbose", "--json", "hello"]);
         no(&["--help", "--json"]);
+        yes(&[
+            "--url",
+            "ws://127.0.0.1:1",
+            "--token-file",
+            "t",
+            "--json",
+            "hello",
+        ]);
+        no(&["--url", "--json", "hello"]);
+    }
+
+    #[test]
+    fn remote_options_name_the_engine_and_token() {
+        assert_eq!(
+            ok(&[
+                "--url",
+                "ws://127.0.0.1:4455",
+                "--token-file",
+                "/t",
+                "hello"
+            ])
+            .connection,
+            Connection::Remote {
+                url: Some("ws://127.0.0.1:4455".into()),
+                token_file: Some("/t".into()),
+            }
+        );
+        assert!(err(&["--url"]).contains("`--url` needs a value"));
+        assert!(err(&["--token-file", "a", "--token-file", "b", "hello"]).contains("twice"));
+        assert!(err(&["--mock", "--url", "ws://x:1", "hello"]).contains("can't be combined"));
     }
 
     #[test]
