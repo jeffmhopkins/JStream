@@ -21,8 +21,8 @@ prompt never drifts from them.
 <a id="ground-rules"></a>
 ## Ground rules
 <!-- @section
-depends_on = ["docs/adr/0015-review-and-governance.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Written for the maintainer's external reviewer harness" }
+depends_on = ["docs/adr/0019-review-gate-v2.md"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against ADR-0019 (supersedes 0015): ground rules unchanged; owner-only verdicts and one-verdict-per-round are stated in #output" }
 -->
 
 - **You only comment.** Never push commits, edit files, merge, close, approve through GitHub
@@ -82,7 +82,8 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
    valid decision comment on the PR matches it: either the maintainer's direct
    `/accept ADR-NNNN` / `/reject ADR-NNNN`, or a proxy decision carrying `on-behalf-of`,
    a quoted `instruction` that names that ADR, and `proxy-session` (format in ADR-0017).
-   Blanket instructions and unattributed agent decisions are invalid. Until a valid
+   Blanket instructions and unattributed agent decisions are invalid, and so is any
+   decision comment not posted from the repository owner's account (ADR-0019). Until a valid
    decision exists, post `escalate` (the PR keeps `needs-human`) instead of `pass`.
 4. **Documentation** (the project's highest-stakes invariant):
    - For each section the PR **re-verified**: re-read it against the diff yourself. If it
@@ -131,7 +132,7 @@ Don't inflate. A PR with only non-blocking findings gets `pass`.
 ## Step 4: Post the review
 <!-- @section
 covers = [".github/workflows/review-gate.yml"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against review-gate.yml: marker regex, newest-marker rule, head-SHA match and recuse/escalate handling all match this section" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against review-gate.yml decide(): owner-only markers, head SHA, highest round, fail/escalate beat pass, recuse pending; matches this section (ADR-0019)" }
 -->
 
 Post **one summary comment per round**. Inline comments on specific lines are welcome
@@ -161,8 +162,14 @@ The summary ends with **exactly one** verdict marker line, followed by a human-r
 | `escalate` | Disputed blocking findings after round 3 (see below), **or** a Tier-1 ADR awaiting a valid maintainer decision (Step 2 item 3), with no other blocking findings. Also apply the `needs-human` label. | `⚠️ Needs the maintainer: B2 disputed` / `⚠️ Needs the maintainer: ADR-NNNN decision` |
 | `recuse` | You authored commits in this PR | `↩️ Recused: reviewer session authored this PR` |
 
-The `review-gate` check reads only the **newest** marker, and only one whose `sha` matches
-the current head. The marker must be on its own line, exactly in this format.
+The `review-gate` check counts only markers posted from the repository owner's account
+(GitHub `author_association = OWNER`), and only those whose `sha` is the current head. Of
+those, the **highest round** decides, and within it any `fail` or `escalate` beats `pass`
+([ADR-0019](docs/adr/0019-review-gate-v2.md)). So:
+- post **exactly one** verdict per round, and never run two reviews of the same head at once;
+- a re-review of the same head (for example after a maintainer decision) uses the next round number.
+
+The marker must be on its own line, exactly in this format.
 
 <a id="rounds"></a>
 ## Re-review rounds and disputes

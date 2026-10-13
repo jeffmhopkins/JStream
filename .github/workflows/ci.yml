@@ -90,6 +90,13 @@ jobs:
             exit 1
           fi
 
+  # The merge gate's decision logic (ADR-0019), tested against the deployed workflow file.
+  gate-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: node .github/tests/review-gate-decide.test.mjs
+
   # Not required until M3 (R-GIT-003).
   macos:
     runs-on: macos-latest

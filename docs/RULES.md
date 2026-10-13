@@ -320,7 +320,7 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Aligned with codec policy ADR-0003 rewrite" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: R-DEP-007 (action SHA pinning, ADR-0018) added in #7; R-DEP-001..006 unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -602,6 +602,7 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `docs` | `cargo xtask docs check` | yes | M0 |
 | `governance` | `cargo xtask governance` (label plus justification for governance changes) | yes | M0 |
 | `pr-title` | Conventional Commit title | yes | M0 |
+| `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
 | `sweep` | weekly docs/external/facts sweep plus override audit list (scheduled) | n/a | M1 |
@@ -759,8 +760,8 @@ warning in drafts). Empty `applies_to = []` is allowed for process rules.
 <a id="governance"></a>
 ## Governance
 <!-- @section
-depends_on = ["docs/adr/0015-review-and-governance.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Reviewer-agent gate for a single GitHub account; labels with justification" }
+depends_on = ["docs/adr/0019-review-gate-v2.md"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: R-GOV-005 (ADR tiers, #5) present; depends_on repointed to ADR-0019; R-GOV-001..004 unchanged" }
 -->
 
 <a id="R-GOV-001"></a>

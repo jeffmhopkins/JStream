@@ -15,8 +15,8 @@ that runs from a clean checkout.
 <a id="m0"></a>
 ## M0: Foundation and risk spikes
 <!-- @section
-depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0015-review-and-governance.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: xtask governance item now names the ADR-0018 Dependabot exemption; rest of M0 unchanged" }
+depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0019-review-gate-v2.md"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: M0 tooling items add uses:-pin-insensitive hashing; depends_on repointed to ADR-0019" }
 -->
 
 Two tracks run in parallel.
@@ -31,7 +31,9 @@ Two tracks run in parallel.
   report, generated-block drift, `docs for`, `docs verify`. It replaces every `bootstrap`
   hash with a real one.
 - `xtask lint-deps` (layers, `unsafe` declarations, `links=` allowlist, workspace deps),
-  `xtask governance` (must encode ADR-0018's pre-approval for Dependabot pin-only PRs).
+  `xtask governance` (must encode ADR-0018's pre-approval for Dependabot pin-only PRs; and
+  `docs check` must ignore `uses:` pin changes when hashing covered workflow files, so a
+  Dependabot bump of `review-gate.yml` doesn't stale REVIEW#output).
 - `jstream-types`, `jstream-media`, first cut of `jstream-protocol` (edit/action
   classification, schema snapshot tests), `jstream-control`.
 

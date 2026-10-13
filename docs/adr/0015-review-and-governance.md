@@ -2,7 +2,8 @@
 id = "ADR-0015"
 title = "Agent review gate and governance with a single GitHub account"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0019-review-gate-v2.md"
 -->
 
 # ADR-0015: Agent review gate and governance with a single GitHub account
