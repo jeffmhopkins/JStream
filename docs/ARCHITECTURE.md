@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:485e151244ba4ecf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main (#22): table holds both the jstream-protocol L1 metadata from this PR and the vcam row citing ADR-0020; layers, summaries and unsafe column consistent, lint-deps passes" }
+verified = { hash = "b3:1c0f575a74d2d9e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crates/jstream-mux/Cargo.toml declares layer 2, summary 'Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4' and unsafe_allowed = false, matching its row verbatim; its only member dependency is jstream-media (L0), strictly lower; table text needs no change" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
