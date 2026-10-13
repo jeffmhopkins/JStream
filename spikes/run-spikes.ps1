@@ -9,6 +9,7 @@
 #   -Only S1,S3     which spikes to run (default S1,S3; S2 is answered, see below)
 #   -S3Minutes 60   length of the S3 drift run (default 60; the README asks for an hour)
 #   -RepoDir PATH   where to clone the repo if this script isn't inside a checkout
+#   -S3Silent       don't play the soundtrack during S3
 #
 # What runs by itself:
 #   S1  An animated test page plays full screen in Edge (kiosk mode) while S1 captures and
@@ -17,8 +18,10 @@
 #   S2  Only with -Only S2. Registers the camera per user, then machine-wide (a UAC
 #       prompt, and one more to remove it at the end), and each time a small Edge window opens "JStream S2" as a webcam while
 #       the producer runs. The producer's report says whether frames reached it.
-#   S3  The spike plays silence on the default output itself (its keep-alive), so nothing
-#       needs to play. A 2-minute smoke run, then the full run. The PC is kept awake.
+#   S3  A quiet generated soundtrack (soft chime arpeggio, about -24 dBFS) loops on the
+#       default output for the whole measurement, since real playback is the realistic
+#       case (s3-clock README). -S3Silent leaves only the spike's own silent keep-alive.
+#       A 2-minute smoke run, then the full run. The PC is kept awake.
 #
 # Ctrl+C stops everything; the results gathered so far are still zipped.
 
@@ -26,7 +29,8 @@
 param(
     [string[]]$Only = @('S1', 'S3'),
     [int]$S3Minutes = 60,
-    [string]$RepoDir = (Join-Path $env:USERPROFILE 'JStream')
+    [string]$RepoDir = (Join-Path $env:USERPROFILE 'JStream'),
+    [switch]$S3Silent
 )
 
 # 'Continue', not 'Stop': in Windows PowerShell 5.1, 'Stop' turns any stderr output of a
@@ -94,6 +98,40 @@ function Keep-Awake([bool]$On) {
     $flags = if ($On) { '80000003' } else { '80000000' }
     [void][JStream.Power]::SetThreadExecutionState([Convert]::ToUInt32($flags, 16))
 }
+
+# S3's soundtrack: a soft looping chime arpeggio, written as a 48 kHz 16-bit stereo WAV.
+Add-Type -TypeDefinition @'
+using System; using System.IO;
+namespace JStream {
+public static class Soundtrack {
+    public static void Write(string path) {
+        const int rate = 48000, seconds = 24, beat = rate / 2;
+        double[] notes = { 261.63, 329.63, 392.00, 523.25, 392.00, 329.63,   // C E G C G E
+                           220.00, 261.63, 329.63, 440.00, 329.63, 261.63 }; // A C E A E C
+        int frames = rate * seconds;
+        using (var w = new BinaryWriter(File.Create(path))) {
+            int bytes = frames * 4;
+            w.Write("RIFF".ToCharArray()); w.Write(36 + bytes); w.Write("WAVE".ToCharArray());
+            w.Write("fmt ".ToCharArray()); w.Write(16); w.Write((short)1); w.Write((short)2);
+            w.Write(rate); w.Write(rate * 4); w.Write((short)4); w.Write((short)16);
+            w.Write("data".ToCharArray()); w.Write(bytes);
+            for (int i = 0; i < frames; i++) {
+                double v = 0;
+                // Each note rings for two beats, so consecutive notes overlap.
+                for (int k = 0; k < 2; k++) {
+                    int n = i / beat - k; if (n < 0) continue;
+                    double t = (double)(i - n * beat) / rate;
+                    double f = notes[n % notes.Length];
+                    v += Math.Sin(2 * Math.PI * f * t) * Math.Exp(-3.0 * t) * Math.Min(1.0, t * 200);
+                }
+                short s = (short)(v * 0.06 * 32767);
+                w.Write(s); w.Write(s);
+            }
+        }
+    }
+}
+}
+'@
 
 # Edge (or Chrome), driven with its own throwaway profile so it never touches yours.
 function Find-Browser {
@@ -422,7 +460,18 @@ if ($Only -contains 'S3') {
     try {
         if (-not (Build-Spike $dir 's3')) { throw 'cargo build failed; see s3-build.txt' }
         $exe = Join-Path $dir 'target\release\s3-clock.exe'
-        Say 'Nothing needs to play: the spike keeps the output busy with silence. Leave the audio devices as they are.' 'Yellow'
+        $player = $null
+        if ($S3Silent) {
+            Say 'Playing nothing (-S3Silent): only the spike''s silent keep-alive runs.' 'Yellow'
+            Note '- playback: none (-S3Silent); only the keep-alive ran, which is not the realistic case'
+        } else {
+            $wav = Join-Path $Scratch 's3-soundtrack.wav'
+            [JStream.Soundtrack]::Write($wav)
+            $player = New-Object Media.SoundPlayer $wav
+            $player.PlayLooping()
+            Say 'A quiet chime loop plays on the default output during S3 (rerun with -S3Silent to skip it). Leave the audio devices as they are.' 'Yellow'
+            Note '- playback: generated 24 s chime loop (48 kHz stereo, about -24 dBFS) on the default output, via System.Media.SoundPlayer, for the whole S3 run'
+        }
         $code = Run-Logged $exe @('--minutes', '2', '--json', '--csv', (Join-Path $Out 's3-smoke.csv')) `
             (Join-Path $Out 's3-smoke.json') (Join-Path $Out 's3-smoke.stderr.txt') 300
         Note "- smoke (2 min): exit code $(Describe-Exit $code)"
@@ -437,6 +486,8 @@ if ($Only -contains 'S3') {
         }
     } catch {
         Say "S3 failed: $_" 'Red'; Note "- S3 failed: $_"
+    } finally {
+        if ($player) { $player.Stop(); $player.Dispose() }
     }
 }
 

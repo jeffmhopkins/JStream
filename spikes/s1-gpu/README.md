@@ -90,7 +90,11 @@ in any player that reads raw H.264, such as VLC.
 On stderr the spike prints a `s1 stage` line as it reaches each step: device, capture,
 shared textures, encoder setup, first frame. If the process dies of an unhandled
 exception (an access violation, for example), it prints an `s1 FAULT` line with the
-exception, the faulting module and offset, and a backtrace before Windows ends it. Up to
+exception, the faulting module and offset, and a backtrace before Windows ends it. A stack
+overflow or heap corruption prints only the code and address, since nothing that
+allocates is safe then. A fail-fast exit (`0xC0000409`, for example a Rust abort) bypasses
+both handlers and prints no `s1 FAULT` line; the runner still decodes its exit code. If a
+driver installs its own unhandled-exception filter later, it replaces ours. Up to
 three `s1 first-chance exception` lines may come first: faults a driver may still handle
 itself, so they aren't crashes on their own. Keep stderr when you report a crash.
 
