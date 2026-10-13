@@ -14,6 +14,7 @@ anyhow = "1"
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 globset = { version = "0.4", default-features = false }
 insta = { version = "1", default-features = false }
+jstream-media = { path = "crates/jstream-media" }
 pulldown-cmark = { version = "0.13", default-features = false }
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 serde = { version = "1", default-features = false, features = ["derive", "std"] }
