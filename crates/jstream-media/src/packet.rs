@@ -18,9 +18,9 @@ pub enum MediaKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Codec {
-    /// H.264 / AVC video.
+    /// H.264 / AVC video. Payloads are Annex B (start codes), as OS encoders emit them.
     H264,
-    /// AAC audio.
+    /// AAC audio. Payloads are raw access units, without ADTS headers.
     Aac,
 }
 

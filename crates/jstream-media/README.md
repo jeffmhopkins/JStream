@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:a77fff5205a188cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only touched the jstream-sources and jstream-platform-windows rows (browser built-in, CEF backend); this crate's row and purpose text unaffected" }
+verified = { hash = "b3:3cd637b56d05cc83", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#30): Packets bullet from main (Annex B H.264, raw AAC, muxers convert) matches src; upstream crate-map change only in jstream-sources/jstream-platform-windows rows" }
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,
@@ -41,6 +41,9 @@ Contents:
   planar `SampleFormat`) and `AudioBuffer`, whose sample count is always whole frames.
 - **Packets:** `Packet` (codec, keyframe flag, pts, dts no later than pts, non-empty
   shared payload). `Codec` covers the [ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md)
-  baseline: H.264 and AAC.
+  baseline: H.264 and AAC. Payload framing is a convention this crate doesn't check:
+  H.264 payloads are Annex B (start codes, as OS encoders emit them) and AAC payloads are
+  raw access units without ADTS. Muxers convert to the container's framing
+  ([`jstream-mux`](../jstream-mux/README.md#purpose)).
 - **Errors:** one `thiserror` enum, `MediaError`, whose variants carry the offending
   values ([R-RS-003](../../docs/RULES.md#R-RS-003)).

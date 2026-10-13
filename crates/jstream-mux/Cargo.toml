@@ -1,0 +1,20 @@
+[package]
+name = "jstream-mux"
+version = "0.0.0"
+description = "Pure-Rust container muxers: FLV tags and files for RTMP, with AMF0 and H.264/AAC framing helpers."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+jstream-media.workspace = true
+thiserror.workspace = true
