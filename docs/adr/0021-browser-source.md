@@ -86,10 +86,13 @@ component that JStream does not ship.
     (VP8/VP9/AV1, Opus, Vorbis, FLAC, MP3, WAV). H.264 and AAC playback in pages is not
     available.
   - Every other part of ADR-0003 stands.
-- **LGPL-2.1 obligations:** `libcef.dll` is a separate DLL that JStream loads dynamically,
-  which satisfies LGPL's relinking requirement. The portable zip ships CEF's license and
-  credits file (`CREDITS.html`) and the FFmpeg LGPL text. Each release notes, or links to,
-  the exact Chromium FFmpeg source revision that runtime was built from. The license policy
+- **LGPL-2.1 obligations:** FFmpeg is statically linked inside `libcef.dll`, so a user
+  replaces it by rebuilding `libcef.dll` from the public CEF and Chromium sources. JStream
+  loads `libcef.dll` as a separate DLL, so a rebuilt one drops in without relinking
+  JStream. The portable zip ships CEF's license and credits file (`CREDITS.html`) and the
+  FFmpeg LGPL text. Each release names, or links to, the exact CEF and Chromium revisions
+  (and so the FFmpeg revision) its runtime was built from. Spike S4 confirms this
+  alongside the codec set. The license policy
   rules ([R-DEP-001](../RULES.md#R-DEP-001), [R-DEP-002](../RULES.md#R-DEP-002)) name this
   exception, a declared governance change made with this ADR.
 - **Security updates:** the CEF version is pinned. Release builds track CEF stable for
