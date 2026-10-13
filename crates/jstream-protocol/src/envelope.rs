@@ -27,6 +27,17 @@ pub enum ClientMessage {
     Request(Request),
 }
 
+impl ClientMessage {
+    /// Parses one JSON text message from a client. Any parse failure (bad JSON, an
+    /// unknown `type`, a missing or mistyped field, or a number that isn't a finite
+    /// `f32`) is [`ProtocolError::Malformed`], with serde's description as the reason.
+    pub fn parse(text: &str) -> Result<ClientMessage, ProtocolError> {
+        serde_json::from_str(text).map_err(|e| ProtocolError::Malformed {
+            reason: e.to_string(),
+        })
+    }
+}
+
 /// A message from the server to a client. Tagged by `type`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -201,6 +212,17 @@ mod tests {
                 "error": {"code": "empty_batch", "message": "a batch must contain at least one edit"}
             }))
         );
+    }
+
+    #[test]
+    fn non_finite_numbers_are_malformed() {
+        let text = r#"{"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"item.set_transform","item_id":"i","transform":{"position":{"x":1e39,"y":0},"scale":{"x":1,"y":1},"rotation_deg":0}}]}}"#;
+        assert!(matches!(
+            ClientMessage::parse(text),
+            Err(ProtocolError::Malformed { .. })
+        ));
+        let ok = text.replace("1e39", "3.4028235e38");
+        assert!(ClientMessage::parse(&ok).is_ok());
     }
 
     #[test]

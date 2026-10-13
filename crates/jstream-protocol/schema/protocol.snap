@@ -502,6 +502,11 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "Finite32": {
+      "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
+      "format": "float",
+      "type": "number"
+    },
     "Hello": {
       "description": "The client's opening message.",
       "properties": {
@@ -529,16 +534,15 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "string"
     },
     "ItemTransform": {
-      "description": "Where a scene item sits in its scene.\n\nA deliberately small first cut: position, scale and rotation about the item's\ntop-left corner. The full 3D transform and crop (ARCH data model) replace it in a\nlater minor version, as added fields with defaults.\n\nEvery number must be finite; the engine rejects non-finite input with\n`invalid_argument`.",
+      "description": "Where a scene item sits in its scene.\n\nA deliberately small first cut: position, scale and rotation about the item's\ntop-left corner. The full 3D transform and crop (ARCH data model) replace it in a\nlater minor version, as added fields with defaults.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
       "properties": {
         "position": {
           "$ref": "#/$defs/Vec2",
           "description": "Top-left corner, in pixels of the scene's canvas."
         },
         "rotation_deg": {
-          "description": "Clockwise rotation, in degrees.",
-          "format": "float",
-          "type": "number"
+          "$ref": "#/$defs/Finite32",
+          "description": "Clockwise rotation, in degrees."
         },
         "scale": {
           "$ref": "#/$defs/Vec2",
@@ -844,17 +848,15 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "string"
     },
     "Vec2": {
-      "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).\n\nBoth components must be finite. JSON has no NaN or infinity, so the wire can't carry\nthem, and the engine rejects a non-finite value built in-process with\n`invalid_argument`.",
+      "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).\n\nBoth components are [`Finite32`]: a non-finite or out-of-`f32`-range number (`1e39`)\nfails deserialization, so the message is rejected as `malformed`, and in-process code\ncan't build a non-finite value.",
       "properties": {
         "x": {
-          "description": "Horizontal component.",
-          "format": "float",
-          "type": "number"
+          "$ref": "#/$defs/Finite32",
+          "description": "Horizontal component."
         },
         "y": {
-          "description": "Vertical component.",
-          "format": "float",
-          "type": "number"
+          "$ref": "#/$defs/Finite32",
+          "description": "Vertical component."
         }
       },
       "required": [
@@ -926,7 +928,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The message could not be parsed: bad JSON, an unknown `type`, or a missing or\nmistyped field.",
+          "description": "The message could not be parsed: bad JSON, an unknown `type`, a missing or\nmistyped field, or a number that isn't a finite `f32` (NaN, infinity, or out of\nrange such as `1e39`). `ClientMessage::parse` produces it.",
           "properties": {
             "code": {
               "const": "malformed",

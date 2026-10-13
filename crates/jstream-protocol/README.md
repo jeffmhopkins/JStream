@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:acea5da72c677fbb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after round-1 fixes (version.rs can_serve rule, command.rs inverse and finiteness docs, description-only schema snapshot diff): module list, types, deps and WASM-safety claims unchanged and still accurate" }
+verified = { hash = "b3:744e97c8eac34a06", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after round-2 fix: added finite.rs/Finite32 and ClientMessage::parse to the contents list; deps unchanged (no new crates), forbid(unsafe_code), wasm32 clippy clean" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -27,6 +27,7 @@ first cut defines its own wire types for them.
 Contents (a deliberately small first cut; [Design](#design) describes the whole model):
 - **Envelope** (`envelope.rs`): `ClientMessage` (`hello`, `request`) and `ServerMessage`
   (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`.
+  `ClientMessage::parse` maps every parse failure to `malformed`.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
   `item.add`, `item.remove`, `item.set_transform`), `Action` (`output.start`,
   `output.stop`), `Batch`, and the `Command`/`CommandClass` classification view.
@@ -36,6 +37,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   codes, and `WireError`, its wire form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs, `Rev`, and
   `PROTOCOL_VERSION`.
+- **Numbers** (`finite.rs`): `Finite32`, the only float type, which rejects NaN,
+  infinity and out-of-range numbers at construction and deserialization.
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
@@ -45,7 +48,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:b5f3120c69ed7a4c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1 B1/N1/N2: can_serve is now same major and client minor <= server minor at 0.x too (0.2 serves 0.1, 0.1 refuses 0.2), envelope paragraph and Schema and compatibility now state R-API-001 additive-minor / removal-major-with-ADR-and-deprecation with no 0.x exception; Undo says the edit set is not yet closed (item.remove stacking, scene.delete display order) and order edits must land before undo; finite-number note matches command.rs docs" }
+verified = { hash = "b3:69575b64d32ec805", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 2 B2: every float is now Finite32 (Vec2.x/y, ItemTransform.rotation_deg); its Deserialize rejects NaN/inf and out-of-f32-range numbers like 1e39 (serde's as-narrowing), ClientMessage::parse maps that to malformed, Finite32::new/Vec2::new return None so in-process code can't build one; tests cover +-1e39, f32::MAX round trip, no null output. Removed the false 'JSON can't carry NaN' claim; compatibility now notes string enums lack Unknown (OQ8); can_serve rule unchanged" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -127,9 +130,13 @@ Creating edits carry a client-chosen ID (`scene_id`, `item_id`). A batch can the
 to an object it creates earlier in the same batch, a retry can't create a duplicate,
 and an undo can re-create a deleted object under its old ID. IDs are opaque strings.
 
-Numbers in edits (`ItemTransform`, `Vec2`) must be finite. JSON can't carry NaN or
-infinity, and the engine rejects a non-finite value from an in-process client with
-`invalid_argument`.
+Every float in the protocol (`Vec2`, `ItemTransform`) is a `Finite32`: an `f32` that is
+never NaN or infinite. serde would otherwise narrow an out-of-range JSON number such as
+`1e39` to infinity, which then serializes as `null` and no longer parses. So a
+non-finite or out-of-`f32`-range number fails deserialization, and
+`ClientMessage::parse` rejects the whole message as `malformed`. In-process clients
+can't build a non-finite value either: `Finite32::new` and `Vec2::new` return `None`
+for one.
 
 ### Batches, revisions and `expected_rev`
 
@@ -223,7 +230,9 @@ after 1.0:
   optional field. Old clients keep working, and a newer server still serves them
   (`can_serve`), because unknown fields are ignored (no type denies them), and because
   unknown server messages, events and error codes parse as an `Unknown` variant that
-  clients skip. An unknown error code still has its `message`.
+  clients skip. An unknown error code still has its `message`. Not yet covered: a new
+  value of a string enum (`OutputState`, `EntityKind`) inside a known message breaks an
+  older client's parse, so adding one needs open question 8 settled first.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.

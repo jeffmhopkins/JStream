@@ -8,6 +8,7 @@
 //!
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
+use crate::finite::Finite32;
 use crate::id::{IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -237,15 +238,25 @@ impl From<Action> for Command {
 
 /// A 2D position or scale, in output pixels (position) or as a factor (scale).
 ///
-/// Both components must be finite. JSON has no NaN or infinity, so the wire can't carry
-/// them, and the engine rejects a non-finite value built in-process with
-/// `invalid_argument`.
+/// Both components are [`Finite32`]: a non-finite or out-of-`f32`-range number (`1e39`)
+/// fails deserialization, so the message is rejected as `malformed`, and in-process code
+/// can't build a non-finite value.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct Vec2 {
     /// Horizontal component.
-    pub x: f32,
+    pub x: Finite32,
     /// Vertical component.
-    pub y: f32,
+    pub y: Finite32,
+}
+
+impl Vec2 {
+    /// A vector from two finite components, or `None` if either is NaN or infinite.
+    pub const fn new(x: f32, y: f32) -> Option<Vec2> {
+        match (Finite32::new(x), Finite32::new(y)) {
+            (Some(x), Some(y)) => Some(Vec2 { x, y }),
+            _ => None,
+        }
+    }
 }
 
 /// Where a scene item sits in its scene.
@@ -254,8 +265,8 @@ pub struct Vec2 {
 /// top-left corner. The full 3D transform and crop (ARCH data model) replace it in a
 /// later minor version, as added fields with defaults.
 ///
-/// Every number must be finite; the engine rejects non-finite input with
-/// `invalid_argument`.
+/// Every number is a [`Finite32`], so a non-finite or out-of-range number is rejected at
+/// deserialization as `malformed`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ItemTransform {
     /// Top-left corner, in pixels of the scene's canvas.
@@ -263,15 +274,21 @@ pub struct ItemTransform {
     /// Scale factors; 1.0 is the source's native size.
     pub scale: Vec2,
     /// Clockwise rotation, in degrees.
-    pub rotation_deg: f32,
+    pub rotation_deg: Finite32,
 }
 
 impl ItemTransform {
     /// No offset, native size, no rotation.
     pub const IDENTITY: ItemTransform = ItemTransform {
-        position: Vec2 { x: 0.0, y: 0.0 },
-        scale: Vec2 { x: 1.0, y: 1.0 },
-        rotation_deg: 0.0,
+        position: Vec2 {
+            x: Finite32::ZERO,
+            y: Finite32::ZERO,
+        },
+        scale: Vec2 {
+            x: Finite32::ONE,
+            y: Finite32::ONE,
+        },
+        rotation_deg: Finite32::ZERO,
     };
 }
 
@@ -334,6 +351,18 @@ mod tests {
                 "idempotency_key": "k"
             }))
         );
+    }
+
+    #[test]
+    fn out_of_range_transform_numbers_are_rejected() {
+        // Regression (review round 2, B2): `1e39` used to narrow to an infinite f32.
+        for x in ["1e39", "-1e39"] {
+            let text = format!(
+                r#"{{"type":"item.set_transform","item_id":"i","transform":{{"position":{{"x":{x},"y":0}},"scale":{{"x":1,"y":1}},"rotation_deg":0}}}}"#
+            );
+            assert!(serde_json::from_str::<Edit>(&text).is_err(), "{x} accepted");
+        }
+        assert_eq!(super::Vec2::new(f32::INFINITY, 0.0), None);
     }
 
     #[test]

@@ -11,6 +11,7 @@ mod command;
 mod envelope;
 mod error;
 mod event;
+mod finite;
 mod id;
 mod query;
 mod schema;
@@ -23,6 +24,7 @@ pub use envelope::{
 };
 pub use error::{EntityKind, ProtocolError, WireError};
 pub use event::{Event, OutputState};
+pub use finite::Finite32;
 pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};
 pub use query::{Query, QueryResult, SceneSummary};
 pub use schema::json_schema;

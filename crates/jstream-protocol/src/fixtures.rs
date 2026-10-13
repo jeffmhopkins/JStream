@@ -7,9 +7,10 @@
 
 use crate::{
     Action, Batch, Call, CallResult, ClientId, ClientMessage, Command, CommandClass, Edit,
-    EntityKind, ErrorResponse, Event, EventMessage, Hello, IdempotencyKey, ItemId, ItemTransform,
-    OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, Query, QueryResult, Request, RequestId,
-    Response, Rev, SceneId, SceneSummary, ServerMessage, SourceId, Vec2, Welcome, json_schema,
+    EntityKind, ErrorResponse, Event, EventMessage, Finite32, Hello, IdempotencyKey, ItemId,
+    ItemTransform, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, Query, QueryResult,
+    Request, RequestId, Response, Rev, SceneId, SceneSummary, ServerMessage, SourceId, Vec2,
+    Welcome, json_schema,
 };
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -45,9 +46,9 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::ItemSetTransform {
             item_id: ItemId::new("itm_2"),
             transform: ItemTransform {
-                position: Vec2 { x: 1280.0, y: 0.5 },
-                scale: Vec2 { x: 0.25, y: 0.25 },
-                rotation_deg: -90.0,
+                position: Vec2::new(1280.0, 0.5).expect("finite"),
+                scale: Vec2::new(0.25, f32::MAX).expect("finite"),
+                rotation_deg: Finite32::new(-90.0).expect("finite"),
             },
         },
     ]
@@ -414,6 +415,8 @@ mod tests {
 
     fn round_trip<T: Serialize + DeserializeOwned + PartialEq + Debug>(value: &T) {
         let json = serde_json::to_string(value).expect("serializes");
+        // No field is ever `null`: optional fields are omitted, and floats are finite.
+        assert!(!json.contains("null"), "serialized a null: {json}");
         let back: T = serde_json::from_str(&json).expect("parses back");
         assert_eq!(&back, value, "round trip changed the value: {json}");
         let again = serde_json::to_string(&back).expect("serializes");

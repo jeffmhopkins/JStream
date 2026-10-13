@@ -28,8 +28,9 @@ pub enum ProtocolError {
     /// A request arrived before the `hello`/`welcome` handshake finished.
     #[error("send `hello` before any request")]
     HandshakeRequired,
-    /// The message could not be parsed: bad JSON, an unknown `type`, or a missing or
-    /// mistyped field.
+    /// The message could not be parsed: bad JSON, an unknown `type`, a missing or
+    /// mistyped field, or a number that isn't a finite `f32` (NaN, infinity, or out of
+    /// range such as `1e39`). `ClientMessage::parse` produces it.
     #[error("malformed message: {reason}")]
     Malformed {
         /// What the parser reported.
