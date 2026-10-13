@@ -83,7 +83,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: added edit/act
 ## Repository layout
 <!-- @section
 covers = ["xtask/**", ".github/workflows/**"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: .github/ comment no longer milestone-dependent (review N1 on #3); tree otherwise unchanged" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read for action SHA pinning: workflows changed only in uses: refs; tree and layout unchanged" }
 -->
 
 ```
