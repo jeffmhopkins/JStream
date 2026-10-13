@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:d8c08c8f007f5fa2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: apps/jstream-cli/Cargo.toml gains an opt-in mock feature and a jstream-control dev-dependency; both are jstream-control (L2, strictly below L6), still no jstream-core; layer 6, summary and unsafe_allowed unchanged; table unchanged" }
+verified = { hash = "b3:2b95037a58ac0fd3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#34 jstream-platform L1, matches its row; table text is main's): this branch adds apps/jstream-cli/Cargo.toml at layer 6 with the cli part of the apps/* summary and unsafe_allowed false, depending (normal, optional mock feature, and dev) only on jstream-control L2, never jstream-core" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
