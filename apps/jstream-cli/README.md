@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:e62b90286b76751b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Running bullet names the WsControl connection; not-here-yet drops the WebSocket client, keeps jstream mcp, adds default address/token file and notes no engine host exists yet so --mock is still the usual path; contents list matches src/" }
+verified = { hash = "b3:b28f936fdbb1695c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#41): not-here-yet line keeps this PR's text (WsControl connection exists; default address/token file and no engine host yet) with the proxy renamed jstream-cli mcp per main; contents list matches src/" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -33,7 +33,7 @@ Contents (a first cut):
 - **Exit codes** (`exit.rs`): one per failure kind, including one per protocol error code.
 - **Blocking** (`block.rs`): a thread-parking `block_on` for `Control`'s futures.
 
-Not here yet: `jstream mcp`, the stdio MCP proxy
+Not here yet: `jstream-cli mcp`, the stdio MCP proxy
 ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)), and a default address and token
 file ([open question 5](#design)). No engine host serves the WebSocket API yet
 (`jstream-daemon` and `jstream-desktop` don't exist), so outside tests the CLI is still
@@ -137,7 +137,7 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b32d70414ca6eb33", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Connection seam bullet now opens WsControl (control ws feature on) after reading the token file in the connector, parser stays pure; runtime bullet notes the client's own thread; open questions 3-4 reworded and 5 (defaults) added; control#design re-read for the client's executor-agnostic futures" }
+verified = { hash = "b3:f8be2923ddcb9a30", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#41): open question 1 now says both halves exist (jstream-mcp, WsControl) so jstream-cli mcp is a follow-up; connection/token-file bullets from this PR unchanged against run.rs/args.rs" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -174,8 +174,11 @@ verified = { hash = "b3:b32d70414ca6eb33", by = "agent:claude@session_01QBbMRwRu
 
 ### Open questions
 
-1. **`jstream mcp`.** The stdio MCP proxy ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape))
-   would make the CLI depend on `jstream-mcp`, which doesn't exist yet. Left out.
+1. **`jstream-cli mcp`.** The binary keeps the name `jstream-cli` (maintainer's choice),
+   so the stdio MCP proxy ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)) is its `mcp`
+   subcommand. Both halves exist now (`jstream-mcp` and the `WsControl` connection), so
+   the proxy is a follow-up: `jstream-cli mcp` would serve `jstream_mcp::Server` on stdio
+   over a `WsControl` session.
 2. **A persistent mock.** `--mock` starts empty on every run, and a run is one command,
    so through the binary the read commands always show an empty collection (the unit
    tests read a populated `MockEngine`). Should `--mock` load and save its state (a

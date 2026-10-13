@@ -95,12 +95,16 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
   encoder ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)). Adding it
   means a `VideoSurface` GPU variant (a texture plus a fence value), an adapter
   identity (S1 picks the encoder MFT by adapter LUID), and `wgpu` pinned exactly
-  ([ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md)). An open alternative is to
-  keep `wgpu` out of this crate: an opaque GPU frame here, with the `wgpu` import done in
-  `jstream-render` against the platform crate.
+  ([ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md)). **Proposed default:** keep
+  `wgpu` out of this crate. This crate gets an opaque GPU frame (texture handle plus fence
+  value), and `jstream-render`, which already depends on `wgpu`, does the import. That
+  keeps this L1 crate light and leaves one crate tracking `wgpu`'s exact pin. Confirmed or
+  changed when S1 reports.
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.
-  A device with another channel count is refused as `Unsupported` until the layout set
-  grows or backends downmix.
+  A device with another channel count is refused as `Unsupported` for now. **Proposed
+  default:** backends downmix any other layout to stereo and log it, and new layouts
+  (e.g. 7.1) are added only when a real device needs them.
 - **Clock unit.** `MediaClock::timebase` lets each platform choose its unit (spike S3
-  uses 100 ns ticks, WASAPI's unit). Whether the engine fixes one unit is still open, with
-  S3's result and `jstream-core`.
+  uses 100 ns ticks, WASAPI's unit). **Proposed default:** the engine fixes one unit,
+  100 ns ticks, and other platforms convert at their edge, so engine timestamps compare
+  without per-platform conversions. Settled with S3's result and `jstream-core`.
