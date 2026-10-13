@@ -14,6 +14,7 @@
 
 mod capture;
 mod convert;
+mod crash;
 mod d3d;
 mod encode;
 
@@ -37,12 +38,15 @@ use windows::Win32::System::WinRT::{RO_INIT_MULTITHREADED, RoInitialize};
 
 use crate::cli::{Args, Size};
 use crate::stats::{Report, Samples};
+pub use crash::stage;
 
 /// NV12 textures in flight between the converter and the encoder. Generous, so an encoder
 /// that buffers a few inputs before its first output cannot stall the ring.
 const RING: usize = 8;
 
 pub fn run(args: &Args) -> Result<Report> {
+    crash::install();
+    stage(format_args!("start, {args:?}"));
     // SAFETY: called once on this thread before any WinRT/COM use. An "already
     // initialised" result is fine.
     let _ = unsafe { RoInitialize(RO_INIT_MULTITHREADED) };
@@ -56,13 +60,23 @@ pub fn run(args: &Args) -> Result<Report> {
 
 fn run_pipeline(args: &Args) -> Result<Report> {
     let monitor = capture::primary_monitor();
+    stage("primary monitor found; creating the wgpu DX12 device");
     let gpu = convert::Gpu::new(monitor)?;
     let info = gpu.adapter.get_info();
+    stage(format_args!(
+        "wgpu device on {} ({})",
+        info.name, gpu.selection
+    ));
     let facts = d3d::adapter_facts(&gpu.dxgi_adapter)?;
     let d3d11 = d3d::create_d3d11(&gpu.dxgi_adapter)?;
+    stage("D3D11 device created; starting Windows Graphics Capture");
 
     let capture = capture::Capture::start(&d3d11.device.clone().into(), monitor)?;
     let display = capture.size;
+    stage(format_args!(
+        "capture started, display {}x{}",
+        display.0, display.1
+    ));
     let encode_size = match args.size {
         Size::Native => (display.0 & !1, display.1 & !1),
         Size::Fixed(w, h) => (w, h),
@@ -107,6 +121,7 @@ fn run_pipeline(args: &Args) -> Result<Report> {
         ring.push((shared, convert::Nv12Target::new(texture)));
     }
     let converter = convert::Converter::new(&gpu.device, &source_view);
+    stage("shared textures imported and converter built; creating the encoder");
 
     let mut encoder = encode::Encoder::new(
         &d3d11.device.clone().into(),
@@ -144,6 +159,7 @@ fn run_pipeline(args: &Args) -> Result<Report> {
     let (mut late, mut busy, mut ring_full) = (0u64, 0u64, 0u64);
     let mut size_warned = false;
 
+    stage("encoder ready; frame loop starts");
     let cpu_start = process_cpu_time();
     let start = Instant::now();
     let end = start + Duration::from_secs_f64(args.seconds);
@@ -221,12 +237,22 @@ fn run_pipeline(args: &Args) -> Result<Report> {
             d3d11.context.Flush();
         }
         let time = this_tick as i64 * frame_100ns;
+        if submitted == 0 {
+            stage("first frame converted; submitting it to the encoder");
+        }
         encoder.submit(&shared.d3d11, time, frame_100ns)?;
+        if submitted == 0 {
+            stage("first frame submitted");
+        }
         sink.free_slots.pop();
         sink.in_flight.push_back((time, Instant::now(), slot));
         submitted += 1;
         tick_work_ms.push(work_start.elapsed().as_secs_f64() * 1e3);
     }
+    stage(format_args!(
+        "frame loop done: {ticks} ticks, {submitted} submitted, {} packets",
+        sink.packets
+    ));
     let measured = start.elapsed().as_secs_f64();
     // Packets drained after this point are counted in frames_encoded but not in the fps.
     let encoded_in_window = sink.packets;

@@ -87,6 +87,17 @@ Other options are `--fps <N>`, `--bitrate <kbps>`, `--out <path>` and `--size <W
 Run `cargo run --release -- --help` to list them. To check the output, play `out.h264`
 in any player that reads raw H.264, such as VLC.
 
+On stderr the spike prints a `s1 stage` line as it reaches each step: device, capture,
+shared textures, encoder setup, first frame. If the process dies of an unhandled
+exception (an access violation, for example), it prints an `s1 FAULT` line with the
+exception, the faulting module and offset, and a backtrace before Windows ends it. Up to
+three `s1 first-chance exception` lines may come first: faults a driver may still handle
+itself, so they aren't crashes on their own. Keep stderr when you report a crash.
+
+`spikes\run-spikes.bat` runs all of this unattended. It plays a full-screen animated page
+in Edge, runs at 1920x1080 and at native size, and zips the reports, the stderr logs and
+the first 6 MB of each H.264 file.
+
 <a id="paste-back"></a>
 ## What to paste back
 <!-- @section
@@ -125,8 +136,10 @@ How to read the numbers:
 -->
 
 This code was cross-checked from Linux with `cargo check` and `cargo clippy` for
-`x86_64-pc-windows-msvc`. **It has never been run.** These are the parts most likely to
-fail at the first run, roughly in order:
+`x86_64-pc-windows-msvc`. Its first run on Windows (Ryzen 9 8945HS, Radeon 780M, 4K
+display) crashed with an access violation before printing a report, and stderr was not
+kept, so the cause is still open. These are the parts most likely to fail, roughly in
+order:
 
 - **NV12 render targets through wgpu.** wgpu only guarantees NV12 for sampling. This code
   wraps a D3D11-created NV12 texture with `RENDER_ATTACHMENT` usage and renders into its
