@@ -33,6 +33,7 @@ const PROTECTED_FILES: &[&str] = &[
     "rust-toolchain.toml",
     "docs/DOCS.md",
     "REVIEW.md",
+    "xtask/src/main.rs",
     "xtask/src/governance.rs",
     "xtask/src/lint_deps.rs",
 ];
@@ -129,8 +130,9 @@ fn lookup<'t>(t: Option<&'t toml::Table>, path: &[&str]) -> Option<&'t toml::Val
     Some(v)
 }
 
-/// `[workspace.lints]` edits, and crate `[lints]` tables that stop being exactly
-/// `workspace = true` (a crate's own table can loosen the workspace lints).
+/// `[workspace.lints]` and root `[lints]` edits, and package manifests (any non-root
+/// `Cargo.toml`, added or edited) whose `[lints]` is not exactly `workspace = true`: a
+/// crate's own table, or none at all, loosens the workspace lints for that crate.
 fn lints(f: &FileChange, out: &mut Vec<Change>) {
     let Some(head) = &f.head else {
         return; // a deleted crate takes its lints with it
@@ -144,12 +146,18 @@ fn lints(f: &FileChange, out: &mut Vec<Change>) {
     let inherits = new
         .and_then(toml::Value::as_table)
         .is_some_and(|t| t.len() == 1 && t.get("workspace") == Some(&toml::Value::Boolean(true)));
-    if lookup(b.as_ref(), &["lints"]) != new && !inherits {
+    if inherits {
+        return;
+    }
+    if f.path != "Cargo.toml" {
+        let verb = if f.base.is_none() { "adds" } else { "edits" };
         push(
             out,
             &f.path,
-            "edits the crate's `[lints]` table (not `workspace = true`)".into(),
+            format!("{verb} a package manifest whose `[lints]` is not exactly `workspace = true`"),
         );
+    } else if lookup(b.as_ref(), &["lints"]) != new {
+        push(out, &f.path, "edits the root `[lints]` table".into());
     }
 }
 
@@ -311,8 +319,8 @@ fn adr_edits(p: &str, base: &str, head: &str, out: &mut Vec<Change>) {
 }
 
 /// Length of the attribute at the start of `s` through its closing `]`, skipping string
-/// literals.
-fn attr_len(s: &str) -> Option<usize> {
+/// literals. Also used by lint-deps to read a crate root's leading inner attributes.
+pub(crate) fn attr_len(s: &str) -> Option<usize> {
     let (mut depth, mut in_str, mut escaped) = (0usize, false, false);
     for (k, c) in s.char_indices() {
         if in_str {
@@ -340,9 +348,58 @@ fn attr_len(s: &str) -> Option<usize> {
     None
 }
 
-/// `#[allow(…)]` / `#[expect(…)]` attributes (outer or inner) in Rust source, with
-/// whitespace collapsed, and their 1-based line. `//` comment lines are skipped. This is a
-/// text scan: attribute text inside string literals counts too.
+/// Splits `s` at its top-level commas (outside brackets and string literals).
+fn split_top(s: &str) -> Vec<&str> {
+    let (mut parts, mut start) = (Vec::new(), 0);
+    let (mut depth, mut in_str, mut escaped) = (0usize, false, false);
+    for (k, c) in s.char_indices() {
+        if in_str {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == '"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match c {
+            '"' => in_str = true,
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                parts.push(&s[start..k]);
+                start = k + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&s[start..]);
+    parts
+}
+
+/// Whether an attribute's contents (between `[` and `]`) suppress lints: `allow(…)` or
+/// `expect(…)`, directly or among the attributes of a `cfg_attr(<predicate>, …)`, which
+/// may nest.
+fn suppresses(meta: &str) -> bool {
+    let m = meta.trim_start();
+    if let Some(args) = m.strip_prefix("allow").or_else(|| m.strip_prefix("expect")) {
+        return args.trim_start().starts_with('(');
+    }
+    let Some(args) = m
+        .strip_prefix("cfg_attr")
+        .map(str::trim_start)
+        .and_then(|a| a.strip_prefix('('))
+        .and_then(|a| a.trim_end().strip_suffix(')'))
+    else {
+        return false;
+    };
+    split_top(args).into_iter().skip(1).any(suppresses)
+}
+
+/// `#[allow(…)]` / `#[expect(…)]` attributes (outer or inner, also inside `cfg_attr`) in
+/// Rust source, with whitespace collapsed, and their 1-based line. `//` comment lines are
+/// skipped. This is a text scan: attribute text inside string literals counts too.
 fn suppressions(src: &str) -> Vec<(String, usize)> {
     let mut out = Vec::new();
     let mut offset = 0;
@@ -354,22 +411,15 @@ fn suppressions(src: &str) -> Vec<(String, usize)> {
         }
         for (j, _) in line.match_indices('#') {
             let at = start + j;
-            let rest = &src[at + 1..];
-            let rest = rest.strip_prefix('!').unwrap_or(rest);
-            let Some(inner) = rest.strip_prefix('[') else {
-                continue;
-            };
-            let name = inner.trim_start();
-            let Some(args) = name
-                .strip_prefix("allow")
-                .or_else(|| name.strip_prefix("expect"))
-            else {
-                continue;
-            };
-            if !args.trim_start().starts_with('(') {
+            let bang = usize::from(src[at + 1..].starts_with('!'));
+            if !src[at + 1 + bang..].starts_with('[') {
                 continue;
             }
-            if let Some(len) = attr_len(&src[at..]) {
+            let Some(len) = attr_len(&src[at..]) else {
+                continue;
+            };
+            // `#`, an optional `!`, then `[` … `]`.
+            if suppresses(&src[at + 2 + bang..at + len - 1]) {
                 let attr = src[at..at + len].split_whitespace().collect::<Vec<_>>();
                 out.push((attr.join(" "), i + 1));
             }
@@ -823,9 +873,56 @@ mod tests {
             whats(&changes),
             vec![
                 "Cargo.toml: edits `[workspace.lints]`",
-                "c/Cargo.toml: edits the crate's `[lints]` table (not `workspace = true`)",
+                "c/Cargo.toml: edits a package manifest whose `[lints]` is not exactly `workspace = true`",
                 "clippy.toml: edits a protected file",
             ]
+        );
+    }
+
+    /// A new crate without `[lints]`, or an edit to a crate manifest that has none, opts
+    /// out of the workspace lints just as an own `[lints]` table does (review N3 on #17).
+    #[test]
+    fn manifests_without_inherited_lints_are_flagged() {
+        let inherits = "[package]\nname = \"a\"\n\n[lints]\nworkspace = true\n";
+        let f = Fixture::new(
+            "no-lints",
+            &[
+                ("Cargo.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n"),
+                ("a/Cargo.toml", inherits),
+                ("b/Cargo.toml", "[package]\nname = \"b\"\n"),
+            ],
+        );
+        let (changes, _) = f.change(&[
+            // Not a package manifest: the root may lack `[lints]`.
+            ("Cargo.toml", "[workspace]\nmembers = [\"a\", \"b\", \"c\"]\n"),
+            ("a/Cargo.toml", &inherits.replace("\"a\"", "\"a2\"")),
+            (
+                "b/Cargo.toml",
+                "[package]\nname = \"b\"\ndescription = \"x\"\n",
+            ),
+            ("c/Cargo.toml", "[package]\nname = \"c\"\n"),
+            (
+                "d/Cargo.toml",
+                "[package]\nname = \"d\"\n\n[lints]\nworkspace = true\nrust.unsafe_code = \"allow\"\n",
+            ),
+        ]);
+        assert_eq!(
+            whats(&changes),
+            vec![
+                "b/Cargo.toml: edits a package manifest whose `[lints]` is not exactly `workspace = true`",
+                "c/Cargo.toml: adds a package manifest whose `[lints]` is not exactly `workspace = true`",
+                "d/Cargo.toml: adds a package manifest whose `[lints]` is not exactly `workspace = true`",
+            ]
+        );
+    }
+
+    #[test]
+    fn xtask_entry_point_is_protected() {
+        let f = Fixture::new("main", &[("xtask/src/main.rs", "fn main() {}\n")]);
+        let (changes, _) = f.change(&[("xtask/src/main.rs", "fn main() { todo!() }\n")]);
+        assert_eq!(
+            whats(&changes),
+            vec!["xtask/src/main.rs: edits a protected file"]
         );
     }
 
@@ -956,6 +1053,28 @@ mod tests {
             vec![
                 "src/lib.rs: line 3: new `\x23[allow(dead_code)]` (missing `reason = \"…\"`)",
                 "src/lib.rs: line 5: new `\x23[expect( clippy::y, reason = \"r ]\" )]`",
+            ]
+        );
+    }
+
+    /// `allow` / `expect` inside `cfg_attr`, nested or not, count too; other `cfg_attr`s
+    /// and lookalike names don't (review N2 on #17).
+    #[test]
+    fn suppressions_inside_cfg_attr_are_flagged() {
+        let f = Fixture::new("cfg-attr", &[("src/lib.rs", "fn a() {}\n")]);
+        let edited = "\x23![cfg_attr(test, allow(dead_code))]\n\
+                      \x23[cfg_attr(feature = \"x, y\", derive(Debug), expect(\n    clippy::z,\n    reason = \"r\"\n))]\n\
+                      \x23[cfg_attr(unix, cfg_attr(test, allow(unused)))]\n\
+                      \x23[cfg_attr(allow, derive(Clone))]\n\
+                      \x23[allowed(x)]\n\
+                      fn a() {}\n";
+        let (changes, _) = f.change(&[("src/lib.rs", edited)]);
+        assert_eq!(
+            whats(&changes),
+            vec![
+                "src/lib.rs: line 1: new `\x23![cfg_attr(test, allow(dead_code))]` (missing `reason = \"…\"`)",
+                "src/lib.rs: line 2: new `\x23[cfg_attr(feature = \"x, y\", derive(Debug), expect( clippy::z, reason = \"r\" ))]`",
+                "src/lib.rs: line 6: new `\x23[cfg_attr(unix, cfg_attr(test, allow(unused)))]` (missing `reason = \"…\"`)",
             ]
         );
     }

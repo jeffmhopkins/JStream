@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:c4e3444987466fa4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main (#17 made docs::parse and is_tracked pub(crate) for the governance check): available/reports/not-yet lists still match xtask/src/docs" }
+verified = { hash = "b3:94d974c034e2104a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against repo_path's lexical .. normalization and directory-keyed known_crates/glob_crate: available-now, docs for and reports (unknown applies_to crate) bullets still match xtask/src/docs" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -270,9 +270,10 @@ so it never causes merge conflicts.
 9. **Rule metadata:** see [Rules](#rules).
 
 It also **reports**, without failing (as `warning:` lines), crates that no section covers,
-and `applies_to` globs naming a crate (`crates/<name>/…`, `apps/<name>/…`) that neither
-exists nor appears in [ARCHITECTURE › Crate map](ARCHITECTURE.md#crate-map), which is
-probably a typo. The reviewer agent ([REVIEW.md](../REVIEW.md)) reads this report.
+and `applies_to` globs naming a crate directory (`crates/<name>/…`, `apps/<name>/…`) that
+neither exists nor appears in [ARCHITECTURE › Crate map](ARCHITECTURE.md#crate-map) under
+that directory, which is probably a typo. Crate-map names on its `apps/*` row are apps;
+all others live under `crates/`, so `apps/jstream-types/…` is reported. The reviewer agent ([REVIEW.md](../REVIEW.md)) reads this report.
 
 CI posts one PR comment listing every verification in the PR (section, by, note)
 so a reviewer reads all of them in one place.
@@ -397,7 +398,7 @@ drift-checked.
 <!-- @section
 covers = ["xtask/src/governance.rs", ".github/workflows/governance.yml"]
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:c75ce20fa88661f7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: protected list adds xtask/src/lint_deps.rs (unsafe and native-code allowlists), matching the new PROTECTED_FILES entry in governance.rs and its test; how-the-check-works text unchanged and still matches the code" }
+verified = { hash = "b3:accc09351f668ffc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: protected list adds xtask/src/main.rs and rewords lint_deps.rs; manifests without workspace lints (new crates too), cfg_attr suppressions, unparseable ADR block as container change, and a new 'what the workflow guarantees' paragraph matching the base-built governance.yml" }
 -->
 
 An agent could pass the gate by weakening it. These changes are **governance changes**,
@@ -409,10 +410,13 @@ section saying what is loosened or tightened, and why:
 - any edit to an accepted ADR, including a metadata-container change under R-DOC-009's exception;
 - retiring a rule; deleting or retiring a doc or section;
 - edits to `deny.toml`, `clippy.toml`, `rustfmt.toml`, `rust-toolchain.toml`,
-  `[workspace.lints]`, a crate's own `[lints]` table (anything but `workspace = true`),
-  `.github/**`, `xtask/src/docs/**`, `xtask/src/governance.rs`, `xtask/src/lint_deps.rs`
-  (its `unsafe` and native-code allowlists), `docs/DOCS.md`, or `REVIEW.md`;
-- new `#[allow(…)]` / `#[expect(…)]` attributes (these must also carry `reason = "…"`).
+  `[workspace.lints]` or the root manifest's `[lints]`, `.github/**`, `xtask/src/docs/**`,
+  `xtask/src/main.rs`, `xtask/src/governance.rs`, `xtask/src/lint_deps.rs` (which holds
+  the `unsafe` and native-code allowlists), `docs/DOCS.md`, or `REVIEW.md`;
+- adding or editing a package manifest (any `Cargo.toml` below the root) whose `[lints]`
+  is not exactly `workspace = true`, including a new crate with no `[lints]` table;
+- new `#[allow(…)]` / `#[expect(…)]` attributes, also inside `#[cfg_attr(…)]` (these must
+  also carry `reason = "…"`).
 
 **Pre-approved:** a Dependabot PR that only changes pinned `uses:` references is justified by
 [ADR-0018](adr/0018-ci-supply-chain-policy.md) and needs no label.
@@ -433,12 +437,69 @@ description and author from the event payload. Then:
   text once HTML comments are removed, as in `review-gate`'s `section()`.
 - **Metadata** blocks are compared per doc, section anchor and rule ID. A section or rule
   that is gone counts as deleted or retired.
-- **Suppressions** are found by a text scan of changed `.rs` files (`//` lines skipped) and
-  compared with the base as a multiset, so an unchanged attribute that moves doesn't count.
+- **Suppressions** are found by a text scan of changed `.rs` files (`//` lines skipped),
+  looking into `cfg_attr` attribute lists (nested too), and compared with the base as a
+  multiset, so an unchanged attribute that moves doesn't count.
+- **Package manifests** are judged by their content at `HEAD`: any added or edited one
+  must inherit the workspace lints, whatever the edit was.
 - **Pre-approval** needs the author `dependabot[bot]` and a diff limited to modified
   `.github/workflows/` files whose only differing lines re-pin the same action to a full
   commit SHA.
 - **Container exception** ([R-DOC-009](RULES.md#R-DOC-009)): when an accepted ADR's
-  metadata delimiters change, its "Governance change" section must also cite, as
+  metadata container changes and either its delimiters differ or its metadata block
+  doesn't parse as TOML before or after the edit (so a block that stops parsing counts),
+  that is a container change: its "Governance change" section must also cite, as
   `ADR-NNNN`, an ADR that is accepted at `HEAD`. A content change is reported separately.
   Whether the cited ADR really is a repo-wide format ADR is judged in review.
+
+**What the workflow guarantees.** It builds the checker from the PR's base commit, with
+the base's toolchain file and lockfile and no build cache, then checks out the PR head
+and runs that binary on it. The checker reads the head only through `git`. So edits a PR
+makes to `xtask`, `rust-toolchain.toml` or `Cargo.lock` never change how its own check
+runs. The workflow file itself is the exception: GitHub runs a `pull_request` workflow as
+the PR's own version of it defines it, so a PR that edits
+`.github/workflows/governance.yml` can change its own check. Such an edit is still a
+listed `.github/**` change that needs the label and justification, but if the edit
+disables the check, only review and the weekly audit stand behind it.
+
+<a id="dependency-lint"></a>
+## Dependency lint
+<!-- @section
+covers = ["xtask/src/lint_deps.rs"]
+depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003", "docs/RULES.md#R-ARCH-005", "docs/RULES.md#R-UNSAFE-001", "docs/RULES.md#R-DEP-002", "docs/RULES.md#R-DEP-003"]
+verified = { hash = "b3:5aa56ab0c68d28e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: checked each bullet against lint_deps.rs (integer layer, all dep kinds for layering, leading-inner-attribute forbid scan, cc/cmake/autotools/nasm-rs one level down, workspace deps incl. target tables) and the six rules it depends on" }
+-->
+
+`cargo xtask lint-deps` (CI check `lint-deps`) checks the rules whose `enforced_by` names
+`ci:lint-deps`. It reads `cargo metadata --locked` for the whole workspace, including the
+resolved dependency graph, reports each problem as `<where>: <rule>: <what>`, and fails if
+there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
+[governance change](#governance).
+
+- **Declared metadata** ([R-ARCH-005](RULES.md#R-ARCH-005)): every workspace member has
+  `[package.metadata.jstream]` with `layer`, a non-empty `summary` and a boolean
+  `unsafe_allowed`. `layer` must be a non-negative TOML integer: `"2"` or `2.0` fails.
+- **Layering** ([R-ARCH-002](RULES.md#R-ARCH-002)): every dependency on another member is
+  in a strictly lower layer. Every dependency kind counts, dev-dependencies included. A
+  member without a valid `layer` is reported once, under R-ARCH-005, and skipped here.
+- **Clients** ([R-ARCH-003](RULES.md#R-ARCH-003)): `jstream-ui`, `jstream-mcp`,
+  `jstream-server` and `jstream-cli` never reach `jstream-core`, directly or through other
+  members. The finding shows the path.
+- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform and vcam crates
+  on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
+  member that declares `false`, every library and binary crate root must carry
+  `#![forbid(unsafe_code)]` (alone or among other lints, possibly wrapped over several
+  lines) among its leading inner attributes: only whitespace, comments and other inner
+  attributes may come before it. One inside a comment or later in the file doesn't count.
+- **Native code** ([R-DEP-002](RULES.md#R-DEP-002),
+  [ADR-0003](adr/0003-media-stack-and-codecs.md)): every resolved package, members or
+  not, that has a `links =` key or whose build script compiles C must be on the
+  native-code allowlist, with any feature that entry requires enabled. "Compiles C" is a
+  heuristic: a build-dependency on `cc`, `cmake`, `autotools` or `nasm-rs`, or on a build
+  helper that has one of them as a normal dependency, one level down (`cxx-build` → `cc`).
+  Deeper chains, and build scripts that run a compiler without those crates, are not
+  detected; the `deny.toml` bans and review cover them.
+- **Workspace dependencies** ([R-DEP-003](RULES.md#R-DEP-003)): every entry in a member's
+  `[dependencies]`, `[dev-dependencies]` and `[build-dependencies]` tables, including
+  `[target.<cfg>.…]` ones, is `<dep>.workspace = true`, with its version in the root
+  `[workspace.dependencies]`.

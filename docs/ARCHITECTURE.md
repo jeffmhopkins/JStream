@@ -83,7 +83,7 @@ verified = { hash = "b3:4c21fdca01d95b25", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:f6ac5ad6f491f1b4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: main.rs dispatches both governance and lint-deps, PLANNED removed, usage lists both; tree line 'xtask/: docs, lint-deps, governance, ...' and .github/ line (CI, governance, review-gate) still accurate" }
+verified = { hash = "b3:23b36fb9fc47552a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only main.rs's Docs: line changed (adds DOCS#dependency-lint); tree line 'xtask/: docs, lint-deps, governance, ...' and .github/ line still accurate" }
 -->
 
 ```

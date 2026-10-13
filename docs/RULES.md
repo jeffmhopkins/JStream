@@ -630,7 +630,7 @@ dependency or performance claim (`.github/pull_request_template.md`).
 ## Documentation
 <!-- @section
 depends_on = ["docs/DOCS.md#gate"]
-verified = { hash = "b3:b9a96ce23f4a55b1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against DOCS#gate: R-DOC-012 now names the applies_to typo report (unknown crate vs crate map), matching check.rs; other rules unchanged" }
+verified = { hash = "b3:3c4c265c0f82b211", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against the edited DOCS#gate: the applies_to typo report is now keyed by crate directory (apps/ vs crates/ per the crate-map apps/* row); R-DOC-012's 'neither exists nor appears in the crate map' still holds, others unaffected" }
 -->
 
 <a id="R-DOC-001"></a>
