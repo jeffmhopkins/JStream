@@ -189,6 +189,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-graph"
+version = "0.0.0"
+dependencies = [
+ "jstream-protocol",
+]
+
+[[package]]
 name = "jstream-media"
 version = "0.0.0"
 dependencies = [

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:9b348d7a7c6872b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate: purpose matches the code (Control trait with hello/call/events, BoxFuture/EventStream/MaybeSendSync in control.rs, ControlError in error.rs, mock behind the mock feature, protocol re-export) and the crate-map row (L2, summary identical, unsafe no); WS client stated as not here yet" }
+verified = { hash = "b3:12ee33da3a56d5fd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "After merging main (protocol 0.2, jstream-graph): mock.rs now keeps sources and handles every 0.2 edit; purpose's contents bullets (trait, ControlError, mock behind feature, protocol re-export) and L2 placement still hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -39,7 +39,7 @@ Not here yet: the WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:d357dccb58785c94", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate: trait semantics (crate-chosen request IDs, second hello keeps identity, handshake_required, per-call event subscriptions) match control.rs and mock.rs and its tests; Send/Sync cfg on wasm32 checked by clippy on both targets; mock behaviour list matches mock.rs; WS client deferral and token/Origin intent consistent with ARCH#protocol and ADR-0006; Cargo.toml has futures-core with default features off" }
+verified = { hash = "b3:fd558713e7951c72", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Mock subsection: lists the 0.2 edits the mock now handles with graph's checks (source.*, scene/item.reorder, item.set_visible/set_crop, cycle and in-use rejections, edits.<n>.<field> paths) and why it doesn't call jstream_graph::Graph::apply (graph is also L2, R-ARCH-002 strictly lower); trait, async and WS sections unchanged" }
 -->
 
 ### The trait
@@ -89,14 +89,27 @@ its own, and is used with default features off.
 ### Mock
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
-`dev-dependencies`) keeps scenes, items and outputs in memory and follows the protocol's
-rules for them: the version check in `hello`, atomic batches that bump `rev` by exactly
-one, `expected_rev` conflicts, per-client idempotency keys, `not_found` and
-`already_exists`, `state.changed` events carrying the request ID, and
-`output.start`/`output.stop` reported as `output.state_changed` events (`starting` →
-`active`, `stopping` → `stopped`). `MockEngine::emit` injects any other event. Its
-futures are always ready. It has no undo, persistence or real outputs, and answers a
+`dev-dependencies`) keeps scenes, items, sources and outputs in memory and follows the
+protocol's rules for them:
+- the version check in `hello`;
+- atomic batches that bump `rev` by exactly one, `expected_rev` conflicts and
+  per-client idempotency keys;
+- every protocol 0.2 edit, with the checks `jstream-graph` makes and the same error
+  codes and `edits.<n>.<field>` paths: `not_found`, `already_exists`, empty names,
+  reorder indices out of range, deleting a source an item places or a scene a scene
+  source shows, and nesting cycles. It stores no transforms, crops or visibility,
+  because no query reports them yet;
+- `state.changed` events carrying the request ID, and `output.start`/`output.stop`
+  reported as `output.state_changed` events (`starting` → `active`, `stopping` →
+  `stopped`). `MockEngine::emit` injects any other event.
+
+Its futures are always ready. It has no undo, persistence or real outputs, and answers a
 protocol variant it doesn't know with `internal`.
+
+The mock re-implements these checks rather than calling `jstream_graph::Graph::apply`.
+`jstream-graph` is also layer 2, and [R-ARCH-002](../../docs/RULES.md#R-ARCH-002) allows
+only strictly lower layers, so the dependency would need a layering change. The
+duplication is small, and the mock's tests pin the shared error paths.
 
 ### WebSocket client (deferred)
 

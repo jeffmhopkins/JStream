@@ -1,7 +1,7 @@
 //! An in-memory [`Control`] implementation for developing and testing clients before the
 //! engine exists. Enabled by the `mock` feature.
 //!
-//! [`MockEngine`] holds a tiny collection (scenes and their items) plus a set of outputs,
+//! [`MockEngine`] holds a tiny collection (scenes, items and sources) plus a set of outputs,
 //! and follows the protocol's rules for it: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, `state.changed` and
 //! `output.state_changed` events. Each [`MockEngine::connect`] opens one client session.
@@ -13,7 +13,7 @@ use futures_core::Stream;
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, Edit, EntityKind, Event, Hello, IdempotencyKey,
     ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, Query, QueryResult, RequestId,
-    Response, Rev, SceneId, SceneSummary, Welcome,
+    Response, Rev, SceneId, SceneSummary, SourceId, SourceKind, Welcome,
 };
 use std::collections::{BTreeMap, VecDeque};
 use std::future;
@@ -149,6 +149,8 @@ struct Collection {
     /// In display order.
     scenes: Vec<Scene>,
     items: BTreeMap<ItemId, Item>,
+    /// What each source shows. The mock keeps no source names or settings.
+    sources: BTreeMap<SourceId, SourceKind>,
 }
 
 #[derive(Clone)]
@@ -160,10 +162,11 @@ struct Scene {
 }
 
 /// An item. The mock keeps only what its checks need: no query reports an item's
-/// source or transform yet.
+/// transform, crop or visibility yet.
 #[derive(Clone)]
 struct Item {
     scene_id: SceneId,
+    source_id: SourceId,
 }
 
 impl State {
@@ -202,8 +205,8 @@ impl State {
             return Err(ProtocolError::RevConflict { expected, current });
         }
         let mut next = self.collection.clone();
-        for edit in batch.edits {
-            next.apply(edit)?;
+        for (at, edit) in batch.edits.into_iter().enumerate() {
+            next.apply(edit, at)?;
         }
         next.rev = current.next().ok_or_else(|| ProtocolError::Internal {
             reason: "rev overflowed".into(),
@@ -317,10 +320,15 @@ impl Drop for State {
 }
 
 impl Collection {
-    /// Applies one edit to this (scratch) copy of the collection.
-    fn apply(&mut self, edit: Edit) -> Result<(), ProtocolError> {
+    /// Applies edit number `at` of its batch to this (scratch) copy of the collection.
+    ///
+    /// It follows the rules `jstream-graph` enforces for the same edits (existence,
+    /// unique IDs, no deleting what is still referenced, index bounds, no nesting
+    /// cycles), with the same error codes and `edits.<at>.<field>` paths.
+    fn apply(&mut self, edit: Edit, at: usize) -> Result<(), ProtocolError> {
         match edit {
             Edit::SceneCreate { scene_id, name } => {
+                check_name(&name, at)?;
                 if self.scene_index(&scene_id).is_some() {
                     return Err(already_exists(EntityKind::Scene, scene_id.as_str()));
                 }
@@ -332,24 +340,64 @@ impl Collection {
             }
             Edit::SceneRename { scene_id, name } => {
                 let index = self.existing_scene(&scene_id)?;
+                check_name(&name, at)?;
                 self.scenes[index].name = name;
             }
             Edit::SceneDelete { scene_id } => {
                 let index = self.existing_scene(&scene_id)?;
+                let shown = self.sources.values().any(
+                    |kind| matches!(kind, SourceKind::Scene { scene_id: s } if *s == scene_id),
+                );
+                if shown {
+                    return Err(invalid(
+                        at,
+                        "scene_id",
+                        format!("scene `{scene_id}` is shown by a scene source; delete it first"),
+                    ));
+                }
                 let scene = self.scenes.remove(index);
                 for item_id in &scene.items {
                     self.items.remove(item_id);
                 }
             }
+            Edit::SceneReorder { scene_id, index } => {
+                let from = self.existing_scene(&scene_id)?;
+                let to = check_index(index, self.scenes.len(), at, "scenes")?;
+                let scene = self.scenes.remove(from);
+                self.scenes.insert(to, scene);
+            }
             Edit::ItemAdd {
-                scene_id, item_id, ..
+                scene_id,
+                item_id,
+                source_id,
+                ..
             } => {
                 let index = self.existing_scene(&scene_id)?;
+                let Some(kind) = self.sources.get(&source_id) else {
+                    return Err(not_found(EntityKind::Source, source_id.as_str()));
+                };
                 if self.items.contains_key(&item_id) {
                     return Err(already_exists(EntityKind::Item, item_id.as_str()));
                 }
+                if let SourceKind::Scene { scene_id: nested } = kind
+                    && self.contains(nested, &scene_id)
+                {
+                    return Err(invalid(
+                        at,
+                        "source_id",
+                        format!(
+                            "placing scene `{nested}` in scene `{scene_id}` would create a cycle"
+                        ),
+                    ));
+                }
                 self.scenes[index].items.push(item_id.clone());
-                self.items.insert(item_id, Item { scene_id });
+                self.items.insert(
+                    item_id,
+                    Item {
+                        scene_id,
+                        source_id,
+                    },
+                );
             }
             Edit::ItemRemove { item_id } => {
                 let Some(item) = self.items.remove(&item_id) else {
@@ -359,14 +407,91 @@ impl Collection {
                     self.scenes[index].items.retain(|id| *id != item_id);
                 }
             }
-            Edit::ItemSetTransform { item_id, .. } => {
-                if !self.items.contains_key(&item_id) {
-                    return Err(not_found(EntityKind::Item, item_id.as_str()));
+            Edit::ItemReorder { item_id, index } => {
+                let scene_id = self.existing_item(&item_id)?.scene_id.clone();
+                let scene = self.existing_scene(&scene_id)?;
+                let items = &mut self.scenes[scene].items;
+                let to = check_index(index, items.len(), at, "items in the scene")?;
+                items.retain(|id| *id != item_id);
+                items.insert(to, item_id);
+            }
+            Edit::ItemSetTransform { item_id, .. }
+            | Edit::ItemSetCrop { item_id, .. }
+            | Edit::ItemSetVisible { item_id, .. } => {
+                self.existing_item(&item_id)?;
+            }
+            Edit::SourceCreate {
+                source_id,
+                name,
+                kind,
+            } => {
+                check_name(&name, at)?;
+                match &kind {
+                    SourceKind::Scene { scene_id } => {
+                        self.existing_scene(scene_id)?;
+                    }
+                    SourceKind::Builtin { kind } if kind.is_empty() => {
+                        return Err(invalid(at, "kind.kind", "must not be empty"));
+                    }
+                    SourceKind::Builtin { .. } => {}
+                    _ => return Err(unimplemented_by_mock("this source kind")),
                 }
+                self.create_source(source_id, kind)?;
+            }
+            Edit::SourceDuplicate {
+                source_id,
+                new_source_id,
+                name,
+            } => {
+                let Some(kind) = self.sources.get(&source_id).cloned() else {
+                    return Err(not_found(EntityKind::Source, source_id.as_str()));
+                };
+                check_name(&name, at)?;
+                self.create_source(new_source_id, kind)?;
+            }
+            Edit::SourceDelete { source_id } => {
+                if !self.sources.contains_key(&source_id) {
+                    return Err(not_found(EntityKind::Source, source_id.as_str()));
+                }
+                if self.items.values().any(|item| item.source_id == source_id) {
+                    return Err(invalid(
+                        at,
+                        "source_id",
+                        format!("source `{source_id}` is placed by items; remove them first"),
+                    ));
+                }
+                self.sources.remove(&source_id);
             }
             other => return Err(unimplemented_by_mock(other.name())),
         }
         Ok(())
+    }
+
+    fn create_source(&mut self, id: SourceId, kind: SourceKind) -> Result<(), ProtocolError> {
+        if self.sources.contains_key(&id) {
+            return Err(already_exists(EntityKind::Source, id.as_str()));
+        }
+        self.sources.insert(id, kind);
+        Ok(())
+    }
+
+    /// Whether scene `outer` is `inner` or shows it, directly or through nested scene
+    /// sources. The collection never holds a cycle, so the walk terminates.
+    fn contains(&self, outer: &SceneId, inner: &SceneId) -> bool {
+        if outer == inner {
+            return true;
+        }
+        let Some(index) = self.scene_index(outer) else {
+            return false;
+        };
+        self.scenes[index].items.iter().any(|item_id| {
+            self.items
+                .get(item_id)
+                .and_then(|item| self.sources.get(&item.source_id))
+                .is_some_and(|kind| {
+                    matches!(kind, SourceKind::Scene { scene_id } if self.contains(scene_id, inner))
+                })
+        })
     }
 
     fn scene_index(&self, scene_id: &SceneId) -> Option<usize> {
@@ -376,6 +501,38 @@ impl Collection {
     fn existing_scene(&self, scene_id: &SceneId) -> Result<usize, ProtocolError> {
         self.scene_index(scene_id)
             .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))
+    }
+
+    fn existing_item(&self, item_id: &ItemId) -> Result<&Item, ProtocolError> {
+        self.items
+            .get(item_id)
+            .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))
+    }
+}
+
+fn invalid(at: usize, field: &str, reason: impl Into<String>) -> ProtocolError {
+    ProtocolError::InvalidArgument {
+        field: format!("edits.{at}.{field}"),
+        reason: reason.into(),
+    }
+}
+
+fn check_name(name: &str, at: usize) -> Result<(), ProtocolError> {
+    if name.trim().is_empty() {
+        return Err(invalid(at, "name", "must not be empty"));
+    }
+    Ok(())
+}
+
+/// Converts a wire index into a position below `len`.
+fn check_index(index: u32, len: usize, at: usize, what: &str) -> Result<usize, ProtocolError> {
+    match usize::try_from(index) {
+        Ok(i) if i < len => Ok(i),
+        _ => Err(invalid(
+            at,
+            "index",
+            format!("must be less than the number of {what} ({len})"),
+        )),
     }
 }
 
@@ -435,7 +592,7 @@ mod tests {
     use jstream_protocol::{
         Action, Batch, Call, CallResult, ClientId, Edit, EntityKind, Event, Hello, IdempotencyKey,
         ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query,
-        QueryResult, Rev, SceneId, SourceId,
+        QueryResult, Rev, SceneId, SourceId, SourceKind,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -486,6 +643,25 @@ mod tests {
         Edit::SceneCreate {
             scene_id: SceneId::new(scene),
             name: scene.to_uppercase(),
+        }
+    }
+
+    fn webcam() -> Edit {
+        Edit::SourceCreate {
+            source_id: SourceId::new("webcam"),
+            name: "Webcam".into(),
+            kind: SourceKind::Builtin {
+                kind: "webcam".into(),
+            },
+        }
+    }
+
+    fn add(scene: &str, item: &str, source: &str) -> Edit {
+        Edit::ItemAdd {
+            scene_id: SceneId::new(scene),
+            item_id: ItemId::new(item),
+            source_id: SourceId::new(source),
+            transform: None,
         }
     }
 
@@ -569,6 +745,7 @@ mod tests {
             edits: vec![
                 create("intro"),
                 create("main"),
+                webcam(),
                 Edit::ItemAdd {
                     scene_id: SceneId::new("main"),
                     item_id: ItemId::new("cam"),
@@ -602,6 +779,107 @@ mod tests {
             transform: None,
         });
         assert_eq!(batch(&*control, readd), Ok(Rev(3)));
+    }
+
+    #[test]
+    fn protocol_0_2_edits_follow_the_graph_rules() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let setup = Batch {
+            edits: vec![
+                create("a"),
+                create("b"),
+                webcam(),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("nested_b"),
+                    name: "B".into(),
+                    kind: SourceKind::Scene {
+                        scene_id: SceneId::new("b"),
+                    },
+                },
+                add("a", "i1", "webcam"),
+                add("a", "i2", "nested_b"),
+                Edit::ItemSetVisible {
+                    item_id: ItemId::new("i1"),
+                    visible: false,
+                },
+                Edit::ItemReorder {
+                    item_id: ItemId::new("i2"),
+                    index: 0,
+                },
+                Edit::SceneReorder {
+                    scene_id: SceneId::new("b"),
+                    index: 0,
+                },
+                Edit::SourceDuplicate {
+                    source_id: SourceId::new("webcam"),
+                    new_source_id: SourceId::new("webcam_2"),
+                    name: "Webcam 2".into(),
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        assert_eq!(
+            scene_list(&*control),
+            (Rev(1), vec![("b".into(), 0), ("a".into(), 2)])
+        );
+
+        let invalid_field = |edit: Edit| match batch(&*control, Batch::single(edit)) {
+            Err(ControlError::Protocol(wire)) => match wire.error {
+                ProtocolError::InvalidArgument { field, .. } => field,
+                other => panic!("expected invalid_argument, got {other:?}"),
+            },
+            other => panic!("expected an error, got {other:?}"),
+        };
+        // Scene `a` shows `b`, so placing `a` inside `b` would be a cycle.
+        let cycle = Batch {
+            edits: vec![
+                Edit::SourceCreate {
+                    source_id: SourceId::new("nested_a"),
+                    name: "A".into(),
+                    kind: SourceKind::Scene {
+                        scene_id: SceneId::new("a"),
+                    },
+                },
+                add("b", "i3", "nested_a"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        let error = batch(&*control, cycle).expect_err("cycle");
+        assert!(matches!(
+            error.protocol(),
+            Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.1.source_id"
+        ));
+        let in_use = Edit::SourceDelete {
+            source_id: SourceId::new("webcam"),
+        };
+        assert_eq!(invalid_field(in_use), "edits.0.source_id");
+        let shown = Edit::SceneDelete {
+            scene_id: SceneId::new("b"),
+        };
+        assert_eq!(invalid_field(shown), "edits.0.scene_id");
+        let out_of_range = Edit::ItemReorder {
+            item_id: ItemId::new("i1"),
+            index: 2,
+        };
+        assert_eq!(invalid_field(out_of_range), "edits.0.index");
+        let missing = batch(&*control, Batch::single(add("a", "i9", "ghost"))).expect_err("src");
+        assert_eq!(
+            missing.protocol(),
+            Some(&ProtocolError::NotFound {
+                entity: EntityKind::Source,
+                id: "ghost".into()
+            })
+        );
+        assert_eq!(engine.rev(), Rev(1));
+
+        let unplaced = Batch::single(Edit::SourceDelete {
+            source_id: SourceId::new("webcam_2"),
+        });
+        assert_eq!(batch(&*control, unplaced), Ok(Rev(2)));
     }
 
     #[test]

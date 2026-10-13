@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:bd9fe6b51ea7201b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Moved jstream-control L1->L2 (it depends on jstream-protocol, also L1, and R-ARCH-002 needs strictly lower), and with it jstream-mcp L2->L3 (written over dyn Control) and jstream-server L3->L4 (mounts MCP over HTTP); added a paragraph explaining the client stack. No ADR fixes these layers; plugin-wasm (L3), core (L5), ui and apps still sit above control; control's Cargo.toml metadata matches its row; lint-deps passes" }
+verified = { hash = "b3:e02b6a80e6d98d3c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: kept main's jstream-graph row (L2, depends only on jstream-protocol, not on control) and re-applied this PR's moves: control L1->L2 (depends on protocol L1), mcp L2->L3, server L3->L4, plus the client-stack paragraph; graph's and control's Cargo.toml metadata match their rows; lint-deps passes with 6 crates" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -162,7 +162,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "b3:c553c8de5bd5b1bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: collection model, Program/Preview mixes, encoder sharing, color and undo placement match ADR-0007 and ADR-0013; no jstream-graph code yet" }
+verified = { hash = "b3:34e2e3757523f785", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added Nesting bullet (scene sources, cycles rejected) and a Built-so-far bullet matching jstream-graph/src/model (sources keyed by ID with builtin|scene kind, scenes in display order, items bottom-first with source_id/transform/crop/visible, reference not copy, referenced deletes rejected, no persistence); diagram and ADR-0007 mixes/buses unchanged" }
 -->
 
 ```
@@ -189,8 +189,16 @@ Collection (JSON on disk, schema_version, rev: u64)
   count.
 - **Color:** compositing is done in linear light in an FP16 working format. Output is
   BT.709 limited range by default. HDR (FP16) capture is tone-mapped to SDR. HDR output is later.
+- **Nesting:** a source can show another scene. A scene never contains itself, at any
+  depth; the edit that would close a cycle is rejected.
 - **Undo** primitives (an edit plus its inverse) live in `jstream-graph`. The per-client
   undo stacks live in `jstream-core`.
+- **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind name or a nested
+  scene; no settings or filters yet), scenes in display order, and items in stacking
+  order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
+  they never copy them. Deleting a source an item still places, or a scene a source
+  still shows, is rejected. Not yet: settings, filters, effects, blend, the 3D
+  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -228,7 +236,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:2441f0484f648220", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New covered crate jstream-control: Control trait (hello/call/events) mirrors the envelope bullets; transport bullet still holds as intent (core in-process, WebSocket client in jstream-control at /api/v1/ws with token + Origin/Host), the WS client itself is deferred and said so in the crate README; protocol crate code unchanged, its README only gained a re-verify" }
+verified = { hash = "b3:6d59dcf859f33e5e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "After merging main: protocol 0.2 adds edits (source.*, reorders, set_visible/set_crop) and its README was re-verified; the jstream-control crate's mock now handles those edits; envelope, batches/expected_rev/idempotency, actions, queries, events, errors and the transport bullet (core in-process, WS client in jstream-control, deferred) still hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
