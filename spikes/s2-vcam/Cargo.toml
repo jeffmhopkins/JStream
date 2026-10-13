@@ -1,0 +1,62 @@
+# Spike S2 (ROADMAP M0, Track B). Throwaway; not a member of the root workspace.
+[package]
+name = "s2-vcam"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Its own workspace, so the root workspace (crates/*, xtask) never builds or lints it.
+[workspace]
+
+# The COM media source DLL that Frame Server loads (`s2_vcam.dll`). `rlib` too, so the
+# producer exe shares the control-block layout, object names and registry code with it.
+[lib]
+name = "s2_vcam"
+crate-type = ["cdylib", "rlib"]
+
+# The producer and registration tool (`s2-vcam.exe`).
+[[bin]]
+name = "s2-vcam"
+path = "src/bin/s2-vcam/main.rs"
+
+[target.'cfg(windows)'.dependencies]
+# Pinned exactly, at the version wgpu uses (as in spike S1). `windows-core` is a direct
+# dependency because the `#[implement]` macro expands to `::windows_core` paths.
+windows-core = "=0.62.2"
+windows = { version = "=0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Media_KernelStreaming",
+    "Win32_Media_MediaFoundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Performance",
+    "Win32_System_Registry",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_System_WindowsProgramming",
+] }
+
+# A standalone workspace can't inherit the root `[workspace.lints]`, so the lints that
+# matter most for this code are restated here (R-UNSAFE-002, R-RS-004, R-RS-009).
+[lints.clippy]
+undocumented_unsafe_blocks = "deny"
+unwrap_used = "deny"
+allow_attributes_without_reason = "deny"
+
+[profile.release]
+# R-UNSAFE-005: every COM entry point catches panics, which needs unwinding.
+panic = "unwind"
+debug = "line-tables-only"
