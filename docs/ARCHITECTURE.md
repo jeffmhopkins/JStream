@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:1c0f575a74d2d9e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crates/jstream-mux/Cargo.toml declares layer 2, summary 'Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4' and unsafe_allowed = false, matching its row verbatim; its only member dependency is jstream-media (L0), strictly lower; table text needs no change" }
+verified = { hash = "b3:37afd204a1d8f484", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main (#28): both new L2 manifests match their rows verbatim (jstream-graph: graph summary, unsafe no, depends on jstream-protocol L1; jstream-mux: muxers summary, unsafe no, depends on jstream-media L0), both strictly lower per R-ARCH-002; table text unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -158,7 +158,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "b3:c553c8de5bd5b1bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: collection model, Program/Preview mixes, encoder sharing, color and undo placement match ADR-0007 and ADR-0013; no jstream-graph code yet" }
+verified = { hash = "b3:34e2e3757523f785", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added Nesting bullet (scene sources, cycles rejected) and a Built-so-far bullet matching jstream-graph/src/model (sources keyed by ID with builtin|scene kind, scenes in display order, items bottom-first with source_id/transform/crop/visible, reference not copy, referenced deletes rejected, no persistence); diagram and ADR-0007 mixes/buses unchanged" }
 -->
 
 ```
@@ -185,8 +185,16 @@ Collection (JSON on disk, schema_version, rev: u64)
   count.
 - **Color:** compositing is done in linear light in an FP16 working format. Output is
   BT.709 limited range by default. HDR (FP16) capture is tone-mapped to SDR. HDR output is later.
+- **Nesting:** a source can show another scene. A scene never contains itself, at any
+  depth; the edit that would close a cycle is rejected.
 - **Undo** primitives (an edit plus its inverse) live in `jstream-graph`. The per-client
   undo stacks live in `jstream-core`.
+- **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind name or a nested
+  scene; no settings or filters yet), scenes in display order, and items in stacking
+  order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
+  they never copy them. Deleting a source an item still places, or a scene a source
+  still shows, is rejected. Not yet: settings, filters, effects, blend, the 3D
+  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -224,7 +232,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:cc7f2453eebf2e28", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main: covered README only changed its purpose verified line; envelope, edits/actions/queries/events, errors, schema, transport and R-API-001 versioning bullets still match the crate" }
+verified = { hash = "b3:20b03b12193ff509", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Protocol gained additive edits (scene.reorder, item.reorder, item.set_visible, item.set_crop, source.create/duplicate/delete) and PROTOCOL_VERSION 0.2, and its README purpose/design were re-verified; envelope, edits-in-atomic-batches with expected_rev/idempotency, actions, queries, events, errors and R-API-001 bullets still hold unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

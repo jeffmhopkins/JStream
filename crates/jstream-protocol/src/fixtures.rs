@@ -6,11 +6,11 @@
 //! naming and classification checks see every variant.
 
 use crate::{
-    Action, Batch, Call, CallResult, ClientId, ClientMessage, Command, CommandClass, Edit,
+    Action, Batch, Call, CallResult, ClientId, ClientMessage, Command, CommandClass, Crop, Edit,
     EntityKind, ErrorResponse, Event, EventMessage, Finite32, Hello, IdempotencyKey, ItemId,
     ItemTransform, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, Query, QueryResult,
-    Request, RequestId, Response, Rev, SceneId, SceneSummary, ServerMessage, SourceId, Vec2,
-    Welcome, json_schema,
+    Request, RequestId, Response, Rev, SceneId, SceneSummary, ServerMessage, SourceId, SourceKind,
+    Vec2, Welcome, json_schema,
 };
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -50,6 +50,49 @@ pub(crate) fn edits() -> Vec<Edit> {
                 scale: Vec2::new(0.25, f32::MAX).expect("finite"),
                 rotation_deg: Finite32::new(-90.0).expect("finite"),
             },
+        },
+        Edit::ItemSetVisible {
+            item_id: ItemId::new("itm_2"),
+            visible: false,
+        },
+        Edit::ItemReorder {
+            item_id: ItemId::new("itm_2"),
+            index: 0,
+        },
+        Edit::SceneReorder {
+            scene_id: SceneId::new("scn_1"),
+            index: 2,
+        },
+        Edit::ItemSetCrop {
+            item_id: ItemId::new("itm_2"),
+            crop: Crop {
+                left: 8,
+                top: 0,
+                right: 8,
+                bottom: 120,
+            },
+        },
+        Edit::SourceCreate {
+            source_id: SourceId::new("src_cam"),
+            name: "Camera".into(),
+            kind: SourceKind::Builtin {
+                kind: "webcam".into(),
+            },
+        },
+        Edit::SourceCreate {
+            source_id: SourceId::new("src_intro"),
+            name: "Intro scene".into(),
+            kind: SourceKind::Scene {
+                scene_id: SceneId::new("scn_1"),
+            },
+        },
+        Edit::SourceDuplicate {
+            source_id: SourceId::new("src_cam"),
+            new_source_id: SourceId::new("src_cam_2"),
+            name: "Camera 2".into(),
+        },
+        Edit::SourceDelete {
+            source_id: SourceId::new("src_cam_2"),
         },
     ]
 }
