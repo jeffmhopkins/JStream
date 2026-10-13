@@ -1,0 +1,15 @@
+[package]
+name = "xtask"
+version = "0.0.0"
+description = "Repository automation: docs checks, dependency lints, governance."
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 99
+summary = "Repository automation (cargo xtask): docs, lint-deps, governance, gen-schema, golden"
+unsafe_allowed = false
+
+[lints]
+workspace = true

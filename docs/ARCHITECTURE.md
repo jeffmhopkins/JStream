@@ -83,7 +83,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: added edit/act
 ## Repository layout
 <!-- @section
 covers = ["xtask/**", ".github/workflows/**"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: docs registries, TEMPLATE, installer dir" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read for workspace skeleton: Cargo.toml, .cargo alias, xtask/ and ci.yml match the tree shown; .cargo/ omitted as config-only" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2 layering fixes from review: control at L1, interfaces above it, platform impls at L2, decode added, vcam crates" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read for jstream-types and xtask: types is L0 as listed; xtask is tooling outside the layer table (metadata layer 99). Table still hand-maintained" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
