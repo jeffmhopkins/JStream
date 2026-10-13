@@ -2,7 +2,7 @@
 id = "ADR-0019"
 title = "Agent review gate v2: owner-only, round-aware verdicts"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
