@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:5b35055780c135c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: generation now 'planned for M0' (was 'from M0'), xtask noted as outside layers; L0-L6 table re-read against R-ARCH-002/003, layering consistent" }
+verified = { hash = "b3:28d1a31526a62c57", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after jstream-media gained a thiserror dependency and main merged: thiserror is external, so the L0 row (summary, layer 0, unsafe no) and strict-lower layering (R-ARCH-002) still hold; lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

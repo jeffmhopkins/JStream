@@ -15,6 +15,7 @@ blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 globset = { version = "0.4", default-features = false }
 pulldown-cmark = { version = "0.13", default-features = false }
 serde_json = { version = "1", default-features = false, features = ["std"] }
+thiserror = { version = "2", default-features = false, features = ["std"] }
 toml = "1"
 
 # Editing this table is a governance change (R-GOV-001). See docs/RULES.md for each rule.
