@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:da3152ebd83cb97e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#29): resolved file keeps main's L4 jstream-outputs row (layer 4, depends only on L0 jstream-media) and L2 jstream-graph row, plus this PR's control L1->L2, mcp L2->L3, server L3->L4 and the client-stack paragraph (diffed against both parents: only the verified line and these moves differ from main); summaries match metadata; lint-deps ok with 7 crates" }
+verified = { hash = "b3:c3c2be6440c7bfeb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#30): table keeps main's L2 jstream-mux, L2 jstream-graph and L4 jstream-outputs rows (each depending only on lower layers) plus this PR's control L2, mcp L3, server L4 moves and client-stack paragraph; summaries match each Cargo.toml metadata" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
