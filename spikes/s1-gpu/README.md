@@ -87,6 +87,15 @@ Other options are `--fps <N>`, `--bitrate <kbps>`, `--out <path>` and `--size <W
 Run `cargo run --release -- --help` to list them. To check the output, play `out.h264`
 in any player that reads raw H.264, such as VLC.
 
+On stderr the spike prints a `s1 stage` line as it reaches each step: device, capture,
+shared textures, encoder setup, first frame. If the process faults (an access violation,
+for example), it prints an `s1 FAULT` line with the exception, the faulting module and
+offset, and a backtrace before Windows ends it. Keep stderr when you report a crash.
+
+`spikes\run-spikes.bat` runs all of this unattended. It plays a full-screen animated page
+in Edge, runs at 1920x1080 and at native size, and zips the reports, the stderr logs and
+the first 6 MB of each H.264 file.
+
 <a id="paste-back"></a>
 ## What to paste back
 <!-- @section

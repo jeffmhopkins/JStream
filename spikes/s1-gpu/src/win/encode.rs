@@ -66,6 +66,7 @@ impl Encoder {
     ) -> Result<Self> {
         let mut warnings = Vec::new();
         let (activate, name) = find_hardware_encoder(adapter_luid, &mut warnings)?;
+        super::stage(format_args!("encoder MFT chosen: {name}; activating"));
         // SAFETY: plain method call on a live COM object.
         let transform: IMFTransform =
             unsafe { activate.ActivateObject() }.context("IMFActivate::ActivateObject")?;
@@ -73,6 +74,9 @@ impl Encoder {
         // SAFETY: plain method call on a live COM object.
         let attrs = unsafe { transform.GetAttributes() }.context("IMFTransform::GetAttributes")?;
         let is_async = get_u32(&attrs, &MF_TRANSFORM_ASYNC).unwrap_or(0) != 0;
+        super::stage(format_args!(
+            "encoder activated (async: {is_async}); setting the D3D manager"
+        ));
         if is_async {
             // SAFETY: plain method call on a live COM object.
             unsafe { attrs.SetUINT32(&MF_TRANSFORM_ASYNC_UNLOCK, 1) }
@@ -97,6 +101,7 @@ impl Encoder {
         unsafe { transform.ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, manager.as_raw() as usize) }
             .context("MFT_MESSAGE_SET_D3D_MANAGER")?;
 
+        super::stage("encoder D3D manager set; configuring");
         let bitrate = bitrate_kbps.saturating_mul(1000);
         match transform.cast::<ICodecAPI>() {
             Ok(codec) => {
@@ -148,6 +153,7 @@ impl Encoder {
             transform.SetInputType(0, &in_type, 0)
         }
         .context("SetInputType NV12")?;
+        super::stage("encoder media types set");
 
         // SAFETY: plain method call on a live COM object.
         let info = unsafe { transform.GetOutputStreamInfo(0) }.context("GetOutputStreamInfo")?;
@@ -171,6 +177,7 @@ impl Encoder {
             transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0)
         }
         .context("start streaming")?;
+        super::stage("encoder streaming");
 
         Ok(Self {
             activate,
