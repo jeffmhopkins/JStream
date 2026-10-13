@@ -2,7 +2,7 @@
 id = "ADR-0017"
 title = "Decision tiers: which ADRs need the maintainer"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
