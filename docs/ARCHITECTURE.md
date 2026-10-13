@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:1d1af9c564242e87", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Diagram vcam box now says registered by the app on first use (ADR-0020) instead of by the installer; rest of the shape unchanged" }
+verified = { hash = "b3:d75fd5a7179de0f1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: CLI changes (mock behind an opt-in feature, JSON flag parsing, request IDs on action output, README) keep the jstream-cli row true: a remote client through Control only, no engine link; jstream mcp still an open question" }
 -->
 
 ```
@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:c343ac1ebc0223ed", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#32): table text identical to main; new crates/jstream-platform/Cargo.toml matches the L1 row (summary verbatim, unsafe_allowed=false) and depends only on L0 jstream-media; outputs now depends on mux (L4->L2), both strictly lower" }
+verified = { hash = "b3:2b95037a58ac0fd3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#34 jstream-platform L1, matches its row; table text is main's): this branch adds apps/jstream-cli/Cargo.toml at layer 6 with the cli part of the apps/* summary and unsafe_allowed false, depending (normal, optional mock feature, and dev) only on jstream-control L2, never jstream-core" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
