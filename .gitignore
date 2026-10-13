@@ -1,0 +1,7 @@
+/target
+/dist
+**/*.rs.bk
+*.pdb
+.DS_Store
+/tests/golden/**/*.actual.png
+/tests/golden/**/*.diff.png
