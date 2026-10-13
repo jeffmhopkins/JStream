@@ -1,9 +1,29 @@
+---
+id: ARCH
+title: Architecture
+kind: normative
+status: draft
+rev: 2
+review_every: 90d
+depends_on: [ADR-0001, ADR-0002, ADR-0003, ADR-0004, ADR-0005, ADR-0006, ADR-0007, ADR-0008, ADR-0009, ADR-0010, ADR-0011]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 2, note: "Converted to tracked sections; covers paths are provisional until M0 creates the crates"}
+---
+
 # Architecture
 
-This document is the map. The *why* behind each choice lives in [`adr/`](adr/).
-If code and this document disagree, fix one of them in the same PR.
+This document is the map. The *why* behind each choice lives in the ADRs ([[ADR-0001]] onward).
+If code and this document disagree, fix one of them in the same PR ([[RULES#R-DOC-013]]).
 
-## 1. Shape of the system
+`covers` paths are provisional until M0 creates the crates. While this doc is `status: draft`, unmatched globs are warnings.
+
+## Shape of the system
+<!-- @section
+id: shape
+rev: 1
+covers: [crates/jstream-core/src/lib.rs, apps/**]
+depends_on: [ADR-0001, ADR-0002]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
+-->
 
 ```
                 ┌───────────────────────── clients (speak only jstream-protocol) ──────────────────────────┐
@@ -33,7 +53,12 @@ If code and this document disagree, fix one of them in the same PR.
 | `apps/jstream-daemon` | Headless engine. Serves `jstream-ui` + WebSocket API over HTTP, optional MCP over HTTP. |
 | `apps/jstream-cli` | `jstream` command: drive a running engine, run headless from a scene file, or run `jstream mcp` as a **stdio** MCP server that connects to a running engine. |
 
-## 2. Core principles
+## Core principles
+<!-- @section
+id: principles
+rev: 1
+depends_on: [ADR-0001, ADR-0003, ADR-0007]
+-->
 
 1. **One API.** Every capability is a command in `jstream-protocol`. The UI, MCP,
    CLI and tests all use it. There are no UI-only features and no private back doors.
@@ -48,7 +73,14 @@ If code and this document disagree, fix one of them in the same PR.
 6. **Deterministic and testable headless.** The whole engine runs without a window,
    with a software GPU adapter, a fake clock and fake devices.
 
-## 3. Repository layout
+## Repository layout
+<!-- @section
+id: repo-layout
+rev: 2
+covers: [Cargo.toml, xtask/**, .github/workflows/**]
+depends_on: [DOCS]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 2, note: "Added docs registries and generated INDEX to layout"}
+-->
 
 ```
 JStream/
@@ -63,19 +95,31 @@ JStream/
 ├── effects/                # built-in WGSL effect packs (data, not code)
 ├── assets/                 # icons, test media, fonts
 ├── tests/                  # cross-crate integration + golden-frame tests
-├── xtask/                  # cargo xtask: lint-deps, gen-schema, golden update, release
+├── xtask/                  # cargo xtask: docs, lint-deps, gen-schema, golden, release
 ├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── RULES.md
-│   ├── adr/                # NNNN-title.md
+│   ├── ARCHITECTURE.md     # id ARCH
+│   ├── RULES.md            # id RULES: every rule has a permanent R-<AREA>-NNN id
+│   ├── DOCS.md             # id DOCS: how docs are tracked, referenced, verified
+│   ├── INDEX.md            # generated: every doc/section/rule id → link, rev, verified
+│   ├── external.toml       # registry of external URLs we rely on
+│   ├── facts.toml          # pinned facts (min OS, toolchain, …), one source each
+│   ├── adr/                # NNNN-title.md, immutable once accepted
 │   └── guides/             # how-tos: adding a source, an effect, a command
-└── .github/workflows/      # CI
+└── .github/workflows/      # CI (incl. `docs` check and weekly docs sweep)
 ```
 
-### Crate map
+## Crate map
+<!-- @section
+id: crate-map
+rev: 1
+covers: [Cargo.toml, crates/*/Cargo.toml, apps/*/Cargo.toml]
+depends_on: [RULES#R-ARCH-002]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Hand-written until M0; then generated from package.metadata.jstream"}
+-->
 
-Layers: a crate may depend only on crates in **strictly lower** layers (plus
-same-layer exceptions listed below). `cargo xtask lint-deps` enforces this in CI.
+Layers: a crate may depend only on crates in **strictly lower** layers ([[RULES#R-ARCH-002]]).
+`cargo xtask lint-deps` enforces this in CI. From M0 this table is generated from
+`[package.metadata.jstream]` ([[DOCS#generated]]); until then it is hand-maintained.
 
 | L | Crate | Responsibility |
 |---|---|---|
@@ -103,9 +147,16 @@ same-layer exceptions listed below). `cargo xtask lint-deps` enforces this in CI
 | 6 | `apps/*` | `jstream-desktop`, `jstream-daemon`, `jstream-cli`. |
 
 Splitting rule: start with the crates above. Split a crate only when compile time,
-`unsafe` isolation or a dependency boundary demands it, and record that in an ADR.
+`unsafe` isolation or a dependency boundary demands it, and record that in an ADR ([[RULES#R-ARCH-005]]).
 
-## 4. Data model (summary)
+## Data model
+<!-- @section
+id: data-model
+rev: 1
+covers: [crates/jstream-graph/**]
+depends_on: [ADR-0007]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
+-->
 
 ```
 Collection (a saved setup, JSON on disk, schema-versioned)
@@ -122,7 +173,14 @@ Collection (a saved setup, JSON on disk, schema-versioned)
 - A source used in several scenes is **one** instance (one capture, one decoder).
 - Effects are per scene item (video) or per source/bus (audio filters).
 
-## 5. Threads and timing
+## Threads and timing
+<!-- @section
+id: threading
+rev: 1
+covers: [crates/jstream-core/src/runtime/**, crates/jstream-audio/src/rt/**, crates/jstream-render/src/frame_loop.rs]
+depends_on: [RULES#R-RT-001, RULES#R-RT-002]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
+-->
 
 | Thread | Runs | Rules |
 |---|---|---|
@@ -135,7 +193,14 @@ Collection (a saved setup, JSON on disk, schema-versioned)
 Master clock: the audio clock drives A/V sync. Video frames are timestamped against it.
 State changes reach RT threads as immutable snapshots (`arc-swap`), so RT threads never see half-applied commands.
 
-## 6. Control protocol
+## Control protocol
+<!-- @section
+id: protocol
+rev: 1
+covers: [crates/jstream-protocol/**, crates/jstream-client/**, crates/jstream-server/**]
+depends_on: [ADR-0001, RULES#R-API-001]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
+-->
 
 - **Commands** (`scene.create`, `item.set_transform`, `audio.set_send`, `output.start`, …):
   typed request/response, each with a JSON Schema.
@@ -143,19 +208,33 @@ State changes reach RT threads as immutable snapshots (`arc-swap`), so RT thread
 - **Events** (`scene.switched`, `output.state_changed`, `stats.tick`, `audio.levels`), pushed to subscribers.
 - **Batches**: a list of commands applied atomically with a single undo step (agents rely on this).
 - Transport: in-process `Control` trait, or JSON over WebSocket (`/api/v1/ws`).
-- Versioning: `jstream-protocol` follows semver independently of the app. Breaking changes need an ADR.
+- Versioning: [[RULES#R-API-001]].
 
-### MCP
+## MCP
+<!-- @section
+id: mcp
+rev: 1
+covers: [crates/jstream-mcp/**]
+depends_on: [ADR-0006, ext:mcp-spec]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
+-->
 
 `jstream-mcp` builds its tool list from the protocol schema at build time: one tool
 per command/query, with a curated description per tool, plus a few agent-friendly
 composite tools (`describe_setup`, `snapshot`, `apply_batch`). Agents have full access
-(ADR-0006). Two defaults stay on regardless: the endpoint binds to localhost only, and
+([[ADR-0006]]). Two defaults stay on regardless: the endpoint binds to localhost only, and
 every agent action goes to the audit log with its MCP client name.
 
 Transports: stdio (`jstream mcp`, for desktop agent apps) and streamable HTTP (served by the daemon/desktop).
 
-## 7. GPU pipeline
+## GPU pipeline
+<!-- @section
+id: gpu-pipeline
+rev: 1
+covers: [crates/jstream-render/**, crates/jstream-platform-*/src/gpu/**, effects/**]
+depends_on: [ADR-0004, ADR-0005]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
+-->
 
 - `jstream-render` owns one `wgpu::Device` (D3D12 on Windows, Metal on macOS, Vulkan on Linux).
 - Capture textures are imported zero-copy through `GpuInterop` (shared handles / IOSurface / dmabuf).
@@ -164,8 +243,24 @@ Transports: stdio (`jstream mcp`, for desktop agent apps) and streamable HTTP (s
 - Encoded frames are handed to the HW encoder as GPU textures via interop; CPU readback is a fallback only.
 - Effects are WGSL with a manifest (`effect.toml`: parameters, types, ranges, defaults). Built-ins live in `effects/`, and user effects hot-reload from the user data dir.
 
-## 8. Persistence and config
+## Persistence and config
+<!-- @section
+id: persistence
+rev: 1
+covers: [crates/jstream-graph/src/persist/**, crates/jstream-core/src/settings/**]
+depends_on: [RULES#R-API-003, RULES#R-SEC-001]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version"}
+-->
 
 - Collections: JSON, `schema_version` field, forward migrations in `jstream-graph::migrate`.
 - App settings: `jstream.toml` in the platform config dir.
 - Secrets (stream keys, OAuth tokens): OS credential store (Windows Credential Manager / Keychain / Secret Service), never in collection files or logs.
+
+## Revision history
+
+<!-- @generated begin history by="xtask docs sync" -->
+| rev | date | by | sections | note |
+|---|---|---|---|---|
+| 1 | 2026-10-13 | agent:claude | all | Initial version |
+| 2 | 2026-10-13 | agent:claude | all | Tracked sections with ids/covers; unnumbered headings; docs registries in layout |
+<!-- @generated end history -->

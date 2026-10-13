@@ -1,0 +1,130 @@
+# External resources JStream relies on. See [[DOCS#ttl]].
+# Docs cite these as [[ext:<id>]]. URLs appear nowhere else.
+# `checked` and `status` are written by `cargo xtask docs sweep` / `docs verify-ext`, not by hand.
+# status: ok | unreachable-from-ci | broken
+
+[[external]]
+id = "yt-live-api"
+url = "https://developers.google.com/youtube/v3/live/getting-started"
+relied_on = "YouTube Live Streaming API: liveBroadcasts (insert/bind/transition), liveStreams (health), liveChatMessages"
+used_by = ["ADR-0009"]
+review_every = "90d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "mf-virtual-camera"
+url = "https://learn.microsoft.com/en-us/windows/win32/api/mfvirtualcamera/nf-mfvirtualcamera-mfcreatevirtualcamera"
+relied_on = "MFCreateVirtualCamera exists; minimum supported client is Windows build 22000"
+used_by = ["ADR-0008"]
+review_every = "180d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "win10-lifecycle"
+url = "https://learn.microsoft.com/en-us/lifecycle/products/windows-10-home-and-pro"
+relied_on = "Windows 10 Home/Pro end of support: October 14, 2025"
+used_by = ["ADR-0008"]
+review_every = "365d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "win-graphics-capture"
+url = "https://learn.microsoft.com/en-us/windows/uwp/audio-video-camera/screen-capture"
+relied_on = "Windows.Graphics.Capture API for display/window capture"
+used_by = ["ADR-0008"]
+review_every = "180d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "wasapi-process-loopback"
+url = "https://learn.microsoft.com/en-us/windows/win32/api/audioclientactivationparams/ns-audioclientactivationparams-audioclient_process_loopback_params"
+relied_on = "Per-process audio loopback capture; minimum supported client Windows 10 build 20348"
+used_by = ["ADR-0008"]
+review_every = "180d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "enhanced-rtmp"
+url = "https://github.com/veovera/enhanced-rtmp"
+relied_on = "Enhanced RTMP spec: HEVC/AV1 over RTMP/FLV"
+used_by = ["ADR-0009"]
+review_every = "180d"
+checked = 2026-10-13
+status = "unreachable-from-ci"   # github.com blocked by the authoring sandbox's proxy; verify on next sweep
+
+[[external]]
+id = "wgpu"
+url = "https://github.com/gfx-rs/wgpu"
+relied_on = "wgpu backends (D3D12/Metal/Vulkan) and wgpu-hal interop escape hatches"
+used_by = ["ADR-0004"]
+review_every = "90d"
+checked = 2026-10-13
+status = "unreachable-from-ci"   # github.com blocked by the authoring sandbox's proxy; verify on next sweep
+
+[[external]]
+id = "mcp-spec"
+url = "https://modelcontextprotocol.io/specification"
+relied_on = "MCP tools, stdio and streamable HTTP transports"
+used_by = ["ADR-0006", "ARCH#mcp"]
+review_every = "90d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "leptos"
+url = "https://leptos.dev/"
+relied_on = "Leptos web framework compiled to WASM"
+used_by = ["ADR-0002"]
+review_every = "180d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "tauri"
+url = "https://v2.tauri.app/"
+relied_on = "Tauri v2 desktop shell with in-process Rust backend"
+used_by = ["ADR-0002"]
+review_every = "180d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "wasmtime"
+url = "https://wasmtime.dev/"
+relied_on = "Sandboxed WASM runtime for plugins"
+used_by = ["ADR-0005"]
+review_every = "180d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "conventional-commits"
+url = "https://www.conventionalcommits.org/en/v1.0.0/"
+relied_on = "Commit/PR title format"
+used_by = ["RULES#R-GIT-003"]
+review_every = "365d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "cargo-deny"
+url = "https://embarkstudios.github.io/cargo-deny/"
+relied_on = "deny.toml schema (licenses, bans, advisories, sources)"
+used_by = ["RULES#R-DEP-001", "RULES#R-DEP-002"]
+review_every = "180d"
+checked = 2026-10-13
+status = "ok"
+
+[[external]]
+id = "adr-practice"
+url = "https://adr.github.io/"
+relied_on = "ADR format conventions (Context/Decision/Consequences)"
+used_by = ["ADR-0011"]
+review_every = "365d"
+checked = 2026-10-13
+status = "ok"

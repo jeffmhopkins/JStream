@@ -1,7 +1,17 @@
+---
+id: ADR-0010
+title: "Build headless engine and MCP before the GUI"
+kind: adr
+status: accepted
+decided: 2026-10-13
+rev: 1
+review_every: 180d
+depends_on: [ADR-0001, ADR-0006]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version, recorded from design Q&A with the maintainer"}
+---
+
 # 0010: Build headless engine and MCP before the GUI
 
-- Status: Accepted
-- Date: 2026-10-13
 
 ## Context
 The GUI is the most change-prone layer. Agents can exercise the engine through MCP

@@ -1,7 +1,17 @@
+---
+id: ADR-0007
+title: "Bus-matrix audio and scene-independent outputs"
+kind: adr
+status: accepted
+decided: 2026-10-13
+rev: 1
+review_every: 180d
+depends_on: []
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version, recorded from design Q&A with the maintainer"}
+---
+
 # 0007: Bus-matrix audio and scene-independent outputs
 
-- Status: Accepted
-- Date: 2026-10-13
 
 ## Context
 Video and audio routing must be independent (e.g. music on stream but not in the VOD,

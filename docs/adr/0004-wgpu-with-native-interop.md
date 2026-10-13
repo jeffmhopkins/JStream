@@ -1,7 +1,17 @@
+---
+id: ADR-0004
+title: "wgpu compositor with native interop"
+kind: adr
+status: accepted
+decided: 2026-10-13
+rev: 1
+review_every: 180d
+depends_on: [ADR-0003, ext:wgpu]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version, recorded from design Q&A with the maintainer"}
+---
+
 # 0004: wgpu compositor with native interop
 
-- Status: Accepted
-- Date: 2026-10-13
 
 ## Context
 Capture → composite → encode must be zero-copy at 1080p60/4K60, on three OSes.

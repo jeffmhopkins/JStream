@@ -1,4 +1,4 @@
-# cargo-deny policy. See docs/RULES.md §5.
+# cargo-deny policy. Enforces R-DEP-001, R-DEP-002, R-DEP-005 (docs/RULES.md).
 
 [advisories]
 version = 2
@@ -21,8 +21,18 @@ allow = [
 ]
 
 [bans]
-multiple-versions = "warn"
+multiple-versions = "warn"   # becomes "deny" at M1 (R-DEP-005)
 wildcards = "deny"
+# R-DEP-002 / ADR-0003: no FFmpeg or bundled C media frameworks.
+deny = [
+    { name = "ffmpeg-next", reason = "R-DEP-002" },
+    { name = "ffmpeg-sys-next", reason = "R-DEP-002" },
+    { name = "ffmpeg-sys", reason = "R-DEP-002" },
+    { name = "rsmpeg", reason = "R-DEP-002" },
+    { name = "rusty_ffmpeg", reason = "R-DEP-002" },
+    { name = "gstreamer", reason = "R-DEP-002" },
+    { name = "gstreamer-sys", reason = "R-DEP-002" },
+]
 
 [sources]
 unknown-registry = "deny"

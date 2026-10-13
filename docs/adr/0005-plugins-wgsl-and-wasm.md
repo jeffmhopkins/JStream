@@ -1,7 +1,17 @@
+---
+id: ADR-0005
+title: "Extensibility through WGSL effects and WASM plugins"
+kind: adr
+status: accepted
+decided: 2026-10-13
+rev: 1
+review_every: 180d
+depends_on: [ADR-0004, ext:wasmtime]
+verified: {date: 2026-10-13, by: "agent:claude", rev: 1, note: "Initial version, recorded from design Q&A with the maintainer"}
+---
+
 # 0005: Extensibility through WGSL effects and WASM plugins
 
-- Status: Accepted
-- Date: 2026-10-13
 
 ## Context
 Native dynamic plugins (OBS-style) need a stable ABI and can crash the process.
