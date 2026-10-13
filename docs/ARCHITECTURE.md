@@ -114,13 +114,17 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:5e0eb4e30825e210", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#30): table keeps main's L2 jstream-mux, L2 jstream-graph and L4 jstream-outputs rows plus this PR's browser built-in in jstream-sources and CEF browser backend in jstream-platform-windows (ADR-0021); layers and unsafe column consistent" }
+verified = { hash = "b3:43d2fc2e00537d95", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#27): table is main's (control L2, mcp L3, server L4, client-stack paragraph, graph/mux/outputs rows) plus this PR's two edits only: browser built-in in jstream-sources and CEF browser backend in jstream-platform-windows (ADR-0021); layers and unsafe column consistent" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
 Once the `xtask docs` generator lands (planned for M0), this table is generated from
 `[package.metadata.jstream]` ([DOCS › Generated content](DOCS.md#generated)). Until then
 it is maintained by hand. `xtask` is repository tooling and sits outside the layers.
+
+The client stack follows from the rule: `jstream-control` builds on `jstream-protocol`, so
+it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` (L3), and
+`jstream-server` mounts MCP over HTTP (L4).
 
 | L | Crate | Responsibility | unsafe |
 |---|---|---|---|
@@ -129,20 +133,20 @@ it is maintained by hand. `xtask` is repository tooling and sits outside the lay
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL (`repr(C)` types and constants only) | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `AudioIo`, `VideoEncoder`, `AudioEncoder`, `VideoDecoder`, `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types). The **single owner** of the encoder and decoder traits. | no |
-| 1 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
+| 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat). No media code. | no |
-| 2 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports | no |
 | 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
 | 3 | `jstream-encode` | Shared encoder sessions keyed by (mix, settings); rate control; fan-out of packet streams | no |
-| 3 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; serves UI assets; mounts MCP over HTTP; token and Origin checks | no |
+| 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
+| 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; serves UI assets; mounts MCP over HTTP; token and Origin checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins (display, window, webcam, image, color, text, browser, media file, scene). Uses platform traits; backends are injected. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
@@ -238,7 +242,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:481c7a18055f7644", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream change only: crate-map rows for jstream-sources/jstream-platform-windows and the merged #29 row; protocol section text (envelope, 0.2 edits, compatibility) unaffected" }
+verified = { hash = "b3:db7b4bb2a05a41d5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#27): section text is main's (control client and mock), unchanged by this PR; re-flagged only by the crate-map rows this PR edits (browser built-in, CEF backend)" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

@@ -12,6 +12,7 @@ publish = false
 # Shared dependency versions live here (R-DEP-003). Member crates use `dep.workspace = true`.
 anyhow = "1"
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
+futures-core = { version = "0.3", default-features = false }
 globset = { version = "0.4", default-features = false }
 insta = { version = "1", default-features = false }
 jstream-media = { path = "crates/jstream-media" }

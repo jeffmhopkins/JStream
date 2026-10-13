@@ -1,0 +1,26 @@
+[package]
+name = "jstream-control"
+version = "0.0.0"
+description = "The JStream Control trait: the async API every client (CLI, MCP, UI) uses to talk to the engine."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[features]
+# `MockEngine`/`MockControl`: an in-memory implementation for developing and testing
+# clients before the engine exists. Off by default; clients enable it in dev-dependencies.
+mock = []
+
+[dependencies]
+futures-core.workspace = true
+jstream-protocol.workspace = true
+thiserror.workspace = true

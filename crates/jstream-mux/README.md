@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:450641ee0671ed58", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream change only: crate-map jstream-sources and jstream-platform-windows rows (ADR-0021); jstream-mux row and this section's text unchanged from main" }
+verified = { hash = "b3:a61f4067d772a2c2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only: this PR's jstream-sources (browser) and jstream-platform-windows (CEF backend) rows; this crate's row and purpose text are main's, unchanged" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md):
