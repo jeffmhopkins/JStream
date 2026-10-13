@@ -24,12 +24,18 @@ mock = ["jstream-control/mock"]
 [dependencies]
 # `ws`: the WebSocket client that `--url` connects with.
 jstream-control = { workspace = true, features = ["ws"] }
+# `jstream-cli mcp`: the MCP server it serves on stdio over the CLI's session.
+jstream-mcp.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
 [dev-dependencies]
 # The unit tests drive whole runs against a `MockEngine` they populate themselves.
 jstream-control = { workspace = true, features = ["mock"] }
+# `tests/mcp.rs`: the binary's `mcp` against a real `jstream-server` on a loopback port,
+# serving a `MockEngine` on a tokio runtime the test owns.
+jstream-server.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "sync"] }
 
 # Runs the binary with `--mock`.
 [[test]]

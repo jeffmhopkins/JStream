@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:08a0af2c4c0f96c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): re-flagged only by the CLI README's verified line (covers apps/**); jstream-cli row (remote client via Control, WsControl connection, jstream-cli mcp later) still holds" }
+verified = { hash = "b3:cc37cf0d3b6b01f8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-cli row ('jstream-cli mcp runs a stdio MCP proxy to it', no engine link) now describes implemented code: mcp.rs serves jstream-mcp over the WsControl session; CLI README purpose/usage/design re-verified; tests/mcp.rs uses jstream-server only as a dev-dependency; diagram unchanged" }
 -->
 
 ```
@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:07ed98827a755dac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): manifests: jstream-control keeps ws deps plus the jstream-protocol fixtures dev-dependency (L1, strictly lower); jstream-server L4 unchanged; table text unchanged" }
+verified = { hash = "b3:03d2ec711a4ec877", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-cli (L6) now depends on jstream-mcp (L3), matching its row 'control and mcp only'; dev-dependency on jstream-server (L4) is test-only and strictly lower; lint-deps ok; table text unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

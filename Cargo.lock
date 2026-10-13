@@ -421,8 +421,11 @@ name = "jstream-cli"
 version = "0.0.0"
 dependencies = [
  "jstream-control",
+ "jstream-mcp",
+ "jstream-server",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

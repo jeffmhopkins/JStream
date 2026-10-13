@@ -3,7 +3,8 @@
 //! queries, batches of edits, actions and the event stream, with human or `--json`
 //! output and one exit code per failure kind. It reaches the engine over its WebSocket
 //! API (`--url`, `--token-file`), or `jstream-control`'s in-memory mock (`--mock`, with
-//! the `mock` cargo feature).
+//! the `mock` cargo feature). `jstream-cli mcp` serves MCP on stdio over that same
+//! session, through `jstream-mcp`.
 //!
 //! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-cli/README.md#purpose, apps/jstream-cli/README.md#usage, apps/jstream-cli/README.md#design, docs/adr/0001-library-first-engine.md
 
@@ -12,9 +13,10 @@
 mod args;
 mod block;
 mod exit;
+mod mcp;
 mod run;
 
-use std::io::{Write, stderr, stdout};
+use std::io::{Write, stderr, stdin, stdout};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -34,9 +36,11 @@ fn main() -> ExitCode {
             }
         }
     }
+    // Only `mcp` reads stdin; for it, stdout carries nothing but MCP messages.
     let code = run::run(
         &args,
         &run::connect,
+        &mut stdin().lock(),
         &mut stdout().lock(),
         &mut stderr().lock(),
     );

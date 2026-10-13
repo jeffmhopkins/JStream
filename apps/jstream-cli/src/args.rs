@@ -43,6 +43,8 @@ Commands:
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
   events [--count <n>]             print events as they arrive; stop after <n>
+  mcp                              serve MCP on stdin/stdout (one JSON-RPC message
+                                   per line) over this connection, until stdin ends
   help                             print this help
 
 Edits (each is its protocol command name followed by its arguments):
@@ -113,6 +115,8 @@ pub enum Command {
         /// How many events to print before exiting.
         count: Option<u64>,
     },
+    /// Serve MCP on stdin and stdout over the session, until stdin ends.
+    Mcp,
 }
 
 fn usage(message: impl Into<String>) -> CliError {
@@ -233,10 +237,11 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         }),
         ["edit", rest @ ..] => Command::Edit(parse_batch(rest)?),
         ["events", rest @ ..] => parse_events(rest)?,
+        ["mcp"] => Command::Mcp,
         [word, ..] => {
             let known = [
                 "help", "version", "hello", "state", "scene", "source", "item", "output", "edit",
-                "events",
+                "events", "mcp",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -734,6 +739,35 @@ mod tests {
         assert!(err(&["--url"]).contains("`--url` needs a value"));
         assert!(err(&["--token-file", "a", "--token-file", "b", "hello"]).contains("twice"));
         assert!(err(&["--mock", "--url", "ws://x:1", "hello"]).contains("can't be combined"));
+    }
+
+    #[test]
+    fn mcp_takes_the_connection_options_and_no_arguments() {
+        assert_eq!(
+            ok(&["--url", "ws://127.0.0.1:4455", "--token-file", "/t", "mcp"]),
+            Invocation {
+                json: false,
+                connection: Connection::Remote {
+                    url: Some("ws://127.0.0.1:4455".into()),
+                    token_file: Some("/t".into()),
+                },
+                command: Command::Mcp,
+            }
+        );
+        assert_eq!(
+            ok(&["--mock", "--mock-output", "o", "mcp"]),
+            Invocation {
+                json: false,
+                connection: Connection::Mock {
+                    outputs: vec![OutputId::new("o")]
+                },
+                command: Command::Mcp,
+            }
+        );
+        assert_eq!(
+            err(&["mcp", "--stdio"]),
+            "wrong arguments for `mcp`; try `jstream-cli help`"
+        );
     }
 
     #[test]

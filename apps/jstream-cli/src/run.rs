@@ -3,17 +3,19 @@
 //! Everything here writes through the `Write` handles it is given, so tests capture the
 //! output (golden strings) and the binary passes locked stdout and stderr. The session
 //! comes from a [`Connector`]: the WebSocket client in the binary, or a `MockEngine`.
+//! `mcp` also reads the input it is given (stdin in the binary).
 
 use crate::args::{self, Command, Connection, Invocation, USAGE};
 use crate::block::{block_on, next_event};
 use crate::exit::{self, CliError};
+use crate::mcp;
 use jstream_control::protocol::{
     Action, Call, CallResult, Event, Hello, ItemInfo, PROTOCOL_VERSION, QueryResult, Response,
     SourceInfo, SourceKind, Welcome,
 };
 use jstream_control::{Control, ControlError, EventStream, WsConfig, WsControl};
 use serde_json::json;
-use std::io::{self, Write};
+use std::io::{self, BufRead, Write};
 
 /// The name this client gives in `hello`, shown in the engine's audit log.
 pub const CLIENT_NAME: &str = "jstream-cli";
@@ -82,15 +84,16 @@ fn read_token(path: Option<String>) -> Result<String, CliError> {
 }
 
 /// Parses `args`, runs the command, writes its output to `out` and any error to `err`,
-/// and returns the process exit code.
+/// and returns the process exit code. Only `mcp` reads `input`.
 pub fn run(
     args: &[String],
     connector: Connector<'_>,
+    input: &mut dyn BufRead,
     out: &mut dyn Write,
     err: &mut dyn Write,
 ) -> u8 {
     let (result, json) = match args::parse(args) {
-        Ok(invocation) => (execute(&invocation, connector, out), invocation.json),
+        Ok(invocation) => (execute(&invocation, connector, input, out), invocation.json),
         // A usage error is reported as JSON too if the global options asked for it.
         Err(error) => (Err(error), args::json_requested(args)),
     };
@@ -107,10 +110,13 @@ pub fn run(
 pub fn execute(
     invocation: &Invocation,
     connector: Connector<'_>,
+    input: &mut dyn BufRead,
     out: &mut dyn Write,
 ) -> Result<(), CliError> {
     let json = invocation.json;
     match &invocation.command {
+        // The MCP server sends `hello` itself, with the MCP client's name.
+        Command::Mcp => return mcp::serve(&invocation.connection, connector, input, out),
         Command::Help => {
             out.write_all(USAGE.as_bytes())?;
             return Ok(());
@@ -155,7 +161,7 @@ pub fn execute(
             write_response(out, &block_on(control.call(call))?, json)
         }
         Command::Events { count } => stream_events(control.events(), *count, json, out),
-        Command::Help | Command::Version => Ok(()),
+        Command::Help | Command::Version | Command::Mcp => Ok(()),
     }
 }
 

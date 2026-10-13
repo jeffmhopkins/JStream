@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:b28f936fdbb1695c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#41): not-here-yet line keeps this PR's text (WsControl connection exists; default address/token file and no engine host yet) with the proxy renamed jstream-cli mcp per main; contents list matches src/" }
+verified = { hash = "b3:0dccfac81334fdae", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Contents list gains mcp.rs (jstream-cli mcp: jstream-mcp's Server over the same connector session) and run.rs now also takes the BufRead input that mcp reads; not-here-yet drops the proxy, keeps default address/token file and no engine host; checked against main.rs, run.rs, mcp.rs" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -29,22 +29,24 @@ Contents (a first cut):
   ([Usage](#usage)).
 - **Running** (`run.rs`): opens a session through a connector (the engine's WebSocket
   API through `jstream-control`'s `WsControl`, or the mock), runs the call, and writes
-  human or `--json` output through the `Write` handles it is given.
+  human or `--json` output through the `Write` handles it is given (`mcp` also reads
+  the `BufRead` it is given).
 - **Exit codes** (`exit.rs`): one per failure kind, including one per protocol error code.
 - **Blocking** (`block.rs`): a thread-parking `block_on` for `Control`'s futures.
+- **MCP proxy** (`mcp.rs`): `jstream-cli mcp`, the stdio MCP proxy
+  ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): `jstream-mcp`'s server over the
+  same session the other commands open.
 
-Not here yet: `jstream-cli mcp`, the stdio MCP proxy
-([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)), and a default address and token
-file ([open question 5](#design)). No engine host serves the WebSocket API yet
-(`jstream-daemon` and `jstream-desktop` don't exist), so outside tests the CLI is still
-mostly used with `--mock`, which needs a build with the `mock` cargo feature
-(`cargo run -p jstream-cli --features mock -- --mock …`).
+Not here yet: a default address and token file ([open question 5](#design)). No engine
+host serves the WebSocket API yet (`jstream-daemon` and `jstream-desktop` don't exist),
+so outside tests the CLI is still mostly used with `--mock`, which needs a build with
+the `mock` cargo feature (`cargo run -p jstream-cli --features mock -- --mock …`).
 
 <a id="usage"></a>
 ## Usage
 <!-- @section
-covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs"]
-verified = { hash = "b3:f3e54f66cc5334f7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Global options add --url and --token-file (JSTREAM_TOKEN_FILE fallback, trimmed, no inline token per ADR-0006), missing/unreadable/empty token or missing url is usage (2), --mock exclusive with them; exit table rows 2 and 3 updated (refused token/Origin/Host is 3); checked against args.rs, run.rs connect/read_token and the updated tests" }
+covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
+verified = { hash = "b3:cd8fc421faba1df1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covers gains mcp.rs. Command table adds mcp, and hello-first now excludes it; new MCP part (launch example, same --url/token file/--mock options, stdout only JSON-RPC, errors before serving on stderr incl. --json, connect failure exits 2/3 with empty stdout, one session with hello under clientInfo.name, lost engine answered with disconnected tool errors while serving continues and no reconnect, exit 0 at EOF and 1 on stdin/stdout failure); exit table row 1 names stdin; checked against args.rs USAGE/parse, run.rs execute, mcp.rs serve, jstream_mcp::serve_stdio and the new unit and e2e tests" }
 -->
 
 ```sh
@@ -82,8 +84,10 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `output start <id>`, `output stop <id>` | action `output.start`, `output.stop` |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
 | `events [--count <n>]` | the event subscription |
+| `mcp` | serves MCP on stdin and stdout; each tool call is one protocol call (see **MCP** below) |
 
-Every command except `version` and `help` sends `hello` first, as client `jstream-cli`.
+Every command except `version`, `help` and `mcp` sends `hello` first, as client
+`jstream-cli`.
 
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
@@ -111,13 +115,40 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
 - **Events** are printed and flushed one by one until `--count` is reached or the
   stream ends. A stream that ends means the engine went away, so it exits with code 3.
 
+**MCP.** `jstream-cli mcp` is the stdio MCP proxy for an agent's MCP client to launch,
+for example:
+
+```json
+{"command": "jstream-cli", "args": ["--url", "ws://127.0.0.1:4455", "mcp"],
+ "env": {"JSTREAM_TOKEN_FILE": "/path/to/token"}}
+```
+
+- It connects with the global options above (`--url` and the token file, or `--mock`
+  with the `mock` feature), then serves `jstream-mcp`'s tools, revisions and errors
+  ([jstream-mcp › Design](../../crates/jstream-mcp/README.md#design)) on stdin and
+  stdout, one JSON-RPC message per line, until stdin ends.
+- **stdout carries only MCP messages.** Errors before serving go to stderr, as for any
+  command (as JSON with `--json`). Nothing else is written to stderr while serving.
+- **Connecting fails before serving**, with the usual exit codes: 2 for a missing URL
+  or token file, 3 when the engine can't be reached or refuses the token. Nothing is
+  written to stdout then, so the MCP client sees the process exit.
+- **One session for the whole run.** Every tool call acts as one client of the engine,
+  with one undo history; `hello` is sent before the first call that needs the engine,
+  with the MCP client's name (`clientInfo.name`) instead of `jstream-cli`.
+- **A lost engine doesn't stop the proxy.** Each tool call that needs the engine is then
+  answered with the `disconnected` tool error, and `describe_api` still works. The proxy
+  doesn't reconnect: the MCP client restarts it to get a new session
+  ([open question 6](#design)).
+- **Exit:** 0 when stdin ends, whatever the engine did meanwhile; 1 if stdin or stdout
+  fails (a closed stdout exits silently).
+
 **Exit codes.** Provisional until the maintainer confirms the scheme
 ([open question 4](#design)); after that, a released code keeps its meaning.
 
 | Code | Meaning |
 |---|---|
 | 0 | Success |
-| 1 | The output could not be written (a closed pipe exits silently) |
+| 1 | The output could not be written, or `mcp` could not read stdin (a closed pipe exits silently) |
 | 2 | Usage: the command line could not be parsed, or names no engine or no readable token file |
 | 3 | `Disconnected`: no connection to the engine (unreachable, or it refused the token, `Origin` or `Host`), or it was lost (whether the call took effect is unknown) |
 | 10 | `unsupported_version` |
@@ -137,7 +168,7 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:125fb729752d6cdb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream control#design gained main's parity paragraph only; CLI design (connection, token file, mock feature) unaffected" }
+verified = { hash = "b3:63e8656d1e7da277", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New bullet on the MCP proxy (same connector, jstream_mcp::Server + serve_stdio, no feature like ws, server sends hello with the MCP client's name, disconnected tool errors and keep serving per jstream-mcp design, no reconnect), writers bullet adds the BufRead input, new Tests bullet (in-memory mcp tests, tests/mcp.rs against jstream-server, which with tokio is dev-only); open question 1 marked done, q2 notes --mock mcp keeps one mock per session, new q6 on reconnecting; Cargo.toml adds jstream-mcp dep and jstream-server/tokio dev-deps; upstream control#design unchanged" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -167,22 +198,40 @@ verified = { hash = "b3:125fb729752d6cdb", by = "agent:claude@session_01QBbMRwRu
   branches of `--mock`; the binary-level test (`tests/exit_codes.rs`) needs the feature
   (`required-features`) and runs under `--all-features`.
 - **Output through writers.** Clippy denies `print!` ([R-RS-005](../../docs/RULES.md#R-RS-005)),
-  so `run` writes to the `Write` handles it is given: locked stdout and stderr in
-  `main`, byte buffers in tests, which compare the exact human and JSON output.
+  so `run` writes to the `Write` handles it is given, and `mcp` reads the `BufRead` it
+  is given: locked stdin, stdout and stderr in `main`, byte buffers in tests, which
+  compare the exact human and JSON output.
+- **The MCP proxy is `jstream-mcp` on the CLI's connection.** The binary keeps the name
+  `jstream-cli` (maintainer's choice), so the stdio MCP proxy
+  ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)) is its `mcp` subcommand. It goes
+  through the same connector as every other command, so it takes the same options and
+  fails to connect with the same exit codes, then hands the session to
+  `jstream_mcp::Server` and runs `jstream_mcp::serve_stdio` on stdin and stdout. The
+  CLI adds no MCP code of its own (`jstream-mcp` is layer 3, below this app, and needs
+  no runtime). Like `ws`, it is always built, with no feature: `mcp` is part of what the
+  CLI is for (ARCH), and it adds no third-party crate. It doesn't send `hello` first,
+  unlike the other commands: the server does, with the MCP client's name, so the audit
+  log names the agent rather than the CLI. A lost connection follows `jstream-mcp`'s
+  design: a `disconnected` tool error per call that the model can read and act on,
+  while the transport keeps going until the MCP client closes stdin. Exiting instead
+  would surface to the agent only as a crashed server. The proxy doesn't reconnect by
+  itself ([open question 6](#design)).
 - **Errors are typed, not `anyhow`.** Each failure must map to its own exit code, so
   `CliError` keeps the `ControlError` (and its protocol code) instead of erasing it.
+- **Tests.** The unit tests drive `mcp` through `run` with in-memory input and output
+  (`initialize`, `tools/list`, `tools/call`, a refused connection and a lost one), and
+  `tests/mcp.rs` runs the binary's `mcp` against a real `jstream-server` on a loopback
+  port, through a server shutdown. `jstream-server` and tokio (for the runtime the test
+  serves on) are dev-dependencies only; the binary itself gains only `jstream-mcp`.
 
 ### Open questions
 
-1. **`jstream-cli mcp`.** The binary keeps the name `jstream-cli` (maintainer's choice),
-   so the stdio MCP proxy ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)) is its `mcp`
-   subcommand. Both halves exist now (`jstream-mcp` and the `WsControl` connection), so
-   the proxy is a follow-up: `jstream-cli mcp` would serve `jstream_mcp::Server` on stdio
-   over a `WsControl` session.
+1. **`jstream-cli mcp`.** Done: [Usage](#usage) describes it.
 2. **A persistent mock.** `--mock` starts empty on every run, and a run is one command,
    so through the binary the read commands always show an empty collection (the unit
-   tests read a populated `MockEngine`). Should `--mock` load and save its state (a
-   file option) until a real engine can be reached?
+   tests read a populated `MockEngine`). `--mock mcp` keeps one mock for a whole MCP
+   session, which covers trying the tools locally. Should `--mock` also load and save
+   its state (a file option) until a real engine can be reached?
 3. **The `mock` feature after the WebSocket client.** Keep it as a scripting sandbox,
    or remove it once an engine host serves the WebSocket API.
 4. **Exit codes.** The numbering (2 usage, 3 disconnected, 10 and up for protocol
@@ -192,3 +241,10 @@ verified = { hash = "b3:125fb729752d6cdb", by = "agent:claude@session_01QBbMRwRu
    default token file (it will be in the platform config directory,
    [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence), once the host apps
    create it). Both are required until then.
+6. **Reconnecting `mcp`.** After the engine goes away, every tool call that needs it
+   fails with `disconnected` until the MCP client restarts the proxy. The proxy could
+   instead open a new session on the next call; that session gets a new `client_id`
+   and an empty undo history, which an agent would need to be told about
+   ([jstream-control › Design](../../crates/jstream-control/README.md#design) leaves
+   reconnecting to the caller). Is that worth doing, or is a restart by the MCP client
+   enough?
