@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:fa5e5810b5202643", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: contents list matches src/ (server.rs Server/handle and version consts, tools.rs generation, jsonrpc.rs, stdio.rs serve_stdio, error.rs McpError); layer 3 over control L2 per crate-map; streamable HTTP stated as not here yet" }
+verified = { hash = "b3:ce25d06345f18b0b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only tests.rs and schema changed (new state group and query ops appear with no code change); contents list of server.rs, tools.rs, jsonrpc.rs, stdio.rs, error.rs still matches" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -41,7 +41,7 @@ Not here yet: the streamable-HTTP transport ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:a5c882007af50614", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#mcp edit only (schema-size bullet now says full op schemas in the first cut); Design text (tool table, describe_api returning the whole schema, dual-era revisions, session, stdio, deferred HTTP) already matches it and the code" }
+verified = { hash = "b3:65b7366b4e487ff1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Group list now item, output, scene, source, state: tools.snap regenerated and reviewed (item.list and source.list ops added to their groups, new state tool with state.get, descriptions gain the query sentence); the 'new noun becomes a new tool' claim held with no tools.rs change; ARCH#mcp edit re-read" }
 -->
 
 ### Tools
@@ -55,7 +55,7 @@ below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`scene`, `item`, `source`, `output` today) | `op`: one edit, action or query of that noun | an edit: a batch of one; an action: an action; a query: a query |
+| one per noun (`item`, `output`, `scene`, `source`, `state` today) | `op`: one edit, action or query of that noun | an edit: a batch of one; an action: an action; a query: a query |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 
@@ -169,7 +169,7 @@ official Rust SDK (`rmcp`):
 -->
 
 1. **Progressive discovery.** Each group tool carries its full op schemas, and `batch`
-   carries every edit's (about 1,200 lines of JSON in total today). ARCH plans small
+   carries every edit's (about 1,300 lines of JSON in total today). ARCH plans small
    schemas plus `describe_api` on demand. When the protocol grows, should group schemas
    shrink to the op names, with `describe_api` taking a group or op name?
 2. **`disconnected`.** A lost engine connection is reported with an MCP-layer error code

@@ -8,7 +8,8 @@ use crate::args::{self, Command, Connection, Invocation, USAGE};
 use crate::block::{block_on, next_event};
 use crate::exit::{self, CliError};
 use jstream_control::protocol::{
-    Action, Call, CallResult, Event, Hello, PROTOCOL_VERSION, QueryResult, Response, Welcome,
+    Action, Call, CallResult, Event, Hello, ItemInfo, PROTOCOL_VERSION, QueryResult, Response,
+    SourceInfo, SourceKind, Welcome,
 };
 use jstream_control::{Control, ControlError, EventStream};
 use serde_json::json;
@@ -210,33 +211,135 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                 writeln!(out, "no scenes")?;
                 return Ok(());
             }
-            let id_width = scenes
-                .iter()
-                .map(|s| s.scene_id.as_str().chars().count())
-                .chain([2])
-                .max()
-                .unwrap_or(2);
-            let name_width = scenes
-                .iter()
-                .map(|s| s.name.chars().count())
-                .chain([4])
-                .max()
-                .unwrap_or(4);
-            writeln!(out, "{:id_width$}  {:name_width$}  ITEMS", "ID", "NAME")?;
-            for scene in scenes {
-                writeln!(
-                    out,
-                    "{:id_width$}  {:name_width$}  {}",
-                    scene.scene_id.as_str(),
-                    scene.name,
-                    scene.item_count
-                )?;
-            }
+            let rows = scenes.iter().map(|scene| {
+                vec![
+                    scene.scene_id.to_string(),
+                    scene.name.clone(),
+                    scene.item_count.to_string(),
+                ]
+            });
+            table(out, "", &["ID", "NAME", "ITEMS"], rows.collect())?;
         }
         QueryResult::OutputStatus { output_id, state } => {
             writeln!(out, "{output_id}: {}", wire_name(state))?;
         }
+        QueryResult::SourceList { rev, sources } => {
+            writeln!(out, "rev {rev}")?;
+            write_sources(out, "", sources)?;
+        }
+        QueryResult::ItemList {
+            rev,
+            scene_id,
+            items,
+        } => {
+            writeln!(out, "rev {rev}, scene {scene_id}")?;
+            write_items(out, "", items)?;
+        }
+        QueryResult::StateGet {
+            rev,
+            sources,
+            scenes,
+        } => {
+            writeln!(out, "rev {rev}")?;
+            writeln!(out, "sources:")?;
+            write_sources(out, "  ", sources)?;
+            if scenes.is_empty() {
+                writeln!(out, "no scenes")?;
+            }
+            for scene in scenes {
+                writeln!(out, "scene {} ({}):", scene.scene_id, scene.name)?;
+                write_items(out, "  ", &scene.items)?;
+            }
+        }
         other => line(out, other)?,
+    }
+    Ok(())
+}
+
+/// Sources as a table, in the `source.create` argument spelling of their kind.
+fn write_sources(
+    out: &mut dyn Write,
+    indent: &str,
+    sources: &[SourceInfo],
+) -> Result<(), CliError> {
+    if sources.is_empty() {
+        writeln!(out, "{indent}no sources")?;
+        return Ok(());
+    }
+    let rows = sources.iter().map(|source| {
+        let kind = match &source.kind {
+            SourceKind::Builtin { kind } => format!("builtin:{kind}"),
+            SourceKind::Scene { scene_id } => format!("scene:{scene_id}"),
+            other => serde_json::to_string(other).unwrap_or_else(|_| "?".into()),
+        };
+        vec![source.source_id.to_string(), source.name.clone(), kind]
+    });
+    table(out, indent, &["ID", "NAME", "KIND"], rows.collect())
+}
+
+/// Items as a table, bottom first, with each property in the argument order of the edit
+/// that sets it.
+fn write_items(out: &mut dyn Write, indent: &str, items: &[ItemInfo]) -> Result<(), CliError> {
+    if items.is_empty() {
+        writeln!(out, "{indent}no items")?;
+        return Ok(());
+    }
+    let rows = items.iter().map(|item| {
+        let t = &item.transform;
+        let c = &item.crop;
+        vec![
+            item.item_id.to_string(),
+            item.source_id.to_string(),
+            item.visible.to_string(),
+            format!("{},{}", t.position.x, t.position.y),
+            format!("{},{}", t.scale.x, t.scale.y),
+            t.rotation_deg.to_string(),
+            format!("{},{},{},{}", c.left, c.top, c.right, c.bottom),
+        ]
+    });
+    table(
+        out,
+        indent,
+        &[
+            "ID", "SOURCE", "VISIBLE", "POSITION", "SCALE", "ROTATION", "CROP",
+        ],
+        rows.collect(),
+    )
+}
+
+/// Writes a left-aligned table: columns two spaces apart, each as wide as its widest
+/// cell (counted in characters), and the last one unpadded, so no line ends in spaces.
+fn table(
+    out: &mut dyn Write,
+    indent: &str,
+    headers: &[&str],
+    rows: Vec<Vec<String>>,
+) -> Result<(), CliError> {
+    let widths: Vec<usize> = headers
+        .iter()
+        .enumerate()
+        .map(|(column, header)| {
+            rows.iter()
+                .filter_map(|row| row.get(column))
+                .map(|cell| cell.chars().count())
+                .chain([header.chars().count()])
+                .max()
+                .unwrap_or(0)
+        })
+        .collect();
+    let header: Vec<String> = headers.iter().map(|h| (*h).to_owned()).collect();
+    for row in std::iter::once(&header).chain(&rows) {
+        let last = row.len().saturating_sub(1);
+        let mut text = String::from(indent);
+        for (column, cell) in row.iter().enumerate() {
+            if column == last {
+                text.push_str(cell);
+            } else {
+                let width = widths.get(column).copied().unwrap_or(0);
+                text.push_str(&format!("{cell:width$}  "));
+            }
+        }
+        writeln!(out, "{text}")?;
     }
     Ok(())
 }

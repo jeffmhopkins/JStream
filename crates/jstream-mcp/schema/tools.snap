@@ -521,7 +521,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "describe_api"
     },
     {
-      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.set_transform` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_crop` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.set_transform` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_crop` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Crop": {
@@ -806,6 +806,24 @@ source: crates/jstream-mcp/src/tests.rs
                   "crop"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "Lists one scene's items, in stacking order (the first is at the bottom). Fails with\n`not_found` if the scene doesn't exist.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose items to list."
+                  },
+                  "type": {
+                    "const": "item.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
               }
             ]
           }
@@ -1054,7 +1072,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "scene"
     },
     {
-      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.duplicate` (edit), `source.delete` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "IdempotencyKey": {
@@ -1217,6 +1235,19 @@ source: crates/jstream-mcp/src/tests.rs
                   "source_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "Lists the collection's sources, ordered by ID. Sources have no display order of\ntheir own.",
+                "properties": {
+                  "type": {
+                    "const": "source.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
               }
             ]
           }
@@ -1227,6 +1258,37 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "source"
+    },
+    {
+      "description": "Runs one `state` operation: set `op.type` to one of `state.get` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `state` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Reads the whole collection state (every source, and every scene with its items)\nat one revision: what a client reads on connecting, after a `state.changed` it\ndidn't cause, or before an edit it sends with `expected_rev`.",
+                "properties": {
+                  "type": {
+                    "const": "state.get",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "state"
     }
   ]
 }

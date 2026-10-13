@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d75fd5a7179de0f1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: CLI changes (mock behind an opt-in feature, JSON flag parsing, request IDs on action output, README) keep the jstream-cli row true: a remote client through Control only, no engine link; jstream mcp still an open question" }
+verified = { hash = "b3:139dd629a921dd22", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "CLI gained read commands over the new protocol queries; the jstream-cli row still holds: a remote client through Control only, no engine link; jstream mcp still an open question" }
 -->
 
 ```
@@ -242,7 +242,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:db7b4bb2a05a41d5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#27): section text is main's (control client and mock), unchanged by this PR; re-flagged only by the crate-map rows this PR edits (browser built-in, CEF backend)" }
+verified = { hash = "b3:7b834723f1d93aba", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Queries bullet now names the 0.3 reads (state.get, scene.list, source.list, item.list, output.status) and marks video.snapshot/audio.levels as later; envelope, edits, actions, versioning bullets hold; control mock changes covered by CRATE-jstream-control#design" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -258,7 +258,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
-- **Queries** (`state.get` → state + `rev`, `scene.list`, `video.snapshot`, `audio.levels`).
+- **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
+  `output.status`; later `video.snapshot`, `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `stats.tick`, …).
 - **Errors** carry a stable machine-readable `code`, detail fields and a message.
 - **Binary streams** (WebSocket binary frames): snapshots (PNG/JPEG), preview video,
@@ -274,12 +275,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:8f5c811ef14ec9ab", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1 on #35, re-recorded after CRATE-jstream-mcp#design's verified line changed (this section covers the crate): schema-size bullet states progressive discovery as the goal and that the first cut ships full op schemas (~50 KB tools/list), matching tools.rs and schema/tools.snap; rest unchanged" }
+verified = { hash = "b3:d24092a6e512b8f6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Tool group list updated: state is now a group (state.get), listed with item, output, scene, source; tools/list still about 50 KB (snapshot 52 KB pretty-printed); rest unchanged against jstream-mcp src and README" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`scene`, `item`, `source`, `output` so far; `audio`, `studio`, `youtube`, `state` as
-  those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`item`, `output`, `scene`, `source` and `state` so far; `audio`, `studio`, `youtube`
+  as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.

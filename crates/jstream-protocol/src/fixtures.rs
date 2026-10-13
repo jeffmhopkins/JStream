@@ -8,9 +8,9 @@
 use crate::{
     Action, Batch, Call, CallResult, ClientId, ClientMessage, Command, CommandClass, Crop, Edit,
     EntityKind, ErrorResponse, Event, EventMessage, Finite32, Hello, IdempotencyKey, ItemId,
-    ItemTransform, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, Query, QueryResult,
-    Request, RequestId, Response, Rev, SceneId, SceneSummary, ServerMessage, SourceId, SourceKind,
-    Vec2, Welcome, json_schema,
+    ItemInfo, ItemTransform, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, Query,
+    QueryResult, Request, RequestId, Response, Rev, SceneId, SceneInfo, SceneSummary,
+    ServerMessage, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -114,6 +114,58 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::OutputStatus {
             output_id: OutputId::new("out_yt"),
         },
+        Query::SourceList,
+        Query::ItemList {
+            scene_id: SceneId::new("scn_1"),
+        },
+        Query::StateGet,
+    ]
+}
+
+fn source_infos() -> Vec<SourceInfo> {
+    vec![
+        SourceInfo {
+            source_id: SourceId::new("src_cam"),
+            name: "Camera".into(),
+            kind: SourceKind::Builtin {
+                kind: "webcam".into(),
+            },
+        },
+        SourceInfo {
+            source_id: SourceId::new("src_intro"),
+            name: "Intro scene".into(),
+            kind: SourceKind::Scene {
+                scene_id: SceneId::new("scn_intro"),
+            },
+        },
+    ]
+}
+
+fn item_infos() -> Vec<ItemInfo> {
+    vec![
+        ItemInfo {
+            item_id: ItemId::new("itm_1"),
+            source_id: SourceId::new("src_intro"),
+            transform: ItemTransform::IDENTITY,
+            crop: Crop::NONE,
+            visible: true,
+        },
+        ItemInfo {
+            item_id: ItemId::new("itm_2"),
+            source_id: SourceId::new("src_cam"),
+            transform: ItemTransform {
+                position: Vec2::new(1280.0, 720.0).expect("finite"),
+                scale: Vec2::new(0.25, 0.25).expect("finite"),
+                rotation_deg: Finite32::ZERO,
+            },
+            crop: Crop {
+                left: 8,
+                top: 0,
+                right: 8,
+                bottom: 0,
+            },
+            visible: false,
+        },
     ]
 }
 
@@ -130,6 +182,31 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::OutputStatus {
             output_id: OutputId::new("out_yt"),
             state: OutputState::Active,
+        },
+        QueryResult::SourceList {
+            rev: Rev(12),
+            sources: source_infos(),
+        },
+        QueryResult::ItemList {
+            rev: Rev(12),
+            scene_id: SceneId::new("scn_1"),
+            items: item_infos(),
+        },
+        QueryResult::StateGet {
+            rev: Rev(12),
+            sources: source_infos(),
+            scenes: vec![
+                SceneInfo {
+                    scene_id: SceneId::new("scn_1"),
+                    name: "Main".into(),
+                    items: item_infos(),
+                },
+                SceneInfo {
+                    scene_id: SceneId::new("scn_intro"),
+                    name: "Intro".into(),
+                    items: vec![],
+                },
+            ],
         },
     ]
 }

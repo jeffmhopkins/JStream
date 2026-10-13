@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:24c31e5f7b257e68", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only: this PR's jstream-sources (browser) and jstream-platform-windows (CEF backend) rows; this crate's row and purpose text are main's, unchanged" }
+verified = { hash = "b3:f3b7cbebddb3617e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added Reading paragraph for read.rs (Graph::query over state.get/scene.list/source.list/item.list, None for output.status, not_found for missing scene, ordering, to_info helpers); edit semantics in apply.rs untouched so Model/Applying text holds; Tests line mentions read tests; protocol#design dependency re-read (new Queries subsection consistent)" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -57,9 +57,18 @@ goes up by exactly one, and the result carries the **inverse batch**.
   the cycle (`a -> b -> a`). Only `item.add` adds nesting, so it is the only edit
   checked.
 
-**Tests** (`tests.rs`): validation and error codes per edit, shared sources, cycles
-(self, 2- and 3-cycles, legal diamonds), exact inverses, and a property test: a seeded
-generator applies 6000 random batches. After each successful one, applying its
+**Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
+collection (`state.get`, `scene.list`, `source.list` and `item.list`) with the
+protocol's result shapes, at the current `rev`. It returns `None` for a query the graph
+doesn't hold the answer to (`output.status` reads runtime state), and fails only with
+`not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
+display order, items bottom first; `Source::to_info`, `Scene::to_info` and
+`Item::to_info` convert single objects. Reads change nothing.
+
+**Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
+edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds), exact inverses,
+what each query reports, and a property test: a seeded generator applies 6000 random
+batches. After each successful one, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged.
 

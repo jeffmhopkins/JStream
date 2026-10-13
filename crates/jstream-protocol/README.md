@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:41c6db993ba7aaa9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only: this PR's jstream-sources (browser) and jstream-platform-windows (CEF backend) rows; this crate's row and purpose text are main's, unchanged" }
+verified = { hash = "b3:268b9ef305501757", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Queries bullet now lists state.get, scene.list, source.list, item.list, output.status and the SceneSummary/SceneInfo/SourceInfo/ItemInfo shapes, matching query.rs and lib.rs re-exports; rest of contents unchanged" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -34,7 +34,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `source.delete`), with `ItemTransform`, `Crop` and `SourceKind`; `Action`
   (`output.start`, `output.stop`); `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Queries** (`query.rs`): `scene.list` and `output.status`, with `QueryResult`.
+- **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list` and
+  `output.status`, with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo`
+  and `ItemInfo` shapes it reports.
 - **Events** (`event.rs`): `state.changed` and `output.state_changed`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, and `WireError`, its wire form with a message.
@@ -51,7 +53,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:e1c93ad96d3ad75d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: Undo section now states the edit set is closed under inversion (reorder/set_visible/set_crop edits, rejected referenced deletes) matching Edit docs and jstream-graph's property test; added sources-as-shared-instances, scene nesting/cycle and index paragraph; handshake example bumped to 0.2 per R-API-001 minor bump; snapshots regenerated and reviewed (only additive oneOf entries, doc text, title 0.2)" }
+verified = { hash = "b3:9faf06707f250c34", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added Queries subsection (collection reads carry rev, source.list by ID, item.list bottom first or not_found, state.get whole state, output.status without rev, ItemInfo carries every edit-set property) matching query.rs; handshake example bumped to 0.3 per R-API-001 minor bump for added queries; protocol.snap and examples.snap diffs reviewed: only added oneOf entries and defs, plus title and version 0.3" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -71,8 +73,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":2},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":2},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":3},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":3},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -169,6 +171,28 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
   original result, even if `rev` has moved on since.
 - Results: a successful batch answers `{"kind":"batch","rev":N}`, the revision it
   produced. Queries that read collection state report the `rev` they read.
+
+### Queries
+
+Queries read and never change `rev`. Those that read the collection state carry the
+`rev` they read, so a client can send its next batch with that `expected_rev`:
+
+- `state.get`: the whole collection at one revision: every source, and every scene in
+  display order with its items. A client reads it on connecting, and again after a
+  `state.changed` it didn't cause.
+- `scene.list`: the scenes in display order, each with its name and item count.
+- `source.list`: the sources, ordered by ID (sources have no display order), each with
+  its name and `SourceKind`.
+- `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
+  `not_found` for a missing scene.
+- `output.status {output_id}`: an output's runtime state, which is not collection
+  state, so it carries no `rev`.
+
+An item is reported with its `source_id`, `transform`, `crop` and `visible`: every
+property an edit sets, so a client can compute any edit, or its inverse, from what it
+read. The shapes (`SourceInfo`, `SceneInfo`, `ItemInfo`) mirror `jstream-graph`'s model,
+which produces them (`Graph::query`). As the model grows (settings, filters, effects)
+they gain fields, which older clients ignore.
 
 ### Undo
 

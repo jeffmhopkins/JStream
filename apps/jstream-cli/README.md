@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:0aa9a96a24814da7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: purpose now says --mock needs the mock cargo feature; Contents bullets still match args.rs, run.rs (connector now returns CliError), exit.rs and block.rs" }
+verified = { hash = "b3:160f4916f930df3d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "args.rs gained state get, source list, item list; run.rs gained their table output; contents bullets (parser, running, exit codes, block_on) and the not-yet list still hold" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -42,7 +42,7 @@ to an engine needs `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs"]
-verified = { hash = "b3:fa7fdaf174f46912", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1: B3 error format corrected (human 'error: <msg>' plus ' (<code>)' only for engine errors; usage/disconnected/io codes only in JSON), --json found after --mock-output (B1), request ID on action lines (N2), mock feature noted, exit codes marked provisional (N3); checked against run.rs, args.rs and the golden tests" }
+verified = { hash = "b3:4fea1e84e90d1879", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Command table adds state get, source list, item list <scene-id>; new Reads bullet describes the tables (kind in builtin:/scene: spelling, items bottom first with VISIBLE/POSITION/SCALE/ROTATION/CROP, empty-list lines), checked against run.rs and the new golden tests; exit codes unchanged (item list of a missing scene exits 15)" }
 -->
 
 ```sh
@@ -61,7 +61,10 @@ usage error that says so.
 |---|---|
 | `version` | none: prints the CLI and protocol versions |
 | `hello` | the `hello`/`welcome` handshake |
+| `state get` | query `state.get` |
 | `scene list` | query `scene.list` |
+| `source list` | query `source.list` |
+| `item list <scene-id>` | query `item.list` |
 | `output status <id>` | query `output.status` |
 | `output start <id>`, `output stop <id>` | action `output.start`, `output.stop` |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
@@ -80,6 +83,12 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
   protocol version doesn't know are skipped, as the protocol asks.
+- **Reads** print `rev N` first, then a table per list: scenes with their item counts;
+  sources with their kind in the `source.create` spelling (`builtin:webcam`,
+  `scene:main`); items bottom first, with `VISIBLE`, `POSITION` (`x,y`), `SCALE`,
+  `ROTATION` and `CROP` (`left,top,right,bottom`) in the argument order of the edits
+  that set them. `state get` prints the sources, then each scene in display order with
+  its items. An empty list prints `no scenes`, `no sources` or `no items`.
 - **Errors** go to stderr. For people: `error: <message>`, with ` (<code>)` appended
   when it is an engine error (``error: scene `x` does not exist (not_found)``). With
   `--json` (found among the global options even when parsing fails): an object
@@ -115,7 +124,7 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3539cfea69d0af53", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review round 1 (B2): new opt-in mock bullet matches Cargo.toml (feature mock off by default enabling jstream-control/mock, dev-dependency with mock for unit tests, exit_codes test required-features) and the cfg'd connect branches; connector type now CliError; open questions 3 and 4 updated; jstream-control#design's 'clients enable it in dev-dependencies' holds for default builds" }
+verified = { hash = "b3:26b56fe42751b8b7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Open question 2 (more queries) resolved by protocol 0.3 and replaced with the persistent-mock question; parser, block_on, connector seam, opt-in mock and writer bullets unchanged against src/ and Cargo.toml; control#design dependency re-read" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -152,9 +161,10 @@ verified = { hash = "b3:3539cfea69d0af53", by = "agent:claude@session_01QBbMRwRu
 
 1. **`jstream mcp`.** The stdio MCP proxy ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape))
    would make the CLI depend on `jstream-mcp`, which doesn't exist yet. Left out.
-2. **More queries.** The protocol has only `scene.list` and `output.status`. Listing
-   sources or items, or reading the full state, needs new protocol queries first
-   ([R-ARCH-001](../../docs/RULES.md#R-ARCH-001)).
+2. **A persistent mock.** `--mock` starts empty on every run, and a run is one command,
+   so through the binary the read commands always show an empty collection (the unit
+   tests read a populated `MockEngine`). Should `--mock` load and save its state (a
+   file option) until a real engine can be reached?
 3. **The `mock` feature after the WebSocket client.** Keep it as a scripting sandbox,
    or remove it once a real engine can be reached.
 4. **Exit codes.** The numbering (2 usage, 3 disconnected, 10 and up for protocol

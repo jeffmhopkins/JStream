@@ -177,7 +177,15 @@ fn handshake_list_and_call_round_trip() {
         .collect();
     assert_eq!(
         names,
-        ["batch", "describe_api", "item", "output", "scene", "source"]
+        [
+            "batch",
+            "describe_api",
+            "item",
+            "output",
+            "scene",
+            "source",
+            "state"
+        ]
     );
     assert!(list.get("ttlMs").is_none() && list.get("resultType").is_none());
 
@@ -205,6 +213,33 @@ fn handshake_list_and_call_round_trip() {
         ], "expected_rev": 1, "idempotency_key": "k1"}),
     );
     assert_eq!(ok(&batch)["result"], json!({"kind": "batch", "rev": 2}));
+    // The protocol 0.3 reads, each under its noun's tool.
+    let cam = json!({"source_id": "src_cam", "name": "Camera",
+                     "kind": {"type": "builtin", "kind": "webcam"}});
+    let item = json!({"item_id": "itm_1", "source_id": "src_cam",
+                      "transform": {"position": {"x": 0.0, "y": 0.0},
+                                    "scale": {"x": 1.0, "y": 1.0}, "rotation_deg": 0.0},
+                      "crop": {"left": 0, "top": 0, "right": 0, "bottom": 0},
+                      "visible": true});
+    let sources = f.call_tool("source", json!({"op": {"type": "source.list"}}));
+    assert_eq!(
+        ok(&sources)["result"]["result"],
+        json!({"type": "source.list", "rev": 2, "sources": [cam]})
+    );
+    let items = f.call_tool(
+        "item",
+        json!({"op": {"type": "item.list", "scene_id": "scn_1"}}),
+    );
+    assert_eq!(
+        ok(&items)["result"]["result"],
+        json!({"type": "item.list", "rev": 2, "scene_id": "scn_1", "items": [item]})
+    );
+    let state = f.call_tool("state", json!({"op": {"type": "state.get"}}));
+    assert_eq!(
+        ok(&state)["result"]["result"],
+        json!({"type": "state.get", "rev": 2, "sources": [cam],
+               "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}]})
+    );
     let started = f.call_tool(
         "output",
         json!({"op": {"type": "output.start", "output_id": "out_rec"}}),
@@ -252,7 +287,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(6));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(7));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(

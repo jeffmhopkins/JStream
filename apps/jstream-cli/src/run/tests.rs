@@ -124,12 +124,12 @@ fn version_and_help_need_no_connection() {
     let version = env!("CARGO_PKG_VERSION");
     assert_eq!(
         run_with(&refuse, &["version"]),
-        ok(&format!("jstream-cli {version}, protocol 0.2\n"))
+        ok(&format!("jstream-cli {version}, protocol 0.3\n"))
     );
     assert_eq!(
         run_with(&refuse, &["--json", "version"]),
         ok(&format!(
-            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":0,\"minor\":2}}}}\n"
+            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":0,\"minor\":3}}}}\n"
         ))
     );
     let help = run_with(&refuse, &["help"]);
@@ -146,11 +146,11 @@ fn hello_prints_the_session() {
     let engine = populated();
     assert_eq!(
         run_on(&engine, &["--mock", "hello"]),
-        ok("connected: protocol 0.2, client mock_2, rev 1\n")
+        ok("connected: protocol 0.3, client mock_2, rev 1\n")
     );
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "hello"]),
-        ok("{\"protocol\":{\"major\":0,\"minor\":2},\"client_id\":\"mock_3\",\"rev\":1}\n")
+        ok("{\"protocol\":{\"major\":0,\"minor\":3},\"client_id\":\"mock_3\",\"rev\":1}\n")
     );
 }
 
@@ -176,6 +176,136 @@ fn scene_list_golden() {
     assert_eq!(
         run_on(&MockEngine::new(), &["--mock", "scene", "list"]),
         ok("rev 0\nno scenes\n")
+    );
+}
+
+#[test]
+fn source_list_golden() {
+    let engine = populated();
+    let nest = [
+        "--mock",
+        "edit",
+        "source.create",
+        "nest",
+        "Nested BRB",
+        "scene:brb",
+    ];
+    assert_eq!(run_on(&engine, &nest), ok("applied: rev 2 (req_1)\n"));
+    assert_eq!(
+        run_on(&engine, &["--mock", "source", "list"]),
+        ok("rev 2\n\
+            ID    NAME        KIND\n\
+            cam   Camera      builtin:webcam\n\
+            nest  Nested BRB  scene:brb\n")
+    );
+    assert_eq!(
+        run_on(&engine, &["--json", "--mock", "source", "list"]),
+        ok(concat!(
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"source.list","rev":2,"#,
+            r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}},"#,
+            r#"{"source_id":"nest","name":"Nested BRB","kind":{"type":"scene","scene_id":"brb"}}]}}}"#,
+            "\n"
+        ))
+    );
+    assert_eq!(
+        run_on(&MockEngine::new(), &["--mock", "source", "list"]),
+        ok("rev 0\nno sources\n")
+    );
+}
+
+#[test]
+fn item_list_golden() {
+    let engine = populated();
+    let line = [
+        "--mock",
+        "edit",
+        "item.set_transform",
+        "cam_2",
+        "100",
+        "50.5",
+        "0.5",
+        "0.5",
+        "-90",
+        "item.set_crop",
+        "cam_2",
+        "0",
+        "0",
+        "10",
+        "0",
+        "item.set_visible",
+        "cam_2",
+        "false",
+    ];
+    assert_eq!(run_on(&engine, &line), ok("applied: rev 2 (req_1)\n"));
+    assert_eq!(
+        run_on(&engine, &["--mock", "item", "list", "main"]),
+        ok("rev 2, scene main\n\
+            ID     SOURCE  VISIBLE  POSITION  SCALE    ROTATION  CROP\n\
+            cam_1  cam     true     0,0       1,1      0         0,0,0,0\n\
+            cam_2  cam     false    100,50.5  0.5,0.5  -90       0,0,10,0\n")
+    );
+    assert_eq!(
+        run_on(&engine, &["--json", "--mock", "item", "list", "main"]),
+        ok(concat!(
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"item.list","rev":2,"#,
+            r#""scene_id":"main","items":[{"item_id":"cam_1","source_id":"cam","#,
+            r#""transform":{"position":{"x":0.0,"y":0.0},"scale":{"x":1.0,"y":1.0},"rotation_deg":0.0},"#,
+            r#""crop":{"left":0,"top":0,"right":0,"bottom":0},"visible":true},"#,
+            r#"{"item_id":"cam_2","source_id":"cam","#,
+            r#""transform":{"position":{"x":100.0,"y":50.5},"scale":{"x":0.5,"y":0.5},"rotation_deg":-90.0},"#,
+            r#""crop":{"left":0,"top":0,"right":10,"bottom":0},"visible":false}]}}}"#,
+            "\n"
+        ))
+    );
+    assert_eq!(
+        run_on(&engine, &["--mock", "item", "list", "brb"]),
+        ok("rev 2, scene brb\nno items\n")
+    );
+    assert_eq!(
+        run_on(&engine, &["--mock", "item", "list", "nope"]),
+        failed(15, "error: scene `nope` does not exist (not_found)\n")
+    );
+}
+
+#[test]
+fn state_get_golden() {
+    let engine = populated();
+    assert_eq!(
+        run_on(&engine, &["--mock", "edit", "item.reorder", "cam_2", "0"]),
+        ok("applied: rev 2 (req_1)\n")
+    );
+    assert_eq!(
+        run_on(&engine, &["--mock", "state", "get"]),
+        ok("rev 2\n\
+            sources:\n\
+           \x20 ID   NAME    KIND\n\
+           \x20 cam  Camera  builtin:webcam\n\
+            scene main (Main):\n\
+           \x20 ID     SOURCE  VISIBLE  POSITION  SCALE  ROTATION  CROP\n\
+           \x20 cam_2  cam     true     0,0       1,1    0         0,0,0,0\n\
+           \x20 cam_1  cam     true     0,0       1,1    0         0,0,0,0\n\
+            scene brb (Be right back):\n\
+           \x20 no items\n")
+    );
+    let item = |id: &str| {
+        format!(
+            r#"{{"item_id":"{id}","source_id":"cam","transform":{{"position":{{"x":0.0,"y":0.0}},"scale":{{"x":1.0,"y":1.0}},"rotation_deg":0.0}},"crop":{{"left":0,"top":0,"right":0,"bottom":0}},"visible":true}}"#
+        )
+    };
+    assert_eq!(
+        run_on(&engine, &["--json", "--mock", "state", "get"]),
+        ok(&format!(
+            "{}{}{},{}{}\n",
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"state.get","rev":2,"#,
+            r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
+            item("cam_2"),
+            item("cam_1"),
+            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}]}}}"#,
+        ))
+    );
+    assert_eq!(
+        run_on(&MockEngine::new(), &["--mock", "state", "get"]),
+        ok("rev 0\nsources:\n  no sources\nno scenes\n")
     );
 }
 
