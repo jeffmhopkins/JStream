@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:fea9d6aea2c3d694", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only change under apps/ is the re-verified line in apps/jstream-cli/README.md; no CLI code or manifest change, so the jstream-cli row (remote client through Control, no engine link) and diagram still hold" }
+verified = { hash = "b3:58acf9dd868b2f07", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#41): text is main's (jstream-cli mcp naming); re-flagged only by the CLI README's verified line, which covers apps/**; the jstream-cli row still holds" }
 -->
 
 ```
@@ -56,7 +56,7 @@ verified = { hash = "b3:fea9d6aea2c3d694", by = "agent:claude@session_01QBbMRwRu
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). |
-| `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
+| `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
 ## Core principles
@@ -275,7 +275,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d24092a6e512b8f6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Tool group list updated: state is now a group (state.get), listed with item, output, scene, source; tools/list still about 50 KB (snapshot 52 KB pretty-printed); rest unchanged against jstream-mcp src and README" }
+verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stdio proxy renamed jstream-cli mcp after the maintainer kept the binary name jstream-cli; tools, schema-size, names, access and undo bullets unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -294,7 +294,7 @@ verified = { hash = "b3:d24092a6e512b8f6", by = "agent:claude@session_01QBbMRwRu
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show.
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
-  The stdio proxy (`jstream mcp`) reads the token from the user-only token file. The
+  The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
   HTTP transport validates `Origin`, as the
   [MCP transport spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
   requires.

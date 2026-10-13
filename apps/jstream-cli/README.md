@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:160f4916f930df3d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "args.rs gained state get, source list, item list; run.rs gained their table output; contents bullets (parser, running, exit codes, block_on) and the not-yet list still hold" }
+verified = { hash = "b3:77eabb8ec2ee1ab3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Binary name settled as jstream-cli (maintainer): the 'not here yet' line now names the proxy jstream-cli mcp; the rest of purpose (commands, queries, mock feature, exit codes) unchanged against src" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -33,7 +33,7 @@ Contents (a first cut):
 - **Blocking** (`block.rs`): a thread-parking `block_on` for `Control`'s futures.
 
 Not here yet: a connection to a real engine (it needs the WebSocket client in
-`jstream-control`), and `jstream mcp`, the stdio MCP proxy
+`jstream-control`), and `jstream-cli mcp`, the stdio MCP proxy
 ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)). Until then every command that talks
 to an engine needs `--mock`, which needs a build with the `mock` cargo feature
 (`cargo run -p jstream-cli --features mock -- --mock …`).
@@ -124,7 +124,7 @@ Every command except `version` and `help` sends `hello` first, as client `jstrea
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c14bb54066e55731", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: only its dependency control#design changed (parity paragraph now names the shared jstream_protocol::parity fixture); block_on, connector seam, opt-in mock feature, writers and typed errors bullets still match unchanged apps/jstream-cli src and Cargo.toml" }
+verified = { hash = "b3:d1b6476fe18182ed", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#41): open question 1 now names jstream-cli mcp (main's text); upstream control#design changed only its parity paragraph (shared jstream-protocol fixture), which the CLI design doesn't describe; bullets unchanged" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -159,8 +159,10 @@ verified = { hash = "b3:c14bb54066e55731", by = "agent:claude@session_01QBbMRwRu
 
 ### Open questions
 
-1. **`jstream mcp`.** The stdio MCP proxy ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape))
-   would make the CLI depend on `jstream-mcp`, which doesn't exist yet. Left out.
+1. **`jstream-cli mcp`.** The binary keeps the name `jstream-cli` (maintainer's choice),
+   so the stdio MCP proxy ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)) is its `mcp`
+   subcommand. `jstream-mcp` exists now, but the proxy also needs a real engine
+   connection (the WebSocket client), so it waits for that.
 2. **A persistent mock.** `--mock` starts empty on every run, and a run is one command,
    so through the binary the read commands always show an empty collection (the unit
    tests read a populated `MockEngine`). Should `--mock` load and save its state (a
