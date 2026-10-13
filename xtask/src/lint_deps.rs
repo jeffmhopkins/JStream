@@ -8,10 +8,11 @@
 //! - R-UNSAFE-001: only the declared crates set `unsafe_allowed = true`; every other crate
 //!   root carries `#![forbid(unsafe_code)]`.
 //! - R-DEP-002: every resolved package with a `links =` key or a C-compiling build
-//!   dependency is on [`NATIVE_ALLOWLIST`].
+//!   dependency (directly, or through a build helper one level down) is on
+//!   [`NATIVE_ALLOWLIST`].
 //! - R-DEP-003: member manifests take every dependency from `[workspace.dependencies]`.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map
+//! Docs: docs/DOCS.md#dependency-lint, docs/ARCHITECTURE.md#crate-map
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -298,13 +299,60 @@ fn unsafe_decl(ws_root: &str, m: &Member<'_>, findings: &mut Vec<Finding>) -> Re
     Ok(())
 }
 
-/// Whether a crate root carries `#![forbid(unsafe_code)]` (possibly among other lints).
+/// Length of the (possibly nested) block comment at the start of `s`.
+fn block_comment_len(s: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut k = 0;
+    while k < s.len() {
+        let rest = &s[k..];
+        if rest.starts_with("/*") {
+            depth += 1;
+            k += 2;
+        } else if rest.starts_with("*/") {
+            depth -= 1;
+            k += 2;
+            if depth == 0 {
+                return Some(k);
+            }
+        } else {
+            k += rest.chars().next().map_or(1, char::len_utf8);
+        }
+    }
+    None
+}
+
+/// Whether a crate root carries `#![forbid(unsafe_code)]` (possibly among other lints, and
+/// wrapped over several lines) among its leading inner attributes, as in `docs_line` in
+/// xtask/src/docs/backrefs.rs: only comments, whitespace and inner attributes may come
+/// before it, so one inside a comment or later in the file doesn't count.
 fn forbids_unsafe(text: &str) -> bool {
-    text.lines().map(str::trim).any(|l| {
-        l.strip_prefix("#![forbid(")
-            .and_then(|rest| rest.strip_suffix(")]"))
-            .is_some_and(|lints| lints.split(',').any(|x| x.trim() == "unsafe_code"))
-    })
+    let mut s = text.strip_prefix('\u{feff}').unwrap_or(text);
+    loop {
+        s = s.trim_start();
+        if s.starts_with("//") {
+            s = s.split_once('\n').map_or("", |(_, rest)| rest);
+        } else if s.starts_with("/*") {
+            let Some(n) = block_comment_len(s) else {
+                return false;
+            };
+            s = &s[n..];
+        } else if s.starts_with("#!") && s[2..].trim_start().starts_with('[') {
+            let Some(n) = crate::governance::attr_len(s) else {
+                return false;
+            };
+            let attr: String = s[..n].chars().filter(|c| !c.is_whitespace()).collect();
+            let forbids = attr
+                .strip_prefix("#![forbid(")
+                .and_then(|rest| rest.strip_suffix(")]"))
+                .is_some_and(|lints| lints.split(',').any(|x| x == "unsafe_code"));
+            if forbids {
+                return true;
+            }
+            s = &s[n..];
+        } else {
+            return false;
+        }
+    }
 }
 
 /// R-DEP-003: every dependency table entry in a member manifest is `workspace = true`.
@@ -363,7 +411,19 @@ fn native(meta: &Value, packages: &[Value], findings: &mut Vec<Finding>) {
         .iter()
         .filter_map(|p| Some((p["id"].as_str()?, p)))
         .collect();
-    for node in meta["resolve"]["nodes"].as_array().into_iter().flatten() {
+    let nodes: BTreeMap<&str, &Value> = meta["resolve"]["nodes"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|n| Some((n["id"].as_str()?, n)))
+        .collect();
+    let name_of = |id: &str| {
+        by_id
+            .get(id)
+            .and_then(|p| p["name"].as_str())
+            .unwrap_or_default()
+    };
+    for node in nodes.values() {
         let Some(pkg) = node["id"].as_str().and_then(|id| by_id.get(id)) else {
             continue;
         };
@@ -373,19 +433,22 @@ fn native(meta: &Value, packages: &[Value], findings: &mut Vec<Finding>) {
         if let Some(links) = pkg["links"].as_str() {
             why.push(format!("`links = \"{links}\"`"));
         }
-        for dep in node["deps"].as_array().into_iter().flatten() {
-            let is_build = dep["dep_kinds"]
-                .as_array()
-                .into_iter()
-                .flatten()
-                .any(|k| k["kind"].as_str() == Some("build"));
-            let dep_name = dep["pkg"]
-                .as_str()
-                .and_then(|id| by_id.get(id))
-                .and_then(|p| p["name"].as_str())
-                .unwrap_or_default();
-            if is_build && C_BUILD_TOOLS.contains(&dep_name) {
+        for build_dep in deps_of(node, Some("build")) {
+            let dep_name = name_of(build_dep);
+            if C_BUILD_TOOLS.contains(&dep_name) {
                 why.push(format!("build-depends on `{dep_name}`"));
+                continue;
+            }
+            // One level down: a build helper such as `cxx-build` that uses `cc` itself.
+            let Some(dep_node) = nodes.get(build_dep) else {
+                continue;
+            };
+            for tool in deps_of(dep_node, None).into_iter().map(name_of) {
+                if C_BUILD_TOOLS.contains(&tool) {
+                    why.push(format!(
+                        "build-depends on `{dep_name}`, which depends on `{tool}`"
+                    ));
+                }
             }
         }
         if why.is_empty() {
@@ -414,6 +477,23 @@ fn native(meta: &Value, packages: &[Value], findings: &mut Vec<Finding>) {
             Some(_) => {}
         }
     }
+}
+
+/// The package ids a resolve node depends on with the given kind (`None`: normal).
+fn deps_of<'v>(node: &'v Value, kind: Option<&str>) -> Vec<&'v str> {
+    node["deps"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|d| {
+            d["dep_kinds"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .any(|k| k["kind"].as_str() == kind)
+        })
+        .filter_map(|d| d["pkg"].as_str())
+        .collect()
 }
 
 /// The strings in a JSON array (nothing for anything else).
@@ -617,6 +697,25 @@ mod tests {
         assert!(!forbids_unsafe(
             "// #![forbid(unsafe_code)] is commented out\n"
         ));
+        // rustfmt wraps long attribute lists over several lines. (`\x23` is `#`, so the
+        // governance check's text scan doesn't report this string as a suppression.)
+        assert!(forbids_unsafe(
+            "//! Doc.\n\x23![allow(\n    clippy::x,\n    reason = \"]\"\n)]\n#![forbid(\n    unsafe_code,\n)]\n"
+        ));
+        assert!(forbids_unsafe(
+            "/* licence\n /* nested */ */\n#![forbid(missing_docs,\n unsafe_code)]\n"
+        ));
+        // Only leading inner attributes count (review N3 on #16).
+        assert!(!forbids_unsafe(
+            "/*\n#![forbid(unsafe_code)]\n*/\nfn f() {}\n"
+        ));
+        assert!(!forbids_unsafe(
+            "//! Doc.\nfn f() {}\n#![forbid(unsafe_code)]\n"
+        ));
+        assert!(!forbids_unsafe(
+            "const S: &str = \"\n#![forbid(unsafe_code)]\n\";\n"
+        ));
+        assert!(!forbids_unsafe("#![forbid(unsafe_code_lookalike)]\n"));
     }
 
     #[test]
@@ -701,5 +800,37 @@ mod tests {
             ),
         );
         assert_eq!(f.findings(), Vec::<String>::new());
+    }
+
+    /// A build helper that uses `cc` itself (`cxx-build` -> `cc`) means the build script
+    /// compiles C too, one level down (review N4 on #16). The helper's own normal
+    /// dependency on `cc` is not a finding.
+    #[test]
+    fn c_build_helper_one_level_down_needs_the_allowlist() {
+        let mut x = krate("x", &meta(2, false), "", SAFE);
+        x[0].1
+            .push_str("\n[build-dependencies]\ncxx-build.workspace = true\n");
+        let f = fixture(
+            "c-helper",
+            &[
+                x,
+                krate("cc", &meta(0, false), "", SAFE),
+                krate("cxx-build", &meta(1, false), "cc.workspace = true\n", SAFE),
+            ],
+        );
+        f.write("crates/x/build.rs", "fn main() {}\n");
+        f.write(
+            "Cargo.toml",
+            "[workspace]\nresolver = \"3\"\nmembers = [\"crates/*\"]\n\n\
+             [workspace.dependencies]\ncc = { path = \"crates/cc\" }\n\
+             cxx-build = { path = \"crates/cxx-build\" }\n",
+        );
+        assert_eq!(
+            f.findings(),
+            [
+                "x 0.0.0: R-DEP-002: native code (build-depends on `cxx-build`, which depends \
+                 on `cc`) is not on the lint-deps allowlist (ADR-0003)"
+            ]
+        );
     }
 }

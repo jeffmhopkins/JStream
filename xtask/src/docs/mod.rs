@@ -198,12 +198,25 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
 /// `arg` as a repo-relative path with `/` separators. Absolute paths must be inside `root`.
 /// They are compared after canonicalizing both sides, so Windows verbatim paths and
 /// symlinks work; the argument may not exist yet, so its deepest existing ancestor is
-/// canonicalized and the rest re-appended (review N1 on #14).
+/// canonicalized and the rest re-appended (review N1 on #14). `..` components are resolved
+/// lexically first, so `<repo>/nope/../../x` is reported as outside the repository rather
+/// than as having no existing ancestor (review N1 on #15).
 fn repo_path(root: &Path, arg: &str) -> Result<String> {
     let p = Path::new(arg);
     let rel = if p.is_absolute() {
         let root = root.canonicalize().context("resolving the repo root")?;
-        let mut existing = p;
+        let mut lexical = std::path::PathBuf::new();
+        for c in p.components() {
+            match c {
+                std::path::Component::CurDir => {}
+                // `..` at the root stays at the root, as the OS resolves it.
+                std::path::Component::ParentDir => {
+                    lexical.pop();
+                }
+                other => lexical.push(other),
+            }
+        }
+        let mut existing = lexical.as_path();
         let mut rest = Vec::new();
         let base = loop {
             if let Ok(c) = existing.canonicalize() {
@@ -514,14 +527,29 @@ mod tests {
             repo_path(&f.0, &abs.to_string_lossy()).ok().as_deref(),
             Some("crates/x/src/not-yet/new.rs")
         );
+        // `..` is resolved before the walk, so escaping through a missing directory is
+        // reported as outside the repository (review N1 on #15).
+        let escape = f.0.join("nope/../../etc/passwd");
+        let err = repo_path(&f.0, &escape.to_string_lossy()).expect_err("outside the repo");
+        assert!(
+            format!("{err:#}").contains("is outside the repository"),
+            "{err:#}"
+        );
+        let inside = f.0.join("nope/../crates/x/a.rs");
+        assert_eq!(
+            repo_path(&f.0, &inside.to_string_lossy()).ok().as_deref(),
+            Some("crates/x/a.rs")
+        );
     }
 
     /// DOCS#gate reports, without failing: crates no section covers, and `applies_to`
-    /// globs naming a crate that neither exists nor is planned in ARCHITECTURE#crate-map.
+    /// globs naming a crate that neither exists nor is planned in ARCHITECTURE#crate-map,
+    /// keyed by directory: a `crates/` name under `apps/` warns, and the reverse (review N2
+    /// on #15).
     #[test]
     fn uncovered_crates_and_applies_to_typos_warn() {
-        let arch = "<!-- @doc\nid = \"ARCH\"\n-->\n<a id=\"crate-map\"></a>\n## Crate map\n<!-- @section\n-->\n| `jstream-planned` | later |\n";
-        let rules = "<!-- @doc\nid = \"R\"\n-->\n<a id=\"R-A-001\"></a>\n### R-A-001: Globs\n<!-- @rule\nstatus = \"active\"\napplies_to = [\"crates/jstream-x/**\", \"crates/jstream-planned/**\", \"crates/jstrem-typo/**\", \"crates/*/src/**\"]\n-->\nText.\n";
+        let arch = "<!-- @doc\nid = \"ARCH\"\n-->\n<a id=\"crate-map\"></a>\n## Crate map\n<!-- @section\n-->\n| `jstream-planned` | later |\n| 6 | `apps/*` | `jstream-app` (links `jstream-planned`) |\n";
+        let rules = "<!-- @doc\nid = \"R\"\n-->\n<a id=\"R-A-001\"></a>\n### R-A-001: Globs\n<!-- @rule\nstatus = \"active\"\napplies_to = [\"crates/jstream-x/**\", \"crates/jstream-planned/**\", \"crates/jstrem-typo/**\", \"crates/*/src/**\", \"apps/jstream-app/**\", \"apps/jstream-x/**\", \"crates/jstream-app/**\"]\n-->\nText.\n";
         let f = Fixture::new(
             "warnings",
             &[
@@ -543,7 +571,9 @@ mod tests {
             warnings,
             vec![
                 "crates/jstream-x/src/lib.rs: crate `crates/jstream-x` is not covered by any section",
-                "docs/RULES.md: rule `R-A-001`: `applies_to` names crate `jstrem-typo`, which neither exists nor appears in ARCHITECTURE#crate-map (typo?)",
+                "docs/RULES.md: rule `R-A-001`: `applies_to` names crate `apps/jstream-x`, which neither exists nor appears in ARCHITECTURE#crate-map (typo?)",
+                "docs/RULES.md: rule `R-A-001`: `applies_to` names crate `crates/jstream-app`, which neither exists nor appears in ARCHITECTURE#crate-map (typo?)",
+                "docs/RULES.md: rule `R-A-001`: `applies_to` names crate `crates/jstrem-typo`, which neither exists nor appears in ARCHITECTURE#crate-map (typo?)",
             ]
         );
     }
