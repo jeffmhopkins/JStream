@@ -1,0 +1,42 @@
+# Spike S1 (ROADMAP M0, Track B). Throwaway; not a member of the root workspace.
+[package]
+name = "s1-gpu"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# Its own workspace, so the root workspace (crates/*, xtask) never builds or lints it.
+[workspace]
+
+[target.'cfg(windows)'.dependencies]
+# Pinned exactly: wgpu-hal interop can change between releases (ADR-0004). `windows` must be
+# the same version wgpu-hal uses so the raw D3D12/DXGI interface types are identical.
+wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "dx12", "wgsl"] }
+pollster = "=0.4.0"
+windows = { version = "=0.62.2", features = [
+    "Foundation",
+    "Graphics",
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
+    "Win32_Media_MediaFoundation",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
+] }
+
+[profile.release]
+debug = "line-tables-only"
