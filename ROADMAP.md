@@ -16,7 +16,7 @@ that runs from a clean checkout.
 ## M0: Foundation and risk spikes
 <!-- @section
 depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:0d73b3ac048bd6ca", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: gate-test added to the required-check list (R-GIT-003); uses:-pin-insensitive hashing moved from the governance item to the docs MVP item; tracks A/B otherwise unchanged" }
+verified = { hash = "b3:c5cf2aaf8b50ebac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "S2 bullet now asks whether Frame Server accepts HKCU registration or needs one elevated HKLM registration (ADR-0020), replacing the MSIX question; tracks otherwise unchanged" }
 -->
 
 Two tracks run in parallel.
@@ -40,8 +40,9 @@ Two tracks run in parallel.
 - **S1 GPU interop:** WGC capture → shared texture + fence → wgpu (D3D12) → NV12 → Media
   Foundation H.264 encode, at 1080p60 with no CPU copy. Measured on named hardware.
 - **S2 Virtual camera:** Rust COM media source loaded by Frame Server, fed cross-process
-  through a shared texture. Also answers whether MSIX can register it, and what registration
-  needs on dev machines.
+  through a shared texture. Also answers whether Frame Server accepts a per-user (HKCU)
+  registration, or needs a one-time elevated machine-wide one
+  ([ADR-0020](docs/adr/0020-portable-windows-distribution.md)).
 - **S3 Clock:** WASAPI mic + loopback timestamps mapped to QPC, drift measured over an hour,
   adaptive resampler validated.
 
@@ -51,8 +52,8 @@ re-verifying is rejected. S1–S3 each have a written result.
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
-depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0012-virtual-camera-windows.md"]
-verified = { hash = "b3:ed1273cced3d5218", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: M1a-M1d thin slice, scenes/mixing, vcam + MSI, hardening still match ADR-0003 codec baseline and ADR-0012 vcam design" }
+depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
+verified = { hash = "b3:83f0593079a94609", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1c now in-app vcam registration shipped in the portable zip per ADR-0020 instead of signed MSI; M1a/b/d unchanged and still match ADR-0003" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -61,7 +62,8 @@ verified = { hash = "b3:ed1273cced3d5218", by = "agent:claude@session_01QBbMRwRu
 - **M1b Scenes and mixing:** scene graph, sources (window, webcam incl. MJPEG decode, image,
   color, text), 2D transform + crop, golden tests; bus-matrix mixer with filters and meters;
   per-client undo, `expected_rev`, audit log; recording to fMP4; encoder sharing.
-- **M1c Virtual camera:** `jstream-vcam-windows` + signed MSI installer (from spike S2).
+- **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the
+  portable zip ([ADR-0020](docs/adr/0020-portable-windows-distribution.md); from spike S2).
 - **M1d Hardening:** RTMP reconnect with backoff, log rotation, local minidumps, `stats.tick`,
   N-edition detection, `multiple-versions = "deny"` in `deny.toml`, the weekly `sweep` job.
 
