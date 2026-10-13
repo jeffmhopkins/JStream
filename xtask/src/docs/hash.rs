@@ -82,6 +82,11 @@ impl<'a> Files<'a> {
         Self { root, paths }
     }
 
+    /// Every tracked file, sorted.
+    pub(crate) fn paths(&self) -> &'a [String] {
+        self.paths
+    }
+
     /// Tracked files matched by any of `globs`, sorted.
     pub(crate) fn matching(&self, globs: &[String]) -> Result<Vec<&'a str>> {
         let mut b = GlobSetBuilder::new();

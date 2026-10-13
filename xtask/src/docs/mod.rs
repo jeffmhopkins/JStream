@@ -1,7 +1,8 @@
 //! `cargo xtask docs`: checks and maintains the documentation graph (docs/DOCS.md).
 //!
-//! Docs: docs/DOCS.md#bootstrap, docs/DOCS.md#gate, docs/DOCS.md#verification
+//! Docs: docs/DOCS.md#bootstrap, docs/DOCS.md#gate, docs/DOCS.md#verification, docs/DOCS.md#back-references
 
+mod backrefs;
 mod check;
 mod hash;
 mod parse;
@@ -102,6 +103,7 @@ pub(crate) fn check_repo(root: &Path) -> Result<Vec<Diag>> {
     };
     let mut diags = l.parse_diags;
     diags.extend(check::check(&repo));
+    diags.extend(backrefs::check(&repo));
     diags.sort();
     diags.dedup();
     Ok(diags)
@@ -249,43 +251,149 @@ mod tests {
         assert!(!is_tracked("Cargo.toml"));
     }
 
+    /// A throwaway git repository, removed on drop even when an assertion fails.
+    struct Fixture(std::path::PathBuf);
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    impl Fixture {
+        /// Writes `files` into a fresh repo named after the test, then `git add`s them.
+        fn new(name: &str, files: &[(&str, &str)]) -> Self {
+            let dir = std::env::temp_dir().join(format!("xtask-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            let f = Self(dir);
+            for (path, text) in files {
+                f.write(path, text);
+            }
+            f.git(&["init", "-q"]);
+            f.git(&["add", "-A"]);
+            f
+        }
+
+        fn write(&self, path: &str, text: &str) {
+            let p = self.0.join(path);
+            std::fs::create_dir_all(p.parent().expect("invariant: files live in the repo"))
+                .expect("invariant: temp dir is writable");
+            std::fs::write(p, text).expect("invariant: temp dir is writable");
+        }
+
+        fn git(&self, args: &[&str]) {
+            let ok = Command::new("git")
+                .args(args)
+                .current_dir(&self.0)
+                .output()
+                .is_ok_and(|o| o.status.success());
+            assert!(ok, "git {args:?} failed");
+        }
+
+        /// `docs check` messages containing `needle`.
+        fn diags(&self, needle: &str) -> Vec<String> {
+            check_repo(&self.0)
+                .expect("invariant: the fixture is readable")
+                .into_iter()
+                .filter(|d| d.msg.contains(needle))
+                .map(|d| format!("{}:{}: {}", d.path, d.line, d.msg))
+                .collect()
+        }
+    }
+
+    /// Registries `check_repo` reads; empty is fine for these tests.
+    const REGISTRIES: [(&str, &str); 3] = [
+        ("docs/external.toml", ""),
+        ("docs/facts.toml", ""),
+        ("docs/RULES.md", ""),
+    ];
+
+    fn doc(id: &str, status: &str, anchor: &str, covers: &str) -> String {
+        format!(
+            "<!-- @doc\nid = \"{id}\"\nstatus = \"{status}\"\n-->\n<a id=\"{anchor}\"></a>\n## A\n<!-- @section\ncovers = [\"{covers}\"]\n-->\nText.\n"
+        )
+    }
+
     /// `verify` refuses while an untracked file matches `covers`: CI hashes only the
     /// committed tree, so the recorded hash would be wrong (review N4 on #10).
     #[test]
     fn verify_refuses_untracked_covered_files() {
-        /// Removes the temp repo even when an assertion fails.
-        struct TempDir(std::path::PathBuf);
-        impl Drop for TempDir {
-            fn drop(&mut self) {
-                let _ = std::fs::remove_dir_all(&self.0);
-            }
-        }
-        let tmp =
-            TempDir(std::env::temp_dir().join(format!("xtask-verify-{}", std::process::id())));
-        let dir = &tmp.0;
-        let _ = std::fs::remove_dir_all(dir);
-        std::fs::create_dir_all(dir.join("src")).expect("invariant: temp dir is writable");
-        let doc = "<!-- @doc\nid = \"T\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\n-->\nText.\n";
-        std::fs::write(dir.join("T.md"), doc).expect("invariant: temp dir is writable");
-        std::fs::write(dir.join("src/a.rs"), "a").expect("invariant: temp dir is writable");
-        let git = |args: &[&str]| {
-            let ok = Command::new("git")
-                .args(args)
-                .current_dir(dir)
-                .output()
-                .is_ok_and(|o| o.status.success());
-            assert!(ok, "git {args:?} failed");
-        };
-        git(&["init", "-q"]);
-        git(&["add", "T.md", "src/a.rs"]);
-        std::fs::write(dir.join("src/b.rs"), "b").expect("invariant: temp dir is writable");
+        let f = Fixture::new(
+            "verify",
+            &[
+                ("T.md", &doc("T", "active", "a", "src/**")),
+                ("src/a.rs", "a"),
+            ],
+        );
+        f.write("src/b.rs", "b");
         let note = "checked the section text against src in this test";
-        let err = verify(dir, "T#a", "agent:test", note).expect_err("untracked src/b.rs");
+        let err = verify(&f.0, "T#a", "agent:test", note).expect_err("untracked src/b.rs");
         assert!(format!("{err:#}").contains("src/b.rs"), "{err:#}");
-        git(&["add", "src/b.rs"]);
-        verify(dir, "T#a", "agent:test", note).expect("all covered files tracked");
-        let written = std::fs::read_to_string(dir.join("T.md")).expect("invariant: just written");
+        f.git(&["add", "src/b.rs"]);
+        verify(&f.0, "T#a", "agent:test", note).expect("all covered files tracked");
+        let written = std::fs::read_to_string(f.0.join("T.md")).expect("invariant: just written");
         assert!(written.contains("hash = \"b3:"), "{written}");
+    }
+
+    /// R-DOC-012: unmatched `covers` fail in active docs, warn in drafts, and are skipped
+    /// in retired docs (review N1 on #12).
+    #[test]
+    fn unmatched_covers_by_status() {
+        let mut files = REGISTRIES.to_vec();
+        let (active, draft, retired) = (
+            doc("A", "active", "a", "nope/**"),
+            doc("D", "draft", "d", "nope/**"),
+            doc("R", "retired", "r", "nope/**"),
+        );
+        files.extend([("A.md", &*active), ("D.md", &*draft), ("R.md", &*retired)]);
+        let f = Fixture::new("globs", &files);
+        let all = check_repo(&f.0).expect("invariant: the fixture is readable");
+        let unmatched: Vec<(&str, bool)> = all
+            .iter()
+            .filter(|d| d.msg.contains("matches no tracked file"))
+            .map(|d| (d.path.as_str(), d.warning))
+            .collect();
+        assert_eq!(unmatched, vec![("A.md", false), ("D.md", true)]);
+    }
+
+    /// R-DOC-008: crate roots list exactly the sections covering the crate; module-level
+    /// references must resolve.
+    #[test]
+    fn back_references_both_directions() {
+        let mut files = REGISTRIES.to_vec();
+        let (a, b) = (
+            doc("A", "active", "a", "crates/x/**"),
+            doc("B", "active", "b", "crates/y/**"),
+        );
+        files.extend([
+            ("A.md", &*a),
+            ("B.md", &*b),
+            ("crates/x/Cargo.toml", ""),
+            ("crates/x/src/lib.rs", "//! X.\n//!\n//! Docs: A.md#a\n"),
+            ("crates/x/src/m.rs", "//! Docs: A.md#a, A.md#gone\n"),
+            ("crates/y/Cargo.toml", ""),
+            ("crates/y/src/main.rs", "//! Docs: A.md#a\n"),
+            ("crates/z/Cargo.toml", ""),
+            ("crates/z/src/lib.rs", "//! Uncovered, so no line needed.\n"),
+        ]);
+        let f = Fixture::new("backrefs", &files);
+        let got = f.diags("`Docs:`");
+        assert_eq!(
+            got,
+            vec![
+                "crates/x/src/m.rs:1: `Docs:` reference `A.md#gone` is not a tracked doc section",
+                "crates/y/src/main.rs:1: `Docs:` is missing `B.md#b`, whose `covers` match this crate",
+                "crates/y/src/main.rs:1: `Docs:` lists `A.md#a`, which does not cover this crate",
+            ],
+            "{got:#?}"
+        );
+        f.write("crates/y/src/main.rs", "fn main() {}\n");
+        assert_eq!(
+            f.diags("no `//! Docs:` line"),
+            vec![
+                "crates/y/src/main.rs:1: crate root has no `//! Docs:` line; sections covering this crate: B.md#b"
+            ]
+        );
     }
 
     /// The repository's own docs must pass. This is what the `docs` CI job enforces.
