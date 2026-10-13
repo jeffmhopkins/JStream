@@ -12,7 +12,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::{Context, Result};
-use globset::{Glob, GlobSetBuilder};
+use globset::{Glob, GlobSet, GlobSetBuilder};
 
 use super::parse::Doc;
 
@@ -67,6 +67,15 @@ fn file_content(path: &str, bytes: &[u8]) -> Vec<u8> {
         .into_bytes()
 }
 
+/// Compiles `globs` into one matcher.
+pub(crate) fn glob_set(globs: &[String]) -> Result<GlobSet> {
+    let mut b = GlobSetBuilder::new();
+    for g in globs {
+        b.add(Glob::new(g).with_context(|| format!("invalid glob `{g}`"))?);
+    }
+    Ok(b.build()?)
+}
+
 fn short(h: &blake3::Hash) -> String {
     h.to_hex().as_str()[..16].to_owned()
 }
@@ -89,11 +98,7 @@ impl<'a> Files<'a> {
 
     /// Tracked files matched by any of `globs`, sorted.
     pub(crate) fn matching(&self, globs: &[String]) -> Result<Vec<&'a str>> {
-        let mut b = GlobSetBuilder::new();
-        for g in globs {
-            b.add(Glob::new(g).with_context(|| format!("invalid glob `{g}`"))?);
-        }
-        let set = b.build()?;
+        let set = glob_set(globs)?;
         Ok(self
             .paths
             .iter()

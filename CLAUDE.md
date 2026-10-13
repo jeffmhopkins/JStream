@@ -19,9 +19,6 @@ where they are and how to find the ones that apply to your change.
 1. Read [docs/DOCS.md](docs/DOCS.md) once. It explains how docs, rules and verification work here.
 2. For every file you will touch, run `cargo xtask docs for <path>`. It lists the rules,
    doc sections and ADRs that govern that file. Read them.
-   *Until `xtask docs` exists (M0):* search [docs/RULES.md](docs/RULES.md) for rules whose
-   `applies_to` matches your paths, and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for
-   sections whose `covers` do.
 3. If your change contradicts an accepted ADR, stop and propose a new ADR
    ([R-ARCH-004](docs/RULES.md#R-ARCH-004)).
 
@@ -29,7 +26,7 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "b3:b48d3fbdb6c430c3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: verify is now the only way to write a hash (--by required), bootstrap instructions removed; matches DOCS#verification and DOCS#notes" }
+verified = { hash = "b3:4c8cb01614e418f6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against DOCS#verification after docs-for went live (commands list no longer marks it planned): check/verify workflow, Docs-line duty and no hand-typed hashes all still match" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one
@@ -92,5 +89,6 @@ verified = { hash = "b3:a74acf3f822f102f", by = "agent:claude@session_01QBbMRwRu
 -->
 
 Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo deny check`,
-`cargo xtask docs check` and `cargo xtask docs verify`. Coming during M0:
-`cargo xtask docs for|log|review`, `cargo xtask lint-deps` and `cargo xtask governance`.
+`cargo xtask docs check`, `cargo xtask docs verify` and `cargo xtask docs for`. Coming
+during M0: `cargo xtask docs log|review`, `cargo xtask lint-deps` and
+`cargo xtask governance`.

@@ -83,7 +83,7 @@ verified = { hash = "b3:4c21fdca01d95b25", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:02977839d17bbc6e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covers narrowed from xtask/** to xtask/src/main.rs (the command list the tree comment describes); re-read tree against repo: unchanged" }
+verified = { hash = "b3:d92ee1f43a6e92a4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs only gained usage lines for docs verify/for; tree comment (xtask: docs, lint-deps, governance, ...) still describes the command set" }
 -->
 
 ```

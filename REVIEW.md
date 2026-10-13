@@ -50,11 +50,12 @@ verified = { hash = "b3:542b376128cb5437", by = "agent:claude@session_01QBbMRwRu
    status on the head commit, and every earlier review round (your comments and the
    builder's replies).
 2. **The rules and docs that govern each changed path:**
-   - With the tool: `cargo xtask docs for <path>` for every changed file. It returns the
-     applicable rules (by `applies_to`), the doc sections that cover the file, and its ADRs.
-   - Before the tool exists (pre-M0): in `docs/RULES.md`, match every rule's
-     `applies_to` globs against the changed paths. In every tracked doc, match each
-     section's `covers` globs. Read everything that matches.
+   - Run `cargo xtask docs for <path>` for every changed file. It returns the applicable
+     rules (by `applies_to`), the doc sections that cover the file, and its ADRs.
+   - If you can't build the tool (it needs the pinned toolchain in `rust-toolchain.toml`):
+     in `docs/RULES.md`, match every rule's `applies_to` globs against the changed paths.
+     In every tracked doc, match each section's `covers` globs. Read everything that
+     matches, and say in your review that you matched by hand.
 3. `cargo xtask docs check` output, if available: the stale sections, and which sections
    the PR re-verified, with their notes.
 4. Read enough of the surrounding code to understand callers and invariants. The diff
