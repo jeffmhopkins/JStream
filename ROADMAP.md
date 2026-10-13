@@ -16,7 +16,7 @@ that runs from a clean checkout.
 ## M0: Foundation and risk spikes
 <!-- @section
 depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: M0 tooling items add uses:-pin-insensitive hashing; depends_on repointed to ADR-0019" }
+verified = { hash = "b3:0d73b3ac048bd6ca", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: gate-test added to the required-check list (R-GIT-003); uses:-pin-insensitive hashing moved from the governance item to the docs MVP item; tracks A/B otherwise unchanged" }
 -->
 
 Two tracks run in parallel.
@@ -24,16 +24,15 @@ Two tracks run in parallel.
 **Track A: repo machinery**
 - Cargo workspace, toolchain, `[workspace.lints]`, `cargo-deny`, and the required CI checks
   from [R-GIT-003](docs/RULES.md#R-GIT-003): `fmt`, `clippy`, `test`, `doc`, `deny`,
-  `lint-deps`, `docs`, `governance`, `pr-title`. `macos` runs but isn't required.
+  `lint-deps`, `docs`, `governance`, `pr-title`, `gate-test`. `macos` runs but isn't required.
   (`review-gate` exists already; see [REVIEW.md](REVIEW.md).)
 - `xtask docs` **MVP**: `@doc`/`@section`/`@rule` block and anchor parsing, link resolution (internal plus the
   external registry), hash-bound verification, unmatched-glob errors, the uncovered-crate
-  report, generated-block drift, `docs for`, `docs verify`. It replaces every `bootstrap`
-  hash with a real one.
+  report, generated-block drift, `docs for`, `docs verify`. Hashing ignores `uses:` pin
+  changes in covered workflow files, so Dependabot bumps don't stale REVIEW#output. It
+  replaces every `bootstrap` hash with a real one.
 - `xtask lint-deps` (layers, `unsafe` declarations, `links=` allowlist, workspace deps),
-  `xtask governance` (must encode ADR-0018's pre-approval for Dependabot pin-only PRs; and
-  `docs check` must ignore `uses:` pin changes when hashing covered workflow files, so a
-  Dependabot bump of `review-gate.yml` doesn't stale REVIEW#output).
+  `xtask governance` (must encode ADR-0018's pre-approval for Dependabot pin-only PRs).
 - `jstream-types`, `jstream-media`, first cut of `jstream-protocol` (edit/action
   classification, schema snapshot tests), `jstream-control`.
 
@@ -53,7 +52,7 @@ re-verifying is rejected. S1–S3 each have a written result.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0012-virtual-camera-windows.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: vertical slice first; hardening and packaging made explicit" }
+verified = { hash = "b3:ed1273cced3d5218", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: M1a-M1d thin slice, scenes/mixing, vcam + MSI, hardening still match ADR-0003 codec baseline and ADR-0012 vcam design" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -73,7 +72,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: preview transport named" }
+verified = { hash = "b3:4e872137e6946ac1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: Leptos confirmation, preview transport (WebCodecs + JPEG fallback), Tauri/daemon and studio mode still match ADR-0002" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).

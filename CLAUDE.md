@@ -29,24 +29,23 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: hash-bound verify workflow" }
+verified = { hash = "b3:b48d3fbdb6c430c3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: verify is now the only way to write a hash (--by required), bootstrap instructions removed; matches DOCS#verification and DOCS#notes" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one
-  against your diff. If it's wrong, **edit it**. If it still holds,
-  `cargo xtask docs verify <ID#anchor> --note "<what you checked>"`.
+  against your diff. If it's wrong, **edit it**. Either way, once it holds, record it:
+  `cargo xtask docs verify <ID#anchor> --by agent:<name> --note "<what you checked>"`.
 - Never type dates, revisions or history into docs; git provides them. Never edit
   `@generated` blocks.
 - New external URL → register it in `docs/external.toml`. Repeated value → `docs/facts.toml`.
 - New crate root → add its `//! Docs:` line.
-- *Before the tool exists:* set `hash = "bootstrap"` on any section you edit or re-read,
-  and put your note in `note`.
+- Never type a `hash` by hand. Only `docs verify` writes it.
 
 <a id="pr-loop"></a>
 ## The PR loop (you are a builder)
 <!-- @section
 depends_on = ["REVIEW.md#output", "REVIEW.md#rounds"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: step 6 now identifies Dependabot PRs by author, not title (review on #7); other steps unchanged" }
+verified = { hash = "b3:a74acf3f822f102f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: auto-merge commands, verdict markers never posted by builders, Dependabot step 6 (by author), ADR step 7 with proxy decisions all match REVIEW#output/#rounds" }
 -->
 
 1. Open the PR with **auto-merge (squash) enabled**. It merges by itself once every required
@@ -92,6 +91,6 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: step 6 no
 <!-- @section
 -->
 
-Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo deny check`
-and `cargo xtask docs check`. Coming during M0: `cargo xtask docs verify|for|log`,
-`cargo xtask lint-deps` and `cargo xtask governance`.
+Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo deny check`,
+`cargo xtask docs check` and `cargo xtask docs verify`. Coming during M0:
+`cargo xtask docs for|log|review`, `cargo xtask lint-deps` and `cargo xtask governance`.

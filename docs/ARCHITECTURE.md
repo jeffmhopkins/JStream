@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2 after independent review: control crate split, apps wire engine to interfaces" }
+verified = { hash = "b3:1e85f22958c7a4bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: client/engine/platform/vcam diagram and hosts table match ADR-0001, ADR-0002 (desktop UI over authenticated WS); no apps/ code exists yet" }
 -->
 
 ```
@@ -62,7 +62,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2 after independe
 ## Core principles
 <!-- @section
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: added edit/action split and authenticated control plane" }
+verified = { hash = "b3:4c21fdca01d95b25", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: all 8 principles hold against ADR-0001/0003/0013 and the linked rules (R-ARCH-001/003, R-RT-001/002, R-UNSAFE-001, R-SEC-002 all exist)" }
 -->
 
 1. **One API.** Every capability is part of `jstream-protocol` ([R-ARCH-001](RULES.md#R-ARCH-001)).
@@ -82,8 +82,8 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: added edit/act
 <a id="repo-layout"></a>
 ## Repository layout
 <!-- @section
-covers = ["xtask/**"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read for xtask docs check: xtask/ still listed as tooling (docs, lint-deps, governance, ...); tree unchanged" }
+covers = ["xtask/src/main.rs"]
+verified = { hash = "b3:02977839d17bbc6e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covers narrowed from xtask/** to xtask/src/main.rs (the command list the tree comment describes); re-read tree against repo: unchanged" }
 -->
 
 ```
@@ -115,12 +115,13 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read for jstream-types and xtask: types is L0 as listed; xtask is tooling outside the layer table (metadata layer 99). Table still hand-maintained" }
+verified = { hash = "b3:5b35055780c135c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: generation now 'planned for M0' (was 'from M0'), xtask noted as outside layers; L0-L6 table re-read against R-ARCH-002/003, layering consistent" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
-From M0 this table is generated from `[package.metadata.jstream]`
-([DOCS › Generated content](DOCS.md#generated)). Until then it is maintained by hand.
+Once the `xtask docs` generator lands (planned for M0), this table is generated from
+`[package.metadata.jstream]` ([DOCS › Generated content](DOCS.md#generated)). Until then
+it is maintained by hand. `xtask` is repository tooling and sits outside the layers.
 
 | L | Crate | Responsibility | unsafe |
 |---|---|---|---|
@@ -158,7 +159,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: clarified Program/Preview, output kinds, encoder sharing, color" }
+verified = { hash = "b3:c553c8de5bd5b1bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: collection model, Program/Preview mixes, encoder sharing, color and undo placement match ADR-0007 and ADR-0013; no jstream-graph code yet" }
 -->
 
 ```
@@ -193,7 +194,7 @@ Collection (JSON on disk, schema_version, rev: u64)
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: monotonic media clock, adaptive resampling, per-subsystem snapshots, deferred reclamation" }
+verified = { hash = "b3:c12d1d1e17c62c75", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: media clock and resampling match ADR-0014; thread table rules match R-RT-001/002/003 and R-UNSAFE-005 as written" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -224,7 +225,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: edit/action split, revisions, binary channel, auth" }
+verified = { hash = "b3:3f9e4d79b011fe0a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: edit/action split, expected_rev, binary streams and authenticated WS transport match ADR-0013, ADR-0006 and R-API-001/004" }
 -->
 
 - **Edits** (`scene.create`, `item.set_transform`, `audio.set_send`, …): typed, undoable,
@@ -245,7 +246,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: edit/action sp
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: grouped tools, sanitized names, token, Origin" }
+verified = { hash = "b3:ff3144be4aced675", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: grouped tools, R-API-002 name pattern, snapshot cap, token + Origin (MCP transports spec link registered) match ADR-0006 and ADR-0013 per-client undo" }
 -->
 
 - **Tools are grouped by noun**, not one per command (`scene`, `item`, `audio`, `output`,
@@ -268,7 +269,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: grouped tools,
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: explicit D3D11/D3D12 sharing and fence protocol; M0 spike gate" }
+verified = { hash = "b3:d885d82c122deac5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: WGC -> shared texture + fence -> wgpu D3D12 -> NV12 -> MF path matches ADR-0004; still gated on spike S1, no render code yet" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -298,7 +299,7 @@ plus an `effect.toml` manifest.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "v2: control token file added" }
+verified = { hash = "b3:233514b2be0b9df3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: collections+migrations, jstream.toml, OS credential store, token file and local minidumps match R-API-003, R-SEC-001 and R-SEC-004" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
@@ -315,7 +316,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: control token 
 <!-- @section
 covers = ["installer/**"]
 depends_on = ["docs/adr/0012-virtual-camera-windows.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "New in v2: installer required by the vcam COM source" }
+verified = { hash = "b3:fcc16249e3a4dfb4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: signed MSI registering the vcam COM source machine-wide matches ADR-0012; MSIX question still open for spike S2" }
 -->
 
 Windows ships as a signed MSI. It installs the apps, and registers the

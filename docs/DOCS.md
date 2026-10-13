@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against xtask/src/docs: check covers identity, schema, sections, rules, references, facts; hashing/globs/back-refs not yet" }
+verified = { hash = "b3:1f46a7b7a507e84f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against final xtask/src/docs (parse, check, hash, verify incl. new untracked-covers guard) with every file tracked; available/not-yet lists accurate" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -30,12 +30,13 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   schema, sections and rules (anchors, blocks, `enforced_by` vocabulary and check names),
   references (links, anchors, registered external URLs, superseded ADRs, `depends_on`), and
   facts. It runs as the `docs` CI check.
-- **Not yet:** hash-bound verification, glob coverage (`covers`, `applies_to`), code
-  back-references, and the `verify`, `for` and `log` commands. Until they land, those
+- **Hash-bound verification** ([Hash-bound verification](#verification)): `docs check`
+  fails on any section whose stored hash no longer matches its text, covered files and
+  dependencies, and `cargo xtask docs verify` records a re-read. Every `bootstrap`
+  placeholder was replaced, each after a re-read, in the PR that added hashing.
+- **Not yet:** errors for globs that match nothing (`covers`, `applies_to`), code
+  back-references, and the `review`, `for` and `log` commands. Until they land, those
   rules are enforced by review.
-- Every `verified` hash is still the placeholder `"bootstrap"`. The PR that adds hashing
-  must replace every placeholder with a real hash, which forces a genuine re-read of
-  every section.
 - IDs, anchors and rule numbers became permanent at the first merge to `main` (#1).
 
 <a id="identity"></a>
@@ -167,8 +168,10 @@ govern a file. Agents run it before editing unfamiliar code.
 
 1. the section's body text, normalized (metadata comment removed, LF line endings,
    trailing whitespace stripped);
-2. for each file matched by `covers`, in sorted order: its path plus a hash of its
-   contents;
+2. for each git-tracked file matched by `covers`, in sorted order: its path plus a hash
+   of its contents. In workflow files (`.github/workflows/`), the commit SHA and version
+   comment of `uses:` pins are ignored, so Dependabot pin bumps don't make the
+   specifying doc stale ([ADR-0018](adr/0018-ci-supply-chain-policy.md));
 3. for each `depends_on` target: its reference plus a hash of its normalized body.
 
 So the verification is stale as soon as **any** of these change: the section, a covered
@@ -187,12 +190,12 @@ That means:
 Commands:
 
 ```sh
-cargo xtask docs check                                     # what is stale, and why
-cargo xtask docs verify ARCH#gpu-pipeline --note "…"       # re-read, still holds: write new hash
-cargo xtask docs verify ARCH#gpu-pipeline --edited --note "…"  # after editing the text
-cargo xtask docs review ARCH --note "…"                    # doc-level TTL review
-cargo xtask docs log ARCH#gpu-pipeline                     # history, derived from git
-cargo xtask docs for crates/jstream-render/src/lib.rs      # what governs this file
+cargo xtask docs check                         # what is stale, and why
+cargo xtask docs verify ARCH#gpu-pipeline \
+    --by agent:claude --note "…"                # re-read (or edited) and it holds: write new hash
+cargo xtask docs review ARCH --note "…"        # doc-level TTL review          (planned)
+cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git     (planned)
+cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file  (planned)
 ```
 
 <a id="history"></a>
@@ -357,7 +360,7 @@ drift-checked.
 ## Governance: protecting the checks themselves
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against ADR-0019 (supersedes 0015): governance labels and audit unchanged; list and ADR-0018 exemption unchanged" }
+verified = { hash = "b3:2ce92e8a86bea3ab", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against ADR-0019 and ADR-0018: governance change list, label + justification, Dependabot pin-only pre-approval all match the current gate and rules" }
 -->
 
 An agent could pass the gate by weakening it. These changes are **governance changes**,

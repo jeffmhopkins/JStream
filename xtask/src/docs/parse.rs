@@ -19,6 +19,11 @@ pub(crate) struct Section {
     pub(crate) anchor: String,
     pub(crate) line: usize,
     pub(crate) meta: Option<toml::Table>,
+    /// 0-based line indices of the `<!-- @section` and closing `-->` lines.
+    pub(crate) block: Option<(usize, usize)>,
+    /// 0-based line range of the section body: after its heading or metadata block, up to
+    /// (not including) the next section's anchor line, or the end of the file.
+    pub(crate) body: (usize, usize),
 }
 
 /// A `### R-…` rule with its `@rule` metadata.
@@ -55,6 +60,10 @@ pub(crate) struct Doc {
     pub(crate) links: Vec<Link>,
     pub(crate) facts: Vec<FactRef>,
     pub(crate) bare_urls: Vec<(String, usize)>,
+    /// The doc's full text, for hashing and rewriting.
+    pub(crate) text: String,
+    /// 0-based line index where content starts (just after the `@doc` block).
+    pub(crate) content_start: usize,
 }
 
 impl Doc {
@@ -85,6 +94,8 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
         links: Vec::new(),
         facts: Vec::new(),
         bare_urls: Vec::new(),
+        text: text.to_owned(),
+        content_start: 0,
     };
     let mut err = |line: usize, msg: String| {
         diags.push(Diag {
@@ -103,6 +114,7 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
             Some((body, end)) => {
                 d.meta = parse_toml(&body, 1, &mut err);
                 i = end + 1;
+                d.content_start = i;
             }
             None => err(1, "unterminated `<!-- @doc` block (missing `-->`)".into()),
         }
@@ -152,6 +164,8 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
                 continue;
             };
             let mut meta = None;
+            let mut block = None;
+            let heading = i;
             if !is_adr {
                 if lines
                     .get(i + 1)
@@ -160,6 +174,7 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
                     match read_block(&lines, i + 1) {
                         Some((body, end)) => {
                             meta = parse_toml(&body, n + 1, &mut err);
+                            block = Some((i + 1, end));
                             i = end;
                         }
                         None => err(n + 1, "unterminated `<!-- @section` block".into()),
@@ -171,10 +186,13 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
                     );
                 }
             }
+            let body_start = block.map_or(heading + 1, |(_, end)| end + 1);
             d.sections.push(Section {
                 anchor: anchor.to_owned(),
                 line: n,
                 meta,
+                block,
+                body: (body_start, lines.len()),
             });
         } else if let Some(rest) = line.strip_prefix("### R-") {
             let id = format!("R-{}", rest.split(':').next().unwrap_or_default().trim());
@@ -208,6 +226,13 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
     }
     if fence.is_some() {
         err(lines.len(), "unterminated code fence".into());
+    }
+
+    // Each body ends where the next section's anchor line begins.
+    for k in 1..d.sections.len() {
+        let next_anchor = d.sections[k].line.saturating_sub(2);
+        let prev = &mut d.sections[k - 1];
+        prev.body.1 = next_anchor.max(prev.body.0);
     }
 
     scan_inline(text, &mut d);
