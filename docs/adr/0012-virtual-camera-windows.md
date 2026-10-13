@@ -2,7 +2,8 @@
 id = "ADR-0012"
 title = "Windows virtual camera as a COM media source"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0020-portable-windows-distribution.md"
 -->
 
 # ADR-0012: Windows virtual camera as a COM media source
