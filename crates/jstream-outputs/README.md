@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md", "docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:1083ce1a6b07f6cf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: crate-private amf0 module removed; intro names jstream-mux (L2) as a dependency for amf0 and flv::to_ms; Commands/Media/AMF0 bullets describe RtmpError::Amf0(MuxError) and timestamp_ms built on to_ms (nearest, negative rejected, wrap 2^32); Tests paragraph adds the one-@setDataFrame wire test and moves AMF0 tests to mux; threading and Not-yet text unchanged" }
+verified = { hash = "b3:80aaf6fe8650b741", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only gained the S3 result paragraph; the outputs threading text (encode thread, bounded queues) is unaffected" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

@@ -211,7 +211,7 @@ Collection (JSON on disk, schema_version, rev: u64)
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:c12d1d1e17c62c75", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: media clock and resampling match ADR-0014; thread table rules match R-RT-001/002/003 and R-UNSAFE-005 as written" }
+verified = { hash = "b3:689a4ff54de4c01d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added spike S3 result (20-min run, ES-9 mic+loopback: no glitches, -59.2/-59.3 ppm vs QPC, resampler within 0.06 ms, no reanchor) from s3.json; it confirms ADR-0014 as written; clock text and thread table unchanged; open items stated (shared crystal, run shorter than ROADMAP's hour)" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -230,6 +230,23 @@ every mix runs at the base rate divided by an integer.
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003) |
+
+**S3 result**, a 20-minute run (ROADMAP M0 asks for an hour) on the S1 machine, with an
+Expert Sleepers ES-9 for both the mic ("Line") and the output ("Speakers"). Both WASAPI
+streams were 48 kHz with a 10 ms period and MMCSS on, and a quiet test tone played
+throughout:
+- **Timestamps:** both streams map cleanly onto QPC. There were no glitches, gaps,
+  discontinuities, timestamp errors or wait timeouts in 120,000 packets each.
+- **Drift:** the ES-9 runs 59.2 to 59.3 ppm slow against QPC, so about 71 ms over the run.
+  The fit has a standard error of 0.001 ppm, with mic jitter of 0.16 ms and loopback
+  jitter of 0.06 ms.
+- **Resampler:** the PI-steered resampler held each stream within 0.06 ms of the engine
+  time line (rms 0.01 ms). It never had to re-anchor.
+- **CPU:** about 1.6% of one core for both streams.
+
+Still open: the mic and the output share the ES-9's crystal, so the relative drift was
+only −0.12 ppm. Drift between two independent devices, and events rarer than about once
+in 20 minutes, haven't been measured.
 
 **State to RT threads:** each subsystem (render, audio, outputs) gets its own immutable
 snapshot through `arc-swap`, rebuilt only when that subsystem's state changes.
@@ -310,7 +327,7 @@ verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:7578a712423bbaa7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Recorded spike S1 result from the maintainer's Radeon 780M run (s1.json/s1-native.json): NV12 plane-view render passes proven, compute+copy kept as fallback; drop-order rule for hal objects; open items (other vendors, hybrid laptop, encoder LUID matching)" }
+verified = { hash = "b3:b517b475e75ab86b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#52 N2: S1 result now says 60 pipeline ticks/s on a 29 Hz display with ~30 new WGC frames/s (latest frame repeated), not a 60 Hz capture result; rest unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -337,8 +354,10 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
    back and reports it.
 
 **S1 result**, on a Ryzen 9 8945HS with Radeon 780M (driver 32.0.22029.9039), a
-3840x2160 display at 29 Hz and the async `AMDh264Encoder` MFT. The path holds 60 fps with
-no CPU copy of frame data:
+3840x2160 display at 29 Hz and the async `AMDh264Encoder` MFT. The pipeline holds 60
+ticks per second with no CPU copy of frame data. A 29 Hz display delivers about 30 new
+WGC frames per second, so every other tick re-encodes the latest frame. This is not a
+60 Hz capture result:
 
 | Encode size | Frames encoded | Convert p50 / p95 | Encode p50 / p95 | CPU |
 |---|---|---|---|---|
