@@ -42,6 +42,8 @@ exists:
 Every tracked Markdown file starts with a `@doc` metadata block: TOML inside an HTML
 comment, so GitHub renders nothing for it. `<!-- @doc` must be the very first bytes of the
 file: no byte-order mark, and no blank lines or other text before it.
+ADRs also carry `tier = "maintainer"` or `tier = "agent"`
+([R-GOV-005](RULES.md#R-GOV-005)); other docs omit it.
 
 ```markdown
 <!-- @doc
@@ -50,6 +52,7 @@ title = "Architecture"
 kind = "normative"           # normative | adr | guide | plan | reference | generated
 status = "active"            # active | draft | retired  (ADRs: proposed | accepted | superseded | rejected)
 review_every = "90d"         # omitted for ADRs and generated docs
+tier = "maintainer"          # ADRs only: maintainer | agent (R-GOV-005)
 reviewed = { by = "human:jeffmhopkins", note = "what was re-read and why it still holds" }
 replaced_by = "docs/NEW.md"  # retired docs only
 retired_sections = { "old-id" = ["new-id-a", "new-id-b"] }   # tombstones, see Lifecycle
@@ -274,7 +277,8 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
     as *unknown*, not broken);
   - lists due docs and externals, fact drift, verify-to-edit ratios, pending
     enforcement past its milestone, and every PR merged with `governance-approved`
-    or `review-override` (the override audit);
+    or `review-override`, and every Tier-1 ADR decision on merged PRs, marked direct or
+    proxy, with the quoted instruction (the override and decision audit);
   - **updates one pinned issue, "Docs due for review"**, instead of opening new ones.
   - A scheduled agent may pick items from that issue and open PRs. Those PRs go
     through the normal gate.
