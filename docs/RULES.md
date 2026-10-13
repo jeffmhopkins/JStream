@@ -630,7 +630,7 @@ dependency or performance claim (`.github/pull_request_template.md`).
 ## Documentation
 <!-- @section
 depends_on = ["docs/DOCS.md#gate"]
-verified = { hash = "b3:6cf2b580eaacf120", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against updated DOCS#gate item 2: R-DOC-012 and the gate now both state draft warns, retired exempt, matching check.rs; R-DOC-008 still pending" }
+verified = { hash = "b3:1a88cdaaeb2f97be", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012: R-DOC-008 now enforced by docs check (backrefs.rs) with applies_to widened to all .rs and module-line wording; R-DOC-012 reflowed, unchanged in meaning" }
 -->
 
 <a id="R-DOC-001"></a>
@@ -708,9 +708,10 @@ marker. ADRs are exempt.
 <!-- @rule
 status = "active"
 enforced_by = ["ci:docs"]
-applies_to = ["crates/*/src/lib.rs", "crates/*/src/main.rs", "apps/*/src/main.rs"]
+applies_to = ["**/*.rs"]
 -->
 Crate roots carry a `Docs:` line that matches the sections covering them, in both directions.
+Module-level `Docs:` lines are optional, but every reference on them must resolve.
 
 <a id="R-DOC-009"></a>
 ### R-DOC-009: Accepted ADRs are immutable
@@ -756,9 +757,8 @@ applies_to = ["**/*.md"]
 -->
 A section's `covers` glob that matches no tracked file is an error in active docs (a
 warning in drafts; retired docs are exempt): a section must not describe code that
-doesn't exist. A rule's
-`applies_to` glob must be valid but may match nothing, so a rule can govern a crate before
-it exists. Empty `applies_to = []` is allowed for process rules.
+doesn't exist. A rule's `applies_to` glob must be valid but may match nothing, so a rule
+can govern a crate before it exists. Empty `applies_to = []` is allowed for process rules.
 
 <a id="governance"></a>
 ## Governance

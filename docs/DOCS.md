@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:fc4a3c23a19e3a1d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against xtask/src/docs after N1/N3/N4 from #11: retired docs exempt from covers check, module doc updated, temp-dir drop guard; lists match the code" }
+verified = { hash = "b3:a62b41832e390641", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against backrefs.rs after #13 round 1: whole-doc refs resolve, superseded ADRs fail, nested crate ownership, #![] skipping; available/not-yet lists match the code" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -36,10 +36,13 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   placeholder was replaced, each after a re-read, in the PR that added hashing.
 - **Unmatched globs** ([R-DOC-012](RULES.md#R-DOC-012)): `covers` globs that match no
   tracked file fail (warn in drafts; retired docs are exempt); `applies_to` globs are
-  checked for validity only.
-  `verify` refuses while untracked files match the section's `covers`.
-- **Not yet:** code back-references, and the `review`, `for` and `log` commands. Until
-  they land, those rules are enforced by review.
+  checked for validity only. `verify` refuses while untracked files match the section's
+  `covers`.
+- **Code back-references** ([Code back-references](#back-references)): crate roots are
+  checked in both directions, and every `Docs:` reference must resolve (sections, or whole
+  docs such as ADRs; superseded ADRs fail).
+- **Not yet:** the uncovered-crate report, and the `review`, `for` and `log` commands.
+  Until they land, those rules are enforced by review.
 - IDs, anchors and rule numbers became permanent at the first merge to `main` (#1).
 
 <a id="identity"></a>
@@ -154,10 +157,23 @@ Checks:
 <!-- @section
 -->
 
-The crate root (`lib.rs` / `main.rs`) of every crate carries a `Docs:` line listing
-every section whose `covers` matches files in that crate. The reverse is also checked:
-each listed section must actually cover the crate. Module-level `Docs:` lines are
-optional, and checked when present.
+The crate root (`src/lib.rs`, else `src/main.rs`) of every crate carries a `Docs:` line
+listing every section whose `covers` matches files in that crate. The reverse is also
+checked: each listed section must actually cover the crate.
+
+- **Crates:** a crate is any directory with a tracked `Cargo.toml` below the workspace
+  root. A file belongs to the deepest crate containing it, so a nested crate's files don't
+  count toward the outer one. A crate without `src/lib.rs` or `src/main.rs` (custom
+  `[lib] path`, binaries only) is not checked yet.
+- **The line:** a single `//! Docs:` line in the file's leading `//!` comment. Blank lines
+  and single-line inner attributes (`#![…]`) may come before it. References are
+  comma-separated, written as in [References](#references): `path#anchor` for a section,
+  or a bare `path` for a whole doc such as an ADR.
+- **What counts:** only section references take part in the two-way check. Whole-doc
+  references add context and only have to resolve. Sections in retired docs create no
+  obligations ([R-DOC-012](RULES.md#R-DOC-012)). A crate that no section covers needs no
+  line.
+- **Module-level lines** are optional. When present, every reference must resolve.
 
 `cargo xtask docs for <path>` prints the sections, rules (via `applies_to`) and ADRs that
 govern a file. Agents run it before editing unfamiliar code.
