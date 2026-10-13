@@ -82,8 +82,8 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "v2: added edit/act
 <a id="repo-layout"></a>
 ## Repository layout
 <!-- @section
-covers = ["xtask/**", ".github/workflows/**"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read for action SHA pinning: workflows changed only in uses: refs; tree and layout unchanged" }
+covers = ["xtask/**"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: .github/ line now names the Dependabot config; covers narrowed per ADR-0018" }
 -->
 
 ```
@@ -107,7 +107,7 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md)
 │   └── guides/
-└── .github/                # workflows (CI, review-gate), PR template
+└── .github/                # workflows (CI, review-gate), Dependabot config, PR template
 ```
 
 <a id="crate-map"></a>

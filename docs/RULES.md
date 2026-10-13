@@ -386,6 +386,17 @@ applies_to = ["Cargo.toml"]
 Use `rustls` with the `ring` crypto provider. `aws-lc-rs` is not used, because its license
 terms are not on the allow list.
 
+<a id="R-DEP-007"></a>
+### R-DEP-007: GitHub Actions are pinned to commit SHAs
+<!-- @rule
+status = "active"
+enforced_by = ["review"]
+applies_to = [".github/workflows/**"]
+-->
+Every third-party action is referenced as `owner/action@<full commit SHA> # vX.Y.Z`. Mutable
+tags (`@v4`) and branches are not allowed. Dependabot keeps the pins current
+([ADR-0018](adr/0018-ci-supply-chain-policy.md)).
+
 <a id="testing"></a>
 ## Testing
 <!-- @section

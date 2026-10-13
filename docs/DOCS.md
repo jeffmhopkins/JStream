@@ -353,7 +353,7 @@ drift-checked.
 ## Governance: protecting the checks themselves
 <!-- @section
 depends_on = ["docs/adr/0015-review-and-governance.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Spec written before the tool exists" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: added pre-approved Dependabot pin-only exemption (ADR-0018); governance list otherwise unchanged" }
 -->
 
 An agent could pass the gate by weakening it. These changes are **governance changes**,
@@ -367,6 +367,9 @@ section saying what is loosened or tightened, and why:
 - edits to `deny.toml`, `clippy.toml`, `rustfmt.toml`, `rust-toolchain.toml`,
   `[workspace.lints]`, `.github/**`, `xtask/src/docs/**`, `docs/DOCS.md`, or `REVIEW.md`;
 - new `#[allow(…)]` / `#[expect(…)]` attributes (these must also carry `reason = "…"`).
+
+**Pre-approved:** a Dependabot PR that only changes pinned `uses:` references is justified by
+[ADR-0018](adr/0018-ci-supply-chain-policy.md) and needs no label.
 
 Agents and the maintainer may both apply the label. The weekly sweep lists every PR
 merged with it, so the maintainer can audit them

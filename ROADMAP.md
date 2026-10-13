@@ -16,7 +16,7 @@ that runs from a clean checkout.
 ## M0: Foundation and risk spikes
 <!-- @section
 depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0015-review-and-governance.md"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read after ADR-0016 superseded ADR-0011: M0 docs MVP scope unchanged, dependency repointed" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: xtask governance item now names the ADR-0018 Dependabot exemption; rest of M0 unchanged" }
 -->
 
 Two tracks run in parallel.
@@ -31,7 +31,7 @@ Two tracks run in parallel.
   report, generated-block drift, `docs for`, `docs verify`. It replaces every `bootstrap`
   hash with a real one.
 - `xtask lint-deps` (layers, `unsafe` declarations, `links=` allowlist, workspace deps),
-  `xtask governance`.
+  `xtask governance` (must encode ADR-0018's pre-approval for Dependabot pin-only PRs).
 - `jstream-types`, `jstream-media`, first cut of `jstream-protocol` (edit/action
   classification, schema snapshot tests), `jstream-control`.
 

@@ -64,7 +64,7 @@ verified = { hash = "bootstrap", by = "agent:claude", note = "Written for the ma
 ## Step 2: Review
 <!-- @section
 depends_on = ["docs/RULES.md#R-DOC-004", "docs/RULES.md#R-GOV-001"]
-verified = { hash = "bootstrap", by = "agent:claude", note = "Item 3 extended for ADR tiers (ADR-0017); other items unchanged" }
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read: item 5 adds the ADR-0018 Dependabot pin-only pre-approval check; item 3 (tiers) and others unchanged" }
 -->
 
 Work through these in order. For each, cite the rule ID or doc anchor that a finding rests on.
@@ -91,7 +91,10 @@ Work through these in order. For each, cite the rule ID or doc anchor that a fin
    - Did the change make any doc wrong, whether or not a hash flagged it? Blocking.
    - New crates or modules that no section covers, missing `Docs:` back-references, and
      unregistered external URLs.
-5. **Governance.** If the PR loosens any check (lint/deny config, `#[allow]`, narrowed
+5. **Governance.** A Dependabot PR that only changes pinned `uses:` references is
+   pre-approved by [ADR-0018](docs/adr/0018-ci-supply-chain-policy.md). Confirm the diff is
+   limited to that, and for a major bump read the action's changelog against how we use it.
+   Otherwise, if the PR loosens any check (lint/deny config, `#[allow]`, narrowed
    `covers` or `applies_to`, retired rules, CI edits, this file), it needs the
    `governance-approved` label and a justification section. Judge whether the
    justification actually holds. A weak justification is blocking.
@@ -127,6 +130,8 @@ Don't inflate. A PR with only non-blocking findings gets `pass`.
 <a id="output"></a>
 ## Step 4: Post the review
 <!-- @section
+covers = [".github/workflows/review-gate.yml"]
+verified = { hash = "bootstrap", by = "agent:claude", note = "Re-read against review-gate.yml: marker regex, newest-marker rule, head-SHA match and recuse/escalate handling all match this section" }
 -->
 
 Post **one summary comment per round**. Inline comments on specific lines are welcome
