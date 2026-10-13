@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:61f15695238a163c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only change: jstream-sources built-ins list gains browser (ADR-0021); layers, summaries and unsafe column unchanged" }
+verified = { hash = "b3:d421c95510f1b30f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read merged table: main's jstream-graph L2 row plus this PR's browser built-in in jstream-sources; layers, summaries and unsafe column consistent" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -158,7 +158,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "b3:a60371136de581e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added shared-source vs duplicate semantics, Scene(scene_id) source kind with cycle rejection, and source filters vs per-item effects/crop; consistent with the Collection tree above and ADR-0007" }
+verified = { hash = "b3:92b0462b389879d4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read merged section: shared-source/duplicate, scenes-as-sources (merged with main's Nesting bullet, no duplicate), filters vs effects, and main's Built-so-far graph paragraph all consistent" }
 -->
 
 ```
@@ -183,7 +183,8 @@ Collection (JSON on disk, schema_version, rev: u64)
   the source or its `filters[]` changes it everywhere. **Duplicate** creates a new
   `Source` with its own id.
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
-  scenes nest. The graph rejects any edit that would create a cycle.
+  scenes nest. A scene never contains itself at any depth, so the graph rejects the edit
+  that would close a cycle.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
   is used. `SceneItem.effects[]` and `crop` belong to that one placement.
 - The preview shown in the UI is a protocol stream, not an `Output`.
@@ -194,6 +195,12 @@ Collection (JSON on disk, schema_version, rev: u64)
   BT.709 limited range by default. HDR (FP16) capture is tone-mapped to SDR. HDR output is later.
 - **Undo** primitives (an edit plus its inverse) live in `jstream-graph`. The per-client
   undo stacks live in `jstream-core`.
+- **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind name or a nested
+  scene; no settings or filters yet), scenes in display order, and items in stacking
+  order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
+  they never copy them. Deleting a source an item still places, or a scene a source
+  still shows, is rejected. Not yet: settings, filters, effects, blend, the 3D
+  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -231,7 +238,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:fde6fb7361a836e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered protocol README changed only its purpose verified line; envelope, edits/actions/queries/events, errors, schema, transport and versioning bullets unchanged and still match the crate" }
+verified = { hash = "b3:81eeb39d95a670bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered protocol README changed only its purpose verified line after merging main; envelope/edits (incl. 0.2 additions)/errors/schema/versioning bullets unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
