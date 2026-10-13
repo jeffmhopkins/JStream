@@ -10,10 +10,12 @@
 
 use std::sync::atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering};
 
+use crate::evidence::ConsumerSnapshot;
+
 /// `JS2V`, so a zeroed or foreign mapping is never mistaken for ours.
 pub const MAGIC: u32 = u32::from_le_bytes(*b"JS2V");
 /// Bumped on any layout change.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 /// The virtual camera's frame size and rate. Frame Server sees exactly this.
 pub const WIDTH: u32 = 1920;
@@ -153,11 +155,39 @@ pub struct Control {
     pub consumer_last_hr: AtomicI32,
     /// QPC of the DLL's last served sample.
     pub consumer_heartbeat_qpc: AtomicU64,
+    /// Session id of the process that last attached (0 = services, such as Frame Server).
+    pub consumer_session_id: AtomicU32,
+    /// `CONSUMER_*` flags describing the process that last attached.
+    pub consumer_flags: AtomicU32,
+    /// Media sources created by a DLL instance that had this block attached.
+    pub consumer_activations: AtomicU32,
 }
+
+/// `consumer_flags`: the host process runs in session 0 (where services run).
+pub const CONSUMER_SESSION0: u32 = 1;
+/// `consumer_flags`: the host process's exe is `svchost.exe` (Frame Server's host).
+pub const CONSUMER_SVCHOST: u32 = 2;
+/// `consumer_flags`: the host process runs as LOCAL SERVICE (checked by SID).
+pub const CONSUMER_LOCAL_SERVICE: u32 = 4;
+/// `consumer_flags`: the flags were written at all (a v2 DLL attached).
+pub const CONSUMER_KNOWN: u32 = 8;
 
 const _: () = assert!(std::mem::size_of::<Control>() <= MAPPING_SIZE);
 
 impl Control {
+    /// The consumer-side counters and identity, for before/after comparison.
+    pub fn consumer_snapshot(&self) -> ConsumerSnapshot {
+        ConsumerSnapshot {
+            pid: self.consumer_pid.load(Ordering::Acquire),
+            attaches: self.consumer_attaches.load(Ordering::Acquire),
+            activations: self.consumer_activations.load(Ordering::Acquire),
+            served: self.frames_served.load(Ordering::Acquire),
+            shared: self.frames_shared.load(Ordering::Acquire),
+            session_id: self.consumer_session_id.load(Ordering::Acquire),
+            flags: self.consumer_flags.load(Ordering::Acquire),
+        }
+    }
+
     /// Whether a producer published a compatible, live block.
     pub fn is_live(&self) -> bool {
         self.magic.load(Ordering::Acquire) == MAGIC
@@ -173,9 +203,31 @@ impl Control {
     }
 }
 
+/// Which frame the DLL should copy, given the newest published frame `latest`, the
+/// fence's completed value and the ring size. Only a frame whose fence signal already
+/// completed is used, so the DLL never blocks on a signal a dead producer can't deliver.
+/// `None` if no complete frame is safe: frame `m` sits in slot `m % ring`, and the
+/// producer may already be rendering `latest + 1`, so `m` must be newer than
+/// `latest + 1 - ring`.
+pub fn choose_frame(latest: u64, completed: u64, ring: u32) -> Option<u64> {
+    let m = latest.min(completed);
+    (m > 0 && latest - m + 1 < u64::from(ring.max(1))).then_some(m)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn frame_choice() {
+        assert_eq!(choose_frame(10, 10, 3), Some(10));
+        assert_eq!(choose_frame(10, 50, 3), Some(10));
+        assert_eq!(choose_frame(10, 9, 3), Some(9));
+        // Frame 8 is in the slot the producer may be rewriting with frame 11.
+        assert_eq!(choose_frame(10, 8, 3), None);
+        assert_eq!(choose_frame(0, 0, 3), None);
+        assert_eq!(choose_frame(5, 0, 3), None);
+    }
 
     #[test]
     fn names() {

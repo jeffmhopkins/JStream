@@ -24,7 +24,7 @@ use windows_core::{BOOL, GUID, HRESULT, IUnknown, Interface, PCWSTR, Ref, Result
 
 use super::CLSID;
 use super::activate::Activate;
-use super::log::{log, process_path, user_name};
+use super::log::log;
 use super::reg::{self, RegScope};
 
 static OBJECTS: AtomicIsize = AtomicIsize::new(0);
@@ -88,21 +88,11 @@ fn guard_hr(what: &str, f: impl FnOnce() -> HRESULT) -> HRESULT {
     })
 }
 
-/// Logs, once per process, who loaded the DLL. This line is how the spike tells whether
-/// Frame Server (`svchost.exe`, `LOCAL SERVICE`) activated the source.
+/// Logs, once per process, the first `DllGetClassObject` call. Who hosts the DLL is in
+/// every log file's first line ([`super::log::identity`]).
 pub(crate) fn log_load_once() {
     static ONCE: Once = Once::new();
-    ONCE.call_once(|| {
-        log(format_args!(
-            "LOADED dll={} process={} user={} version={}",
-            module_path()
-                .map(|p| p.display().to_string())
-                .unwrap_or_else(|e| format!("unknown ({e})")),
-            process_path(),
-            user_name(),
-            env!("CARGO_PKG_VERSION"),
-        ));
-    });
+    ONCE.call_once(|| log("DllGetClassObject: first call in this process"));
 }
 
 /// The full path of this DLL.

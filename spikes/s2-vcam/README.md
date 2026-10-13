@@ -13,7 +13,9 @@ on a real Windows 11 machine, the path the virtual-camera ADRs fix: a **Rust COM
 source** that the Windows camera **Frame Server** loads, fed **cross-process** through a
 shared NT-handle texture and a shared fence.
 
-It also answers the registration question from ADR-0020 (portable Windows distribution):
+It also answers the registration question from
+[ADR-0020](../../docs/adr/0020-portable-windows-distribution.md) (portable Windows
+distribution):
 does Frame Server accept a media source registered **per user** (`HKCU`, no admin), or
 does it need a **machine-wide** registration (`HKLM`, one elevation)? The results PR must
 record the answer in [ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging),
@@ -76,10 +78,23 @@ plus a row of 32 squares that count frames in binary. If the DLL is loaded but c
 reach a live producer, it shows its own **colour bars** with a moving black-and-white
 line instead.
 
-**Logs.** The DLL logs to `C:\ProgramData\JStreamS2\vcam-<pid>.log`, one file per host
-process, and to `OutputDebugString`. The first line of each file records which process
-and account loaded it. That is how the spike tells whether Frame Server activated the
-source. The producer clears old logs when it starts, and puts the new ones in its report.
+**Did Frame Server load it?** The report's `frame_server` object answers this, and
+`decided_by` says which evidence decided:
+
+- **`control_block`** (preferred). When the DLL attaches to the control block, it
+  records its host's session id and flags (session 0, `svchost.exe`, LOCAL SERVICE by
+  SID). It counts attaches, created sources and served samples there. The producer
+  snapshots these at start and compares them at the end, so a DLL that stayed loaded
+  in Frame Server from an earlier run still counts.
+- **`dll_log`**, used when the DLL never reached the control block. The DLL logs to
+  `C:\ProgramData\JStreamS2\vcam-<pid>.log` (one file per host process) and to
+  `OutputDebugString`. Every new log file starts with a `LOADED` line naming the host
+  process, account and session, even when the DLL was already loaded before the
+  producer cleared the old logs. Every `ActivateObject` also logs it.
+- **`none`**: no sign of the DLL at all.
+
+If the two sources disagree, `frame_server.inconsistency` explains how, and the report
+lists it under `errors`.
 
 <a id="run"></a>
 ## How to run it (Windows)
@@ -111,15 +126,17 @@ prompt and press **Enter**. The JSON report is printed and saved to `s2-hkcu.jso
 
 **3. If step 2 failed, try machine-wide registration.** Step 2 failed if "JStream S2"
 isn't listed, if selecting it gives an error or a black picture, or if the report has
-`"frame_server_loaded": false`.
+`"frame_server": {"loaded": false, …}`.
 
 ```powershell
 .\target\release\s2-vcam.exe --unregister
 ```
 
-Then, in an **elevated** PowerShell (Run as administrator), in the same folder:
+Then, in an **elevated** PowerShell (Run as administrator), in the same folder, restart
+Frame Server so the DLL from step 2 is unloaded, and register machine-wide:
 
 ```powershell
+net stop FrameServer
 .\target\release\s2-vcam.exe --register hklm
 ```
 
@@ -153,10 +170,11 @@ Paste these into the PR or issue:
    - the namespace used for the shared objects;
    - the `MFCreateVirtualCamera`, `Start`, `Stop` and `Shutdown` HRESULTs, with their
      error text;
-   - the DLL's counters (samples served, how many came from the producer and how many
-     were the pattern), and its last error;
-   - whether Frame Server loaded the DLL (`dll_log.frame_server_loaded`, plus
-     `loaded_by`);
+   - the DLL's counters for this run (attaches, sources created, samples served and how
+     many came from the producer), its host's identity, and its last error;
+   - whether Frame Server loaded the DLL (`frame_server.loaded`), which evidence
+     decided (`frame_server.decided_by`), and the hosts named in the logs
+     (`dll_log.loaded_by`);
    - the DLL's log lines and any errors.
 2. For each attempt, **what the Camera app showed**: whether "JStream S2" was listed, and
    whether the picture was teal with a moving bar (the full path works), colour bars (the
@@ -169,13 +187,19 @@ How to read the report:
 
 - **`vcam.create.hr` is not `0x00000000`:** `MFCreateVirtualCamera` refused the source.
   Check the registration and the error text.
-- **`create` and `start` are OK, but `frame_server_loaded` is false:** Frame Server never
-  activated the DLL. With `hkcu`, this is the expected sign that per-user registration
-  isn't seen.
-- **`frame_server_loaded` is true, and `consumer.frames_shared` is greater than 0:** the
-  whole path works in that registration mode.
-- **`frame_server_loaded` is true, and only `frames_pattern` counts:** the DLL ran but
-  couldn't open the shared objects. The log lines say which name or call failed.
+- **`create` and `start` are OK, `frame_server.loaded` is false and `decided_by` is
+  `none`:** Frame Server never activated the DLL. With `hkcu`, this is the expected sign
+  that per-user registration isn't seen.
+- **`frame_server.loaded` is false but `decided_by` is `control_block` or `dll_log`:**
+  the DLL ran, but in another process (see `consumer.pid`, `consumer.session_id` and
+  `dll_log.loaded_by`), such as an app loading it in-process. That is not Frame Server.
+- **`frame_server.loaded` is true, and `consumer.frames_shared_this_run` is greater
+  than 0:** the whole path works in that registration mode.
+- **`frame_server.loaded` is true, but no samples came from the producer:** the DLL ran
+  but couldn't open the shared objects. If `decided_by` is `dll_log`, it didn't even find
+  the control block. The log lines say which name or call failed.
+- **`frame_server.inconsistency` is set:** the two kinds of evidence disagree. Paste the
+  report as it is; the control block's answer is the one used.
 
 <a id="risks"></a>
 ## Known risks and uncertainties
@@ -215,3 +239,12 @@ roughly in order:
   "Windows Camera Frame Server" service from an elevated prompt (`net stop FrameServer`).
 - **Hybrid GPUs.** The DLL opens a device on the producer's adapter, by LUID. That
   adapter must be usable from session 0.
+- **A dying producer.** The DLL only copies a frame whose fence signal has already
+  completed (`GetCompletedValue`), so it never blocks inside Frame Server on a signal
+  that a dead producer can't deliver. It shows colour bars instead.
+- **Security is spike-grade.** Interactive users get full control of the log folder and
+  of the shared objects. So a local user could plant a link where Frame Server writes its
+  log, or write into the control block. That's fine on the maintainer's machine. The M1
+  crates (`jstream-vcam-windows`, `jstream-vcam-proto`) must not copy it: they need a
+  service-owned log location or ETW, and DACLs narrowed to the producing user's SID plus
+  LOCAL SERVICE.

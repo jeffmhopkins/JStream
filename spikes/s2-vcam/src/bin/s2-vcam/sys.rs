@@ -3,6 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use s2_vcam::evidence::LoadedBy;
 use s2_vcam::win::log::FILE_PREFIX;
 use s2_vcam::win::reg::{self, RegScope};
 use s2_vcam::win::shared::log_dir;
@@ -148,11 +149,10 @@ fn dll_logs() -> Vec<PathBuf> {
     files
 }
 
-/// The DLL's log lines from this run, and who loaded it (from its `LOADED` lines).
+/// The DLL's log lines from this run, and who hosts it (from its `LOADED` lines).
 pub struct DllLog {
     pub lines: Vec<String>,
-    pub loaded_by: Vec<String>,
-    pub frame_server_loaded: bool,
+    pub hosts: Vec<LoadedBy>,
 }
 
 /// Keeps at most this many lines per log file (the first and last halves).
@@ -161,27 +161,16 @@ const MAX_LINES_PER_FILE: usize = 120;
 pub fn read_dll_logs() -> DllLog {
     let mut log = DllLog {
         lines: Vec::new(),
-        loaded_by: Vec::new(),
-        frame_server_loaded: false,
+        hosts: Vec::new(),
     };
     for path in dll_logs() {
         let Ok(text) = std::fs::read_to_string(&path) else {
             continue;
         };
         let lines: Vec<&str> = text.lines().collect();
-        for line in &lines {
-            if let Some(i) = line.find("LOADED ") {
-                let process = field(&line[i..], " process=", " user=");
-                let user = field(&line[i..], " user=", " version=");
-                // Frame Server is a svchost-hosted service running as LOCAL SERVICE; the
-                // Camera app or a browser loading the DLL in-process would show their own
-                // exe and the user's account instead.
-                if process.to_ascii_lowercase().ends_with("svchost.exe")
-                    || user.eq_ignore_ascii_case("LOCAL SERVICE")
-                {
-                    log.frame_server_loaded = true;
-                }
-                log.loaded_by.push(format!("{process} ({user})"));
+        for host in lines.iter().filter_map(|l| LoadedBy::parse(l)) {
+            if !log.hosts.contains(&host) {
+                log.hosts.push(host);
             }
         }
         let name = path
@@ -207,12 +196,4 @@ pub fn read_dll_logs() -> DllLog {
         }
     }
     log
-}
-
-fn field<'a>(s: &'a str, start: &str, end: &str) -> &'a str {
-    let Some(a) = s.find(start).map(|i| i + start.len()) else {
-        return "";
-    };
-    let b = s[a..].find(end).map_or(s.len(), |i| a + i);
-    &s[a..b]
 }

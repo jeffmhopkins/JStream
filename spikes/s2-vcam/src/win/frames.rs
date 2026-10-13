@@ -35,7 +35,9 @@ use windows_core::{GUID, HSTRING, Interface, Result};
 use super::log::log;
 use super::shared::{Mapping, OwnedHandle, qpc, qpc_freq};
 use crate::pixels::{bgra_to_nv12, copy_bgra, nv12_size, test_pattern};
-use crate::proto::{CONTROL_NAME, Control, HEIGHT, RING, Scope, WIDTH, fence_base, texture_base};
+use crate::proto::{
+    CONTROL_NAME, Control, HEIGHT, RING, Scope, WIDTH, choose_frame, fence_base, texture_base,
+};
 
 const RETRY: Duration = Duration::from_secs(1);
 /// A block whose producer has been silent this long is dropped and searched for again.
@@ -61,14 +63,22 @@ pub(crate) struct FrameSource {
 }
 
 impl FrameSource {
+    /// Also tries to attach to the control block right away, so the producer sees the
+    /// activation even before the first sample.
     pub(crate) fn new() -> Self {
         let now = Instant::now();
+        let link = open_link();
+        if let Some(l) = &link {
+            l.control()
+                .consumer_activations
+                .fetch_add(1, Ordering::AcqRel);
+        }
         Self {
             bgra: vec![0; WIDTH as usize * HEIGHT as usize * 4],
             served: 0,
-            link: None,
+            link,
             link_last_live: now,
-            next_link_try: now,
+            next_link_try: now + RETRY,
             gpu: None,
             next_gpu_try: now,
             last_origin: None,
@@ -202,10 +212,10 @@ impl FrameSource {
         if n == 0 {
             return Ok(false);
         }
-        if let Some(gpu) = &self.gpu {
-            gpu.read(n, &mut self.bgra)?;
+        match &self.gpu {
+            Some(gpu) => gpu.read(n, &mut self.bgra),
+            None => Ok(false),
         }
-        Ok(true)
     }
 }
 
@@ -238,6 +248,12 @@ fn open_link() -> Option<Mapping> {
             Ok(m) => {
                 let c = m.control();
                 c.consumer_pid.store(std::process::id(), Ordering::Release);
+                c.consumer_session_id.store(
+                    super::log::session_id().unwrap_or(u32::MAX),
+                    Ordering::Release,
+                );
+                c.consumer_flags
+                    .store(super::log::host_flags(), Ordering::Release);
                 c.consumer_attaches.fetch_add(1, Ordering::AcqRel);
                 log(format_args!(
                     "frames: control block opened as {name} (after {} failures: {})",
@@ -374,12 +390,19 @@ impl Gpu {
     }
 
     /// Copies frame `n` into `bgra` (tightly packed).
-    fn read(&self, n: u64, bgra: &mut [u8]) -> Result<()> {
+    /// `Ok(false)` if no completed frame is safe to read (see [`choose_frame`]).
+    fn read(&self, latest: u64, bgra: &mut [u8]) -> Result<bool> {
+        // SAFETY: plain call on a live COM object.
+        let completed = unsafe { self.fence.GetCompletedValue() };
+        let Some(n) = choose_frame(latest, completed, self.ring) else {
+            return Ok(false);
+        };
         let slot = (n % self.ring as u64) as usize;
         let tex = &self.textures[slot];
         let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
-        // SAFETY: plain calls on live objects of the same device. The GPU waits for the
-        // producer's signal of `n` before the copy; Map blocks until the copy is done.
+        // SAFETY: plain calls on live objects of the same device. The fence already
+        // reached `n`, so the GPU wait is satisfied at once; Map blocks until the copy is
+        // done.
         unsafe {
             self.context.Wait(&self.fence, n)?;
             self.context.CopyResource(&self.staging, tex);
@@ -398,7 +421,7 @@ impl Gpu {
         }
         // SAFETY: paired with the Map above.
         unsafe { self.context.Unmap(&self.staging, 0) };
-        Ok(())
+        Ok(true)
     }
 }
 

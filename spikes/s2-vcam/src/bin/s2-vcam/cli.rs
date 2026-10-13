@@ -78,8 +78,8 @@ impl Args {
                 }
                 "--seconds" => {
                     let s: f64 = parse_num(&value("--seconds")?)?;
-                    if !s.is_finite() || s <= 0.0 {
-                        return Err("--seconds must be a finite number > 0".into());
+                    if !s.is_finite() || s <= 0.0 || s > 86_400.0 {
+                        return Err("--seconds must be > 0 and at most 86400 (one day)".into());
                     }
                     seconds = Some(s);
                 }

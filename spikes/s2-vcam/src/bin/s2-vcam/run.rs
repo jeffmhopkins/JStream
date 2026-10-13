@@ -21,6 +21,7 @@ use crate::err::{Context, Result, bail};
 use crate::json::Json;
 use crate::producer::Producer;
 use crate::sys;
+use s2_vcam::evidence::{LogEvidence, decide};
 
 pub fn main(args: &Args) -> Result<ExitCode> {
     match args.command {
@@ -170,6 +171,9 @@ fn run_inner(seconds: Option<f64>, fps: u32, use_vcam: bool, json: bool) -> Resu
     let stuck_logs = sys::clear_dll_logs();
 
     let producer = Producer::new()?;
+    // The block can outlive a producer (the DLL holds it open), so its consumer counters
+    // are compared against this snapshot rather than read as totals.
+    let before = producer.control().consumer_snapshot();
     let mut frame = 1u64;
     producer.render(frame)?;
     eprintln!(
@@ -274,6 +278,11 @@ fn run_inner(seconds: Option<f64>, fps: u32, use_vcam: bool, json: bool) -> Resu
     let elapsed = started.elapsed().as_secs_f64();
     let c = producer.control();
     let dll_log = sys::read_dll_logs();
+    let after = c.consumer_snapshot();
+    let verdict = decide(&before, &after, LogEvidence::from_hosts(&dll_log.hosts));
+    if let Some(i) = &verdict.inconsistency {
+        errors.push(format!("evidence disagrees: {i}"));
+    }
     if let Some(Err(e)) = &create {
         errors.push(format!("MFCreateVirtualCamera: {e}"));
     }
@@ -324,24 +333,47 @@ fn run_inner(seconds: Option<f64>, fps: u32, use_vcam: bool, json: bool) -> Resu
             ]),
         ),
         (
+            "frame_server",
+            Json::Obj(vec![
+                ("loaded", Json::Bool(verdict.frame_server_loaded)),
+                ("decided_by", Json::str(verdict.decided_by.as_str())),
+                (
+                    "inconsistency",
+                    Json::opt_str(verdict.inconsistency.clone()),
+                ),
+            ]),
+        ),
+        (
             "consumer",
             Json::Obj(vec![
-                ("pid", Json::num(c.consumer_pid.load(Ordering::Acquire))),
+                ("active_this_run", Json::Bool(after.active_since(&before))),
+                ("pid", Json::num(after.pid)),
+                ("session_id", Json::num(after.session_id)),
+                ("flags", Json::str(format!("{:#x}", after.flags))),
+                ("host_is_service", Json::Bool(after.host_is_service())),
                 (
-                    "attaches",
-                    Json::num(c.consumer_attaches.load(Ordering::Acquire)),
-                ),
-                ("gpu_opens", Json::num(c.gpu_opens.load(Ordering::Acquire))),
-                (
-                    "frames_served",
-                    Json::num(c.frames_served.load(Ordering::Acquire) as f64),
-                ),
-                (
-                    "frames_shared",
-                    Json::num(c.frames_shared.load(Ordering::Acquire) as f64),
+                    "attaches_this_run",
+                    Json::num(after.attaches - before.attaches),
                 ),
                 (
-                    "frames_pattern",
+                    "activations_this_run",
+                    Json::num(after.activations - before.activations),
+                ),
+                (
+                    "frames_served_this_run",
+                    Json::num((after.served - before.served) as f64),
+                ),
+                (
+                    "frames_shared_this_run",
+                    Json::num((after.shared - before.shared) as f64),
+                ),
+                ("frames_served_total", Json::num(after.served as f64)),
+                (
+                    "gpu_opens_total",
+                    Json::num(c.gpu_opens.load(Ordering::Acquire)),
+                ),
+                (
+                    "frames_pattern_total",
                     Json::num(c.frames_pattern.load(Ordering::Acquire) as f64),
                 ),
                 (
@@ -355,12 +387,14 @@ fn run_inner(seconds: Option<f64>, fps: u32, use_vcam: bool, json: bool) -> Resu
             Json::Obj(vec![
                 ("dir", Json::str(log_dir().display().to_string())),
                 (
-                    "frame_server_loaded",
-                    Json::Bool(dll_log.frame_server_loaded),
-                ),
-                (
                     "loaded_by",
-                    Json::Arr(dll_log.loaded_by.into_iter().map(Json::Str).collect()),
+                    Json::Arr(
+                        dll_log
+                            .hosts
+                            .iter()
+                            .map(|h| Json::str(h.describe()))
+                            .collect(),
+                    ),
                 ),
                 (
                     "lines",
@@ -383,10 +417,12 @@ fn run_inner(seconds: Option<f64>, fps: u32, use_vcam: bool, json: bool) -> Resu
             start.as_ref().map_or(Json::Null, outcome)
         );
         println!(
-            "DLL loaded by Frame Server: {} | samples served {} (from the producer {})",
-            dll_log.frame_server_loaded,
-            c.frames_served.load(Ordering::Acquire),
-            c.frames_shared.load(Ordering::Acquire)
+            "DLL loaded by Frame Server: {} (decided by {}) | samples served this run {} \
+             (from the producer {})",
+            verdict.frame_server_loaded,
+            verdict.decided_by.as_str(),
+            after.served - before.served,
+            after.shared - before.shared
         );
         for e in &errors {
             println!("error: {e}");

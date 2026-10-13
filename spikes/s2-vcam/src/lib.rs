@@ -11,10 +11,11 @@
 //! textures and a shared fence (see [`proto`]); with no live producer the stream serves a
 //! test pattern.
 //!
-//! Docs: docs/adr/0008-windows-support-policy.md
+//! Docs: docs/adr/0020-portable-windows-distribution.md
 
 #![warn(clippy::undocumented_unsafe_blocks)]
 
+pub mod evidence;
 pub mod pixels;
 pub mod proto;
 
