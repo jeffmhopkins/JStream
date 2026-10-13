@@ -1,5 +1,6 @@
 # CI: the required checks from docs/RULES.md#R-GIT-003 that exist so far.
-# Not yet here (later M0 PRs): lint-deps, docs, governance, cargo-hack feature checks.
+# `governance` runs from governance.yml, so label and description edits re-run only it.
+# Not yet here (later M0 PRs): lint-deps, cargo-hack feature checks.
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.

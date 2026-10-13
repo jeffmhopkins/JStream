@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:7f5a40bab35400ab", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against xtask/src/docs: uncovered-crate and applies_to-typo warnings now listed as reports; retired/superseded Docs refs fail; docs for path handling; not-yet is review and log" }
+verified = { hash = "b3:c4e3444987466fa4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main (#17 made docs::parse and is_tracked pub(crate) for the governance check): available/reports/not-yet lists still match xtask/src/docs" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -395,8 +395,9 @@ drift-checked.
 <a id="governance"></a>
 ## Governance: protecting the checks themselves
 <!-- @section
+covers = ["xtask/src/governance.rs", ".github/workflows/governance.yml"]
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:2ce92e8a86bea3ab", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against ADR-0019 and ADR-0018: governance change list, label + justification, Dependabot pin-only pre-approval all match the current gate and rules" }
+verified = { hash = "b3:046035d508f1ca21", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: now covers governance.rs and governance.yml; list adds crate [lints] tables and governance.rs; new 'How the check works' (merge base, section() parity, pin-only, container exception citing an accepted ADR) matches the code and ADR-0019" }
 -->
 
 An agent could pass the gate by weakening it. These changes are **governance changes**,
@@ -408,7 +409,8 @@ section saying what is loosened or tightened, and why:
 - any edit to an accepted ADR, including a metadata-container change under R-DOC-009's exception;
 - retiring a rule; deleting or retiring a doc or section;
 - edits to `deny.toml`, `clippy.toml`, `rustfmt.toml`, `rust-toolchain.toml`,
-  `[workspace.lints]`, `.github/**`, `xtask/src/docs/**`, `docs/DOCS.md`, or `REVIEW.md`;
+  `[workspace.lints]`, a crate's own `[lints]` table (anything but `workspace = true`),
+  `.github/**`, `xtask/src/docs/**`, `xtask/src/governance.rs`, `docs/DOCS.md`, or `REVIEW.md`;
 - new `#[allow(…)]` / `#[expect(…)]` attributes (these must also carry `reason = "…"`).
 
 **Pre-approved:** a Dependabot PR that only changes pinned `uses:` references is justified by
@@ -417,3 +419,25 @@ section saying what is loosened or tightened, and why:
 Agents and the maintainer may both apply the label. The weekly sweep lists every PR
 merged with it, so the maintainer can audit them
 ([ADR-0019](adr/0019-review-gate-v2.md)).
+
+**How the check works.** `cargo xtask governance --base <rev>` compares `HEAD` with its
+merge base with `<rev>` (`git diff <rev>...HEAD`; committed changes only, and a rename
+counts as a delete plus an add) and lists the governance changes. Run locally, it only
+lists them. The `governance` workflow runs it on every PR event, label and description
+edits included, against `origin/<base branch>`, and passes it the PR's labels,
+description and author from the event payload. Then:
+
+- **Justification:** the first `##` heading that starts with "Governance change" (any
+  case) opens the section, which runs to the next `##` heading. It must still contain
+  text once HTML comments are removed, as in `review-gate`'s `section()`.
+- **Metadata** blocks are compared per doc, section anchor and rule ID. A section or rule
+  that is gone counts as deleted or retired.
+- **Suppressions** are found by a text scan of changed `.rs` files (`//` lines skipped) and
+  compared with the base as a multiset, so an unchanged attribute that moves doesn't count.
+- **Pre-approval** needs the author `dependabot[bot]` and a diff limited to modified
+  `.github/workflows/` files whose only differing lines re-pin the same action to a full
+  commit SHA.
+- **Container exception** ([R-DOC-009](RULES.md#R-DOC-009)): when an accepted ADR's
+  metadata delimiters change, its "Governance change" section must also cite, as
+  `ADR-NNNN`, an ADR that is accepted at `HEAD`. A content change is reported separately.
+  Whether the cited ADR really is a repo-wide format ADR is judged in review.
