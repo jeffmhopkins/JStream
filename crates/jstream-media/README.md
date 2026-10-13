@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:0c2d362fda5e4f37", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: depends_on ARCH#crate-map changed only in the vcam row ADR link; jstream-media L0 purpose, ADR-0003/0014 references unaffected" }
+verified = { hash = "b3:e2411e061034c872", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: depends_on ARCH#crate-map changed only in the jstream-sources built-ins list; jstream-media purpose unaffected" }
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,

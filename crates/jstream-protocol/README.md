@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:624920fce117fbd9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main: depends_on ARCH#crate-map only gained the vcam row ADR-0020 link; protocol crate purpose, modules and L1 placement unaffected" }
+verified = { hash = "b3:ee3212f8d21ec9a6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: depends_on ARCH#crate-map changed only in the jstream-sources built-ins list; jstream-protocol purpose unaffected" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined

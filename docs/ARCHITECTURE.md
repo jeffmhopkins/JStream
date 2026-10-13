@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:485e151244ba4ecf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main (#22): table holds both the jstream-protocol L1 metadata from this PR and the vcam row citing ADR-0020; layers, summaries and unsafe column consistent, lint-deps passes" }
+verified = { hash = "b3:61f15695238a163c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only change: jstream-sources built-ins list gains browser (ADR-0021); layers, summaries and unsafe column unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -143,7 +143,7 @@ it is maintained by hand. `xtask` is repository tooling and sits outside the lay
 | 3 | `jstream-encode` | Shared encoder sessions keyed by (mix, settings); rate control; fan-out of packet streams | no |
 | 3 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; serves UI assets; mounts MCP over HTTP; token and Origin checks | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
-| 4 | `jstream-sources` | `Source` trait plus built-ins (display, window, webcam, image, color, text, media file, scene). Uses platform traits; backends are injected. | no |
+| 4 | `jstream-sources` | `Source` trait plus built-ins (display, window, webcam, image, color, text, browser, media file, scene). Uses platform traits; backends are injected. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
@@ -158,7 +158,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "b3:c553c8de5bd5b1bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: collection model, Program/Preview mixes, encoder sharing, color and undo placement match ADR-0007 and ADR-0013; no jstream-graph code yet" }
+verified = { hash = "b3:a60371136de581e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added shared-source vs duplicate semantics, Scene(scene_id) source kind with cycle rejection, and source filters vs per-item effects/crop; consistent with the Collection tree above and ADR-0007" }
 -->
 
 ```
@@ -179,6 +179,13 @@ Collection (JSON on disk, schema_version, rev: u64)
   `program_scene`, including any transition in progress. A `VideoMix` with input
   `Program` follows it.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
+  Adding an *existing* source to a scene adds a `SceneItem` that references it. Changing
+  the source or its `filters[]` changes it everywhere. **Duplicate** creates a new
+  `Source` with its own id.
+- **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
+  scenes nest. The graph rejects any edit that would create a cycle.
+- **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
+  is used. `SceneItem.effects[]` and `crop` belong to that one placement.
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
   encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
@@ -224,7 +231,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:cc7f2453eebf2e28", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main: covered README only changed its purpose verified line; envelope, edits/actions/queries/events, errors, schema, transport and R-API-001 versioning bullets still match the crate" }
+verified = { hash = "b3:fde6fb7361a836e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered protocol README changed only its purpose verified line; envelope, edits/actions/queries/events, errors, schema, transport and versioning bullets unchanged and still match the crate" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
