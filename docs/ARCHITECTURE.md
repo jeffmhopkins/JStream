@@ -224,7 +224,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:25554f13fd739078", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after round-2 fix in jstream-protocol (Finite32 floats, ClientMessage::parse -> malformed): envelope, batch, error-code and schema bullets still accurate; nothing in this section mentions float handling" }
+verified = { hash = "b3:cc7f2453eebf2e28", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main: covered README only changed its purpose verified line; envelope, edits/actions/queries/events, errors, schema, transport and R-API-001 versioning bullets still match the crate" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
