@@ -114,7 +114,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:d421c95510f1b30f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read merged table: main's jstream-graph L2 row plus this PR's browser built-in in jstream-sources; layers, summaries and unsafe column consistent" }
+verified = { hash = "b3:d4078e47c8b723e6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main (#29) and review B1/N3 on #26: table holds main's L2 jstream-graph and L4 jstream-outputs rows, this PR's browser built-in in jstream-sources, and the CEF browser backend in jstream-platform-windows (unsafe yes) per ADR-0021's crate placement; layers and unsafe column consistent" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -136,7 +136,7 @@ it is maintained by hand. `xtask` is repository tooling and sits outside the lay
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat). No media code. | no |
 | 2 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports | no |
-| 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side | **yes** |
+| 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
@@ -238,7 +238,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:81eeb39d95a670bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered protocol README changed only its purpose verified line after merging main; envelope/edits (incl. 0.2 additions)/errors/schema/versioning bullets unchanged" }
+verified = { hash = "b3:481c7a18055f7644", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream change only: crate-map rows for jstream-sources/jstream-platform-windows and the merged #29 row; protocol section text (envelope, 0.2 edits, compatibility) unaffected" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

@@ -320,7 +320,7 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:21964fa70eab8ed1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DEP-001..007 against ADR-0003 and deny.toml: allow-list, FFmpeg/C-codec bans, anyhow wrappers, ring/aws-lc ban and SHA-pinned actions all match" }
+verified = { hash = "b3:f959f56035f4a804", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1 on #26: R-DEP-001 and R-DEP-002 now name the single CEF-runtime exception (LGPL-2.1 FFmpeg inside libcef, in-page decode only, no JStream crate calls its codecs) exactly as ADR-0021 scopes it; R-DEP-003..007 unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -331,7 +331,9 @@ enforced_by = ["deny:licenses"]
 applies_to = ["Cargo.toml", "deny.toml"]
 -->
 Dependencies may only use the licenses on the `deny.toml` allow list: permissive
-licenses plus MPL-2.0 (file-level copyleft). No GPL, LGPL or AGPL.
+licenses plus MPL-2.0 (file-level copyleft). No GPL, LGPL or AGPL. The one exception is the
+prebuilt CEF runtime for browser sources, which contains LGPL-2.1 FFmpeg and ships with
+its notices and source pointer ([ADR-0021](adr/0021-browser-source.md)).
 
 <a id="R-DEP-002"></a>
 ### R-DEP-002: No FFmpeg, GStreamer or bundled C codec libraries
@@ -343,7 +345,9 @@ applies_to = ["Cargo.toml", "deny.toml"]
 Per [ADR-0003](adr/0003-media-stack-and-codecs.md). Known binding crates are banned in
 `deny.toml`. lint-deps also checks every crate with a `links =` key or a build script
 that compiles C against an allowlist. Non-media C dependencies (e.g. `ring`) are
-allowed only through that allowlist.
+allowed only through that allowlist. The one media exception is the prebuilt CEF runtime, whose
+internal media stack decodes in-page audio and video only; no JStream crate calls its
+codecs ([ADR-0021](adr/0021-browser-source.md)).
 
 <a id="R-DEP-003"></a>
 ### R-DEP-003: Workspace-managed versions

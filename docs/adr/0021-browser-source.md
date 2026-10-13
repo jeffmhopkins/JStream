@@ -2,7 +2,7 @@
 id = "ADR-0021"
 title = "Browser (web page) source"
 kind = "adr"
-status = "accepted"
+status = "proposed"
 tier = "maintainer"
 -->
 
@@ -44,7 +44,15 @@ Options on Windows:
    - **Cost:** it adds about 150–250 MB to the portable zip and a large C++ native
      dependency (a lint-deps allowlist entry and a governance change). It also needs a
      Chromium update every few weeks for security fixes.
+   - **Codec policy:** `libcef.dll` statically links Chromium's media stack, including
+     its FFmpeg build (LGPL-2.1+), to play `<audio>` and `<video>` in pages. That conflicts
+     with [ADR-0003](0003-media-stack-and-codecs.md) ("no FFmpeg, GStreamer, or bundled
+     C/C++ codec libraries") and with the no-LGPL license policy, so choosing CEF means
+     an explicit exception to both.
 3. **Servo** (pure Rust): not mature enough for real-world overlay pages today.
+
+WebView2 avoids the codec conflict because its Chromium, FFmpeg included, is an OS
+component that JStream does not ship.
 
 <a id="decision"></a>
 ## Decision
@@ -64,6 +72,26 @@ Options on Windows:
 - **Dependency:** Rust bindings to CEF (to be picked in spike S4). The prebuilt CEF runtime
   is native code, so its addition must come with a lint-deps native-code allowlist entry
   and a declared governance change.
+- **Where the code lives:** the CEF FFI and backend live in the platform crates
+  (`jstream-platform-windows` first), under the `unsafe` rules there. `jstream-sources`
+  only gains the `browser` kind, with the backend injected like every other source.
+- **Exception to ADR-0003 (partially supersedes it):** this ADR replaces ADR-0003's "no
+  bundled codec libraries" rule for one artifact only: the prebuilt CEF runtime and the
+  media stack inside it, FFmpeg included. The exception is bounded:
+  - It covers decoding inside the browser page only. JStream's own encode and decode
+    paths stay on OS and GPU-vendor APIs, exactly as ADR-0003 decides, and no JStream
+    crate may call CEF's or FFmpeg's codecs directly.
+  - The runtime is a standard CEF binary distribution built with
+    `proprietary_codecs` off (the CEF default), so it carries only royalty-free codecs
+    (VP8/VP9/AV1, Opus, Vorbis, FLAC, MP3, WAV). H.264 and AAC playback in pages is not
+    available.
+  - Every other part of ADR-0003 stands.
+- **LGPL-2.1 obligations:** `libcef.dll` is a separate DLL that JStream loads dynamically,
+  which satisfies LGPL's relinking requirement. The portable zip ships CEF's license and
+  credits file (`CREDITS.html`) and the FFmpeg LGPL text. Each release notes, or links to,
+  the exact Chromium FFmpeg source revision that runtime was built from. The license policy
+  rules ([R-DEP-001](../RULES.md#R-DEP-001), [R-DEP-002](../RULES.md#R-DEP-002)) name this
+  exception, a declared governance change made with this ADR.
 - **Security updates:** the CEF version is pinned. Release builds track CEF stable for
   Chromium security fixes, and a scheduled check flags when the pinned CEF falls behind.
 - **Prove it first:** spike **S4** must show both of these before the source is built:
@@ -99,3 +127,6 @@ Options on Windows:
   - there is no file access outside an explicit local file or folder.
 - **A second large native dependency** joins the build. It is declared through lint-deps
   and governance, not hidden.
+- **Licensing is no longer purely permissive.** ADR-0003's promise of clean, permissive
+  licensing now has one named, LGPL-2.1 exception: the CEF runtime. Releases carry its
+  notices and source pointer. A user who never adds a browser source still downloads it.

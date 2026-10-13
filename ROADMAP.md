@@ -16,7 +16,7 @@ that runs from a clean checkout.
 ## M0: Foundation and risk spikes
 <!-- @section
 depends_on = ["docs/adr/0016-docs-as-checked-graph-v2.md", "docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:a54a321936b4ef31", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "S4 now proves CEF off-screen rendering via accelerated-paint shared textures into wgpu plus per-browser audio handler, and picks bindings/helper layout, per ADR-0021 decision changed to CEF" }
+verified = { hash = "b3:82028f4d88d590e3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review N1 on #26: Demo now says S1-S3 have results and S4 may finish in M1b but needs a written result before the browser source is built, matching ADR-0021's 'prove it first'; Track B S4 bullet unchanged" }
 -->
 
 Two tracks run in parallel.
@@ -51,7 +51,8 @@ Two tracks run in parallel.
   ([ADR-0021](docs/adr/0021-browser-source.md)).
 
 **Demo:** CI green with all required checks. A PR that changes covered code without
-re-verifying is rejected. S1–S3 each have a written result.
+re-verifying is rejected. S1–S3 each have a written result. S4 may finish in M1b, but
+must have a written result before the browser source is built.
 
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)

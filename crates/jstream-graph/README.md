@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:dcae2e6b22f6b6a2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: depends_on ARCH#crate-map/data-model changed only by this PR's browser built-in and merged nesting wording; graph purpose and contents unaffected" }
+verified = { hash = "b3:0a6ab8851245f27f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only touched the jstream-sources and jstream-platform-windows rows (browser built-in, CEF backend); this crate's row and purpose text unaffected" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

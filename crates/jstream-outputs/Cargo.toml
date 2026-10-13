@@ -1,0 +1,20 @@
+[package]
+name = "jstream-outputs"
+version = "0.0.0"
+description = "Stream outputs: the RTMP publish client, later recording and virtual-camera outputs."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 4
+summary = "`Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits."
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+jstream-media.workspace = true
+thiserror.workspace = true
