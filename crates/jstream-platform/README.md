@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:bd1969b4661a41fd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section: checked each bullet against src/ (MediaClock bounds, VideoSurface non_exhaustive CPU-only, capture mailbox and stats, audio handler/packet fields vs S3, codec can_accept/encode/poll/finish vs S1, VcamSink vs S2/ADR-0020, Backends incl. optional vcam, PlatformError, fake feature) and its dependencies ARCH crate-map/threading, ADR-0003/0004/0014/0020 and jstream-media#purpose" }
+verified = { hash = "b3:22b41805f177c929", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #36 fixes: Fakes bullet edited for the decoder's pts reordering (hold until a packet's dts reaches the frame's pts, drain on finish; poll stays non-blocking), FakeVcamSink stopping on drop with a FakeVcamProbe, and tests using trait objects with concrete fakes only for test controls; Codecs and VcamSink bullets still match codec.rs and vcam.rs" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -73,8 +73,11 @@ Contents:
 - **Fakes** (`fake.rs`, feature `fake`): deterministic in-memory backends for engine and
   scenario tests ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): `FakeClock` (time moves
   only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and
-  keyframe pattern, placeholder payloads) and `FakeVcamSink`, plus `fake::backends`.
-  The crate's tests drive every trait through trait objects only, and check the
+  keyframe pattern, placeholder payloads; the decoder returns frames in presentation
+  order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
+  (dropping it stops it; a test watches it through a `FakeVcamProbe`), plus
+  `fake::backends`. The crate's tests drive every trait through trait objects only,
+  keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 
 **Not yet:** `GpuInterop` and GPU frames, webcam capture (an MJPEG `Codec` variant and a
