@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-types/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d10d0cc55780a706", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: depends_on ARCH#crate-map changed only in the vcam row ADR link; jstream-types L0 purpose and contents unaffected" }
+verified = { hash = "b3:4a75c264ddc5add6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: depends_on ARCH#crate-map changed only in the client rows (control L2, mcp L3, server L4) and a paragraph on them; jstream-types L0 purpose and contents unaffected" }
 -->
 
 Layer-0 value types shared by every JStream crate. No dependencies on other JStream crates,

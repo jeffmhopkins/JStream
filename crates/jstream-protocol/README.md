@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:624920fce117fbd9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main: depends_on ARCH#crate-map only gained the vcam row ADR-0020 link; protocol crate purpose, modules and L1 placement unaffected" }
+verified = { hash = "b3:701aa095a5baf217", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: crate map now puts jstream-control at L2 above this crate; purpose still says Layer 1, WASM-safe because jstream-ui and jstream-control compile it to wasm32 (true: control's clippy passes on wasm32), no JStream deps; contents unchanged" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
