@@ -89,6 +89,6 @@ verified = { hash = "b3:a74acf3f822f102f", by = "agent:claude@session_01QBbMRwRu
 -->
 
 Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo deny check`,
-`cargo xtask docs check`, `cargo xtask docs verify`, `cargo xtask docs for` and
-`cargo xtask governance --base origin/main` (lists your governance changes). Coming
-during M0: `cargo xtask docs log|review` and `cargo xtask lint-deps`.
+`cargo xtask docs check`, `cargo xtask docs verify`, `cargo xtask docs for`,
+`cargo xtask lint-deps` and `cargo xtask governance --base origin/main` (lists your
+governance changes). Coming during M0: `cargo xtask docs log|review`.

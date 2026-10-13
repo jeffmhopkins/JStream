@@ -34,6 +34,7 @@ const PROTECTED_FILES: &[&str] = &[
     "docs/DOCS.md",
     "REVIEW.md",
     "xtask/src/governance.rs",
+    "xtask/src/lint_deps.rs",
 ];
 /// Directories whose every edit is a governance change.
 const PROTECTED_DIRS: &[&str] = &[".github/", "xtask/src/docs/"];
@@ -825,6 +826,20 @@ mod tests {
                 "c/Cargo.toml: edits the crate's `[lints]` table (not `workspace = true`)",
                 "clippy.toml: edits a protected file",
             ]
+        );
+    }
+
+    #[test]
+    fn lint_deps_allowlist_edits_are_flagged() {
+        let src = "const UNSAFE_CRATES: &[&str] = &[\"jstream-platform-windows\"];\n";
+        let f = Fixture::new("lint-deps", &[("xtask/src/lint_deps.rs", src)]);
+        let (changes, _) = f.change(&[(
+            "xtask/src/lint_deps.rs",
+            &src.replace("]", ", \"jstream-render\"]"),
+        )]);
+        assert_eq!(
+            whats(&changes),
+            vec!["xtask/src/lint_deps.rs: edits a protected file"]
         );
     }
 

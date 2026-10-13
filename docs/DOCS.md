@@ -397,7 +397,7 @@ drift-checked.
 <!-- @section
 covers = ["xtask/src/governance.rs", ".github/workflows/governance.yml"]
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:046035d508f1ca21", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: now covers governance.rs and governance.yml; list adds crate [lints] tables and governance.rs; new 'How the check works' (merge base, section() parity, pin-only, container exception citing an accepted ADR) matches the code and ADR-0019" }
+verified = { hash = "b3:c75ce20fa88661f7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: protected list adds xtask/src/lint_deps.rs (unsafe and native-code allowlists), matching the new PROTECTED_FILES entry in governance.rs and its test; how-the-check-works text unchanged and still matches the code" }
 -->
 
 An agent could pass the gate by weakening it. These changes are **governance changes**,
@@ -410,7 +410,8 @@ section saying what is loosened or tightened, and why:
 - retiring a rule; deleting or retiring a doc or section;
 - edits to `deny.toml`, `clippy.toml`, `rustfmt.toml`, `rust-toolchain.toml`,
   `[workspace.lints]`, a crate's own `[lints]` table (anything but `workspace = true`),
-  `.github/**`, `xtask/src/docs/**`, `xtask/src/governance.rs`, `docs/DOCS.md`, or `REVIEW.md`;
+  `.github/**`, `xtask/src/docs/**`, `xtask/src/governance.rs`, `xtask/src/lint_deps.rs`
+  (its `unsafe` and native-code allowlists), `docs/DOCS.md`, or `REVIEW.md`;
 - new `#[allow(…)]` / `#[expect(…)]` attributes (these must also carry `reason = "…"`).
 
 **Pre-approved:** a Dependabot PR that only changes pinned `uses:` references is justified by
