@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:f4ea80564c01f0a9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's lock-free privacy flag and fail-closed preallocated pass, consistent with R-RT-001/002, beside ADR-0028/0035 text" }
+verified = { hash = "b3:f315a837358f5623", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's live-value handover (one atomic store per RT thread, nothing waits), consistent with R-RT-001/002" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:6b91d4f329169329", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0034's youtube.chat.send/feature actions and youtube.stats event are additive minor-release changes under R-API-001 and follow R-API-002 noun.verb, beside main's additive ADR-0022/0024/0025/0027/0028 changes" }
+verified = { hash = "b3:854c497e0324367d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0037's transition-preset settings, plugin kinds and opaque state type, and #94's override and hotkey rules, are additive or behavioural refinements of unbuilt features; R-API-001..004 hold" }
 -->
 
 <a id="R-API-001"></a>

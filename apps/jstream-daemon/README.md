@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d4aedfdcf5b5d7da", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's stderr logging with RUST_LOG and exit 2 on a bad RUST_LOG; dependencies (server, core) changed by main's #95 and this PR's tracing; Purpose matches main.rs" }
+verified = { hash = "b3:d67df04358b6063f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed by the crate-map mcp/server rows (MCP HTTP to be served by the server, not built); the daemon's Purpose and main's #98 logging unchanged" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -100,7 +100,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:e025ca33246091f6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Logging bullet (fmt layer to stderr, Targets from RUST_LOG, installed before the token loads) and tracing-subscriber dependency; main's #95 server changes don't change what the daemon passes" }
+verified = { hash = "b3:04589956249e2533", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency server#design records #44's Origin and buffer decisions (not built); the daemon still passes no extra hosts and installs the log subscriber as in main's #98" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
