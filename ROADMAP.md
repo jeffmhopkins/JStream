@@ -57,8 +57,8 @@ must have a written result before the browser source is built.
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
-depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:40d51e6f1cf12572", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b keeps this PR's reservation of Output video/audio chains beside main's ADR-0023/0024/0028/0031 bullets; M1a/c/d unchanged" }
+depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0020-portable-windows-distribution.md"]
+verified = { hash = "b3:7a438748cfb1a5f1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Restored the ADR-0031 dependency a merge dropped; M1b's source-kinds bullet is ADR-0031's list (display, window, video capture device, image formats, color, text, audio inputs, browser) and still matches it" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
