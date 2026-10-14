@@ -581,6 +581,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-core"
+version = "0.0.0"
+dependencies = [
+ "futures-core",
+ "jstream-control",
+ "jstream-graph",
+ "jstream-mcp",
+ "jstream-protocol",
+ "serde_json",
+]
+
+[[package]]
 name = "jstream-graph"
 version = "0.0.0"
 dependencies = [
