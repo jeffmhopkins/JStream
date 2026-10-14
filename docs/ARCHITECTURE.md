@@ -331,7 +331,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:c431ece709e1c1e7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:ab4ac4777b908217", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered READMEs changed only by re-verified lines; the planned privacy.set (refused inside a batch with malformed), privacy.changed after handshake, and per-output session reporting bullets match ADR-0027 and are marked not built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

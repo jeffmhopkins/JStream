@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f09a773d4f6b9bbe", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
+verified = { hash = "b3:f09a773d4f6b9bbe", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0027 adds master, privacy and output chains to the data model and planned protocol, none built; Engine still handles only OutputStart/OutputStop and the graph edits it applies, so the design holds" }
 -->
 
 ### Engine and sessions

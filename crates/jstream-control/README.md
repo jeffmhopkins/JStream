@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:4df8d4c22e5fff6b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
+verified = { hash = "b3:4df8d4c22e5fff6b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH protocol gains ADR-0027's planned privacy.set/privacy.changed and per-output session reporting, none built; Control trait and mock still forward any Call and answer unhandled ones with not_implemented, so the design holds" }
 -->
 
 ### The trait

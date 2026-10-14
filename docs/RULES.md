@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:283218beda13c4df", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
+verified = { hash = "b3:283218beda13c4df", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0027's privacy.set action, privacy.changed event, output chains and session reporting are new optional fields and calls, minor-release additions under R-API-001; R-API-002 noun.verb names hold" }
 -->
 
 <a id="R-API-001"></a>
