@@ -84,8 +84,10 @@ impl PipelineStats {
 
 /// Backends and the publish target for one engine, plus the pipeline if it is up.
 ///
-/// `gate` is taken only while the collection lock is held. `gate_cv` is the wait
-/// for an in-flight start, and that wait does not hold the collection lock.
+/// `gate` is taken after the collection lock when both are held. `output_stats`,
+/// the in-flight wait and `Drop` take `gate` alone. Nothing takes the collection
+/// lock while holding `gate`. `gate_cv` wakes a stop that is waiting for a start,
+/// and a start that is waiting for a failed pipeline to finish joining.
 pub(crate) struct MediaHost {
     pub(crate) backends: Mutex<Option<Backends>>,
     pub(crate) publish: Mutex<Option<Box<dyn LivePublish>>>,
@@ -100,6 +102,8 @@ pub(crate) struct Gate {
     pub(crate) running: Option<Running>,
     pub(crate) pending: Option<Pending>,
     pub(crate) watcher: Option<JoinHandle<()>>,
+    /// `Running` was taken and is still being joined. A new start waits this out.
+    pub(crate) draining: bool,
 }
 
 /// One `output.start` between the `starting` event and the settle.
@@ -119,6 +123,7 @@ impl MediaHost {
                 running: None,
                 pending: None,
                 watcher: None,
+                draining: false,
             }),
             gate_cv: Condvar::new(),
             next_generation: AtomicU64::new(1),

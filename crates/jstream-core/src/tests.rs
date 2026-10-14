@@ -1055,8 +1055,83 @@ fn output_publish_failure_settles_failed() {
     }
     assert!(failed, "publish failure left the output running");
     assert_eq!(output_steps(&mut events), vec![OutputState::Failed]);
-    // The watcher joins the pipeline after it publishes `failed`.
-    thread::sleep(Duration::from_millis(200));
+}
+
+/// Dropping the last engine handle stops a running pipeline. The publish watcher
+/// must not keep that handle alive.
+#[test]
+fn dropping_the_engine_stops_the_pipeline() {
+    use std::io::Write;
+    use std::sync::atomic::AtomicBool;
+
+    use jstream_media::{ChannelLayout, FrameSize, Timebase};
+    use jstream_mux::flv::FlvTag;
+    use jstream_platform::Backends;
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+
+    use crate::{LivePublish, PublishError};
+
+    struct FinishFlag {
+        finished: Arc<AtomicBool>,
+    }
+
+    impl LivePublish for FinishFlag {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            self.finished.store(true, Ordering::Release);
+            Ok(())
+        }
+    }
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let size = FrameSize::new(320, 180).expect("size");
+    let finished = Arc::new(AtomicBool::new(false));
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        capture: Arc::new(FakeCapture::new(clock, size)),
+        audio: Arc::new(audio),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_publish(Box::new(FinishFlag {
+            finished: Arc::clone(&finished),
+        }));
+    let control = connected(&engine);
+    let started = block_on(control.call(output_call("yt", true)));
+    if let Err(err) = &started
+        && err.protocol().is_some_and(|error| {
+            matches!(error, ProtocolError::ActionFailed { reason } if reason.contains("no wgpu adapter"))
+        })
+    {
+        if std::env::var_os("CI").is_some() {
+            panic!("CI has no wgpu adapter: {err}");
+        }
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping engine-drop test, no adapter: {err}"
+        );
+        return;
+    }
+    started.expect("output.start");
+    assert!(engine.output_stats().is_some());
+    drop(control);
+    drop(engine);
+    assert!(
+        finished.load(Ordering::Acquire),
+        "dropping the engine left the pipeline running"
+    );
 }
 
 fn output_state(control: &dyn Control, output: &str) -> OutputState {

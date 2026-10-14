@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:0fda13cb6f195a05", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs bullet against engine.rs. The pipeline still emits starting then active or failed, stop emits stopping then stopped, a stop during starting cancels that start, and a publish failure after active settles failed. Pipeline threads still take neither lock." }
+verified = { hash = "b3:e0cdf4de3323d973", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs and tests bullets against engine.rs. The pipeline still emits starting then active or failed, stop during starting still cancels, and a publish failure still settles failed. Pipeline threads still take neither lock. The weak watcher is described under Design." }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -67,7 +67,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5b432d834132f26c", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Calls, Outputs and Locking against start_pipeline, stop_pipeline and watch_publish. Batches and collection queries stay under the collection lock. A pipeline start keeps an in-flight generation until it settles, and stop during that window cancels it and waits until the threads are dropped. A publish send or poll failure settles failed from the watcher. The gate is taken after the collection lock and is not held across open or join." }
+verified = { hash = "b3:c38676cf6bff86b6", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Outputs and Locking against watch_publish. The watcher holds weak pointers until a publish failure, so dropping the last engine joins the pipeline. A later start waits, without the collection lock, until that join finishes." }
 -->
 
 ### Engine and sessions
@@ -238,10 +238,13 @@ publish target is dropped on that path too.
 
 Once the pipeline is `active`, a `send_tag` or `poll` failure is sent on a channel.
 A watcher the control thread started settles `failed`, emits `output.state_changed`,
-and drops the pipeline so the render and mixer threads stop. `output_stats` is then
+and drops the pipeline so the render and mixer threads stop. The watcher holds weak
+pointers until that failure arrives, so it does not keep the engine alive: dropping
+the last engine handle and its sessions joins the pipeline. `output_stats` is then
 empty. This cut does not reconnect. `failed` counts as idle, and a later start needs
-a new publish target. A `finish` error while a stop is tearing the session down is
-not a second failure.
+a new publish target. That start waits until the failed pipeline has finished
+joining, so the new devices do not overlap the old teardown. A `finish` error while
+a stop is tearing the session down is not a second failure.
 
 The render thread reads the platform capture mailbox, composites the primary target
 at 30 frames per second, repeats the last frame when capture is empty, and reads the
@@ -263,8 +266,10 @@ The GPU wait of `video.snapshot` holds only the compositor lock. `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
 across device open, that wait, or a join. `output.stop` waits for an in-flight
 start on the gate's condition variable without holding the collection lock. The
-publish watcher takes the collection lock only to settle `failed`, then joins the
-pipeline outside it. The render, mixer, encode and output threads do not take the
+publish watcher keeps weak pointers until a failure arrives, then takes the
+collection lock only to settle `failed` and joins the pipeline outside it. A later
+start waits on that same condition variable, still without the collection lock,
+until the join finishes. The render, mixer, encode and output threads do not take the
 collection lock or the snapshot compositor lock; session counters the host reads
 sit on their own mutex. A poisoned lock is recovered rather than propagated:
 `Graph::apply` changes a working copy and replaces the state only on success, and the

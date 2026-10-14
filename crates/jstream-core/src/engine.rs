@@ -25,7 +25,7 @@ use jstream_render::Compositor;
 use std::collections::BTreeMap;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc::{self, Receiver, TryRecvError};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::task::Waker;
 use std::thread;
 
@@ -258,9 +258,23 @@ impl Engine {
             return Err(not_implemented("output.start"));
         };
         let mut wake = Vec::new();
-        let (parts, publish, generation) = {
+        let (parts, publish, generation) = loop {
+            // A failed pipeline may still be joining. Wait that out before opening
+            // devices, and do not hold the collection lock across the wait.
+            {
+                let mut gate = lock(&host.gate);
+                while gate.draining {
+                    gate = host
+                        .gate_cv
+                        .wait(gate)
+                        .unwrap_or_else(PoisonError::into_inner);
+                }
+            }
             let mut state = lock(&self.shared.state);
             let mut gate = lock(&host.gate);
+            if gate.draining {
+                continue;
+            }
             let current = state.outputs.state(&output_id)?;
             let idle = matches!(current, OutputState::Stopped | OutputState::Failed);
             if !idle {
@@ -299,7 +313,7 @@ impl Engine {
                     return Err(err);
                 }
             }
-            (parts, publish, generation)
+            break (parts, publish, generation);
         };
         wake_all(std::mem::take(&mut wake));
 
@@ -309,7 +323,6 @@ impl Engine {
             generation,
             armed: true,
         };
-        let shared = Arc::clone(&self.shared);
         let (fail_tx, fail_rx) = mpsc::channel();
         let launched = launch(parts, publish, output_id.clone(), generation, fail_tx);
         let outcome = {
@@ -349,8 +362,8 @@ impl Engine {
                         }
                         Err(TryRecvError::Empty) => {
                             let watched = output_id.clone();
-                            let host_for_watch = Arc::clone(host);
-                            let shared_for_watch = Arc::clone(&shared);
+                            let host_for_watch = Arc::downgrade(host);
+                            let shared_for_watch = Arc::downgrade(&self.shared);
                             match thread::Builder::new()
                                 .name("jstream-publish-watch".into())
                                 .spawn(move || {
@@ -549,14 +562,21 @@ fn abandon_start(
 }
 
 /// Blocks until the publish target fails. A disconnected channel is a clean stop.
+///
+/// The pointers are weak, so this thread does not keep the engine alive. Dropping
+/// the last [`Engine`] drops [`MediaHost`], which joins the pipeline and then this
+/// thread. A real failure upgrades the pointers only long enough to settle.
 fn watch_publish(
-    shared: Arc<Shared>,
-    host: Arc<MediaHost>,
+    shared: Weak<Shared>,
+    host: Weak<MediaHost>,
     output_id: OutputId,
     generation: u64,
     fail_rx: Receiver<String>,
 ) {
     let Ok(reason) = fail_rx.recv() else {
+        return;
+    };
+    let (Some(shared), Some(host)) = (shared.upgrade(), host.upgrade()) else {
         return;
     };
     tracing::error!(output_id = %output_id, error = %reason, "publish failed");
@@ -571,6 +591,9 @@ fn watch_publish(
         if ours && active {
             state.outputs.settle(&output_id, OutputState::Failed);
             emit_output(&mut state, &output_id, OutputState::Failed, &mut wake);
+            // The join happens below, outside the locks. A new start waits until
+            // `draining` clears so it does not open devices over this teardown.
+            gate.draining = true;
             // Detach this watcher. `JoinHandle`'s drop does not join, so the
             // thread can go on to drop `Running` without joining itself.
             drop(gate.watcher.take());
@@ -580,7 +603,13 @@ fn watch_publish(
         }
     };
     wake_all(wake);
+    let took = running.is_some();
     drop(running);
+    if took {
+        let mut gate = lock(&host.gate);
+        gate.draining = false;
+        host.gate_cv.notify_all();
+    }
 }
 
 fn already_running(output_id: &OutputId) -> ProtocolError {

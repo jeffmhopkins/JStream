@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:d11daf2ecbfba407", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the output-pipeline paragraph against runtime/. Render, mixer, encode and output threads still do not lock the collection. Stop during starting cancels that start. A publish failure is a channel message; the watcher emits failed and drops the pipeline." }
+verified = { hash = "b3:b87308bea6c5a058", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the output-pipeline paragraph against runtime/. Render, mixer, encode and output threads still do not lock the collection. The watcher still emits failed and stops the pipeline. It no longer keeps the engine alive; that detail is in the core design." }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
