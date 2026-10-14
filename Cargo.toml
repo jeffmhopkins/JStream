@@ -33,6 +33,10 @@ jstream-platform = { path = "crates/jstream-platform" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }
+# PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
+# Encoding is part of the crate. `default-features = false` leaves deflate on the
+# pure-Rust backend.
+png = { version = "0.17", default-features = false }
 pulldown-cmark = { version = "0.13", default-features = false }
 # Test-only certificates for the RTMPS tests; `ring` instead of the default aws-lc-rs (R-DEP-006).
 rcgen = { version = "0.14", default-features = false, features = ["ring"] }

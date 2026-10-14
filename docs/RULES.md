@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:c60ebc1542e86b02", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-API-001..004 against ARCH#protocol's Transport edit (Origin handling only): no protocol message, version or write path changed" }
+verified = { hash = "b3:aaa5b9c7a7317fcd", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read R-API-001 through R-API-004 against the protocol section. video.snapshot is an additive query, a minor bump to 0.5. No rule text changed. Persistence is untouched." }
 -->
 
 <a id="R-API-001"></a>

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:f862679b0332b218", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: session.rs changed only how a connection closes and gate.rs one doc line; the Server, Configuration, Gate and Session contents lines still hold" }
+verified = { hash = "b3:0c07faa209aff911", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "tests.rs hello minor is 5. Server, config, gate and session contents are unchanged." }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -49,7 +49,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6ec17979ad7e4bb2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the shutdown paragraph: a closing connection ends its event subscription, sends what the outbox holds before the close frame, and drops a client that doesn't take them within CLOSE_TIMEOUT; matches session.rs and shutdown_drops_a_client_that_stopped_reading; admission (Origin optional) text from #109 unchanged" }
+verified = { hash = "b3:c6e0b90d28d0535b", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read sessions against the protocol change: video.snapshot is a JSON response the task forwards like any other. Binary frames are still malformed. The 4 MiB cap, Origin-optional admission and close behaviour are unchanged." }
 -->
 
 ### Listening and admission

@@ -953,6 +953,19 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "The current program mix, as a PNG.\n\nThe result's `png` is standard base64 with padding and no line breaks. `width`\nand `height` are that image's size in pixels; the longest side is at most 1280.\n`rev` is the collection revision of the layout the image shows. Source pixels are\nruntime state and can change without a new `rev`.",
+          "properties": {
+            "type": {
+              "const": "video.snapshot",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1096,6 +1109,43 @@ source: crates/jstream-protocol/src/fixtures.rs
             "rev",
             "sources",
             "scenes"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `video.snapshot`: the program mix encoded as a PNG.",
+          "properties": {
+            "height": {
+              "description": "PNG height in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "png": {
+              "description": "The PNG file, standard base64 with padding and no line breaks.",
+              "type": "string"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The collection revision of the layout this image shows."
+            },
+            "type": {
+              "const": "video.snapshot",
+              "type": "string"
+            },
+            "width": {
+              "description": "PNG width in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "rev",
+            "width",
+            "height",
+            "png"
           ],
           "type": "object"
         }
@@ -1593,5 +1643,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.4"
+  "title": "JStream protocol 0.5"
 }

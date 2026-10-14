@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:5ccfe25135bcdb9e", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the Numbers and Geometry bullets against geometry.rs and finite.rs. Finite32 is the wire float; CanvasPoint, ContentRect and LegacyQuad are plain f32. A negative scale is flagged, not refused. PROTOCOL_VERSION stays 0.4. The other contents bullets still match lib.rs: commands, queries, events.dropped. Schema snaps change only ItemTransform's description, in protocol.snap and tools.snap." }
+verified = { hash = "b3:f7a2ee252e5cad9e", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Geometry bullet: types are not messages, PROTOCOL_VERSION is 0.5 from video.snapshot, and the geometry wire surface is a later minor. Queries still list video.snapshot. version.rs minor is 5. Numbers, events.dropped and the module list still match lib.rs and geometry.rs." }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -34,9 +34,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `source.delete`), with `ItemTransform`, `Crop` and `SourceKind`; `Action`
   (`output.start`, `output.stop`); `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list` and
-  `output.status`, with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo`
-  and `ItemInfo` shapes it reports.
+- **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
+  `output.status` and `video.snapshot`, with `QueryResult` and the `SceneSummary`,
+  `SceneInfo`, `SourceInfo` and `ItemInfo` shapes the collection reads report.
+  `video.snapshot` returns the program mix as a PNG.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed` and `events.dropped`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, and `WireError`, its wire form with a message.
@@ -51,9 +52,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   formula and defaulting to neutral. `content` maps a cropped source with `stretch`,
   `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
   transform. A negative scale is not refused: `from_legacy` returns the drawn outline
-  and flags the reflection, which geometry cannot store. Not a new message, so
-  `PROTOCOL_VERSION` stays 0.4. The schema snapshots change only in `ItemTransform`'s
-  description (`protocol.snap` and the MCP `tools.snap`).
+  and flags the reflection, which geometry cannot store. These types are not
+  messages. `PROTOCOL_VERSION` is 0.5 because of `video.snapshot`; the geometry wire
+  surface ships as a later minor. `ItemTransform`'s schema description names
+  `ItemGeometry` as the replacement (`protocol.snap` and the MCP `tools.snap`).
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
@@ -70,7 +72,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:51d05462a4c27926", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the float paragraph and the Item geometry subsection against geometry.rs. Wire floats stay Finite32; computed results are f32. A negative scale is not refused. No new message, so PROTOCOL_VERSION stays 0.4; the ADR's 0.4 wire list moves to 0.5 under R-API-001 without editing the ADR. is_neutral_3d is the stored-geometry predicate. Envelope, edits, events.dropped and schema compatibility are unchanged." }
+verified = { hash = "b3:ebbd30f3719c0ffb", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Item geometry subsection: PROTOCOL_VERSION is 0.5 because video.snapshot landed; the geometry wire surface is a later minor, and the ADR is not edited. Handshake example is minor 5. video.snapshot stays a base64 PNG in the JSON result. is_neutral_3d, project, content and from_legacy still match geometry.rs." }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -90,8 +92,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":4},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":4},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":5},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":5},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -205,6 +207,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `not_found` for a missing scene.
 - `output.status {output_id}`: an output's runtime state, which is not collection
   state, so it carries no `rev`.
+- `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
+  base64 with padding and no line breaks. `width` and `height` are that image's size;
+  the longest side is at most 1280. `rev` is the collection revision of the layout.
+  Source pixels are runtime state and can change without a new `rev`. The query takes
+  no arguments and changes nothing.
 
 An item is reported with its `source_id`, `transform`, `crop` and `visible`: every
 property an edit sets, so a client can compute any edit, or its inverse, from what it
@@ -335,15 +342,15 @@ function in this crate so the compositor and the UI share one implementation.
   reflected quad.
 
 These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`, and `PROTOCOL_VERSION` stays 0.4. ADR-0022
-names these additions as 0.4, which already shipped with `events.dropped`; the wire
-surface ships as the next minor, 0.5, under
-[R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited
-([R-DOC-009](../../docs/RULES.md#R-DOC-009)). The schema snapshots
-([R-TEST-002](../../docs/RULES.md#R-TEST-002)) change only in `ItemTransform`'s
+`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.5 because
+`video.snapshot` is that minor. ADR-0022 names the geometry additions as 0.4, which
+already shipped with `events.dropped`; the geometry wire surface ships as a later
+minor, under [R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited
+([R-DOC-009](../../docs/RULES.md#R-DOC-009)). The geometry change in the schema
+snapshots ([R-TEST-002](../../docs/RULES.md#R-TEST-002)) is `ItemTransform`'s
 description, in `protocol.snap` and in the MCP tool list (`tools.snap`): it no longer
-says that 3D fields will be added to that struct with defaults. No definition was
-added or removed.
+says that 3D fields will be added to that struct with defaults. `video.snapshot` is
+the additive 0.5 definition beside that. No geometry definition was added or removed.
 `is_neutral_3d` is the predicate a stored geometry uses to reject a non-neutral 3D
 field with `invalid_argument` until the compositor draws it. That rejection belongs
 on the edit that stores the geometry, which is not on the wire yet. This crate still
@@ -351,14 +358,17 @@ evaluates the formula, so the definition is locked by unit tests; it does not dr
 
 ### Binary streams (deferred)
 
-Snapshots (PNG/JPEG), preview video and audio meters
-([ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol)) are deferred to a later
-PR. The intended shape: they travel as WebSocket binary frames with a small fixed header
-(stream ID, stream kind, the `rev` or media timestamp they show), so they never pass
-through JSON. They are opened and closed with JSON requests: `video.snapshot` is a
-query whose result names the binary frame that carries the image, and preview and
-meters are subscriptions. The header layout and the subscription commands are part of
-that PR.
+Preview video and audio meters
+([ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol)) stay WebSocket binary
+frames, not designed yet except the meter frame's fields. Preview is the M2 low-res
+H.264 stream ([ROADMAP › M2](../../ROADMAP.md#m2)). They will travel with a small fixed
+header (stream ID, stream kind, the `rev` or media timestamp they show) and be opened
+and closed with JSON subscriptions. That header is part of the preview work.
+
+`video.snapshot` is not one of those frames. M1a uses it so an agent can check a scene
+over the JSON API and over MCP ([ROADMAP › M1](../../ROADMAP.md#m1),
+[ARCH › MCP](../../docs/ARCHITECTURE.md#mcp)), so the PNG is a field of the query
+result. A binary snapshot frame would need a second channel those clients do not have.
 
 <a id="open-questions"></a>
 ## Open questions

@@ -27,6 +27,9 @@ jstream-outputs.workspace = true
 jstream-platform.workspace = true
 jstream-protocol.workspace = true
 jstream-render.workspace = true
+# PNG for `video.snapshot` (ADR-0031). Encoding only; deflate stays pure Rust.
+png.workspace = true
+thiserror.workspace = true
 # Spans around commands, outputs and sessions (R-RS-005).
 tracing.workspace = true
 

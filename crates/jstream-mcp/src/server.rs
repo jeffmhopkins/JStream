@@ -420,7 +420,9 @@ impl Server {
              client and each applied batch raises the state `rev` by one; pass \
              `expected_rev` to make a read-modify-write safe. IDs of new objects are \
              chosen by you. `events` returns what changed since your last read, from \
-             every client. `describe_api` returns the full protocol schema.",
+             every client. `describe_api` returns the full protocol schema. \
+             `video` with `op.type` `video.snapshot` returns the current program mix as \
+             a PNG image.",
             groups.join(", ")
         )
     }
@@ -452,13 +454,29 @@ fn unsupported_version(requested: &Value) -> RpcError {
 }
 
 /// A `CallToolResult`: `structured` as `structuredContent`, and serialized in a text
-/// block for clients that only read `content`.
+/// block for clients that only read `content`. A `video.snapshot` result also leads
+/// with an image block, so an agent can see the program mix.
 fn tool_result(structured: Value, is_error: bool) -> Value {
+    let png = snapshot_png(&structured).map(str::to_owned);
+    let mut content = Vec::new();
+    if let Some(png) = png {
+        content.push(json!({"type": "image", "data": png, "mimeType": "image/png"}));
+    }
+    content.push(json!({"type": "text", "text": structured.to_string()}));
     json!({
-        "content": [{"type": "text", "text": structured.to_string()}],
+        "content": content,
         "structuredContent": structured,
         "isError": is_error,
     })
+}
+
+/// The base64 PNG of a successful `video.snapshot` response, if this value is one.
+fn snapshot_png(structured: &Value) -> Option<&str> {
+    let result = structured.pointer("/result/result")?;
+    if result.get("type")?.as_str()? != "video.snapshot" {
+        return None;
+    }
+    result.get("png")?.as_str()
 }
 
 /// A tool error with the MCP-layer code `disconnected`: the engine session's connection

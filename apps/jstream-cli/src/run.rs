@@ -273,6 +273,18 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             writeln!(out, "rev {rev}, scene {scene_id}")?;
             write_items(out, "", items)?;
         }
+        QueryResult::VideoSnapshot {
+            rev,
+            width,
+            height,
+            png,
+        } => {
+            writeln!(
+                out,
+                "rev {rev}, {width}x{height} png ({} base64 chars)",
+                png.len()
+            )?;
+        }
         QueryResult::StateGet {
             rev,
             sources,

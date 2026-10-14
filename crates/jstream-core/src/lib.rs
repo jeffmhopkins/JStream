@@ -18,6 +18,7 @@ mod events;
 mod outputs;
 mod runtime;
 mod session;
+mod snapshot;
 #[cfg(test)]
 mod tests;
 
@@ -26,6 +27,7 @@ pub use runtime::{
     LivePublish, OutputStats, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
 };
 pub use session::InProcessControl;
+pub use snapshot::SourceFrameError;
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
