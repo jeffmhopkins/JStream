@@ -164,15 +164,15 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md"]
-verified = { hash = "b3:3b95c26bd0517a59", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's ADR-0023 tree and bullets with ADR-0029's: SceneItem keeps opacity, blend and reserved effects[] and gains transition, Scene gains transition_in/out, studio drops transition for the transitions collection; Built-so-far now also lists the transition fields as not yet" }
+depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md"]
+verified = { hash = "b3:04b2b9fb9f194341", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0022 now keeps deprecated transforms as a stored legacy placement evaluated against the current source size every frame, converted only by an explicit item.set_geometry; Canvas and geometry bullet gains that, tree shows the target geometry, Filters bullet says geometry, Built-so-far unchanged and consistent" }
 -->
 
 ```
-Collection (JSON on disk, schema_version, rev: u64)
+Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ├── sources        Source { id, kind, settings, filters[], duplicated_from? }   video and/or audio; independent of scenes
 ├── scenes         Scene { id, name, items[], transition_in?, transition_out? }
-│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, opacity, blend,
+│                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (reserved, empty in v1), transition }
 ├── studio         { program_scene, preview_scene }   (studio-mode state)
 ├── transitions    { presets: [TransitionPreset], default }
@@ -198,11 +198,21 @@ Collection (JSON on disk, schema_version, rev: u64)
   source is placed rather than marking one placement as the original.
   `item.set_source` switches an item between reference and clone and keeps its id,
   placement and stacking position ([ADR-0023](adr/0023-placements-references-and-clones.md)).
+- **Canvas and geometry** ([ADR-0022](adr/0022-item-transform-and-canvas.md)): the
+  collection's `canvas` is every scene's coordinate space, in pixels, and a `VideoMix`
+  scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
+  canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
+  and 3D tilt, turn, depth and per-item perspective, drawn in stacking order with no
+  depth buffer. `crop` is in source pixels. A source's current size is runtime state,
+  not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,
+  protocol 0.3's transform as written, which the compositor evaluates against the
+  source's current size every frame. Only an explicit `item.set_geometry` turns it into
+  a geometry.
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
   scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
   that would close a cycle (`item.add`, and `item.set_source`).
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
-  is used. A placement owns its transform, `crop`, `visible`, `opacity` (an alpha
+  is used. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.
@@ -226,11 +236,12 @@ Collection (JSON on disk, schema_version, rev: u64)
   undo stacks live in `jstream-core`.
 - **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind name or a nested
   scene; no settings or filters yet), scenes in display order, and items in stacking
-  order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
-  they never copy them. Deleting a source an item still places, or a scene a source
-  still shows, is rejected. Not yet: settings, filters, `opacity`, `blend`, the reserved
-  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the 3D
-  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
+  order with `source_id`, protocol 0.3's 2D transform (top-left corner and scale, which
+  ADR-0022 replaces), `crop` and `visible`. Items refer to sources; they never copy them.
+  Deleting a source an item still places, or a scene a source still shows, is rejected.
+  Not yet: settings, filters, `opacity`, `blend`, the reserved `effects[]`,
+  `duplicated_from`, `item.set_source`, the transition fields, the canvas, `geometry`,
+  and everything outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
