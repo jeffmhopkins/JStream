@@ -157,7 +157,7 @@ native targets only, so a `wasm32` build never pulls tokio, even with `ws` on.
   rather than the URL, so it stays out of logs: an `Authorization: Bearer` header from
   native clients, and later the `Sec-WebSocket-Protocol` header from browsers, which
   can't set others. The caller supplies the token (the CLI reads it from a token file).
-  The server validates `Origin` and `Host`; browsers set `Origin` themselves, and the
+  The server validates `Host`, and `Origin` when present; browsers set `Origin` themselves, and the
   native client sends the server's own origin (`http://<host>:<port>` of the URL) unless
   `WsConfig::origin` names another.
 - **Session:** `hello` is the caller's first call. Requests get the IDs `req_1`,

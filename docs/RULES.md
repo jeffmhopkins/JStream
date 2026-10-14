@@ -541,7 +541,8 @@ enforced_by = ["test:jstream_server::rejects_missing_token", "test:jstream_serve
 applies_to = ["crates/jstream-server/**", "crates/jstream-mcp/**"]
 -->
 Every HTTP, WebSocket and MCP listener requires the control token (even on localhost) and
-validates the `Origin` and `Host` headers. Listeners bind to `127.0.0.1` by default
+validates the `Host` header, and the `Origin` header when one is present. Listeners bind
+to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>

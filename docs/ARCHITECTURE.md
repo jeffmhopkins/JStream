@@ -77,7 +77,7 @@ verified = { hash = "b3:67a80aa8d2b1bb42", by = "agent:claude@session_01QBbMRwRu
 7. **Headless and deterministic.** The whole engine runs with a software GPU adapter, a fake
    clock and fake devices.
 8. **Authenticated by default.** Every control listener requires a token and checks
-   `Origin` ([R-SEC-002](RULES.md#R-SEC-002)).
+   `Host`, and `Origin` when one is present ([R-SEC-002](RULES.md#R-SEC-002)).
 
 <a id="repo-layout"></a>
 ## Repository layout
@@ -517,9 +517,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
   default, with the token required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
-  for now; TLS is an open question there. Decided, not built yet: an upgrade with no
-  `Origin` header is allowed, because the token is the gate, while an `Origin` that is
-  present must be on the allow list (today a missing one is refused). The same server
+  for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
+  because the token is the gate, while an `Origin` that is present must be on the allow
+  list. The same server
   serves MCP's streamable-HTTP transport on the control port, behind the same checks
   ([MCP](#mcp)).
 - **Slow clients** (decided, not built yet): each connection gets a bounded event buffer.
@@ -560,7 +560,9 @@ verified = { hash = "b3:d41661e807a29ea4", by = "agent:claude@session_01QBbMRwRu
   behind the same token and `Origin` checks as the WebSocket API, so it validates
   `Origin`, as the
   [MCP transport spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
-  requires.
+  requires. Whether that transport also lets a request without `Origin` through, as the
+  WebSocket API does, is settled when it is built: browsers send `Origin` on a
+  cross-origin `fetch`, and the bearer token forces a preflight.
 - Every agent action goes to the audit log with the client's name. Undo is per client,
   so an agent can never undo the user's work.
 

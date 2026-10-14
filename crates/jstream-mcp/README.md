@@ -149,7 +149,7 @@ noticing, and this server doesn't check for that.
 Authentication happens below this crate: the session the host passes in already holds
 the control token ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)). The stdio
 transport is not a listener; the streamable-HTTP transport will be, so it must check the
-token, `Origin` and `Host` ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
+token and `Host`, and an `Origin` that is present ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
 
 ### Events
 

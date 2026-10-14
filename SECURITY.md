@@ -50,7 +50,7 @@ A report is in scope when it breaks one of these. The rules they cite are the au
 - **Secrets:** stream keys and OAuth tokens stay in the OS credential store and are
   redacted everywhere else ([R-SEC-001](docs/RULES.md#R-SEC-001)).
 - **The control API:** every connection needs the control token, and the listener
-  binds to localhost by default and checks `Origin` and `Host`
+  binds to localhost by default and checks `Host`, and `Origin` when one is present
   ([R-SEC-002](docs/RULES.md#R-SEC-002)).
 - **WASM plugins** get no filesystem or network access unless the manifest declares it
   and the user grants it ([R-SEC-003](docs/RULES.md#R-SEC-003)).

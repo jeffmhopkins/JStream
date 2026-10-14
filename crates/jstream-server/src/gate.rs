@@ -7,10 +7,11 @@
 //!   attacker's name. A `Host` without a port means the scheme's default port, 80 for
 //!   `http` and `ws`, so it is accepted only when the server listens on port 80;
 //!   otherwise it names another port and is refused.
-//! - **`Origin`** must be present and be the server's own (`http://` plus the accepted
+//! - **`Origin`**, when present, must be the server's own (`http://` plus the accepted
 //!   `Host`, where an origin without a port means port 80 too) or a configured extra.
-//!   Browsers always send it on WebSocket upgrades, so a
-//!   foreign web page can't connect; native clients send the server's own.
+//!   Browsers always send it on WebSocket upgrades, so a foreign web page can't connect.
+//!   A request without one is a native client (the CLI, a script, an MCP proxy) and is
+//!   let through to the token check, which is the gate (#44, R-SEC-002).
 //! - **`Authorization: Bearer <token>`** must carry the control token. The server keeps
 //!   only the token's BLAKE3 digest; the presented value is hashed too and the two
 //!   digests are compared in constant time, so the compare reveals nothing about the
@@ -20,8 +21,8 @@
 //! (`[::1]:port`) and exactly one port: `check_extra_hosts` refuses any other form
 //! before the server binds, since it could never match.
 //!
-//! A refused `Host` or `Origin` is HTTP 403, a missing or wrong token 401. Each header
-//! must appear exactly once. `Gate::admit` logs each refusal at `warn` with its reason
+//! A refused `Host` or `Origin` is HTTP 403, a missing or wrong token 401. `Host` and
+//! the token must appear exactly once, and `Origin` at most once. `Gate::admit` logs each refusal at `warn` with its reason
 //! and the peer address, and never a header's value, so never the token (R-SEC-001).
 
 use crate::config::{ServerConfig, Token};
@@ -140,18 +141,22 @@ impl Gate {
         if !self.hosts.contains(&host) {
             return Err(Refusal::Host);
         }
-        let origin = single(headers, &header::ORIGIN)
-            .map(|value| value.to_ascii_lowercase())
-            .ok_or(Refusal::Origin)?;
-        let own = origin.strip_prefix("http://").is_some_and(|rest| {
-            if has_port(rest) {
-                rest == host
-            } else {
-                format!("{rest}:{DEFAULT_PORT}") == host
+        // No `Origin` at all is a native client: the token is the gate (#44). One that is
+        // present, even the opaque `null`, must be allowed, and it may appear only once.
+        if headers.contains_key(header::ORIGIN) {
+            let origin = single(headers, &header::ORIGIN)
+                .map(|value| value.to_ascii_lowercase())
+                .ok_or(Refusal::Origin)?;
+            let own = origin.strip_prefix("http://").is_some_and(|rest| {
+                if has_port(rest) {
+                    rest == host
+                } else {
+                    format!("{rest}:{DEFAULT_PORT}") == host
+                }
+            });
+            if !own && !self.extra_origins.contains(&origin) {
+                return Err(Refusal::Origin);
             }
-        });
-        if !own && !self.extra_origins.contains(&origin) {
-            return Err(Refusal::Origin);
         }
         let token = single(headers, &header::AUTHORIZATION)
             .and_then(bearer)
@@ -356,10 +361,9 @@ mod tests {
     }
 
     #[test]
-    fn refuses_foreign_or_missing_origins() {
+    fn refuses_foreign_origins() {
         let gate = gate(&[], &[]);
         for origin in [
-            None,
             Some("null"),
             Some("http://evil.example"),
             Some("https://127.0.0.1:4455"),
@@ -371,6 +375,23 @@ mod tests {
                 "{origin:?}"
             );
         }
+    }
+
+    /// #44: a request without `Origin` (a native client) passes to the token check,
+    /// which still refuses it without the token; a repeated `Origin` is refused.
+    #[test]
+    fn a_missing_origin_is_left_to_the_token() {
+        let gate = gate(&[], &[]);
+        let mut map = with(header::ORIGIN, None);
+        assert_eq!(gate.check(&map), Ok(()));
+        map.remove(header::AUTHORIZATION);
+        assert_eq!(gate.check(&map), Err(Refusal::Token));
+        let mut twice = headers(&good());
+        twice.append(
+            header::ORIGIN,
+            HeaderValue::from_static("http://127.0.0.1:4455"),
+        );
+        assert_eq!(gate.check(&twice), Err(Refusal::Origin));
     }
 
     #[test]

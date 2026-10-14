@@ -62,17 +62,16 @@ Every upgrade request passes three checks, in this order, before a session is op
 | Check | Accepted | Refused with |
 |---|---|---|
 | `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra; without a port only on port 80 (below) | 403 |
-| `Origin` | present, and `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
+| `Origin` | absent, or `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
 | `Authorization` | `Bearer <token>`, matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` |
 
-Each header must appear exactly once, and comparisons ignore ASCII case (except the
-token). The `Host` check defeats DNS rebinding: a page on an attacker's domain that
-resolves to `127.0.0.1` still sends its own name. The `Origin` check stops foreign
-pages, since browsers always send `Origin` on a WebSocket upgrade; native clients send
-the server's own. A request without `Origin` is refused too today, so every client must
-send one. That is decided to change (open question 4): a missing `Origin` will be
-accepted, because the token is the gate, and an `Origin` that is present must still pass
-this check. The token is never logged (see *Logging*), and `Token`'s `Debug` form hides it.
+`Host` and `Authorization` must appear exactly once and `Origin` at most once, and
+comparisons ignore ASCII case (except the token). The `Host` check defeats DNS
+rebinding: a page on an attacker's domain that resolves to `127.0.0.1` still sends its
+own name. The `Origin` check stops foreign pages, since browsers always send `Origin` on
+a WebSocket upgrade, and an opaque `null` origin is refused like any other foreign one.
+A request without `Origin` is a native client (the CLI, `websocat`, a script) and goes
+on to the token check, which is the gate (open question 4). The token is never logged (see *Logging*), and `Token`'s `Debug` form hides it.
 
 **`Host` without a port.** A `Host` (or `Origin`) without a port names the scheme's
 default port, 80 for `http` and `ws`, and browsers leave `:80` out. So when the server
@@ -168,11 +167,11 @@ for the token digest; `tracing` for the spans and events above. No TLS crate is 
    this server serves MCP's streamable-HTTP transport (`jstream_mcp::Server::handle`) on
    the control port, behind the same token, `Origin` and `Host` checks, and stdio stays
    in the CLI. Neither is built yet.
-4. **Requests without `Origin`.** Decided, not built yet: an upgrade with no `Origin`
+4. **Requests without `Origin`.** Settled and built (#44): an upgrade with no `Origin`
    header is allowed, because the token is the gate, so non-browser tools (`websocat`,
    scripts) needn't invent one. An `Origin` that is present must still be the server's
    own or a configured extra. Browsers always send `Origin`, so this doesn't open the
-   server to foreign pages. Today a missing `Origin` is still refused.
+   server to foreign pages.
 5. **Default port and token file.** The host apps choose the port and create the
    user-only token file ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)),
    so the server takes both from its caller. `jstream-daemon` creates or reuses the
