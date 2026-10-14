@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:7a03362624bd4242", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds the events tool (ADR-0036) to the crate's purpose; main's crate-map changes (ADR-0031/0034 rows) don't touch the jstream-mcp row, so Purpose still matches the crate" }
+verified = { hash = "b3:62f26e4467ed08a3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's #96 events tool into the Purpose beside this PR's tracing; crate-map row unchanged; Purpose matches the crate" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -43,7 +43,7 @@ Not here yet: the streamable-HTTP transport ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:ddd4a86214efc92b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: events row in the tools table, malformed for a cursor past the newest seq, new Events subsection (subscribe before first hello, BUFFER_CAPACITY drop-oldest, PAGE_SIZE, next/dropped/more/ended, no engine call once subscribed), N4 re-hello never yields a new client_id with the CLI e2e test cited; checked against server.rs, events.rs, tools.rs and ADR-0036" }
+verified = { hash = "b3:4c9c4b9df6baa5bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's Logging subsection (mcp_session/mcp_request/tool_call spans, never arguments) with main's #96 events tool row, malformed cursor and Events subsection; the Not implemented line now names both the events tool and tracing; depends_on keeps ADR-0036; matches server.rs" }
 -->
 
 ### Tools

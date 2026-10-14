@@ -68,7 +68,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:5e24f5dbbb915cce", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's design bullet now says a Busy from fill_gap still records the gap and gap clears only after silence and block both succeed; matches audio.rs; main's dependency changes (ADR-0027/0028 text) don't affect the encode thread design" }
+verified = { hash = "b3:424cf8d0e4e184b7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's note that tracing is now a workspace dependency but encode doesn't use it yet; main's #95 Busy-gap design bullet kept; matches audio.rs" }
 -->
 
 ### Threads and pacing

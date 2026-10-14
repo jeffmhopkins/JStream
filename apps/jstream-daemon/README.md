@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:9613fd65686dff4c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the apps row and the daemon's Purpose are unchanged" }
+verified = { hash = "b3:d4aedfdcf5b5d7da", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's stderr logging with RUST_LOG and exit 2 on a bad RUST_LOG; dependencies (server, core) changed by main's #95 and this PR's tracing; Purpose matches main.rs" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -100,7 +100,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:07f34cadaaf2248e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency server#design now requires bracketed IPv6 and one port in extra hosts and rewords the token compare; the daemon passes no extra_hosts and builds its token with Token::new, so its Listening and token bullets hold" }
+verified = { hash = "b3:e025ca33246091f6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Logging bullet (fmt layer to stderr, Targets from RUST_LOG, installed before the token loads) and tracing-subscriber dependency; main's #95 server changes don't change what the daemon passes" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

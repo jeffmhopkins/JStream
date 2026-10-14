@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d8dcd54503c2ba9f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's extra-hosts rule (bracketed IPv6, exactly one port) and BLAKE3 token-compare wording beside main's crate-map changes (ADR-0031/0034 rows, none for the server); Purpose matches the crate" }
+verified = { hash = "b3:aefc31c2bb5a6738", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds tracing; main's #95 extra-hosts and token-compare text kept; Purpose matches the crate" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:54e13395ef9bbd98", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Extra hosts paragraph (IPv6 in brackets, one port, a reason per refusal) and Token compare paragraph (BLAKE3 digest compare) match gate.rs; main's protocol changes are planned additions the server forwards unchanged" }
+verified = { hash = "b3:99bcb121169fd69a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's connection span and refusal logging (reason, never header values) with main's #95 extra-hosts rule (bracketed IPv6, one port) and BLAKE3 token compare; matches gate.rs and lib.rs" }
 -->
 
 ### Listening and admission
