@@ -108,6 +108,7 @@ pub struct ItemGeometry {
 
 /// Why a geometry could not be placed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum GeometryError {
     /// `size.width` or `size.height` is zero or negative. A negative size is not a flip.
     #[error("item size must be greater than zero")]
@@ -131,6 +132,7 @@ pub struct CanvasPoint {
 
 /// One corner of a projected box.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Placed {
     /// The corner is in front of the viewer.
     At(CanvasPoint),
@@ -369,8 +371,10 @@ impl ItemGeometry {
     ///
     /// The cropped source is scaled, its top-left is `position`, and it rotates
     /// clockwise about that corner. The returned geometry has [`FitMode::Stretch`] and
-    /// neutral 3D, so a non-uniform scale stays exact. A negative scale sets the
-    /// matching flip flag; the geometry's size is the absolute value.
+    /// neutral 3D, so a non-uniform scale stays exact. A negative scale is not refused:
+    /// there is no flip field yet, so the size is the absolute value and the matching
+    /// flag records that the reflection is not stored. Projecting the box matches the
+    /// outline, not the reflected corner order. [`legacy_quad`] keeps that reflection.
     ///
     /// # Errors
     /// [`GeometryError::NotFinite`] when the scaled size or the centre is not finite.

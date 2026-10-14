@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:47b87f81a4b2d71e", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the edits, queries, events, schema and transport bullets against the protocol crate. geometry.rs is a pure function, not a new command, query or event, so those lists still match. The schema snapshot's only change is ItemTransform's description. Slow clients and events.dropped are unchanged." }
+verified = { hash = "b3:c4d44ff5396af27b", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the edits, queries, events, schema and transport bullets. geometry.rs is still a pure function, not a command, query or event. PROTOCOL_VERSION stays 0.4. The schema bullet still names the generated snapshot as the API review. Slow clients and events.dropped are unchanged." }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -535,7 +535,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:2dfd99573c6826a8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Access: streamable HTTP (not built) still validates Origin per the MCP spec; whether it lets a missing Origin through is left to that build, with the browser-preflight reason (#101 review N1)" }
+verified = { hash = "b3:e9fa1c035e9dd062", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the grouped-tools, events, schema-size, names, snapshots and access bullets against the tools.snap diff. The only change is the two ItemTransform descriptions; tools stay grouped by noun and still carry full op schemas. Origin handling is unchanged." }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

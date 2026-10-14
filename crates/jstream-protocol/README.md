@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:8913267966c9c9b7", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Added the Geometry bullet for geometry.rs: project rotates about the box centre, content does stretch/fit/fill, legacy_quad and from_legacy evaluate a 0.3 transform, 3D fields default to neutral, and PROTOCOL_VERSION stays 0.4. Re-read the other contents against lib.rs: commands, queries, events.dropped and Finite32 are unchanged. The schema bullet still names both snaps; the only snap diff is ItemTransform's description." }
+verified = { hash = "b3:5ccfe25135bcdb9e", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the Numbers and Geometry bullets against geometry.rs and finite.rs. Finite32 is the wire float; CanvasPoint, ContentRect and LegacyQuad are plain f32. A negative scale is flagged, not refused. PROTOCOL_VERSION stays 0.4. The other contents bullets still match lib.rs: commands, queries, events.dropped. Schema snaps change only ItemTransform's description, in protocol.snap and tools.snap." }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -42,15 +42,18 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   codes, and `WireError`, its wire form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs, `Rev`, and
   `PROTOCOL_VERSION`.
-- **Numbers** (`finite.rs`): `Finite32`, the only float type, which rejects NaN,
-  infinity and out-of-range numbers at construction and deserialization.
+- **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
+  NaN, infinity and out-of-range numbers at construction and deserialization. Computed
+  results (`CanvasPoint`, `ContentRect`, `LegacyQuad`) use plain `f32`.
 - **Geometry** (`geometry.rs`): [`ItemGeometry`](src/geometry.rs) and the shared
   placement formula ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)).
   `project` places the box, rotation about its centre, with the 3D fields in the
   formula and defaulting to neutral. `content` maps a cropped source with `stretch`,
   `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
-  transform. Not a new message, so `PROTOCOL_VERSION` stays 0.4. The schema
-  snapshot changes only in `ItemTransform`'s description.
+  transform. A negative scale is not refused: `from_legacy` returns the drawn outline
+  and flags the reflection, which geometry cannot store. Not a new message, so
+  `PROTOCOL_VERSION` stays 0.4. The schema snapshots change only in `ItemTransform`'s
+  description (`protocol.snap` and the MCP `tools.snap`).
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
@@ -67,7 +70,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:ef59b837e5b0eabf", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Added the Item geometry subsection (centre rotation, stretch/fit/fill, legacy quad, 3D formula with neutral defaults, no new message). Re-read the envelope, the 0.4 handshake, edits, events.dropped and schema compatibility against command.rs, event.rs, version.rs and protocol.snap: the snap diff is only ItemTransform's description and examples.snap is unchanged. R-API-001 still counts this as no wire addition." }
+verified = { hash = "b3:51d05462a4c27926", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the float paragraph and the Item geometry subsection against geometry.rs. Wire floats stay Finite32; computed results are f32. A negative scale is not refused. No new message, so PROTOCOL_VERSION stays 0.4; the ADR's 0.4 wire list moves to 0.5 under R-API-001 without editing the ADR. is_neutral_3d is the stored-geometry predicate. Envelope, edits, events.dropped and schema compatibility are unchanged." }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -158,9 +161,10 @@ its settings come with `jstream-sources`) or `scene`, which nests another scene.
 `invalid_argument` naming the cycle. Positions are indexes: scenes in display order,
 items in stacking order with 0 at the bottom.
 
-Every float in the protocol (`Vec2`, `ItemTransform`, `ItemGeometry`) is a `Finite32`:
-an `f32` that is never NaN or infinite. serde would otherwise narrow an out-of-range JSON number such as
-`1e39` to infinity, which then serializes as `null` and no longer parses. So a
+Every float on the wire (`Vec2`, `ItemTransform`, `ItemGeometry`) is a `Finite32`:
+an `f32` that is never NaN or infinite. Computed geometry results use plain `f32`. serde
+would otherwise narrow an out-of-range JSON number such as `1e39` to infinity, which
+then serializes as `null` and no longer parses. So a
 non-finite or out-of-`f32`-range number fails deserialization, and
 `ClientMessage::parse` rejects the whole message as `malformed`. In-process clients
 can't build a non-finite value either: `Finite32::new` and `Vec2::new` return `None`
@@ -326,18 +330,24 @@ function in this crate so the compositor and the UI share one implementation.
   then scale, top-left at `position`, clockwise about that corner. `from_legacy`
   returns that outline as a box with `fit_mode = stretch` and neutral 3D, so a
   non-uniform scale stays exact, plus whether a negative scale flipped an axis.
-  Geometry has no flip field, so projecting that box matches the outline and not the
-  reflected corner order. `legacy_quad` is the reflected quad.
+  A negative scale is not refused. Geometry has no flip field, so projecting that box
+  matches the outline and not the reflected corner order. `legacy_quad` is the
+  reflected quad.
 
 These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`, and `PROTOCOL_VERSION` stays 0.4. The schema
-snapshot
-([R-TEST-002](../../docs/RULES.md#R-TEST-002)) changes only in `ItemTransform`'s
-description: it no longer says that 3D fields will be added to that struct with
-defaults. No definition was added or removed.
-`is_neutral_3d` is the check the engine uses to reject a non-neutral 3D field with
-`invalid_argument` until the compositor draws it. This crate still evaluates the
-formula, so the definition is locked by unit tests; it does not draw.
+`item.add` still takes `ItemTransform`, and `PROTOCOL_VERSION` stays 0.4. ADR-0022
+names these additions as 0.4, which already shipped with `events.dropped`; the wire
+surface ships as the next minor, 0.5, under
+[R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited
+([R-DOC-009](../../docs/RULES.md#R-DOC-009)). The schema snapshots
+([R-TEST-002](../../docs/RULES.md#R-TEST-002)) change only in `ItemTransform`'s
+description, in `protocol.snap` and in the MCP tool list (`tools.snap`): it no longer
+says that 3D fields will be added to that struct with defaults. No definition was
+added or removed.
+`is_neutral_3d` is the predicate a stored geometry uses to reject a non-neutral 3D
+field with `invalid_argument` until the compositor draws it. That rejection belongs
+on the edit that stores the geometry, which is not on the wire yet. This crate still
+evaluates the formula, so the definition is locked by unit tests; it does not draw.
 
 ### Binary streams (deferred)
 
