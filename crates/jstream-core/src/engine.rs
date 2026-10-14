@@ -602,13 +602,34 @@ fn watch_publish(
             None
         }
     };
+    // Clears `draining` on the normal return and if the join panics, so a later
+    // start cannot wait on `gate_cv` forever.
+    let _clear_drain = ClearDrain::arm(Arc::clone(&host), running.is_some());
     wake_all(wake);
-    let took = running.is_some();
     drop(running);
-    if took {
-        let mut gate = lock(&host.gate);
+}
+
+/// Clears `Gate::draining` when the failed pipeline has been joined, including
+/// when that join unwinds.
+struct ClearDrain {
+    host: Arc<MediaHost>,
+    armed: bool,
+}
+
+impl ClearDrain {
+    fn arm(host: Arc<MediaHost>, armed: bool) -> Self {
+        Self { host, armed }
+    }
+}
+
+impl Drop for ClearDrain {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let mut gate = lock(&self.host.gate);
         gate.draining = false;
-        host.gate_cv.notify_all();
+        self.host.gate_cv.notify_all();
     }
 }
 

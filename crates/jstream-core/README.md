@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:e0cdf4de3323d973", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs and tests bullets against engine.rs. The pipeline still emits starting then active or failed, stop during starting still cancels, and a publish failure still settles failed. Pipeline threads still take neither lock. The weak watcher is described under Design." }
+verified = { hash = "b3:a0700b8dcafb479d", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs bullet against the drain guard. The pipeline still emits starting then active or failed, and a publish failure still settles failed. The guard only clears the wait if the join unwinds; the written steps are unchanged." }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -67,7 +67,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c38676cf6bff86b6", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Outputs and Locking against watch_publish. The watcher holds weak pointers until a publish failure, so dropping the last engine joins the pipeline. A later start waits, without the collection lock, until that join finishes." }
+verified = { hash = "b3:9bbdd2d484691438", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Outputs and Locking against ClearDrain. A later start still waits, without the collection lock, until the failed pipeline has finished joining. The guard also clears that wait if the join unwinds, which the section does not need to spell out." }
 -->
 
 ### Engine and sessions
