@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:b372bce8d2832223", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main: the #58 AAC section (per-layout bit rates, non-STA opener, ShutdownObject, reused output sample) plus the CPU-path H.264 encoder (hardware then software MFTs, CBR/VBR, GOP, no B-frames, High, BT.709 limited, exact pts round trip, CleanPoint keyframes, async event pumping, 5 s drain) and its hardware/system-memory open question; checked against codec/{mod,mf,aac,h264}.rs" }
+verified = { hash = "b3:b2de198c374dcb08", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main (AAC from #58): adds the CPU-path H.264 encoder (hardware then software MFTs, CBR/VBR, GOP, no B-frames, High, BT.709 limited, exact pts round trip, CleanPoint keyframes, async event pumping, 5 s drain) and its hardware/system-memory open question; Not-yet and Tests updated; checked against codec/{mod,mf,h264}.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

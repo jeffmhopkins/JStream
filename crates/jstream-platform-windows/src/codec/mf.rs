@@ -202,6 +202,8 @@ pub(crate) struct Output {
     provides_samples: bool,
     /// The buffer size to allocate otherwise.
     buffer_size: u32,
+    /// The lower bound `buffer_size` was created with, kept for a stream change.
+    min_size: u32,
     /// The output sample handed to the MFT when it doesn't allocate its own: created
     /// once and reused, so a pull that finds no output allocates nothing.
     reusable: Option<IMFSample>,
@@ -220,23 +222,48 @@ impl Output {
         Ok(Self {
             provides_samples: info.dwFlags & provides != 0,
             buffer_size: info.cbSize.max(min_size),
+            min_size,
             reusable: None,
         })
     }
 
-    /// Takes the next output sample, or `None` when the MFT needs more input. A format
-    /// change on the output (`MF_E_TRANSFORM_STREAM_CHANGE`) is accepted and the call
-    /// retried, and an empty output sample is skipped.
+    /// Takes the next output sample, or `None` when the MFT needs more input.
+    ///
+    /// A format change on the output (`MF_E_TRANSFORM_STREAM_CHANGE`) is accepted: the
+    /// first offered type is set, the stream's requirements are read again (a new type
+    /// can need a larger buffer, so the reused sample is replaced), and the call retried.
+    /// Empty output samples are skipped. Each has its own bound, so a misbehaving MFT
+    /// can't loop forever.
     pub(crate) fn pull(
         &mut self,
         transform: &IMFTransform,
     ) -> Result<Option<OutSample>, PlatformError> {
-        for _ in 0..4 {
+        const MAX_CHANGES: u32 = 2;
+        const MAX_EMPTY: u32 = 64;
+        let (mut changes, mut empty) = (0, 0);
+        loop {
             match self.pull_once(transform)? {
-                Pulled::Sample(s) if s.data.is_empty() => {}
+                Pulled::Sample(s) if s.data.is_empty() => {
+                    empty += 1;
+                    if empty > MAX_EMPTY {
+                        return Err(PlatformError::Os {
+                            call: "IMFTransform::ProcessOutput",
+                            code: None,
+                            message: format!("{MAX_EMPTY} empty samples in a row"),
+                        });
+                    }
+                }
                 Pulled::Sample(s) => return Ok(Some(s)),
                 Pulled::NeedInput => return Ok(None),
                 Pulled::StreamChange => {
+                    changes += 1;
+                    if changes > MAX_CHANGES {
+                        return Err(PlatformError::Os {
+                            call: "IMFTransform::ProcessOutput",
+                            code: None,
+                            message: "the output format kept changing".into(),
+                        });
+                    }
                     // SAFETY: plain COM calls on a live transform.
                     unsafe {
                         let t = transform
@@ -246,14 +273,10 @@ impl Output {
                             .SetOutputType(0, &t, 0)
                             .os("IMFTransform::SetOutputType (stream change)")?;
                     }
+                    *self = Self::new(transform, self.min_size)?;
                 }
             }
         }
-        Err(PlatformError::Os {
-            call: "IMFTransform::ProcessOutput",
-            code: None,
-            message: "the output format kept changing, or only empty samples came out".into(),
-        })
     }
 
     fn pull_once(&mut self, transform: &IMFTransform) -> Result<Pulled, PlatformError> {
