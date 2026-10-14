@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:bcd8c2a1e1131c20", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:bcd8c2a1e1131c20", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; covered/depended Threads section gains ADR-0028's mixer row and pts paragraph and ADR-0035's out-of-process CLAP host, both consistent with R-RT-001..004 (the mixer never waits on a host; late blocks bypassed and counted)" }
 -->
 
 <a id="R-RT-001"></a>

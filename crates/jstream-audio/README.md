@@ -92,7 +92,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:94c7e7084c68cae4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:94c7e7084c68cae4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Body unchanged by ADR-0028; its dependency ARCH#threading now has this PR's mixer row and pts paragraph plus main's CLAP host paragraph; the rt code still allocates nothing and takes no locks on the audio thread, and Block::pts already follows the stated rule" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
