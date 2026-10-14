@@ -1,0 +1,183 @@
+//! Control-plane handles: gains, mutes, meters and counters of the inputs and the bus.
+//! Every method is a few atomic operations, so the control thread never waits on a
+//! real-time thread and vice versa (docs/RULES.md#R-RT-003).
+
+use std::sync::Arc;
+use std::sync::atomic::Ordering;
+
+use crate::MeterReading;
+use crate::rt::input::InputShared;
+use crate::rt::mixer::BusShared;
+use crate::rt::shared::db_to_gain;
+
+/// Controls and observes one mixer input. Cheap to clone; every clone controls the
+/// same input.
+#[derive(Clone, Debug)]
+pub struct InputControl {
+    shared: Arc<InputShared>,
+}
+
+impl InputControl {
+    pub(crate) fn new(shared: Arc<InputShared>) -> Self {
+        Self { shared }
+    }
+
+    /// Sets the input's gain into the bus (its send), linear. Clamped to 0..=+24 dB; NaN
+    /// is ignored. The mixer ramps to it over one block.
+    pub fn set_gain(&self, gain: f32) {
+        self.shared.gain.set(gain);
+    }
+
+    /// Sets the gain in dB (`-inf` is silence).
+    pub fn set_gain_db(&self, db: f32) {
+        self.shared.gain.set(db_to_gain(db));
+    }
+
+    /// The linear gain.
+    pub fn gain(&self) -> f32 {
+        self.shared.gain.get()
+    }
+
+    /// Mutes or unmutes the input, keeping its gain.
+    pub fn set_muted(&self, muted: bool) {
+        self.shared.gain.set_muted(muted);
+    }
+
+    /// Whether the input is muted.
+    pub fn muted(&self) -> bool {
+        self.shared.gain.muted()
+    }
+
+    /// The input's post-gain levels; restarts the held peak.
+    pub fn take_meter(&self) -> MeterReading {
+        self.shared.meter.take()
+    }
+
+    /// The input's counters and timing estimates.
+    pub fn stats(&self) -> InputStats {
+        let s = &*self.shared;
+        let finite = |v: f64| v.is_finite().then_some(v);
+        InputStats {
+            packets: s.packets.get(),
+            discontinuities: s.discontinuities.get(),
+            gap_frames: s.gap_frames.get(),
+            resets: s.resets.get(),
+            reanchors: s.reanchors.get(),
+            outliers: s.outliers.get(),
+            timestamps_missing: s.timestamps_missing.get(),
+            unanchored_frames: s.unanchored_frames.get(),
+            late_frames: s.late_frames.get(),
+            overrun_frames: s.overrun_frames.get(),
+            underrun_frames: s.underrun_frames.get(),
+            drift_ppm: finite(s.drift_ppm.load()),
+            jitter_s: finite(s.jitter.load()),
+            correction_ppm: s.correction_ppm.load(),
+            timing_error_s: finite(s.timing_error.load()),
+            failed: s.failed.load(Ordering::Relaxed),
+        }
+    }
+}
+
+/// One input's counters (since it was added) and timing estimates.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[non_exhaustive]
+pub struct InputStats {
+    /// Device packets received.
+    pub packets: u64,
+    /// Packets flagged as discontinuous (not counting the first packet's flag).
+    pub discontinuities: u64,
+    /// Device frames lost in gaps the clock agreed with, replaced by silence.
+    pub gap_frames: u64,
+    /// Restarts of the position mapping: backwards or overlong position jumps, gaps the
+    /// clock disagreed with, and runs of timestamp outliers.
+    pub resets: u64,
+    /// Times the input was re-placed on the engine time line after its first anchor
+    /// (after resets, discontinuities and timing errors beyond 20 ms).
+    pub reanchors: u64,
+    /// Timestamps rejected as more than 20 ms off the fitted clock line.
+    pub outliers: u64,
+    /// Packets without a usable timestamp.
+    pub timestamps_missing: u64,
+    /// Device frames dropped before the first usable timestamp anchored the input.
+    pub unanchored_frames: u64,
+    /// Engine frames whose audio arrived after the mixer had passed them, or that a
+    /// re-anchor skipped.
+    pub late_frames: u64,
+    /// Engine frames overwritten before the mixer read them (the input ran more than a
+    /// ring ahead): dropped oldest.
+    pub overrun_frames: u64,
+    /// Engine frames the mixer needed but the input had not delivered: mixed as silence.
+    pub underrun_frames: u64,
+    /// The device's clock drift against the media clock, ppm (positive: fast), once
+    /// measurable.
+    pub drift_ppm: Option<f64>,
+    /// The standard deviation of the device's timestamps around the fitted clock line,
+    /// seconds, once measurable.
+    pub jitter_s: Option<f64>,
+    /// How much faster than nominal the resampler consumes input, ppm. Settles at the
+    /// drift.
+    pub correction_ppm: f64,
+    /// The smoothed timing error, seconds, once measured: the engine time of the next
+    /// output frame minus the capture time of the input it holds. Positive means the
+    /// audio lands later on the engine time line than it was captured. The controller
+    /// holds it near zero.
+    pub timing_error_s: Option<f64>,
+    /// Whether the device stream reported an error and stopped.
+    pub failed: bool,
+}
+
+/// Controls and observes the mix bus. Cheap to clone.
+#[derive(Clone, Debug)]
+pub struct BusControl {
+    shared: Arc<BusShared>,
+}
+
+impl BusControl {
+    pub(crate) fn new(shared: Arc<BusShared>) -> Self {
+        Self { shared }
+    }
+
+    /// Sets the bus's output gain, linear. Clamped to 0..=+24 dB; NaN is ignored.
+    pub fn set_gain(&self, gain: f32) {
+        self.shared.gain.set(gain);
+    }
+
+    /// Sets the bus gain in dB.
+    pub fn set_gain_db(&self, db: f32) {
+        self.shared.gain.set(db_to_gain(db));
+    }
+
+    /// The bus's linear gain.
+    pub fn gain(&self) -> f32 {
+        self.shared.gain.get()
+    }
+
+    /// Mutes or unmutes the bus.
+    pub fn set_muted(&self, muted: bool) {
+        self.shared.gain.set_muted(muted);
+    }
+
+    /// The bus output's levels; restarts the held peak.
+    pub fn take_meter(&self) -> MeterReading {
+        self.shared.meter.take()
+    }
+
+    /// The bus's counters.
+    pub fn stats(&self) -> BusStats {
+        BusStats {
+            blocks: self.shared.blocks.get(),
+            skipped_frames: self.shared.skipped_frames.get(),
+        }
+    }
+}
+
+/// The bus's counters since the mixer was created.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct BusStats {
+    /// Blocks mixed.
+    pub blocks: u64,
+    /// Engine frames skipped because the mixer fell more than half a ring behind the
+    /// clock.
+    pub skipped_frames: u64,
+}

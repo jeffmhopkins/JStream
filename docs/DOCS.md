@@ -470,7 +470,7 @@ disables the check, only review and the weekly audit stand behind it.
 <!-- @section
 covers = ["xtask/src/lint_deps.rs"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003", "docs/RULES.md#R-ARCH-005", "docs/RULES.md#R-UNSAFE-001", "docs/RULES.md#R-DEP-002", "docs/RULES.md#R-DEP-003"]
-verified = { hash = "b3:1c51c8f70bafb3e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Native-code allowlist gained wasm-bindgen-shared (links marker only, build.rs compiles nothing; via wgpu's wasm32 deps); the section describes the allowlist mechanism, not its entries, so it holds" }
+verified = { hash = "b3:e44729766fa76216", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Native-code allowlist gained ring (links key plus cc build-dependency; R-DEP-006's rustls provider). The section describes the allowlist mechanism and heuristic, not its entries, so it holds" }
 -->
 
 `cargo xtask lint-deps` (CI check `lint-deps`) checks the rules whose `enforced_by` names
