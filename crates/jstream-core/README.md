@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:ecc0e0713d34d826", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate: contents list matches engine.rs, session.rs, events.rs, outputs.rs, tests.rs and tests/mcp.rs; layer 5 per crate map; no runtime/ dir (ARCH#threading keeps that); not-yet list matches what is absent" }
+verified = { hash = "b3:7186cfa574ae25fa", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the

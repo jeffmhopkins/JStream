@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:2761f432f1297f88", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; WGC mailbox, MF and WASAPI threading descriptions are unaffected" }
+verified = { hash = "b3:1ab0a76567b6631c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged; Dependency ARCH#threading only gained ADR-0035's planned out-of-process CLAP host paragraph; WASAPI, WGC and MF descriptions unaffected (host process creation and shared memory are not built yet)" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

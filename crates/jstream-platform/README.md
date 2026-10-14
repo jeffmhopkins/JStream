@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:08235abb8c816a16", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; platform traits, GPU interop and capture hand-off are unaffected" }
+verified = { hash = "b3:e7eed9649b7a94dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged; Dependency ARCH#threading only gained ADR-0035's planned out-of-process CLAP host paragraph; platform traits unaffected" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -98,7 +98,7 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:897b5b2a98493e9e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#gpu-pipeline only gained ADR-0029's planned transition node paragraph; steps 2, 5 and 6 this section cites are unchanged" }
+verified = { hash = "b3:6336fd435e53dd27", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
