@@ -1,0 +1,1911 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Panel contents</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+:root{color-scheme:dark}
+body{margin:0}
+button{font:inherit;cursor:pointer}
+input{font:inherit}
+*{scrollbar-width:thin;scrollbar-color:#3A3F48 transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#3A3F48;border-radius:6px;border:2px solid #16191E}
+::-webkit-scrollbar-thumb:hover{background:#4D535E}
+::-webkit-scrollbar-corner{background:transparent}
+::selection{background:#2B4A7A}
+input:focus-visible,button:focus-visible{outline:2px solid #4C8DFF;outline-offset:-1px}
+.nf:focus{cursor:text}
+.step:hover{background:#2B313A !important;color:#E6E8EB !important}
+.row:hover{background:#1C2028 !important}
+.row.sel:hover{background:#26385A !important}
+.hov{opacity:0;transition:opacity 120ms}
+.sechd:hover{color:#E6E8EB !important}
+.row:hover .hov,.hov:focus-visible,.hov.on{opacity:1}
+.ib:hover{background:#2B313A !important}
+.chip:hover{border-color:#4D535E !important}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 100%; box-sizing: border-box; padding: 8px; background: #16191E; color: #E6E8EB; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px">
+
+<sc-if value="{{is.tree}}" hint-placeholder-val="{{ true }}">
+<div onContextMenu="{{treeCtx}}" style="display: flex; flex-direction: column; gap: 6px; min-height: calc(100cqh - 16px); box-sizing: border-box">
+
+<div style="display: flex; gap: 6px; align-items: center">
+<label style="flex: 1 1 auto; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; background: #0F1115; border: 1px solid #2E333B; border-radius: 5px; color: #7D8590">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4a7 7 0 1 0 0 14a7 7 0 1 0 0-14z M20 20l-4-4"></path></svg>
+<input aria-label="Search {{treeName}}" placeholder="Search {{treeName}}" value="{{search}}" onChange="{{onSearch}}" style="flex: 1 1 auto; min-width: 0; background: transparent; border: 0; color: #E6E8EB; outline: none">
+</label>
+<div data-pop="filter-{{uid}}" onKeyDown="{{popKey}}" style="position: relative">
+<button class="ib" onClick="{{toggleFilter}}" aria-expanded="{{filterOpen}}" aria-label="Filter" title="Filter by favorites and labels" style="position: relative; width: 28px; height: 28px; background: {{filterBg}}; border: 1px solid {{filterBorder}}; border-radius: 5px; color: {{filterColor}}; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7v6l-4 2v-8z"></path></svg>
+<sc-if value="{{filtering}}" hint-placeholder-val="{{ false }}">
+<span style="position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #4C8DFF; color: #0F1115; font-size: 10px; font-weight: 600; line-height: 16px; text-align: center">{{filterCount}}</span>
+</sc-if>
+</button>
+<sc-if value="{{filterOpen}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; z-index: 10; top: 34px; right: 0; width: 220px; padding: 6px; background: #1F232A; border: 1px solid #2E333B; border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 2px">
+<button class="ib" onClick="{{favFilter.toggle}}" aria-pressed="{{favFilter.active}}" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; background: none; border: 0; border-radius: 5px; color: #E6E8EB; text-align: left">
+<span style="width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid {{favFilter.boxBorder}}; background: {{favFilter.boxBg}}; display: flex; align-items: center; justify-content: center; color: #0F1115; font-size: 10px; line-height: 1">{{favFilter.tick}}</span>
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="#F2C14E" stroke="#F2C14E" stroke-width="1.8" stroke-linejoin="round"><path d="{{starIcon}}"></path></svg>
+<span>Favorites only</span>
+</button>
+<div style="padding: 8px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">LABELS · ANY OF</div>
+<sc-for list="{{labelFilters}}" as="c" hint-placeholder-count="4">
+<button class="ib" onClick="{{c.toggle}}" aria-pressed="{{c.active}}" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; background: none; border: 0; border-radius: 5px; color: #E6E8EB; text-align: left">
+<span style="width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid {{c.boxBorder}}; background: {{c.boxBg}}; display: flex; align-items: center; justify-content: center; color: #0F1115; font-size: 10px; line-height: 1">{{c.tick}}</span>
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="{{c.color}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{c.icon}}"></path></svg>
+<span>{{c.name}}</span>
+</button>
+</sc-for>
+<div style="height: 1px; background: #2E333B; margin: 4px 2px"></div>
+<div style="display: flex; justify-content: space-between">
+<button onClick="{{clearFilters}}" style="background: none; border: 0; color: #9AA1AC; padding: 6px 8px">Clear</button>
+<button onClick="{{openManage}}" style="background: none; border: 0; color: #8AB4FF; padding: 6px 8px">Edit labels…</button>
+</div>
+</div>
+</sc-if>
+</div>
+</div>
+
+<sc-if value="{{manage}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 10px; background: #1A1D23; border: 1px solid #2E333B; border-radius: 6px">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">LABELS</span><button onClick="{{toggleManage}}" style="background: none; border: 0; color: #8AB4FF; padding: 2px 4px">Done</button></div>
+<sc-for list="{{mlabels}}" as="m" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 6px; padding: 6px; background: #16191E; border-radius: 5px">
+<div style="display: flex; align-items: center; gap: 6px">
+<button class="ib" onClick="{{m.toggleIcons}}" aria-label="Change icon for {{m.name}}" title="Change icon" style="flex: 0 0 28px; height: 28px; background: #0F1115; border: 1px solid {{m.color}}; border-radius: 5px; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="{{m.color}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{m.icon}}"></path></svg>
+</button>
+<input aria-label="Label name" value="{{m.name}}" onChange="{{m.rename}}" style="flex: 1 1 auto; min-width: 0; height: 28px; box-sizing: border-box; background: #0F1115; border: 1px solid #2E333B; border-radius: 5px; color: #E6E8EB; padding: 0 8px">
+<button class="ib" onClick="{{m.remove}}" aria-label="Delete label {{m.name}}" title="Delete label" style="flex: 0 0 24px; height: 24px; background: none; border: 0; border-radius: 4px; color: #7D8590; padding: 0">×</button>
+</div>
+<div style="display: flex; gap: 5px; flex-wrap: wrap">
+<sc-for list="{{m.swatches}}" as="w" hint-placeholder-count="8">
+<button onClick="{{w.pick}}" aria-label="Color {{w.c}}" style="width: 18px; height: 18px; border-radius: 50%; background: {{w.c}}; border: 2px solid {{w.ring}}; padding: 0"></button>
+</sc-for>
+</div>
+<sc-if value="{{m.iconsOpen}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 6px; padding-top: 4px">
+<sc-for list="{{m.iconGroups}}" as="ig" hint-placeholder-count="3">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<span style="font-size: 11px; color: #7D8590">{{ig.title}}</span>
+<div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px">
+<sc-for list="{{ig.icons}}" as="i" hint-placeholder-count="7">
+<button class="ib" onClick="{{i.pick}}" aria-label="{{i.n}}" title="{{i.n}}" style="height: 30px; background: {{i.bg}}; border: 1px solid {{i.border}}; border-radius: 5px; display: flex; align-items: center; justify-content: center; padding: 0; color: #C9CED6">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{i.d}}"></path></svg>
+</button>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+<button onClick="{{addLabel}}" style="align-self: flex-start; background: none; border: 0; color: #8AB4FF; padding: 2px 0">+ New label</button>
+</div>
+</sc-if>
+
+<sc-if value="{{is.objects}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 2px 4px 2px; color: #7D8590; font-size: 12px">In “{{sceneName}}”, top to bottom</div>
+</sc-if>
+
+<div style="display: flex; flex-direction: column; gap: 1px">
+<sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+<div style="display: flex; flex-direction: column">
+<div class="row {{r.selCls}}" onContextMenu="{{r.ctx}}" onDragOver="{{r.dragOver}}" onDragLeave="{{r.dragLeave}}" onDrop="{{r.drop}}" style="display: flex; align-items: center; gap: 2px; padding: 0 4px 0 {{r.indent}}px; height: 30px; border-radius: 5px; background: {{r.bg}}; box-shadow: {{r.dropLine}}">
+<button onClick="{{r.toggleCollapse}}" aria-label="{{r.caretLabel}}" aria-expanded="{{r.expanded}}" tabindex="{{r.caretTab}}" style="flex: 0 0 16px; width: 16px; height: 20px; visibility: {{r.caretVis}}; background: none; border: 0; padding: 0; color: #7D8590; font-size: 10px">{{r.caret}}</button>
+<button onClick="{{r.pick}}" onDoubleClick="{{r.dbl}}" draggable="{{r.draggable}}" onDragStart="{{r.dragStart}}" onDragEnd="{{r.dragEnd}}" style="flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 7px; height: 100%; background: none; border: 0; padding: 0 2px; color: {{r.color}}; text-align: left">
+<sc-if value="{{r.isLink}}" hint-placeholder-val="{{ false }}">
+<span title="{{r.roleTitle}}" style="flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; background: {{r.roleColor}}33">
+<svg role="img" aria-label="{{r.roleTitle}}" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="{{r.roleColor}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.roleIcon}}"></path></svg>
+</span>
+</sc-if>
+<svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="{{r.typeColor}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><path d="{{r.typeIcon}}"></path></svg>
+<span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: {{r.italic}}">{{r.label}}</span>
+<span style="font-size: 11px; color: #FF8A8F">{{r.badge}}</span>
+<span style="flex: 0 0 auto; font-size: 11px; color: #7D8590">{{r.shared}}</span>
+</button>
+<sc-for list="{{r.chips}}" as="ch" hint-placeholder-count="1">
+<span title="{{ch.name}}" style="flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; background: {{ch.tint}}">
+<svg role="img" aria-label="{{ch.name}}" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="{{ch.color}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ch.icon}}"></path></svg>
+</span>
+</sc-for>
+<sc-if value="{{r.eyeShow}}" hint-placeholder-val="{{ false }}">
+<button class="hov ib {{r.eyeCls}}" onClick="{{r.toggleEye}}" aria-pressed="{{r.hiddenNow}}" aria-label="Show or hide {{r.label}}" title="Visible in this scene" style="flex: 0 0 24px; height: 24px; background: none; border: 0; border-radius: 4px; color: #9AA1AC; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{r.eyeIcon}}"></path></svg>
+</button>
+</sc-if>
+<sc-if value="{{r.canMark}}" hint-placeholder-val="{{ true }}">
+<button data-pop="tag-{{uid}}" class="hov ib {{r.tagOn}}" onClick="{{r.toggleTag}}" aria-label="Labels for {{r.label}}" title="Labels" style="flex: 0 0 24px; height: 24px; background: none; border: 0; border-radius: 4px; color: #9AA1AC; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{tagIcon}}"></path></svg>
+</button>
+<button class="hov ib {{r.favOn}}" onClick="{{r.toggleFav}}" aria-pressed="{{r.fav}}" aria-label="Favorite {{r.label}}" title="Favorite" style="flex: 0 0 24px; height: 24px; background: none; border: 0; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="{{r.starFill}}" stroke="{{r.starStroke}}" stroke-width="1.8" stroke-linejoin="round"><path d="{{starIcon}}"></path></svg>
+</button>
+</sc-if>
+</div>
+<sc-if value="{{r.tagOpen}}" hint-placeholder-val="{{ false }}">
+<div data-pop="tag-{{uid}}" onKeyDown="{{popKey}}" style="margin: 2px 4px 6px {{r.indent}}px; padding: 6px; background: #1A1D23; border: 1px solid #2E333B; border-radius: 6px; display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{r.assign}}" as="a" hint-placeholder-count="4">
+<button class="ib" onClick="{{a.toggle}}" aria-pressed="{{a.checked}}" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 6px; background: none; border: 0; border-radius: 4px; color: #E6E8EB; text-align: left">
+<span style="width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid {{a.boxBorder}}; background: {{a.boxBg}}; display: flex; align-items: center; justify-content: center; color: #0F1115; font-size: 10px; line-height: 1">{{a.tick}}</span>
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="{{a.color}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{a.icon}}"></path></svg>
+<span>{{a.name}}</span>
+</button>
+</sc-for>
+<button onClick="{{openManage}}" style="align-self: flex-start; background: none; border: 0; color: #8AB4FF; padding: 4px 6px; font-size: 12px">Edit labels…</button>
+</div>
+</sc-if>
+</div>
+</sc-for>
+<sc-if value="{{noRows}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 12px 8px; color: #7D8590">Nothing matches these filters.</div>
+</sc-if>
+</div>
+
+
+</div>
+</sc-if>
+
+<sc-if value="{{is.inspector}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column">
+<div class="row" style="display: flex; align-items: center; gap: 2px; height: 30px; padding: 0 4px 0 6px; border-radius: 5px; background: #1F232A">
+<span style="flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 0 2px">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#9AA1AC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex: 0 0 auto"><path d="{{insp.icon}}"></path></svg>
+<span style="font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-style: {{insp.italic}}">{{insp.title}}</span>
+<span style="flex: 0 0 auto; font-size: 11px; color: #7D8590; white-space: nowrap">{{insp.kindTag}}</span>
+<span style="flex: 0 0 auto; font-size: 11px; color: #B5CEFF">{{insp.more}}</span>
+</span>
+<sc-for list="{{insp.chips}}" as="ch" hint-placeholder-count="1">
+<span title="{{ch.name}}" style="flex: 0 0 auto; display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; background: {{ch.tint}}">
+<svg role="img" aria-label="{{ch.name}}" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="{{ch.color}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ch.icon}}"></path></svg>
+</span>
+</sc-for>
+<button data-pop="tag-{{uid}}" class="ib {{insp.tagOn}}" onClick="{{insp.toggleTag}}" aria-label="Labels for {{insp.title}}" title="Labels" style="flex: 0 0 24px; height: 24px; background: none; border: 0; border-radius: 4px; color: #9AA1AC; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{tagIcon}}"></path></svg>
+</button>
+<button class="ib" onClick="{{insp.toggleFav}}" aria-pressed="{{insp.fav}}" aria-label="Favorite {{insp.title}}" title="Favorite" style="flex: 0 0 24px; height: 24px; background: none; border: 0; border-radius: 4px; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="{{insp.starFill}}" stroke="{{insp.starStroke}}" stroke-width="1.8" stroke-linejoin="round"><path d="{{starIcon}}"></path></svg>
+</button>
+</div>
+<sc-if value="{{insp.tagOpen}}" hint-placeholder-val="{{ false }}">
+<div data-pop="tag-{{uid}}" onKeyDown="{{popKey}}" style="margin: 4px 0 0; padding: 6px; background: #1A1D23; border: 1px solid #2E333B; border-radius: 6px; display: flex; flex-direction: column; gap: 2px">
+<sc-for list="{{insp.assign}}" as="a" hint-placeholder-count="4">
+<button class="ib" onClick="{{a.toggle}}" aria-pressed="{{a.checked}}" style="display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px 6px; background: none; border: 0; border-radius: 4px; color: #E6E8EB; text-align: left">
+<span style="width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid {{a.boxBorder}}; background: {{a.boxBg}}; display: flex; align-items: center; justify-content: center; color: #0F1115; font-size: 10px; line-height: 1">{{a.tick}}</span>
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="{{a.color}}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{a.icon}}"></path></svg>
+<span>{{a.name}}</span>
+</button>
+</sc-for>
+<button onClick="{{openManage}}" style="align-self: flex-start; background: none; border: 0; color: #8AB4FF; padding: 4px 6px; font-size: 12px">Edit labels…</button>
+</div>
+</sc-if>
+</div>
+
+<sc-if value="{{insp.isScene}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<button class="sechd" onClick="{{secScene.toggle}}" aria-expanded="{{secScene.open}}" style="display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; min-height: 24px; color: #9AA1AC; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-align: left"><span aria-hidden="true" style="width: 10px; font-size: 9px">{{secScene.caret}}</span>SCENE<span style="font-weight: 400; letter-spacing: 0; color: #5A606B">{{secScene.hint}}</span></button>
+<sc-if value="{{secScene.open}}" hint-placeholder-val="{{ true }}">
+<sc-for list="{{sceneFields}}" as="f" hint-placeholder-count="1">
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+<span style="color: #9AA1AC">{{f.label}}</span>
+<div style="display: flex; align-items: stretch; height: 30px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; overflow: hidden">
+<button class="step" aria-label="Decrease {{f.label}}" onClick="{{f.dec}}" style="flex: 0 0 26px; background: #1A1D23; border: 0; border-right: 1px solid #2E333B; color: #9AA1AC">−</button>
+<input class="nf" aria-label="{{f.label}}" title="Drag to change · Shift: fine · Ctrl: coarse · or type a value" value="{{f.display}}" onChange="{{f.change}}" onBlur="{{f.commit}}" onKeyDown="{{f.key}}" onPointerDown="{{f.down}}" onPointerMove="{{f.move}}" onPointerUp="{{f.up}}" inputmode="decimal" style="flex: 1 1 auto; min-width: 0; width: 100%; text-align: right; background: transparent; border: 0; color: #E6E8EB; padding: 0 4px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: ew-resize; touch-action: none">
+<span style="display: flex; align-items: center; padding-right: 6px; color: #7D8590; font-size: 11px">{{f.unit}}</span>
+<button class="step" aria-label="Increase {{f.label}}" onClick="{{f.inc}}" style="flex: 0 0 26px; background: #1A1D23; border: 0; border-left: 1px solid #2E333B; color: #9AA1AC">+</button>
+</div>
+</div>
+</sc-for>
+<div style="display: flex; justify-content: space-between"><span style="color: #9AA1AC">Objects</span><span>{{insp.count}}</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #9AA1AC">Used as a source in</span><span>{{insp.usedIn}}</span></div>
+<div style="display: flex; justify-content: space-between"><span style="color: #9AA1AC">Hotkey</span><span style="font-family: 'IBM Plex Mono', monospace">{{insp.hotkey}}</span></div>
+</sc-if>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<button class="sechd" onClick="{{secTrans.toggle}}" aria-expanded="{{secTrans.open}}" style="display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; min-height: 24px; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC; text-align: left"><span aria-hidden="true" style="width: 10px; font-size: 9px">{{secTrans.caret}}</span>TRANSITIONS<span style="font-weight: 400; letter-spacing: 0; color: #5A606B">{{secTrans.hint}}</span></button>
+<sc-if value="{{secTrans.open}}" hint-placeholder-val="{{ true }}">
+<sc-for list="{{sceneTrans}}" as="f" hint-placeholder-count="2">
+<label style="display: flex; align-items: center; gap: 8px; color: #9AA1AC">
+<span style="flex: 1 1 auto">{{f.label}}</span>
+<select onChange="{{f.change}}" value="{{f.value}}" style="width: 150px; height: 28px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; color: #E6E8EB; padding: 0 4px; font: inherit">
+<sc-for list="{{f.opts}}" as="o" hint-placeholder-count="3"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+</select>
+</label>
+</sc-for>
+<span style="font-size: 11px; color: #7D8590">If both scenes override, the next scene's “in” wins.</span>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{insp.isObject}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<sc-for list="{{fieldSections}}" as="sec" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; justify-content: space-between; min-height: 24px">
+<button class="sechd" onClick="{{sec.toggle}}" aria-expanded="{{sec.open}}" style="display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; min-height: 24px; color: #9AA1AC; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-align: left"><span aria-hidden="true" style="width: 10px; font-size: 9px">{{sec.caret}}</span>{{sec.title}}<span style="font-weight: 400; letter-spacing: 0; color: #5A606B">{{sec.hint}}</span></button>
+<sc-if value="{{sec.hasLink}}" hint-placeholder-val="{{ false }}">
+<button class="ib" onClick="{{sec.toggleLink}}" aria-pressed="{{sec.linkOn}}" aria-label="{{sec.linkLabel}}" title="{{sec.linkLabel}}" style="display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 7px; background: {{sec.linkBg}}; border: 1px solid {{sec.linkBorder}}; border-radius: 5px; color: {{sec.linkColor}}; font-size: 11px">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{sec.linkIcon}}"></path></svg>W/H</button>
+</sc-if>
+</div>
+<sc-if value="{{sec.open}}" hint-placeholder-val="{{ true }}">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<sc-for list="{{sec.fields}}" as="f" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+<span style="color: #9AA1AC">{{f.label}}</span>
+<div style="display: flex; align-items: stretch; height: 30px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; overflow: hidden">
+<button class="step" aria-label="Decrease {{f.label}}" onClick="{{f.dec}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-right: 1px solid #2E333B; color: #9AA1AC">−</button>
+<input class="nf" aria-label="{{f.label}}" title="Drag to change · Shift: fine · Ctrl: coarse · or type a value" value="{{f.display}}" onChange="{{f.change}}" onBlur="{{f.commit}}" onKeyDown="{{f.key}}" onPointerDown="{{f.down}}" onPointerMove="{{f.move}}" onPointerUp="{{f.up}}" inputmode="decimal" style="flex: 1 1 auto; min-width: 0; width: 100%; text-align: right; background: transparent; border: 0; color: #E6E8EB; padding: 0 2px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: ew-resize; touch-action: none">
+<span style="display: flex; align-items: center; padding: 0 4px; color: #7D8590; font-size: 11px">{{f.unit}}</span>
+<button class="step" aria-label="Increase {{f.label}}" onClick="{{f.inc}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-left: 1px solid #2E333B; color: #9AA1AC">+</button>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+
+<sc-if value="{{audioOnly}}" hint-placeholder-val="{{ false }}">
+<div style="color: #9AA1AC">Audio only: no picture, so nothing to place. Its level is in the Mixer.</div>
+</sc-if>
+<sc-if value="{{kfLock}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; gap: 8px; padding: 8px 10px; background: rgba(176,124,255,0.10); border: 1px solid #4E3A7A; border-radius: 6px; color: #D9C6FF; font-size: 12px"><span aria-hidden="true">◆</span><span>{{kfLock}}</span></div>
+</sc-if>
+<sc-if value="{{srcSecs}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<button class="sechd" onClick="{{secBlend.toggle}}" aria-expanded="{{secBlend.open}}" style="display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; min-height: 24px; color: #9AA1AC; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-align: left"><span aria-hidden="true" style="width: 10px; font-size: 9px">{{secBlend.caret}}</span>BLENDING<span style="font-weight: 400; letter-spacing: 0; color: #5A606B">{{secBlend.hint}}</span></button>
+<sc-if value="{{secBlend.open}}" hint-placeholder-val="{{ true }}">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<label style="display: flex; flex-direction: column; gap: 4px; min-width: 0; color: #9AA1AC">Mode
+<select onChange="{{blend.change}}" value="{{blend.value}}" style="height: 30px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; color: #E6E8EB; padding: 0 6px; font: inherit">
+<sc-for list="{{blend.opts}}" as="o" hint-placeholder-count="9"><option value="{{o.o}}">{{o.o}}</option></sc-for>
+</select>
+</label>
+<sc-for list="{{blend.fields}}" as="f" hint-placeholder-count="1">
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+<span style="color: #9AA1AC">{{f.label}}</span>
+<div style="display: flex; align-items: stretch; height: 30px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; overflow: hidden">
+<button class="step" aria-label="Decrease {{f.label}}" onClick="{{f.dec}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-right: 1px solid #2E333B; color: #9AA1AC">−</button>
+<input class="nf" aria-label="{{f.label}}" title="Drag to change · Shift: fine · Ctrl: coarse · or type a value" value="{{f.display}}" onChange="{{f.change}}" onBlur="{{f.commit}}" onKeyDown="{{f.key}}" onPointerDown="{{f.down}}" onPointerMove="{{f.move}}" onPointerUp="{{f.up}}" inputmode="decimal" style="flex: 1 1 auto; min-width: 0; width: 100%; text-align: right; background: transparent; border: 0; color: #E6E8EB; padding: 0 2px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: ew-resize; touch-action: none">
+<span style="display: flex; align-items: center; padding: 0 4px; color: #7D8590; font-size: 11px">{{f.unit}}</span>
+<button class="step" aria-label="Increase {{f.label}}" onClick="{{f.inc}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-left: 1px solid #2E333B; color: #9AA1AC">+</button>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<button class="sechd" onClick="{{secSwitch.toggle}}" aria-expanded="{{secSwitch.open}}" style="display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; min-height: 24px; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC; text-align: left"><span aria-hidden="true" style="width: 10px; font-size: 9px">{{secSwitch.caret}}</span>SCENE SWITCHES<span style="font-weight: 400; letter-spacing: 0; color: #5A606B">{{secSwitch.hint}}</span></button>
+<sc-if value="{{secSwitch.open}}" hint-placeholder-val="{{ true }}">
+<sc-for list="{{sw.fields}}" as="f" hint-placeholder-count="1">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="flex: 1 1 auto; color: #9AA1AC">{{f.label}}</span>
+<div style="display: flex; align-items: stretch; width: 128px; height: 28px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; overflow: hidden">
+<button class="step" aria-label="Decrease {{f.label}}" onClick="{{f.dec}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-right: 1px solid #2E333B; color: #9AA1AC">−</button>
+<input class="nf" aria-label="{{f.label}}" title="Drag to change · Shift: fine · Ctrl: coarse · or type a value" value="{{f.display}}" onChange="{{f.change}}" onBlur="{{f.commit}}" onKeyDown="{{f.key}}" onPointerDown="{{f.down}}" onPointerMove="{{f.move}}" onPointerUp="{{f.up}}" inputmode="decimal" style="flex: 1 1 auto; min-width: 0; width: 100%; text-align: right; background: transparent; border: 0; color: #E6E8EB; padding: 0 2px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: ew-resize; touch-action: none">
+<span style="display: flex; align-items: center; padding: 0 4px; color: #7D8590; font-size: 11px">{{f.unit}}</span>
+<button class="step" aria-label="Increase {{f.label}}" onClick="{{f.inc}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-left: 1px solid #2E333B; color: #9AA1AC">+</button>
+</div>
+
+</div>
+</sc-for>
+<sc-for list="{{sw.selects}}" as="f" hint-placeholder-count="4">
+<label style="display: flex; align-items: center; gap: 8px; color: #9AA1AC">
+<span style="flex: 1 1 auto">{{f.label}}</span>
+<select onChange="{{f.change}}" value="{{f.value}}" style="width: 150px; height: 28px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; color: #E6E8EB; padding: 0 4px; font: inherit">
+<sc-for list="{{f.opts}}" as="o" hint-placeholder-count="3"><option value="{{o.o}}">{{o.o}}</option></sc-for>
+</select>
+</label>
+</sc-for>
+</sc-if>
+</div>
+
+</sc-if>
+
+<sc-for list="{{listSections}}" as="sec" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<button class="sechd" onClick="{{sec.toggle}}" aria-expanded="{{sec.open}}" style="display: flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; min-height: 24px; color: #9AA1AC; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; text-align: left"><span aria-hidden="true" style="width: 10px; font-size: 9px">{{sec.caret}}</span>{{sec.title}}<span style="font-weight: 400; letter-spacing: 0; color: #5A606B">{{sec.hint}}</span></button>
+<sc-if value="{{sec.open}}" hint-placeholder-val="{{ true }}">
+<sc-for list="{{sec.fields}}" as="f" hint-placeholder-count="1">
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #1F232A; border-radius: 5px">
+<span style="flex: 1 1 auto; min-width: 0">{{f.label}}</span>
+<div style="display: flex; align-items: stretch; width: 128px; height: 28px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; overflow: hidden">
+<button class="step" aria-label="Decrease {{f.label}}" onClick="{{f.dec}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-right: 1px solid #2E333B; color: #9AA1AC">−</button>
+<input class="nf" aria-label="{{f.label}}" title="Drag to change · Shift: fine · Ctrl: coarse · or type a value" value="{{f.display}}" onChange="{{f.change}}" onBlur="{{f.commit}}" onKeyDown="{{f.key}}" onPointerDown="{{f.down}}" onPointerMove="{{f.move}}" onPointerUp="{{f.up}}" inputmode="decimal" style="flex: 1 1 auto; min-width: 0; width: 100%; text-align: right; background: transparent; border: 0; color: #E6E8EB; padding: 0 2px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: ew-resize; touch-action: none">
+<span style="display: flex; align-items: center; padding: 0 4px; color: #7D8590; font-size: 11px">{{f.unit}}</span>
+<button class="step" aria-label="Increase {{f.label}}" onClick="{{f.inc}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-left: 1px solid #2E333B; color: #9AA1AC">+</button>
+</div>
+</div>
+</sc-for>
+<sc-if value="{{sec.empty}}" hint-placeholder-val="{{ false }}"><div style="color: #7D8590">None</div></sc-if>
+<button style="align-self: flex-start; background: none; border: 0; color: #8AB4FF; padding: 2px 0">{{sec.add}}</button>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{is.transform}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="color: #9AA1AC">{{tx.summary}}</div>
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="color: #9AA1AC; flex: 0 0 auto">Align to</span>
+<div role="group" aria-label="Align to" style="display: flex; gap: 2px; background: #0F1115; border: 1px solid #2E333B; border-radius: 6px; padding: 2px">
+<button onClick="{{tx.setSelection}}" aria-pressed="{{tx.alignToSelection}}" style="background: {{tx.selBg}}; opacity: {{tx.selOp}}; border: 0; color: #E6E8EB; padding: 4px 10px; border-radius: 4px">Selection</button>
+<button onClick="{{tx.setCanvas}}" style="background: {{tx.canvasBg}}; border: 0; color: #E6E8EB; padding: 4px 10px; border-radius: 4px">Canvas</button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">ALIGN</div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px">
+<sc-for list="{{tx.alignBtns}}" as="b" hint-placeholder-count="6">
+<button class="ib" onClick="{{b.go}}" disabled="{{b.disabled}}" aria-label="{{b.label}}" title="{{b.label}}" style="height: 32px; opacity: {{b.op}}; background: #0F1115; border: 1px solid #2E333B; border-radius: 5px; color: #C9CED6; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="{{b.d}}"></path></svg>
+</button>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">DISTRIBUTE · 3 OR MORE</div>
+<div style="display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px">
+<sc-for list="{{tx.distBtns}}" as="b" hint-placeholder-count="2">
+<button class="ib" onClick="{{b.go}}" disabled="{{b.disabled}}" aria-label="{{b.label}}" title="{{b.label}}" style="height: 32px; opacity: {{b.op}}; background: #0F1115; border: 1px solid #2E333B; border-radius: 5px; color: #C9CED6; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="{{b.d}}"></path></svg>
+</button>
+</sc-for>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">ARRANGE</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px">
+<sc-for list="{{tx.actions}}" as="a" hint-placeholder-count="9">
+<button class="ib" onClick="{{a.go}}" disabled="{{a.disabled}}" style="opacity: {{a.op}}; background: #1F232A; border: 1px solid #2E333B; border-radius: 5px; color: #E6E8EB; padding: 6px 8px; text-align: left; font-size: 12px">{{a.label}}</button>
+</sc-for>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{is.ytstats}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="display: flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 11px; background: {{yt.pillBg}}; border: 1px solid {{yt.pillBorder}}; font-size: 11px; font-weight: 600; letter-spacing: 0.6px; color: #E6E8EB">
+<span style="width: 7px; height: 7px; border-radius: 50%; background: {{yt.dot}}"></span>{{yt.status}}</span>
+<span style="flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #9AA1AC">{{yt.title}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; color: #E6E8EB">{{yt.uptime}}</span>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
+<sc-for list="{{yt.tiles}}" as="t" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: #1F232A; border-radius: 6px">
+<span style="font-size: 11px; color: #9AA1AC">{{t.label}}</span>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 20px; color: #E6E8EB">{{t.value}}</span>
+<span style="font-size: 11px; color: #7D8590">{{t.sub}}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: #1F232A; border-radius: 6px">
+<svg role="img" aria-label="{{yt.healthLabel}}" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="{{yt.healthColor}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{yt.healthIcon}}"></path></svg>
+<div style="display: flex; flex-direction: column; min-width: 0">
+<span style="color: #E6E8EB">Stream health: {{yt.healthLabel}}</span>
+<span style="font-size: 11px; color: #9AA1AC">{{yt.healthNote}}</span>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<span style="font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">BITRATE · LAST 2 MIN</span>
+<span style="font-family: 'IBM Plex Mono', monospace; color: #E6E8EB">{{yt.bitrateNow}}</span>
+</div>
+<sc-if value="{{yt.hasChart}}" hint-placeholder-val="{{ true }}">
+<div style="position: relative">
+<svg role="img" aria-label="{{yt.chartLabel}}" viewBox="0 0 240 64" preserveAspectRatio="none" onPointerMove="{{yt.hoverMove}}" onPointerLeave="{{yt.hoverLeave}}" style="display: block; width: 100%; height: 72px; cursor: crosshair">
+<line x1="0" y1="{{yt.targetY}}" x2="240" y2="{{yt.targetY}}" stroke="#3A3F48" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"></line>
+<line x1="0" y1="63.5" x2="240" y2="63.5" stroke="#2E333B" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+<polyline points="{{yt.points}}" fill="none" stroke="#4C8DFF" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"></polyline>
+<sc-if value="{{yt.hoverOn}}" hint-placeholder-val="{{ false }}">
+<line x1="{{yt.hoverX}}" y1="0" x2="{{yt.hoverX}}" y2="64" stroke="#9AA1AC" stroke-width="1" vector-effect="non-scaling-stroke"></line>
+</sc-if>
+</svg>
+<sc-if value="{{yt.hoverOn}}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: {{yt.hoverPct}}%; top: {{yt.hoverDotPct}}%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #4C8DFF; box-shadow: 0 0 0 2px #16191E; pointer-events: none"></div>
+<div style="position: absolute; left: {{yt.tipLeft}}%; top: -6px; transform: translate({{yt.tipShift}}, -100%); padding: 4px 8px; background: #0F1115; border: 1px solid #2E333B; border-radius: 5px; font-size: 11px; white-space: nowrap; pointer-events: none">
+<span style="font-family: 'IBM Plex Mono', monospace; color: #E6E8EB">{{yt.tipValue}}</span>
+<span style="color: #9AA1AC"> · {{yt.tipWhen}}</span>
+</div>
+</sc-if>
+<div style="display: flex; justify-content: space-between; font-size: 11px; color: #7D8590; padding-top: 2px"><span>2 min ago</span><span>target {{yt.target}} · dashed</span><span>now</span></div>
+</div>
+</sc-if>
+<sc-if value="{{yt.noChart}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; align-items: center; justify-content: center; height: 72px; border: 1px dashed #2E333B; border-radius: 6px; color: #7D8590; font-size: 12px">No data yet. Go Live to start the stream.</div>
+</sc-if>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 6px">
+<sc-for list="{{yt.details}}" as="d" hint-placeholder-count="6">
+<div style="display: flex; justify-content: space-between; gap: 12px"><span style="color: #9AA1AC">{{d.k}}</span><span style="font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #E6E8EB; text-align: right">{{d.v}}</span></div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{is.filters}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; gap: 8px">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#9AA1AC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{fl.icon}}"></path></svg>
+<div style="display: flex; flex-direction: column; min-width: 0">
+<span style="font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{fl.title}}</span>
+<span style="font-size: 11px; color: #9AA1AC">{{fl.note}}</span>
+</div>
+</div>
+<sc-for list="{{fl.sections}}" as="sec" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<div style="display: flex; align-items: center; gap: 8px; min-height: 24px">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#9AA1AC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{sec.icon}}"></path></svg>
+<span style="flex: 1 1 auto; font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">{{sec.title}}</span>
+<span style="font-size: 11px; color: #7D8590">{{sec.count}}</span>
+</div>
+<sc-for list="{{sec.items}}" as="f" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column">
+<div class="row" draggable="true" onDragStart="{{f.dragStart}}" onDragEnd="{{f.dragEnd}}" onDragOver="{{f.dragOver}}" onDrop="{{f.drop}}" onDoubleClick="{{f.edit}}" title="Double-click for its settings · drag to reorder" style="display: flex; align-items: center; gap: 4px; height: 30px; padding: 0 4px; border-radius: 5px; background: #1F232A; cursor: grab; box-shadow: {{f.dropLine}}">
+<button class="ib" onClick="{{f.toggle}}" aria-pressed="{{f.on}}" aria-label="{{f.toggleLabel}}" title="{{f.toggleLabel}}" style="flex: 0 0 24px; height: 24px; background: none; border: 0; border-radius: 4px; color: {{f.eyeColor}}; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{f.eye}}"></path></svg>
+</button>
+<button onClick="{{f.click}}" aria-expanded="{{f.open}}" title="{{f.clickTitle}}" style="flex: 1 1 auto; min-width: 0; height: 100%; display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 0 2px; text-align: left; cursor: pointer">
+<span style="flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: {{f.color}}; text-decoration: {{f.strike}}">{{f.name}}</span>
+<span style="flex: 0 1 auto; min-width: 0; max-width: 55%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; color: {{f.sumColor}}; font-style: {{f.sumStyle}}; font-family: {{f.sumFont}}">{{f.summary}}</span>
+<span aria-hidden="true" style="flex: 0 0 14px; text-align: center; color: #7D8590; font-size: 11px">{{f.caret}}</span>
+</button>
+<button class="ib hov" onClick="{{f.remove}}" aria-label="Remove {{f.name}}" title="Remove" style="flex: 0 0 24px; height: 24px; background: none; border: 0; border-radius: 4px; color: #9AA1AC; padding: 0">×</button>
+</div>
+<sc-if value="{{f.open}}" hint-placeholder-val="{{ false }}">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 6px 8px 10px; background: #1A1D23; border: 1px solid #2E333B; border-top: 0; border-radius: 0 0 6px 6px; margin-top: -2px">
+<sc-for list="{{f.fields}}" as="p" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column; gap: 4px; min-width: 0; grid-column: {{p.span}}">
+<span style="color: #9AA1AC; font-size: 12px">{{p.label}}</span>
+<sc-if value="{{p.isNum}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; align-items: stretch; height: 28px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; overflow: hidden">
+<button class="step" aria-label="Decrease {{p.label}}" onClick="{{p.dec}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-right: 1px solid #2E333B; color: #9AA1AC">−</button>
+<input class="nf" aria-label="{{p.label}}" title="Drag to change · Shift: fine · Ctrl: coarse · or type a value" value="{{p.display}}" onChange="{{p.change}}" onBlur="{{p.commit}}" onKeyDown="{{p.key}}" onPointerDown="{{p.down}}" onPointerMove="{{p.move}}" onPointerUp="{{p.up}}" inputmode="decimal" style="flex: 1 1 auto; min-width: 0; width: 100%; text-align: right; background: transparent; border: 0; color: #E6E8EB; padding: 0 2px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: ew-resize; touch-action: none">
+<span style="display: flex; align-items: center; padding: 0 4px; color: #7D8590; font-size: 11px">{{p.unit}}</span>
+<button class="step" aria-label="Increase {{p.label}}" onClick="{{p.inc}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-left: 1px solid #2E333B; color: #9AA1AC">+</button>
+</div>
+
+</sc-if>
+<sc-if value="{{p.isSelect}}" hint-placeholder-val="{{ false }}">
+<select aria-label="{{p.label}}" onChange="{{p.change}}" value="{{p.value}}" style="height: 28px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; color: #E6E8EB; padding: 0 4px; font: inherit">
+<sc-for list="{{p.opts}}" as="o" hint-placeholder-count="3"><option value="{{o.v}}">{{o.l}}</option></sc-for>
+</select>
+</sc-if>
+<sc-if value="{{p.isText}}" hint-placeholder-val="{{ false }}">
+<input aria-label="{{p.label}}" value="{{p.value}}" onChange="{{p.change}}" style="height: 28px; box-sizing: border-box; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; color: #E6E8EB; padding: 0 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px">
+</sc-if>
+<sc-if value="{{p.isColor}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; gap: 5px; flex-wrap: wrap">
+<sc-for list="{{p.swatches}}" as="w" hint-placeholder-count="6">
+<button onClick="{{w.pick}}" aria-label="Color {{w.c}}" style="width: 20px; height: 20px; border-radius: 50%; background: {{w.c}}; border: 2px solid {{w.ring}}; padding: 0"></button>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</div>
+</sc-for>
+<sc-if value="{{sec.empty}}" hint-placeholder-val="{{ false }}">
+<div style="padding: 10px 8px; color: #7D8590; text-align: center; border: 1px dashed #2E333B; border-radius: 6px; font-size: 12px">{{sec.emptyText}}</div>
+</sc-if>
+</div>
+</sc-for>
+<sc-if value="{{fl.canAdd}}" hint-placeholder-val="{{ true }}">
+<button class="ib" onClick="{{fl.add}}" style="align-self: flex-start; display: flex; align-items: center; gap: 6px; background: #1F232A; border: 1px solid #2E333B; color: #E6E8EB; padding: 6px 12px; border-radius: 6px">+ Add filter…</button>
+</sc-if>
+<sc-if value="{{fl.noTarget}}" hint-placeholder-val="{{ false }}"><div style="color: #7D8590">Select a source or a scene.</div></sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{is.chat}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 8px; height: calc(100cqh - 16px); min-height: 220px">
+<div style="display: flex; align-items: center; gap: 8px; color: #9AA1AC; font-size: 12px">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: #FF5C63"></span>
+<span style="color: #E6E8EB; font-weight: 600">YouTube live chat</span>
+<span style="flex: 1 1 auto"></span>
+<span style="font-family: 'IBM Plex Mono', monospace">1,284 watching</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #1F232A; border-radius: 5px; font-size: 12px; color: #9AA1AC">
+<svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#E8A33D" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v4 M8 3h8l-1 6 3 3v2H6v-2l3-3z"></path></svg>
+<span>Pinned: <span style="color: #E6E8EB">Repo is github.com/jeffmhopkins/JStream</span></span>
+</div>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; overflow: auto; min-height: 80px">
+<sc-for list="{{chat}}" as="c" hint-placeholder-count="6">
+<li class="row" style="display: flex; align-items: flex-start; gap: 8px; padding: 5px 6px; border-radius: 5px; background: {{c.bg}}; border-left: 3px solid {{c.edge}}">
+<div style="flex: 1 1 auto; min-width: 0; line-height: 1.4">
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #7D8590; margin-right: 6px">{{c.time}}</span>
+<span style="font-size: 11px; color: {{c.badgeColor}}; margin-right: 4px">{{c.badge}}</span>
+<span style="font-weight: 600; color: {{c.color}}; margin-right: 6px">{{c.author}}</span>
+<span style="color: #E6E8EB">{{c.text}}</span>
+</div>
+<button class="hov ib" onClick="{{c.feature}}" title="Show this message on stream" aria-label="Show message from {{c.author}} on stream" style="flex: 0 0 auto; height: 22px; padding: 0 6px; background: #1F232A; border: 1px solid #2E333B; border-radius: 4px; color: #9AA1AC; font-size: 11px">{{c.featureLabel}}</button>
+</li>
+</sc-for>
+</ol>
+<div style="flex: 0 0 auto; display: flex; gap: 6px; margin: 0; padding-top: 6px; border-top: 1px solid #262A31">
+<input aria-label="Chat message" placeholder="Chat as JStream…" value="{{chatDraft}}" onChange="{{onChatDraft}}" onKeyDown="{{chatKey}}" style="flex: 1 1 auto; min-width: 0; height: 30px; box-sizing: border-box; background: #0F1115; border: 1px solid #2E333B; border-radius: 5px; color: #E6E8EB; padding: 0 8px">
+<button type="button" onClick="{{sendChat}}" style="height: 30px; padding: 0 12px; background: #22324A; border: 1px solid #4C8DFF; border-radius: 5px; color: #E6E8EB">Send</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{is.mixer}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<sc-if value="{{mixHorzMode}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 8px; padding: 10px; background: #1F232A; border: 1px solid #2E333B; border-radius: 8px">
+<div style="display: flex; align-items: center; gap: 8px">
+<button onClick="{{mixToggle}}" aria-expanded="{{mixOpen}}" title="Show or hide the channels feeding the master" style="flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; background: none; border: 0; color: #E6E8EB; padding: 0; text-align: left"><span aria-hidden="true" style="width: 10px; color: #7D8590; font-size: 10px">{{mixCaret}}</span><span style="font-weight: 600">Master · program output</span><span style="font-size: 12px; color: #7D8590">{{mixCount}}</span></button>
+<button class="ib" onClick="{{ms.toggleMonitor}}" aria-pressed="{{ms.monitorPost}}" title="What your headphones hear" style="background: none; border: 1px solid #2E333B; color: #C9CED6; padding: 3px 8px; border-radius: 5px; font-size: 12px">{{ms.monitorLabel}}</button>
+<button class="ib" onClick="{{ms.openFx}}" title="Filters on the program output" style="background: #22324A; border: 1px solid #4C8DFF; color: #E6E8EB; padding: 3px 10px; border-radius: 5px; font-size: 12px">FX {{ms.fx}}</button>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+<span style="flex: 0 0 120px; color: #9AA1AC; font-size: 12px">Loudness</span>
+<div style="flex: 1 1 120px; height: 7px; background: #22262D; border-radius: 4px; overflow: hidden; position: relative"><div style="width: {{ms.short}}%; height: 100%; background: #3FB27F"></div><div title="Target" style="position: absolute; left: 70%; top: -2px; bottom: -2px; width: 2px; background: #E6E8EB"></div></div>
+<span style="flex: 0 0 128px; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px">{{ms.lufs}} LUFS</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px">
+<span style="flex: 0 0 120px; color: #9AA1AC; font-size: 12px">True peak</span>
+<span style="flex: 1 1 auto; font-size: 12px; color: {{ms.tpColor}}">{{ms.tpNote}}</span>
+<span style="flex: 0 0 128px; text-align: right; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: {{ms.tpColor}}">{{ms.tp}} dBTP</span>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{mixHorz}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 10px; margin-left: 10px; padding: 4px 0 2px 12px; border-left: 2px solid #2E333B">
+<sc-for list="{{channels}}" as="c" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+<span style="flex: 0 0 120px; min-width: 0">{{c.label}}</span>
+<div style="flex: 1 1 120px; height: 7px; background: #22262D; border-radius: 4px; overflow: hidden"><div style="width: {{c.level}}%; height: 100%; background: #3FB27F"></div></div>
+<div style="display: flex; align-items: stretch; width: 128px; height: 28px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; overflow: hidden">
+<button class="step" aria-label="Decrease {{c.label}}" onClick="{{c.dec}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-right: 1px solid #2E333B; color: #9AA1AC">−</button>
+<input class="nf" aria-label="{{c.label}} gain" title="Drag to change · Shift: fine · Ctrl: coarse · or type a value" value="{{c.display}}" onChange="{{c.change}}" onBlur="{{c.commit}}" onKeyDown="{{c.key}}" onPointerDown="{{c.down}}" onPointerMove="{{c.move}}" onPointerUp="{{c.up}}" inputmode="decimal" style="flex: 1 1 auto; min-width: 0; width: 100%; text-align: right; background: transparent; border: 0; color: #E6E8EB; padding: 0 2px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: ew-resize; touch-action: none">
+<span style="display: flex; align-items: center; padding: 0 4px; color: #7D8590; font-size: 11px">{{c.unit}}</span>
+<button class="step" aria-label="Increase {{c.label}}" onClick="{{c.inc}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-left: 1px solid #2E333B; color: #9AA1AC">+</button>
+</div>
+</div>
+</sc-for>
+</div>
+</sc-if>
+<sc-if value="{{mixVertMode}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px">
+<div style="flex: 0 0 84px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px; background: #1F232A; border: 1px solid #2E333B; border-radius: 6px">
+<button onClick="{{mixToggle}}" aria-expanded="{{mixOpen}}" title="Show or hide the channels feeding the master" style="display: flex; align-items: center; gap: 4px; background: none; border: 0; color: #E6E8EB; padding: 0; font-size: 11px; font-weight: 600"><span aria-hidden="true" style="color: #7D8590; font-size: 9px">{{mixCaret}}</span>Master</button>
+<span style="font-size: 10px; color: #7D8590">{{mixCount}}</span>
+<div title="Loudness · white line = target" style="position: relative; width: 14px; height: 150px; background: #22262D; border-radius: 5px; overflow: hidden">
+<div style="position: absolute; left: 0; right: 0; bottom: 0; height: {{ms.short}}%; background: #3FB27F"></div>
+<div style="position: absolute; left: -2px; right: -2px; bottom: 70%; height: 2px; background: #E6E8EB"></div>
+</div>
+<span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px">{{ms.lufs}}</span>
+<span style="font-size: 10px; color: #7D8590; margin-top: -4px">LUFS</span>
+<span title="True peak" style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: {{ms.tpColor}}">{{ms.tp}}</span>
+<span style="font-size: 10px; color: #7D8590; margin-top: -4px">dBTP</span>
+<button class="ib" onClick="{{ms.openFx}}" title="Filters on the program output" style="width: 60px; background: #22324A; border: 1px solid #4C8DFF; color: #E6E8EB; padding: 3px 0; border-radius: 5px; font-size: 11px">FX {{ms.fx}}</button>
+<button class="ib" onClick="{{ms.toggleMonitor}}" aria-pressed="{{ms.monitorPost}}" title="{{ms.monitorLabel}}" style="width: 60px; background: none; border: 1px solid #2E333B; color: #C9CED6; padding: 3px 0; border-radius: 5px; font-size: 10px">{{ms.monitorShort}}</button>
+</div>
+<sc-if value="{{mixOpen}}" hint-placeholder-val="{{ false }}">
+<div style="flex: 0 0 2px; align-self: stretch; background: #2E333B; border-radius: 1px"></div>
+<sc-for list="{{channels}}" as="c" hint-placeholder-count="3">
+<div style="flex: 0 0 64px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 4px; background: #1A1D23; border: 1px solid #262A31; border-radius: 6px">
+<span title="{{c.label}}" style="width: 100%; text-align: center; font-size: 11px; color: #C9CED6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.short}}</span>
+<div style="position: relative; width: 10px; height: 150px; background: #22262D; border-radius: 5px; overflow: hidden">
+<div style="position: absolute; left: 0; right: 0; bottom: 0; height: {{c.level}}%; background: #3FB27F"></div>
+</div>
+<button class="step" aria-label="Increase {{c.label}}" onClick="{{c.inc}}" style="width: 48px; height: 20px; background: #1F232A; border: 1px solid #2E333B; border-radius: 4px; color: #9AA1AC; padding: 0">+</button>
+<input class="nf" aria-label="{{c.label}} gain" title="Drag to change · Shift: fine · Ctrl: coarse · or type a value" value="{{c.display}}" onChange="{{c.change}}" onBlur="{{c.commit}}" onKeyDown="{{c.key}}" onPointerDown="{{c.down}}" onPointerMove="{{c.move}}" onPointerUp="{{c.up}}" inputmode="decimal" style="width: 52px; height: 24px; box-sizing: border-box; text-align: center; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; color: #E6E8EB; padding: 0 2px; font-family: 'IBM Plex Mono', monospace; font-size: 11px; cursor: ns-resize; touch-action: none">
+<button class="step" aria-label="Decrease {{c.label}}" onClick="{{c.dec}}" style="width: 48px; height: 20px; background: #1F232A; border: 1px solid #2E333B; border-radius: 4px; color: #9AA1AC; padding: 0">−</button>
+<span style="font-size: 10px; color: #7D8590">dB</span>
+</div>
+</sc-for>
+</sc-if>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{is.outputs}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<sc-for list="{{outs}}" as="o" hint-placeholder-count="4">
+<div class="row" style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 {{o.indent}}px; border-radius: 5px; background: {{o.bg}}">
+<span style="flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: {{o.weight}}">{{o.name}}</span>
+<span style="flex: 0 0 auto; color: #9AA1AC; font-size: 12px">{{o.status}}</span>
+<button class="ib" onClick="{{o.open}}" title="{{o.tip}}" style="flex: 0 0 auto; min-width: 44px; background: {{o.fxBg}}; border: 1px solid {{o.fxBorder}}; color: #E6E8EB; padding: 2px 8px; border-radius: 5px; font-size: 11px">FX {{o.fx}}</button>
+</div>
+</sc-for>
+<span style="font-size: 11px; color: #7D8590; padding-top: 4px">Program filters apply to every output; each output can add its own after them.</span>
+</div>
+</sc-if>
+
+<sc-if value="{{is.transitions}}" hint-placeholder-val="{{ false }}">
+<div style="display: flex; flex-direction: column; gap: 14px">
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 11px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">PRESETS</span>
+<span style="font-size: 11px; color: #7D8590">Pick a preset to edit it. Scenes use the default unless you override it: right-click a scene, or set it in its Properties or the Inspector.</span>
+<select aria-label="Preset to edit" onChange="{{tr.pickEdit}}" value="{{tr.editId}}" style="height: 30px; background: #0F1115; border: 1px solid #2E333B; border-radius: 5px; color: #E6E8EB; padding: 0 6px; font: inherit">
+<sc-for list="{{tr.presetOpts}}" as="o" hint-placeholder-count="4"><option value="{{o.id}}">{{o.label}}</option></sc-for>
+</select>
+<sc-if value="{{tr.hasEdit}}" hint-placeholder-val="{{ true }}">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label style="display: flex; align-items: center; gap: 8px; color: #9AA1AC"><span style="flex: 1 1 auto">Name</span>
+<input value="{{tr.ed.name}}" onChange="{{tr.ed.setName}}" style="width: 160px; height: 28px; box-sizing: border-box; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; color: #E6E8EB; padding: 0 8px"></label>
+<div role="radiogroup" aria-label="Type" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; background: #0F1115; border: 1px solid #2E333B; border-radius: 6px; padding: 2px">
+<sc-for list="{{tr.ed.kinds}}" as="k" hint-placeholder-count="3">
+<button role="radio" aria-checked="{{k.on}}" onClick="{{k.pick}}" style="background: {{k.bg}}; border: 0; color: #E6E8EB; padding: 6px 4px; border-radius: 4px; font-size: 12px">{{k.name}}</button>
+</sc-for>
+</div>
+<sc-for list="{{tr.ed.fields}}" as="f" hint-placeholder-count="1">
+<div style="display: flex; align-items: center; gap: 8px">
+<span style="flex: 1 1 auto; color: #9AA1AC">{{f.label}}</span>
+<div style="display: flex; align-items: stretch; width: 128px; height: 28px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; overflow: hidden">
+<button class="step" aria-label="Decrease {{f.label}}" onClick="{{f.dec}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-right: 1px solid #2E333B; color: #9AA1AC">−</button>
+<input class="nf" aria-label="{{f.label}}" title="Drag to change · Shift: fine · Ctrl: coarse · or type a value" value="{{f.display}}" onChange="{{f.change}}" onBlur="{{f.commit}}" onKeyDown="{{f.key}}" onPointerDown="{{f.down}}" onPointerMove="{{f.move}}" onPointerUp="{{f.up}}" inputmode="decimal" style="flex: 1 1 auto; min-width: 0; width: 100%; text-align: right; background: transparent; border: 0; color: #E6E8EB; padding: 0 2px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; cursor: ew-resize; touch-action: none">
+<span style="display: flex; align-items: center; padding: 0 4px; color: #7D8590; font-size: 11px">{{f.unit}}</span>
+<button class="step" aria-label="Increase {{f.label}}" onClick="{{f.inc}}" style="flex: 0 0 22px; background: #1A1D23; border: 0; border-left: 1px solid #2E333B; color: #9AA1AC">+</button>
+</div>
+
+</div>
+</sc-for>
+<sc-for list="{{tr.ed.selects}}" as="f" hint-placeholder-count="1">
+<label style="display: flex; align-items: center; gap: 8px; color: #9AA1AC">
+<span style="flex: 1 1 auto">{{f.label}}</span>
+<select onChange="{{f.change}}" value="{{f.value}}" style="width: 128px; height: 28px; background: #0F1115; border: 1px solid #2E333B; border-radius: 4px; color: #E6E8EB; padding: 0 4px; font: inherit">
+<sc-for list="{{f.opts}}" as="o" hint-placeholder-count="3"><option value="{{o.o}}">{{o.o}}</option></sc-for>
+</select>
+</label>
+</sc-for>
+<span style="font-size: 11px; color: #7D8590">{{tr.ed.note}}</span>
+<div style="display: flex; gap: 8px">
+<sc-if value="{{tr.ed.canDefault}}" hint-placeholder-val="{{ true }}"><button class="ib" onClick="{{tr.ed.makeDefault}}" style="background: none; border: 1px solid #2E333B; color: #C9CED6; padding: 4px 10px; border-radius: 5px; font-size: 12px">Make default</button></sc-if>
+<sc-if value="{{tr.ed.canDefault}}" hint-placeholder-val="{{ true }}"><button class="ib" onClick="{{tr.ed.remove}}" style="background: none; border: 1px solid #2E333B; color: #FF8A8F; padding: 4px 10px; border-radius: 5px; font-size: 12px">Delete</button></sc-if>
+</div>
+</div>
+</sc-if>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{is.agent}}" hint-placeholder-val="{{ false }}">
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+<li style="display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #7D8590">MCP · 2 min ago</span><span>Switched to “Desktop + Cam”</span></li>
+<li style="display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #7D8590">MCP · 4 min ago</span><span>Mic gain −1.5 → −3.0 dB</span></li>
+</ol>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kind":{"editor":"enum","options":["scenes","objects","inspector","transform","filters","ytstats","chat","mixer","outputs","transitions","agent"],"default":"scenes"},"sel":{"editor":null},"picker":{"editor":null},"meta":{"editor":null},"metaset":{"editor":null},"xf":{"editor":null},"selids":{"editor":null},"tx":{"editor":null},"trees":{"editor":null},"treemove":{"editor":null},"treeadd":{"editor":null},"openctx":{"editor":null},"stream":{"editor":null},"filters":{"editor":null},"filtset":{"editor":null},"showpanel":{"editor":null},"names":{"editor":null},"openprops":{"editor":null},"setmixorient":{"editor":null},"mixorient":{"editor":null},"vertical":{"editor":null},"master":{"editor":null},"addfilter":{"editor":null},"editfilter":{"editor":null},"fltnew":{"editor":null},"keyframes":{"editor":null},"scenename":{"editor":null},"trans":{"editor":null},"srcinfo":{"editor":null},"mixer":{"editor":null},"dups":{"editor":null},"srcof":{"editor":null},"baseof":{"editor":null},"clones":{"editor":null},"xfset":{"editor":null},"xfpatch":{"editor":null},"$preview":{"width":320,"height":520}}'>
+// 24x24 stroke icons, one path each.
+const ICONS = {
+  monitor: ['Display', 'M3 5h18v11H3z M8 20h8 M12 16v4'],
+  window: ['Window', 'M3 5h18v14H3z M3 9h18 M6 7h.01 M9 7h.01'],
+  webcam: ['Webcam', 'M12 3a6 6 0 1 0 0 12a6 6 0 1 0 0-12z M12 7a2 2 0 1 0 0 4a2 2 0 1 0 0-4z M7 21h10 M12 15v6'],
+  mic: ['Microphone', 'M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z M5 11a7 7 0 0 0 14 0 M12 18v3 M8 21h8'],
+  speaker: ['Audio output', 'M4 9h4l5-4v14l-5-4H4z M17 9a4 4 0 0 1 0 6 M19.5 6.5a8 8 0 0 1 0 11'],
+  globe: ['Browser', 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M3 12h18 M12 3c3 3.5 3 14.5 0 18 M12 3c-3 3.5-3 14.5 0 18'],
+  image: ['Image', 'M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6 M15.5 7.5a1.5 1.5 0 1 0 0.01 0z'],
+  text: ['Text', 'M5 7V4h14v3 M12 4v16 M9 20h6'],
+  film: ['Video file', 'M3 5h18v14H3z M7 5v14 M17 5v14 M3 9h4 M3 15h4 M17 9h4 M17 15h4'],
+  palette: ['Color', 'M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-1-1.5-1-2.5 1-1.5 2-1.5h2a4 4 0 0 0 4-4c0-4.5-4-8-9-8z M7.5 11h.01 M10 7.5h.01 M14.5 7.5h.01'],
+  music: ['Music', 'M9 18V5l11-2v13 M9 18a3 3 0 1 1-6 0a3 3 0 1 1 6 0z M20 16a3 3 0 1 1-6 0a3 3 0 1 1 6 0z'],
+  layers: ['Scene', 'M12 3l9 5-9 5-9-5z M3 13l9 5 9-5'],
+  keyframe: ['Keyframe', 'M12 3l7 9-7 9-7-9z'],
+  spout: ['Shared video', 'M3 6h12v12H3z M15 10l6-3v10l-6-3'],
+  wave: ['Waveform', 'M2 12h2l2-6 3 12 3-14 3 16 3-10 2 4h2'],
+  bars: ['Spectrum', 'M4 20V12 M8 20V6 M12 20V9 M16 20V4 M20 20V14'],
+  folder: ['Folder', 'M3 6h6l2 2h10v11H3z'],
+  play: ['Starting', 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M10 8.5v7l6-3.5z'],
+  coffee: ['Break', 'M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z M16 11h2a2 2 0 0 1 0 4h-2 M8 3v3 M12 3v3'],
+  chat: ['Talk', 'M4 5h16v11H9l-5 4z'],
+  gamepad: ['Gameplay', 'M6 8h12a4 4 0 0 1 4 4v3a3 3 0 0 1-5.5 1.6L15 15H9l-1.5 1.6A3 3 0 0 1 2 15v-3a4 4 0 0 1 4-4z M7 10.5v3 M5.5 12h3 M16 11.5h.01 M18 13h.01'],
+  flag: ['Intro / outro', 'M5 21V4 M5 4h11l-2 4 2 4H5'],
+  clock: ['Countdown', 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M12 7v5l3 2'],
+  user: ['Person', 'M12 4a4 4 0 1 0 0 8a4 4 0 1 0 0-8z M4 21a8 8 0 0 1 16 0'],
+  hash: ['Topic', 'M5 9h15 M4 15h15 M10 3L8 21 M16 3l-2 18'],
+  star: ['Star', 'M12 3l2.8 5.8 6.2.9-4.5 4.4 1.1 6.2L12 17.4 6.4 20.3l1.1-6.2L3 9.7l6.2-.9z'],
+  heart: ['Heart', 'M12 20s-7-4.4-9-8.5C1.7 8.4 3.6 5 7 5c2 0 3.5 1.2 5 3 1.5-1.8 3-3 5-3 3.4 0 5.3 3.4 4 6.5-2 4.1-9 8.5-9 8.5z'],
+  bolt: ['Bolt', 'M13 3L5 14h6l-1 7 8-11h-6z'],
+  sparkle: ['Sponsor', 'M12 3v4 M12 17v4 M3 12h4 M17 12h4 M6 6l2.5 2.5 M15.5 15.5L18 18 M6 18l2.5-2.5 M15.5 8.5L18 6'],
+  bell: ['Alert', 'M6 16v-5a6 6 0 0 1 12 0v5l2 2H4z M10 21h4'],
+  tag: ['Tag', 'M3 3h8l10 10-8 8L3 11z M7.5 7.5h.01'],
+  eye: ['Visible', 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z'],
+  lock: ['Locked', 'M5 11h14v10H5z M8 11V7a4 4 0 0 1 8 0v4'],
+  wrench: ['Setup', 'M14.5 4a4.5 4.5 0 0 0-4.3 5.8L4 16l4 4 6.2-6.2A4.5 4.5 0 0 0 20 9.5l-2.7 2.7-2.8-.7-.7-2.8L16.5 6A4.5 4.5 0 0 0 14.5 4z']
+};
+const ICON_GROUPS = [
+  { title: 'Sources', ids: ['monitor', 'window', 'webcam', 'spout', 'mic', 'speaker', 'globe', 'image', 'text', 'film', 'palette', 'music', 'wave', 'bars'] },
+  { title: 'Scenes', ids: ['layers', 'folder', 'play', 'coffee', 'chat', 'gamepad', 'flag', 'clock', 'user', 'hash'] },
+  { title: 'General', ids: ['star', 'heart', 'bolt', 'sparkle', 'bell', 'tag', 'eye', 'lock', 'wrench'] }
+];
+const XF_KEY = { X: 'x', Y: 'y', W: 'w', H: 'h', rot: 'rot', rotX: 'rx', rotY: 'ry', posZ: 'z', persp: 'persp', opacity: 'opacity', cropLeft: 'cl', cropRight: 'cr', cropTop: 'ct', cropBottom: 'cb' };
+// Filters live on a source (or a scene) and apply wherever it is shown, top to bottom.
+// Video and audio are separate chains. A filter with a `scene` input uses another scene
+// (a mask shape, a displacement map...); that scene shows nested under the object.
+// Filters with three settings or fewer are "easy": they open in place in the Filters panel.
+const easyFilter = (T) => T.params.length > 0 && T.params.length <= 3;
+const N = (k, label, def, min, max, step, unit, dec) => ({ k, label, t: 'num', def, min, max, step, unit: unit || '', dec });
+const SEL = (k, label, opts, def) => ({ k, label, t: 'select', opts, def: def ?? opts[0] });
+const COL = (k, label, def) => ({ k, label, t: 'color', def });
+const TXT = (k, label, def) => ({ k, label, t: 'text', def });
+const SCN = (k, label) => ({ k, label, t: 'scene', def: '' });
+const FILTER_TYPES = {
+  // ---- Video
+  cc: { kind: 'video', group: 'Color and keying', name: 'Color correction', hint: 'Gamma, contrast, saturation, hue', params: [N('gamma', 'Gamma', 0, -3, 3, 0.05, '', 2), N('brightness', 'Brightness', 0, -100, 100, 1), N('contrast', 'Contrast', 0, -100, 100, 1), N('saturation', 'Saturation', 0, -100, 100, 1), N('hue', 'Hue shift', 0, -180, 180, 1, '°'), COL('mult', 'Color multiply', '#FFFFFF')] },
+  lut: { kind: 'video', group: 'Color and keying', name: 'Apply LUT', hint: 'A .cube or .png colour look', params: [TXT('file', 'LUT file', 'C:\\LUTs\\warm-film.cube'), N('amount', 'Amount', 100, 0, 100, 1, '%')] },
+  chroma: { kind: 'video', group: 'Color and keying', name: 'Chroma key', hint: 'Remove a green or blue screen', params: [SEL('key', 'Key color', ['Green', 'Blue', 'Magenta', 'Custom']), N('similarity', 'Similarity', 40, 0, 100, 1, '%'), N('smooth', 'Smoothness', 8, 0, 100, 1, '%'), N('spill', 'Spill reduction', 10, 0, 100, 1, '%')] },
+  colorkey: { kind: 'video', group: 'Color and keying', name: 'Color key', hint: 'Remove any one colour', params: [COL('color', 'Color', '#3FB27F'), N('similarity', 'Similarity', 30, 0, 100, 1, '%'), N('smooth', 'Smoothness', 5, 0, 100, 1, '%')] },
+  lumakey: { kind: 'video', group: 'Color and keying', name: 'Luma key', hint: 'Remove dark or bright areas', params: [N('min', 'Luma min', 0, 0, 100, 1, '%'), N('max', 'Luma max', 100, 0, 100, 1, '%'), N('smooth', 'Smoothness', 4, 0, 100, 1, '%')] },
+  sharpen: { kind: 'video', group: 'Detail', name: 'Sharpen', hint: 'Crisper detail', params: [N('amount', 'Amount', 0.2, 0, 1, 0.05, '', 2)] },
+  blur: { kind: 'video', group: 'Detail', name: 'Blur', hint: 'Gaussian, whole image or an area', params: [N('size', 'Size', 8, 0, 200, 1, 'px'), SEL('area', 'Area', ['Whole image', 'Rectangle']), N('ax', 'Area X', 0, 0, 1920, 1, 'px'), N('ay', 'Area Y', 0, 0, 1080, 1, 'px')] },
+  rounded: { kind: 'video', group: 'Style', name: 'Rounded corners', hint: 'Round the corners, optional border', params: [N('radius', 'Radius', 16, 0, 500, 1, 'px'), N('border', 'Border', 0, 0, 50, 1, 'px'), COL('bcolor', 'Border color', '#FFFFFF')] },
+  shadow: { kind: 'video', group: 'Style', name: 'Drop shadow', hint: 'Soft shadow behind', params: [N('dx', 'Offset X', 6, -200, 200, 1, 'px'), N('dy', 'Offset Y', 8, -200, 200, 1, 'px'), N('blur', 'Blur', 16, 0, 200, 1, 'px'), N('opacity', 'Opacity', 40, 0, 100, 1, '%'), COL('color', 'Color', '#0F1115')] },
+  outline: { kind: 'video', group: 'Style', name: 'Outline', hint: 'A stroke around the shape', params: [N('width', 'Width', 3, 0, 50, 1, 'px'), COL('color', 'Color', '#FFFFFF')] },
+  glow: { kind: 'video', group: 'Style', name: 'Glow', hint: 'Soft light around the shape', params: [N('size', 'Size', 20, 0, 200, 1, 'px'), N('strength', 'Strength', 60, 0, 100, 1, '%'), COL('color', 'Color', '#4C8DFF')] },
+  scroll: { kind: 'video', group: 'Motion and timing', name: 'Scroll', hint: 'Continuously scroll the image', params: [N('sx', 'Speed X', 80, -2000, 2000, 1, 'px/s'), N('sy', 'Speed Y', 0, -2000, 2000, 1, 'px/s')] },
+  vdelay: { kind: 'video', group: 'Motion and timing', name: 'Video delay', hint: 'Hold the picture back to match audio', params: [N('ms', 'Delay', 0, 0, 5000, 10, 'ms')] },
+  mask: { kind: 'video', group: 'Uses another scene', ref: 'mask', name: 'Alpha mask', hint: 'Cut out by another scene’s shape', params: [SCN('scene', 'Mask scene'), SEL('invert', 'Invert', ['No', 'Yes'])] },
+  matte: { kind: 'video', group: 'Uses another scene', ref: 'mask', name: 'Luma matte', hint: 'Bright areas of a scene show this', params: [SCN('scene', 'Matte scene'), SEL('invert', 'Invert', ['No', 'Yes'])] },
+  clip: { kind: 'video', group: 'Uses another scene', ref: 'mask', name: 'Clip to', hint: 'Only show inside another scene', params: [SCN('scene', 'Clip scene')] },
+  displace: { kind: 'video', group: 'Uses another scene', ref: 'fx', name: 'Displacement', hint: 'Warp by another scene’s brightness', params: [SCN('scene', 'Map scene'), N('strength', 'Strength', 20, 0, 200, 1, 'px')] },
+  shader: { kind: 'video', group: 'Advanced', name: 'Custom shader', hint: 'Your own WGSL effect, time-limited', params: [TXT('file', 'Shader file', 'effects\\crt.wgsl'), N('strength', 'Strength', 50, 0, 100, 1, '%')] },
+  // ---- Audio
+  gain: { kind: 'audio', group: 'Levels and dynamics', name: 'Gain', hint: 'Turn it up or down', params: [N('db', 'Gain', 0, -30, 30, 0.5, 'dB', 1)] },
+  comp: { kind: 'audio', group: 'Levels and dynamics', name: 'Compressor', hint: 'Even out loud and quiet', params: [N('ratio', 'Ratio', 4, 1, 32, 0.5, ':1', 1), N('thresh', 'Threshold', -18, -60, 0, 1, 'dB'), N('attack', 'Attack', 6, 1, 500, 1, 'ms'), N('release', 'Release', 60, 1, 1000, 1, 'ms'), N('out', 'Output gain', 0, -32, 32, 0.5, 'dB', 1), SEL('side', 'Duck under', ['Nothing', 'Mic · ES-9 Line', 'Desktop audio'])] },
+  limiter: { kind: 'audio', group: 'Levels and dynamics', name: 'Limiter', hint: 'Never go over a level', params: [N('thresh', 'Threshold', -6, -60, 0, 0.5, 'dB', 1), N('release', 'Release', 60, 1, 1000, 1, 'ms')] },
+  gate: { kind: 'audio', group: 'Levels and dynamics', name: 'Noise gate', hint: 'Silence below a level', params: [N('open', 'Open threshold', -26, -96, 0, 1, 'dB'), N('close', 'Close threshold', -32, -96, 0, 1, 'dB'), N('attack', 'Attack', 25, 1, 500, 1, 'ms'), N('release', 'Release', 150, 1, 1000, 1, 'ms')] },
+  noise: { kind: 'audio', group: 'Cleanup', name: 'Noise suppression', hint: 'RNNoise: remove fans and hum', params: [N('mix', 'Amount', 100, 0, 100, 1, '%')] },
+  invert: { kind: 'audio', group: 'Cleanup', name: 'Invert polarity', hint: 'Flip the waveform', params: [] },
+  eq: { kind: 'audio', group: 'Tone', name: 'EQ', hint: 'Shape low, mid and high', params: [N('low', 'Low', 0, -20, 20, 0.5, 'dB', 1), N('mid', 'Mid', 0, -20, 20, 0.5, 'dB', 1), N('high', 'High', 0, -20, 20, 0.5, 'dB', 1), N('midf', 'Mid frequency', 1000, 100, 8000, 10, 'Hz')] },
+  adelay: { kind: 'audio', group: 'Timing', name: 'Audio delay', hint: 'Hold the sound back to match video', params: [N('ms', 'Delay', 0, 0, 5000, 5, 'ms')] },
+  loudness: { kind: 'audio', group: 'Mastering', name: 'Loudness target', hint: 'Ride the level to a LUFS target', params: [N('target', 'Target', -14, -30, -6, 0.5, 'LUFS', 1), N('maxgain', 'Max boost', 12, 0, 24, 0.5, 'dB', 1), SEL('speed', 'Speed', ['Slow', 'Medium', 'Fast'], 'Slow')] },
+  tplimit: { kind: 'audio', group: 'Mastering', name: 'True-peak limiter', hint: 'A brick wall the encoder can’t clip', params: [N('ceiling', 'Ceiling', -1, -12, 0, 0.1, 'dBTP', 1), N('release', 'Release', 50, 1, 1000, 1, 'ms')] },
+  duck: { kind: 'audio', group: 'Mastering', name: 'Ducking', hint: 'Dip everything else while the mic talks', params: [SEL('trigger', 'Triggered by', ['Mic · ES-9 Line', 'Desktop audio']), N('amount', 'Amount', -12, -40, 0, 0.5, 'dB', 1), N('release', 'Release', 400, 10, 3000, 10, 'ms')] },
+  clap: { kind: 'audio', group: 'Plugins', name: 'CLAP plugin', hint: 'Host a CLAP audio effect', params: [SEL('plugin', 'Plugin', ['TDR Nova', 'Airwindows Consolidated', 'Surge XT Effects'])] }
+};
+const FILTERS0 = {
+  'obj:webcam': [
+    { id: 'fw1', type: 'cc', on: true, p: { saturation: 6 } },
+    { id: 'fw2', type: 'rounded', on: true, p: { radius: 24 } },
+    { id: 'fw3', type: 'mask', on: false, p: { scene: 'Cam shape' } },
+    { id: 'fw4', type: 'shadow', on: true, p: {} }
+  ],
+  'obj:display': [{ id: 'fd1', type: 'sharpen', on: true, p: {} }],
+  'obj:alerts': [{ id: 'fa1', type: 'chroma', on: false, p: {} }, { id: 'fa2', type: 'gain', on: true, p: { db: -6 } }, { id: 'fa3', type: 'limiter', on: true, p: {} }],
+  'obj:ticker': [{ id: 'ft1', type: 'scroll', on: true, p: {} }],
+  'obj:logo': [{ id: 'fl1', type: 'displace', on: true, p: { scene: 'Lower third pack', strength: 12 } }, { id: 'fl2', type: 'glow', on: true, p: {} }],
+  'out:program': [{ id: 'fp1', type: 'loudness', on: true, p: {} }, { id: 'fp2', type: 'comp', on: true, p: { ratio: 2, thresh: -12 } }, { id: 'fp3', type: 'tplimit', on: true, p: {} }, { id: 'fp4', type: 'lut', on: false, p: { file: 'C:\\LUTs\\stream-look.cube', amount: 40 } }],
+  'out:youtube': [{ id: 'fy1', type: 'sharpen', on: true, p: { amount: 0.15 } }],
+  'scene:Desktop + Cam': [{ id: 'fs1', type: 'lut', on: true, p: { amount: 60 } }],
+  'scene:Intro overlay': [{ id: 'fi1', type: 'cc', on: true, p: { contrast: 12, saturation: -8 } }, { id: 'fi2', type: 'glow', on: false, p: { size: 30 } }, { id: 'fi3', type: 'clip', on: true, p: { scene: 'Cam shape' } }],
+  'scene:Just Chatting': [{ id: 'fj1', type: 'lut', on: true, p: { file: 'C:\\LUTs\\teal-orange.cube', amount: 45 } }, { id: 'fj2', type: 'sharpen', on: true, p: { amount: 0.1 } }],
+  'scene:BRB': [{ id: 'fb1', type: 'blur', on: true, p: { size: 24 } }]
+};
+const SWATCHES = ['#4C8DFF', '#2EC4D6', '#3FB27F', '#E8A33D', '#E5484D', '#E86BA6', '#B07CFF', '#9AA1AC'];
+const DEFAULT_META = {
+  labels: [
+    { id: 'l1', name: 'Intro / outro', icon: 'flag', color: '#E8A33D' },
+    { id: 'l2', name: 'Gameplay', icon: 'gamepad', color: '#4C8DFF' },
+    { id: 'l3', name: 'Overlay', icon: 'layers', color: '#B07CFF' },
+    { id: 'l4', name: 'Sponsor', icon: 'sparkle', color: '#E86BA6' }
+  ],
+  assign: {
+    'scene:Starting Soon': ['l1'], 'scene:Ending': ['l1'], 'scene:Desktop + Cam': ['l2'],
+    'scene:Intro overlay': ['l3'], 'scene:Lower third pack': ['l3'],
+    'obj:alerts': ['l3'], 'obj:lower': ['l3'], 'obj:display': ['l2'], 'obj:ticker': ['l4']
+  },
+  favs: { 'scene:Desktop + Cam': true, 'scene:Just Chatting': true, 'obj:webcam': true }
+};
+const SCENES = [
+  { key: 'f:show', label: 'Show', depth: 0 },
+  { key: 'scene:Starting Soon', label: 'Starting Soon', icon: 'play', depth: 1 },
+  { key: 'scene:Desktop + Cam', label: 'Desktop + Cam', icon: 'layers', depth: 1 },
+  { key: 'scene:Just Chatting', label: 'Just Chatting', icon: 'chat', depth: 1 },
+  { key: 'f:overlays', label: 'Overlays', depth: 0 },
+  { key: 'scene:Intro overlay', label: 'Intro overlay', icon: 'layers', depth: 1 },
+  { key: 'scene:Lower third pack', label: 'Lower third pack', icon: 'layers', depth: 1 },
+  { key: 'scene:BRB', label: 'BRB', icon: 'coffee', depth: 0 },
+  { key: 'scene:Ending', label: 'Ending', icon: 'flag', depth: 0 }
+];
+const SCENE_INFO = {
+  'Starting Soon': { count: 3, usedIn: 'none', hotkey: 'F1', icon: 'play' },
+  'Desktop + Cam': { count: 5, usedIn: 'none', hotkey: 'F2', icon: 'layers' },
+  'Just Chatting': { count: 4, usedIn: 'none', hotkey: 'F3', icon: 'chat' },
+  'Intro overlay': { count: 2, usedIn: 'Desktop + Cam, BRB', hotkey: 'none', icon: 'layers' },
+  'Lower third pack': { count: 3, usedIn: 'Just Chatting', hotkey: 'none', icon: 'layers' },
+  'BRB': { count: 3, usedIn: 'none', hotkey: 'F4', icon: 'coffee' },
+  'Ending': { count: 2, usedIn: 'none', hotkey: 'F5', icon: 'flag' }
+};
+// Objects in this scene that reference a source owned by another scene. They show in
+// italics unless turned into an independent clone (right-click).
+const REF_KEYS = { 'obj:webcam': true, 'scene:Intro overlay': true };
+const OBJECTS = [
+  { key: 'obj:alerts', label: 'Alerts', icon: 'globe', depth: 0 },
+  { key: 'obj:lower', label: 'Lower third', icon: 'text', depth: 0 },
+  { key: 'obj:webcam', label: 'Webcam · Brio', icon: 'webcam', depth: 0 },
+  { key: 'scene:Intro overlay', label: 'Intro overlay', icon: 'layers', depth: 0 },
+  { key: 'obj:logo', label: 'Logo', icon: 'image', depth: 1 },
+  { key: 'obj:ticker', label: 'Ticker', icon: 'text', depth: 1 },
+  { key: 'obj:display', label: 'Display 1', icon: 'monitor', depth: 0 }
+];
+// Each source's own size; the W/H percentage fields scale relative to it.
+const NATIVE = { display: [3840, 2160], webcam: [1920, 1080], lower: [880, 64], alerts: [560, 240], logo: [512, 512], ticker: [1920, 40] };
+const BLEND_NAMES = ['Normal', 'Additive', 'Multiply', 'Screen', 'Overlay', 'Darken', 'Lighten', 'Difference', 'Exclusion'];
+const LINK_SHORT = { 'Alpha mask': 'mask', 'Luma matte': 'matte', 'Clip to': 'clip', 'Effect source': 'fx' };
+const EYE_ON = 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z';
+const EYE_OFF = 'M3 3l18 18 M10.6 6.1A9.9 9.9 0 0 1 12 6c6 0 10 6 10 6a17 17 0 0 1-3.2 3.8 M6.6 6.6A17 17 0 0 0 2 12s4 7 10 7a9.6 9.6 0 0 0 4.4-1.1 M9.9 9.9a3 3 0 0 0 4.2 4.2';
+const OUT_ICON = 'M2 8a10 10 0 0 1 20 0 M5 11a7 7 0 0 1 14 0 M8.5 14a3.5 3.5 0 0 1 7 0 M12 18h.01';
+const MASK_ICON = 'M4 4h16v16H4z M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z';
+const FX_ICON = 'M12 3v4 M12 17v4 M3 12h4 M17 12h4 M6 6l2.5 2.5 M15.5 15.5L18 18 M6 18l2.5-2.5 M15.5 8.5L18 6';
+const LINK_ICON = 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1';
+const OBJ_INFO = {
+  alerts: { title: 'Alerts', icon: 'globe', subtitle: 'Browser source · only in this scene', t: [1600, 60, 280, 120, 0], c: [0, 0, 0, 0],
+    effects: [], filters: [{ n: 'Chroma key similarity', v: 0, step: 1, unit: '%', min: 0, max: 100 }] },
+  lower: { title: 'Lower third', icon: 'text', subtitle: 'Text source · in 2 scenes', t: [77, 958, 880, 64, 0], c: [0, 0, 0, 0],
+    effects: [{ n: 'Slide in', v: 250, step: 10, unit: 'ms', min: 0, max: 5000 }], filters: [] },
+  webcam: { title: 'Webcam · Brio', icon: 'webcam', subtitle: 'Video capture · used in 3 scenes', t: [1384, 497, 460, 410, 0], c: [24, 24, 0, 0],
+    effects: [{ n: 'Rounded mask', v: 12, step: 1, unit: 'px', min: 0, max: 500 }, { n: 'Drop shadow', v: 40, step: 1, unit: '%', min: 0, max: 100 }],
+    filters: [{ n: 'Color temperature', v: 6, step: 1, unit: '', min: -100, max: 100 }, { n: 'Sharpen', v: 0.2, step: 0.05, unit: '', min: 0, max: 1, dec: 2 }] },
+  logo: { title: 'Logo', icon: 'image', subtitle: 'Image · inside “Intro overlay”', t: [40, 40, 180, 180, 0], c: [0, 0, 0, 0], effects: [], filters: [] },
+  ticker: { title: 'Ticker', icon: 'text', subtitle: 'Text · inside “Intro overlay”', t: [0, 1040, 1920, 40, 0], c: [0, 0, 0, 0],
+    effects: [{ n: 'Scroll speed', v: 80, step: 1, unit: 'px/s', min: 0, max: 1000 }], filters: [] },
+  display: { title: 'Display 1', icon: 'monitor', subtitle: 'Display capture · 3840 × 2160', t: [77, 65, 1267, 713, 0], c: [0, 0, 0, 0],
+    effects: [], filters: [{ n: 'Sharpen', v: 0.2, step: 0.05, unit: '', min: 0, max: 1, dec: 2 }] }
+};
+const CHAT = [
+  { id: 1, time: '01:21', author: 'rustacean_ella', color: '#7FD6A8', text: 'is the compositor in wgpu too?' },
+  { id: 2, time: '01:21', author: 'Nightbot', color: '#9AA1AC', badge: 'BOT', badgeColor: '#9AA1AC', text: 'Repo: github.com/jeffmhopkins/JStream' },
+  { id: 3, time: '01:22', author: 'tom_codes', color: '#8AB4FF', badge: 'MEMBER', badgeColor: '#7FD6A8', text: 'the fence handoff thing was wild' },
+  { id: 4, time: '01:22', author: 'kat.dev', color: '#E8A33D', text: '$5.00 · keep going, this is great', superChat: true },
+  { id: 5, time: '01:23', author: 'modmarcus', color: '#B5CEFF', badge: 'MOD', badgeColor: '#4C8DFF', text: 'reminder: be nice in chat' },
+  { id: 6, time: '01:23', author: 'pixelpusher', color: '#E86BA6', text: 'what GPU are you on?' }
+];
+const LOCAL_TREES = {
+  scenes: [
+    { key: 'f:show', label: 'Show', children: [{ key: 'scene:Starting Soon' }, { key: 'scene:Desktop + Cam' }, { key: 'scene:Just Chatting' }] },
+    { key: 'f:overlays', label: 'Overlays', children: [{ key: 'scene:Intro overlay' }, { key: 'scene:Lower third pack' }] },
+    { key: 'scene:BRB' }, { key: 'scene:Ending' }
+  ],
+  objects: [
+    { key: 'obj:alerts' }, { key: 'obj:lower' }, { key: 'obj:webcam' },
+    { key: 'scene:Intro overlay', children: [{ key: 'obj:logo' }, { key: 'obj:ticker' }] },
+    { key: 'obj:display' }
+  ]
+};
+const fmtNum = (x, dec) => {
+  const s = dec ? x.toFixed(dec) : String(Math.round(x));
+  return s.startsWith('-') ? '−' + s.slice(1) : s;
+};
+const copy = (x) => JSON.parse(JSON.stringify(x));
+const tint = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+};
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = {
+      localSel: 'obj:webcam', vals: {}, edits: {}, meta: copy(DEFAULT_META),
+      search: '', favOnly: false, labelFilter: [], filterOpen: false, manage: false, iconFor: null, tagOpen: null, trOpen: null, trDrop: null, trEdit: null, secClosed: { '3D': true, 'SCENE SWITCHES': true },
+      chat: copy(CHAT), chatDraft: '', featured: null, dropAt: null, collapsed: {},
+      yt: { up: 0, bitrate: Array.from({ length: 120 }, (_, i) => 6000 + Math.sin(i / 7) * 120 + ((i * 37) % 11 - 5) * 25), viewers: 1284, peak: 1310, likes: 212, chat: 18 }, ytHover: null, aspectLock: true, localFilters: copy(FILTERS0), fltOpen: null, fltDrop: null, addOpen: false
+    };
+    this.scrub = null;
+    this.uid = 'p' + Math.random().toString(36).slice(2, 8);
+    // Popups close on a click anywhere outside them.
+    this.outside = (e) => {
+      const st = this.state;
+      if (!st.filterOpen && !st.tagOpen && !st.addOpen) return;
+      const t = e.target;
+      const inside = (name) => t && t.closest && t.closest('[data-pop="' + name + '-' + this.uid + '"]');
+      const patch = {};
+      if (st.filterOpen && !inside('filter')) patch.filterOpen = false;
+      if (st.tagOpen && !inside('tag')) patch.tagOpen = null;
+      if (st.addOpen && !inside('add')) patch.addOpen = false;
+      if (Object.keys(patch).length) this.setState(patch);
+    };
+  }
+
+  componentDidMount() {
+    document.addEventListener('pointerdown', this.outside, true);
+    this.timer = setInterval(() => this.ytTick(), 1000);
+  }
+  componentWillUnmount() {
+    document.removeEventListener('pointerdown', this.outside, true);
+    clearInterval(this.timer);
+  }
+
+  // ---- Filters (per source and per scene, shared through the workspace) -----------
+  filterList(target) {
+    target = this.src(target);
+    const all = this.props.filters ?? this.state.localFilters;
+    return all[target] || [];
+  }
+  setFilterList(target, list) {
+    target = this.src(target);
+    if (typeof this.props.filtset === 'function') this.props.filtset(target, list);
+    else this.setState({ localFilters: { ...this.state.localFilters, [target]: list } });
+  }
+
+  filterTarget() {
+    const sel = this.props.sel ?? this.state.localSel;
+    if (sel.startsWith('obj:') || sel.startsWith('scene:') || sel.startsWith('out:')) return sel;
+    return null;
+  }
+
+  flVals() {
+    const st = this.state;
+    const target = this.filterTarget();
+    const list = target ? this.filterList(target) : [];
+    const isScene = target && target.startsWith('scene:');
+    const isOut = target && target.startsWith('out:');
+    const OUT = { 'out:program': ['Program output', 'Master chain: applies to everything leaving JStream.', ['video', 'audio']], 'out:youtube': ['YouTube stream', 'Only this output, after the program filters.', ['video', 'audio']], 'out:record': ['Recording', 'Only this output, after the program filters.', ['video', 'audio']], 'out:vcam': ['Virtual camera', 'Only this output, after the program filters. No sound.', ['video']] };
+    const title = !target ? 'Nothing selected' : isOut ? OUT[target][0] : isScene ? target.slice(6) : this.nameFor(target);
+    const icon = !target || isScene ? ICONS.layers[1] : isOut ? OUT_ICON : ICONS[(this.info(target) || { icon: 'layers' }).icon][1];
+    // Which chains this target has: scenes and pictures get video; anything with sound gets audio.
+    const ti = target && !isScene && !isOut && typeof this.props.srcinfo === 'function' ? this.props.srcinfo(this.src(target).slice(4)) : null;
+    const hasVideo = !!target && (isOut ? OUT[target][2].includes('video') : isScene || !(ti && ti.audioOnly));
+    const hasAudio = !!target && (isOut ? OUT[target][2].includes('audio') : !isScene && !!(ti && (ti.audioOnly || ti.hasAudio)));
+    // A filter can't use a scene that (directly or through nesting) contains this source:
+    // the current scene and any scene it sits inside are left out.
+    const inside = new Set([this.props.scenename || 'Desktop + Cam']);
+    if (target && !isScene) {
+      const path = (nodes, trail) => {
+        for (const n of nodes) {
+          if (n.key === target) return trail;
+          if (n.children) { const r = path(n.children, n.key.startsWith('scene:') ? [...trail, n.key.slice(6)] : trail); if (r) return r; }
+        }
+        return null;
+      };
+      for (const n of path(((this.props.trees ?? LOCAL_TREES).objects) || [], []) || []) inside.add(n);
+    }
+    const kfs = this.props.keyframes || {};
+    const scenes = this.sceneNames().filter((n) => !inside.has(n) && !(kfs[n] && inside.has(kfs[n].parent)));
+    const eyeOn = 'M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z';
+    const eyeOff = 'M3 3l18 18 M10.6 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9 M6.6 6.6C3.8 8.4 2 12 2 12s4 7 10 7a9.7 9.7 0 0 0 4.4-1';
+    const setP = (f, k, v) => this.setFilterList(target, this.filterList(target).map((x) => (x.id === f.id ? { ...x, p: { ...x.p, [k]: v } } : x)));
+    const row = (f, chain) => {
+      const T = FILTER_TYPES[f.type];
+      // A filter just added from the dialog opens, until something else is opened.
+      const openId = st.fltSeen === this.props.fltnew ? st.fltOpen : this.props.fltnew || st.fltOpen;
+      const open = openId === f.id;
+      const dropOn = st.fltDrop && st.fltDrop.id === f.id ? st.fltDrop.after : null;
+      const refScene = T.ref ? f.p.scene : '';
+      const fields = T.params.map((p) => {
+        const v = f.p[p.k] ?? p.def;
+        if (p.t === 'num') return { ...this.field('flt:' + target + '|' + f.id + '|' + p.k, p.label, p.def, { min: p.min, max: p.max, step: p.step, unit: p.unit, dec: p.dec }), isNum: true, span: 'auto' };
+        const base = { label: p.label, value: v, isNum: false, isSelect: false, isText: false, isColor: false, span: 'auto' };
+        if (p.t === 'select') return { ...base, isSelect: true, opts: p.opts.map((o) => ({ v: o, l: o })), change: (e) => setP(f, p.k, e.target.value) };
+        if (p.t === 'scene') return { ...base, isSelect: true, span: '1 / -1', opts: [{ v: '', l: 'Choose a scene…' }, ...scenes.map((n) => ({ v: n, l: n }))], change: (e) => setP(f, p.k, e.target.value) };
+        if (p.t === 'text') return { ...base, isText: true, span: '1 / -1', change: (e) => setP(f, p.k, e.target.value) };
+        return { ...base, isColor: true, span: '1 / -1', swatches: [...new Set([p.def, ...SWATCHES, '#FFFFFF', '#0F1115'])].map((c) => ({ c, ring: c === v ? '#E6E8EB' : 'transparent', pick: () => setP(f, p.k, c) })) };
+      });
+      // The key setting, shown in the row (same as the Properties list).
+      const fmt = (x) => { const v = f.p[x.k] ?? x.def; return (typeof v === 'number' ? (x.dec ? v.toFixed(x.dec) : String(v)).replace('-', '−') : v) + (x.unit ? ' ' + x.unit : ''); };
+      const nums = T.params.filter((x) => x.t === 'num');
+      const changed = nums.filter((x) => f.p[x.k] !== undefined && f.p[x.k] !== x.def);
+      const summary = T.ref ? (f.p.scene || 'no scene')
+        : nums.length === 1 ? fmt(nums[0])
+        : changed.length ? changed.slice(0, 2).map((x) => x.label + ' ' + fmt(x)).join(' · ')
+        : T.params.length ? 'defaults' : '';
+      return {
+        summary, sumColor: T.ref ? (f.p.scene ? '#B5CEFF' : '#E8A33D') : '#9AA1AC', sumStyle: T.ref ? 'italic' : 'normal', sumFont: T.ref ? 'inherit' : "'IBM Plex Mono', monospace",
+        name: T.name, on: f.on, open: open && easyFilter(T),
+        // Easy filters (three settings or fewer) open in place; busier ones open a dialog.
+        click: () => { if (easyFilter(T)) this.setState({ fltOpen: open ? null : f.id, fltSeen: this.props.fltnew }); else if (typeof this.props.editfilter === 'function') this.props.editfilter(target, f.id); },
+        clickTitle: easyFilter(T) ? 'Click to adjust here · double-click for the full dialog' : 'Click to open its settings',
+        ref: T.ref ? (refScene ? '· ' + refScene : '· no scene') : '',
+        refColor: refScene ? '#B5CEFF' : '#E8A33D',
+        caret: !T.params.length ? '' : easyFilter(T) ? (open ? '▾' : '▸') : '⤢',
+        color: f.on ? '#E6E8EB' : '#7D8590',
+        strike: f.on ? 'none' : 'line-through',
+        eye: f.on ? eyeOn : eyeOff,
+        eyeColor: f.on ? '#C9CED6' : '#5A606B',
+        toggleLabel: (f.on ? 'Turn off ' : 'Turn on ') + T.name,
+        bg: open ? '#1A1D23' : 'transparent',
+        border: open ? '#2E333B' : 'transparent',
+        dropLine: dropOn === null ? 'none' : dropOn ? 'inset 0 -2px 0 #4C8DFF' : 'inset 0 2px 0 #4C8DFF',
+        toggle: () => this.setFilterList(target, this.filterList(target).map((x) => (x.id === f.id ? { ...x, on: !x.on } : x))),
+        select: () => this.setState({ fltOpen: open ? null : f.id, fltSeen: this.props.fltnew }),
+        edit: () => { if (typeof this.props.editfilter === 'function') this.props.editfilter(target, f.id); },
+        remove: () => this.setFilterList(target, this.filterList(target).filter((x) => x.id !== f.id)),
+        fields, noParams: fields.length === 0,
+        dragStart: (e) => { this.fltDrag = { id: f.id, chain }; e.dataTransfer.setData('application/x-jstream-filter', f.id); e.dataTransfer.effectAllowed = 'move'; },
+        dragEnd: () => { this.fltDrag = null; this.setState({ fltDrop: null }); },
+        dragOver: (e) => {
+          // Filters reorder within their own chain only.
+          if (!this.fltDrag || this.fltDrag.chain !== chain) return;
+          e.preventDefault(); e.stopPropagation();
+          const r = e.currentTarget.getBoundingClientRect();
+          const after = e.clientY > r.top + r.height / 2;
+          const d = this.state.fltDrop;
+          if (!d || d.id !== f.id || d.after !== after) this.setState({ fltDrop: { id: f.id, after } });
+        },
+        drop: (e) => {
+          if (!this.fltDrag || this.fltDrag.chain !== chain) return;
+          e.preventDefault(); e.stopPropagation();
+          const src = this.fltDrag.id, after = this.state.fltDrop ? this.state.fltDrop.after : false;
+          this.fltDrag = null;
+          this.setState({ fltDrop: null });
+          if (src === f.id) return;
+          const all = this.filterList(target);
+          const moving = all.find((x) => x.id === src);
+          const rest = all.filter((x) => x.id !== src);
+          let j = rest.findIndex((x) => x.id === f.id);
+          if (after) j += 1;
+          rest.splice(j, 0, moving);
+          this.setFilterList(target, rest);
+        }
+      };
+    };
+    const section = (chain) => {
+      const items = list.filter((f) => FILTER_TYPES[f.type] && FILTER_TYPES[f.type].kind === chain).map((f) => row(f, chain));
+      return {
+        title: chain === 'video' ? 'VIDEO' : 'AUDIO',
+        icon: chain === 'video' ? ICONS.monitor[1] : ICONS.speaker[1],
+        count: items.length ? items.length + (items.length === 1 ? ' filter' : ' filters') : '',
+        items, empty: items.length === 0,
+        emptyText: chain === 'video' ? 'No video filters.' : 'No audio filters.'
+      };
+    };
+    return {
+      title, icon,
+      note: !target ? '' : isOut ? OUT[target][1] : isScene ? 'Scene filters apply to the whole scene, top to bottom.' : 'Applies everywhere this source appears, top to bottom.',
+      sections: [...(hasVideo ? [section('video')] : []), ...(hasAudio ? [section('audio')] : [])],
+      noTarget: !target,
+      canAdd: !!target,
+      add: () => { if (target && typeof this.props.addfilter === 'function') this.props.addfilter(target); }
+    };
+  }
+
+  sendChatNow() {
+    const st = this.state;
+    const t = st.chatDraft.trim();
+    if (!t) return;
+    this.setState({ chatDraft: '', chat: [...st.chat, { id: Date.now(), time: 'now', author: 'JStream', color: '#E6E8EB', badge: 'OWNER', badgeColor: '#F2C14E', text: t }] });
+  }
+
+  sceneNames() {
+    const t = this.props.trees ?? LOCAL_TREES;
+    const out = [];
+    const walk = (nodes) => { for (const n of nodes) { if (n.key.startsWith('scene:')) out.push(n.key.slice(6)); if (n.children) walk(n.children); } };
+    walk(t.scenes || []);
+    return out;
+  }
+
+  // Short summary for the Inspector.
+  filterSummary(target) {
+    return this.filterList(target).filter((f) => FILTER_TYPES[f.type]).map((f) => {
+      const T = FILTER_TYPES[f.type];
+      return { n: T.name + (T.ref && f.p.scene ? ' · ' + f.p.scene : ''), v: (T.kind === 'video' ? 'video' : 'audio') + (f.on ? '' : ' · off'), color: f.on ? '#E6E8EB' : '#7D8590' };
+    });
+  }
+
+  // ---- Stream stats (simulated while live) ----------------------------------------
+  ytTick() {
+    if ((this.props.kind ?? 'scenes') !== 'ytstats') return;
+    const live = this.props.stream ? !!this.props.stream.live : true;
+    const y = this.state.yt;
+    if (!live) { if (y.up) this.setState({ yt: { ...y, up: 0 } }); return; }
+    const last = y.bitrate.length ? y.bitrate[y.bitrate.length - 1] : 6000;
+    let next = last + (6000 - last) * 0.3 + (Math.random() - 0.5) * 260;
+    if (Math.random() < 0.02) next -= 900 + Math.random() * 700;
+    next = Math.max(3500, Math.min(6900, next));
+    const viewers = Math.max(0, Math.round(y.viewers + (Math.random() - 0.45) * 14));
+    this.setState({
+      yt: {
+        ...y,
+        up: y.up + 1,
+        bitrate: [...y.bitrate, next].slice(-120),
+        viewers,
+        peak: Math.max(y.peak, viewers),
+        likes: y.likes + (Math.random() < 0.25 ? 1 : 0),
+        chat: Math.max(0, Math.round(y.chat + (Math.random() - 0.5) * 6))
+      }
+    });
+  }
+
+  ytVals() {
+    const y = this.state.yt;
+    const st = this.props.stream || { title: 'Building JStream: the canvas editor', privacy: 'Unlisted', latency: 'Low', live: true };
+    const live = !!st.live;
+    const fmtTime = (sec) => [Math.floor(sec / 3600), Math.floor(sec / 60) % 60, sec % 60].map((n) => String(n).padStart(2, '0')).join(':');
+    const n = (v) => v.toLocaleString('en-US');
+    const data = y.bitrate;
+    const lo = Math.min(4000, ...data), hi = Math.max(7000, ...data);
+    const yOf = (v) => 62 - ((v - lo) / (hi - lo)) * 58;
+    const xOf = (i) => data.length > 1 ? (i / (data.length - 1)) * 240 : 0;
+    const points = data.map((v, i) => xOf(i).toFixed(1) + ',' + yOf(v).toFixed(1)).join(' ');
+    const now = data.length ? data[data.length - 1] : 0;
+    const dips = data.filter((v) => v < 5000).length;
+    const health = !live ? { label: 'Waiting', note: 'YouTube has not received data yet.', color: '#9AA1AC', icon: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M12 7v5l3 2' }
+      : dips > 6 ? { label: 'OK', note: 'Bitrate dipped below 5 Mbps a few times.', color: '#E8A33D', icon: 'M12 3l10 18H2z M12 10v5 M12 18h.01' }
+      : { label: 'Excellent', note: 'No issues reported by YouTube ingestion.', color: '#3FB27F', icon: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M8 12.5l2.7 2.7L16 9.8' };
+    const h = this.state.ytHover;
+    const hi2 = h !== null && h < data.length ? h : null;
+    const hoverPct = hi2 !== null ? (xOf(hi2) / 240) * 100 : 0;
+    return {
+      status: live ? 'LIVE' : 'READY',
+      pillBg: live ? 'rgba(198,47,54,0.22)' : '#1F232A',
+      pillBorder: live ? '#C62F36' : '#2E333B',
+      dot: live ? '#FF5C63' : '#7D8590',
+      title: st.title,
+      uptime: live ? fmtTime(y.up) : '--:--:--',
+      tiles: [
+        { label: 'Watching now', value: live ? n(y.viewers) : '–', sub: live ? 'peak ' + n(y.peak) : 'not live' },
+        { label: 'Likes', value: live ? n(y.likes) : '–', sub: st.privacy },
+        { label: 'Chat', value: live ? y.chat + '/min' : '–', sub: 'messages' },
+        { label: 'Dropped frames', value: live ? '0' : '–', sub: '0.00% · encoder' }
+      ],
+      healthLabel: health.label, healthNote: health.note, healthColor: health.color, healthIcon: health.icon,
+      bitrateNow: live && data.length ? (now / 1000).toFixed(2) + ' Mbps' : '–',
+      hasChart: live && data.length > 1,
+      noChart: !(live && data.length > 1),
+      chartLabel: 'Bitrate over the last two minutes, now ' + (now / 1000).toFixed(1) + ' Mbps',
+      points,
+      target: '6.0 Mbps',
+      targetY: yOf(6000).toFixed(1),
+      hoverOn: hi2 !== null,
+      hoverX: hi2 !== null ? xOf(hi2).toFixed(1) : 0,
+      hoverPct,
+      hoverDotPct: hi2 !== null ? (yOf(data[hi2]) / 64) * 100 : 0,
+      tipLeft: hoverPct,
+      tipShift: hoverPct > 70 ? '-100%' : hoverPct < 30 ? '0%' : '-50%',
+      tipValue: hi2 !== null ? (data[hi2] / 1000).toFixed(2) + ' Mbps' : '',
+      tipWhen: hi2 !== null ? (data.length - 1 - hi2 === 0 ? 'now' : (data.length - 1 - hi2) + ' s ago') : '',
+      hoverMove: (e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        const f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+        const i = Math.round(f * (this.state.yt.bitrate.length - 1));
+        if (i !== this.state.ytHover) this.setState({ ytHover: i });
+      },
+      hoverLeave: () => this.setState({ ytHover: null }),
+      details: [
+        { k: 'Video', v: '1920×1080 · 60 fps · H.264' },
+        { k: 'Audio', v: 'AAC · 160 kbps · 48 kHz' },
+        { k: 'Latency', v: st.latency + (st.latency === 'Low' ? ' (~5 s)' : st.latency === 'Ultra-low' ? ' (~2 s)' : ' (~15 s)') },
+        { k: 'Visibility', v: st.privacy },
+        { k: 'Ingest', v: 'rtmps://a.rtmps.youtube.com' },
+        { k: 'Stream key', v: 'jstream-main (reusable)' }
+      ]
+    };
+  }
+
+  meta() { return this.props.meta ?? this.state.meta; }
+  setMeta(m) {
+    if (typeof this.props.metaset === 'function') this.props.metaset(m);
+    else this.setState({ meta: m });
+  }
+  toggleFav(key) {
+    const m = copy(this.meta());
+    if (m.favs[key]) delete m.favs[key]; else m.favs[key] = true;
+    this.setMeta(m);
+  }
+  toggleLabel(key, lid) {
+    const m = copy(this.meta());
+    const cur = m.assign[key] || [];
+    m.assign[key] = cur.includes(lid) ? cur.filter((x) => x !== lid) : [...cur, lid];
+    this.setMeta(m);
+  }
+  updateLabel(lid, patch) {
+    const m = copy(this.meta());
+    m.labels = m.labels.map((l) => (l.id === lid ? { ...l, ...patch } : l));
+    this.setMeta(m);
+  }
+
+  isRef(key) {
+    if (REF_KEYS[key]) return !(this.props.clones || {})[key];
+    const d = key.startsWith('obj:') && (this.props.dups || {})[key.slice(4)];
+    return !!d && d.mode === 'reference';
+  }
+  // A reference shares everything but its placement with its source.
+  src(key) { return key && typeof this.props.srcof === 'function' ? this.props.srcof(key) : key; }
+  base(id) { return typeof this.props.baseof === 'function' ? this.props.baseof(id) : id; }
+  info(key) {
+    const id = key.slice(4);
+    return OBJ_INFO[this.base(id)] || (typeof this.props.srcinfo === 'function' ? this.props.srcinfo(id) : null);
+  }
+  nameFor(key) { const k = this.src(key); return (this.props.names && this.props.names[k]) || (OBJ_INFO[this.base(k.slice(4))] || {}).title || k.slice(4); }
+
+  // Transform and crop fields are bound to the workspace's shared transforms, so the
+  // canvas and the Inspector edit the same numbers.
+  bound(key) {
+    const m = /^obj:([a-z]+):(\w+)$/.exec(key);
+    if (!m || !this.props.xf || !this.props.xf[m[1]]) return null;
+    // Wpct/Hpct are the same width and height, shown as a % of the source's own size.
+    if (m[2] === 'Wpct' || m[2] === 'Hpct') {
+      const n = NATIVE[this.base(m[1])] || (this.info('obj:' + m[1]) || {}).native || [1920, 1080];
+      return m[2] === 'Wpct' ? { id: m[1], prop: 'w', scale: n[0] / 100 } : { id: m[1], prop: 'h', scale: n[1] / 100 };
+    }
+    if (!XF_KEY[m[2]]) return null;
+    return { id: m[1], prop: XF_KEY[m[2]] };
+  }
+  fltBound(key) {
+    if (!key.startsWith('flt:')) return null;
+    const [target, id, param] = key.slice(4).split('|');
+    return { target, id, param };
+  }
+  val(key, base) {
+    if (key.startsWith('tri:') && this.props.trans) {
+      const [id, k] = key.slice(4).split('|');
+      return this.props.trans.item(id)[k] ?? base;
+    }
+    if (key.startsWith('tr:') && this.props.trans) return this.props.trans.get(key.slice(3)) ?? base;
+    const fb = this.fltBound(key);
+    if (fb) { const f = this.filterList(fb.target).find((x) => x.id === fb.id); return f && f.p[fb.param] !== undefined ? f.p[fb.param] : base; }
+    const b = this.bound(key);
+    if (b) { const v = this.props.xf[b.id][b.prop] ?? base; return b.scale ? Math.round((v / b.scale) * 10) / 10 : v; }
+    const v = this.state.vals[key];
+    return v === undefined ? base : v;
+  }
+  write(key, v) {
+    if (key.startsWith('tri:') && this.props.trans) { const [id, k] = key.slice(4).split('|'); this.props.trans.setItem(id, k, v); return; }
+    if (key.startsWith('tr:') && this.props.trans) { this.props.trans.set(key.slice(3), v); return; }
+    const fb = this.fltBound(key);
+    if (fb) {
+      const list = this.filterList(fb.target).map((f) => (f.id === fb.id ? { ...f, p: { ...f.p, [fb.param]: v } } : f));
+      this.setFilterList(fb.target, list);
+      return;
+    }
+    const b = this.bound(key);
+    if (b && b.scale) v = Math.max(1, Math.round(v * b.scale * 100) / 100);
+    if (b && (b.prop === 'w' || b.prop === 'h') && this.state.aspectLock && this.props.xf) {
+      const t = this.props.xf[b.id];
+      const ar = t.w / t.h;
+      const patch = b.prop === 'w' ? { w: v, h: Math.max(1, Math.round((v / ar) * 100) / 100) } : { h: v, w: Math.max(1, Math.round(v * ar * 100) / 100) };
+      if (typeof this.props.xfpatch === 'function') { this.props.xfpatch(b.id, patch); return; }
+    }
+    if (b && typeof this.props.xfset === 'function') this.props.xfset(b.id, b.prop, v);
+    else this.setState({ vals: { ...this.state.vals, [key]: v } });
+  }
+  setVal(key, x, o) {
+    const min = o.min ?? -100000, max = o.max ?? 100000;
+    const q = o.step < 1 ? Math.pow(10, o.dec ?? 1) : 1;
+    this.write(key, Math.min(max, Math.max(min, Math.round(x * q) / q)));
+  }
+  field(key, label, base, o) {
+    const step = o.step ?? 1;
+    const dec = o.dec ?? (step < 1 ? 1 : 0);
+    const opts = { ...o, step, dec };
+    const cur = () => this.val(key, base);
+    const editing = this.state.edits[key];
+    const clearEdit = () => { const edits = { ...this.state.edits }; delete edits[key]; return edits; };
+    const commit = () => {
+      const raw = this.state.edits[key];
+      if (raw === undefined) return;
+      const n = parseFloat(String(raw).replace('−', '-').replace(',', '.'));
+      const edits = clearEdit();
+      if (Number.isFinite(n)) {
+        const min = o.min ?? -100000, max = o.max ?? 100000;
+        const q = Math.pow(10, dec);
+        this.setState({ edits });
+        this.write(key, Math.min(max, Math.max(min, Math.round(n * q) / q)));
+      } else this.setState({ edits });
+    };
+    return {
+      label, unit: o.unit ?? '',
+      display: editing !== undefined ? editing : fmtNum(cur(), dec),
+      dec: () => this.setVal(key, cur() - step, opts),
+      inc: () => this.setVal(key, cur() + step, opts),
+      change: (e) => this.setState({ edits: { ...this.state.edits, [key]: e.target.value } }),
+      commit,
+      key: (e) => {
+        const mult = e.shiftKey ? (step < 1 ? 0.1 : 1) : (e.ctrlKey || e.metaKey || e.altKey) ? 10 : 1;
+        if (e.key === 'ArrowUp') { e.preventDefault(); this.setState({ edits: clearEdit() }); this.setVal(key, cur() + step * mult, opts); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); this.setState({ edits: clearEdit() }); this.setVal(key, cur() - step * mult, opts); }
+        else if (e.key === 'Enter') { commit(); e.currentTarget.blur(); }
+        else if (e.key === 'Escape') { this.setState({ edits: clearEdit() }); e.currentTarget.blur(); }
+      },
+      down: (e) => {
+        if (document.activeElement === e.currentTarget) return;
+        // Scrub sideways, or up/down (dragging up increases) for vertical fields.
+        const p = o.axis === 'y' ? -e.clientY : e.clientX;
+        this.scrub = { key, x: p, lastX: p, acc: cur(), moved: false, id: e.pointerId };
+      },
+      move: (e) => {
+        const s = this.scrub;
+        if (!s || s.key !== key) return;
+        if (e.buttons === 0) { this.scrub = null; return; }
+        const pos = o.axis === 'y' ? -e.clientY : e.clientX;
+        const dx = pos - s.x;
+        if (!s.moved) {
+          if (Math.abs(dx) < 3) return;
+          s.moved = true;
+          e.currentTarget.setPointerCapture(s.id);
+          e.currentTarget.blur();
+        }
+        e.preventDefault();
+        // Incremental, so pressing or releasing Shift/Ctrl mid-drag never jumps.
+        const mult = e.shiftKey ? 0.1 : (e.ctrlKey || e.metaKey || e.altKey) ? 4 : 1;
+        const moved = pos - s.lastX;
+        s.lastX = pos;
+        s.acc = Math.min(opts.max ?? 100000, Math.max(opts.min ?? -100000, s.acc + (moved / 3) * step * mult));
+        this.setVal(key, s.acc, opts);
+      },
+      up: (e) => {
+        const s = this.scrub;
+        this.scrub = null;
+        if (s && s.moved) { e.preventDefault(); e.currentTarget.blur(); }
+      }
+    };
+  }
+
+  // Flattens a { key, label?, children? } tree into rows, skipping collapsed children.
+  treeItems(kind) {
+    const tree = (this.props.trees ?? LOCAL_TREES)[kind];
+    const meta = Object.fromEntries((kind === 'scenes' ? SCENES : OBJECTS).map((o) => [o.key, o]));
+    const out = [];
+    // A filter that uses another scene (mask, matte, clip, displacement) shows that scene
+    // nested under the object, as a reference.
+    const refsOf = (key) => {
+      if (kind !== 'objects' || !key.startsWith('obj:')) return [];
+      return this.filterList(this.src(key)).filter((f) => FILTER_TYPES[f.type] && FILTER_TYPES[f.type].ref && f.p.scene);
+    };
+    const push = (n, depth) => {
+      const m = meta[n.key] || (n.key.startsWith('obj:') ? meta['obj:' + this.base(n.key.slice(4))] || { icon: (this.info(n.key) || {}).icon } : null) || {};
+      const isGroup = !!n.children;
+      const isFolder = n.key.startsWith('f:') || n.key.startsWith('grp:');
+      const refs = refsOf(n.key);
+      const open = !this.state.collapsed[kind + '|' + n.key];
+      const kf = kind === 'scenes' && n.key.startsWith('scene:') && (this.props.keyframes || {})[n.key.slice(6)];
+      out.push({
+        ...m, key: n.key, depth, isGroup, isFolder, container: isGroup || refs.length > 0, kf: !!kf,
+        label: (this.props.names && this.props.names[this.src(n.key)]) || n.label || m.label || n.key.replace(/^[a-z]+:/, ''),
+        icon: kf ? 'keyframe' : isFolder ? 'folder' : (m.icon || 'layers')
+      });
+      if (!open) return;
+      if (isGroup) walk(n.children, depth + 1);
+      for (const f of refs) {
+        const T = FILTER_TYPES[f.type];
+        out.push({ key: 'ref:' + n.key + '|' + f.id, depth: depth + 1, isGroup: false, isFolder: false, container: false, kf: false,
+          ref: { role: T.name, fx: T.ref === 'fx', scene: f.p.scene, on: f.on, owner: n.key }, label: f.p.scene, icon: 'layers' });
+      }
+    };
+    const walk = (nodes, depth) => { for (const n of nodes) push(n, depth); };
+    walk(tree, 0);
+    return out;
+  }
+
+  // Tree rows with labels, favorites and filtering. A parent stays visible when a child matches.
+  treeRows(items, sel, pick, kind) {
+    const st = this.state;
+    const m = this.meta();
+    const byId = Object.fromEntries(m.labels.map((l) => [l.id, l]));
+    const selIds = this.props.selids ?? [];
+    const q = st.search.trim().toLowerCase();
+    const filtering = q !== '' || st.favOnly || st.labelFilter.length > 0;
+    const isFolder = (it) => !!it.isFolder;
+    const matches = (it) => {
+      if (isFolder(it)) return false;
+      if (q && !it.label.toLowerCase().includes(q)) return false;
+      if (st.favOnly && !m.favs[this.src(it.key)]) return false;
+      if (st.labelFilter.length && !(m.assign[this.src(it.key)] || []).some((l) => st.labelFilter.includes(l))) return false;
+      return true;
+    };
+    const keep = new Set();
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      if (!filtering || matches(it)) {
+        keep.add(i);
+        if (it.depth > 0) {
+          for (let j = i - 1; j >= 0; j--) { if (items[j].depth < it.depth) { keep.add(j); break; } }
+        }
+      }
+    }
+    return items.filter((_, i) => keep.has(i)).map((it) => {
+      const folder = isFolder(it);
+      const mk = this.src(it.key);
+      const fav = !!m.favs[mk];
+      const labels = (m.assign[mk] || []).map((id) => byId[id]).filter(Boolean);
+      const iconId = it.icon || (folder ? 'folder' : 'layers');
+      const ck = kind + '|' + it.key;
+      const collapsed = !!st.collapsed[ck];
+      const canDrag = !filtering && typeof this.props.treemove === 'function';
+      const dropOn = st.dropAt && st.dropAt.kind === kind && st.dropAt.key === it.key ? st.dropAt.mode : null;
+      const dim = filtering && !matches(it);
+      const rf = it.ref;
+      return {
+        // Visibility, per placement (a keyframe can change it).
+        eyeShow: !!(it.key.startsWith('obj:') && this.props.xf && this.props.xf[it.key.slice(4)]),
+        hiddenNow: !!(it.key.startsWith('obj:') && this.props.xf && this.props.xf[it.key.slice(4)] && this.props.xf[it.key.slice(4)].hidden),
+        eyeCls: it.key.startsWith('obj:') && this.props.xf && this.props.xf[it.key.slice(4)] && this.props.xf[it.key.slice(4)].hidden ? 'on' : '',
+        eyeIcon: it.key.startsWith('obj:') && this.props.xf && this.props.xf[it.key.slice(4)] && this.props.xf[it.key.slice(4)].hidden ? EYE_OFF : EYE_ON,
+        toggleEye: () => { const id = it.key.slice(4); if (typeof this.props.xfset === 'function') this.props.xfset(id, 'hidden', !(this.props.xf[id] || {}).hidden); },
+        isLink: !!rf,
+        roleIcon: rf ? (rf.fx ? FX_ICON : MASK_ICON) : '',
+        roleColor: rf ? (rf.on ? (rf.fx ? '#E8A33D' : '#B07CFF') : '#5A606B') : '#7D8590',
+        roleTitle: rf ? rf.role + (rf.on ? '' : ' (off)') + ': uses the scene “' + rf.scene + '”' : '',
+        label: it.label,
+        indent: 6 + it.depth * 18,
+        typeIcon: ICONS[iconId][1],
+        typeColor: it.kf ? '#B07CFF' : dim ? '#4D535E' : '#9AA1AC',
+        color: folder || dim || (it.key.startsWith('obj:') && this.props.xf && (this.props.xf[it.key.slice(4)] || {}).hidden) ? '#6B717C' : '#E6E8EB',
+        badge: kind === 'scenes' && it.key === 'scene:' + (this.props.scenename || 'Desktop + Cam') ? 'program' : '',
+        shared: '',
+        italic: kind === 'objects' && this.isRef(it.key) ? 'italic' : 'normal',
+        bg: sel === it.key || (it.key.startsWith('obj:') && selIds.includes(it.key.slice(4))) ? '#22324A' : 'transparent',
+        pick: (e) => {
+          if (it.ref) { if (typeof this.props.picker === 'function') this.props.picker('scene:' + it.ref.scene, {}); return; }
+          if (!folder) pick(it.key, !!(e && e.shiftKey));
+        },
+        dbl: (e) => { if (!folder && typeof this.props.openprops === 'function') { e.stopPropagation(); this.props.openprops(it.key); } },
+        selCls: sel === it.key || (it.key.startsWith('obj:') && selIds.includes(it.key.slice(4))) ? 'sel' : '',
+        caret: it.container ? (collapsed ? '▸' : '▾') : '',
+        caretVis: it.container ? 'visible' : 'hidden',
+        caretTab: it.container ? '0' : '-1',
+        caretLabel: (collapsed ? 'Expand ' : 'Collapse ') + it.label,
+        expanded: it.container && !collapsed,
+        toggleCollapse: () => this.setState({ collapsed: { ...st.collapsed, [ck]: !collapsed } }),
+        draggable: canDrag && !it.kf && !it.ref ? 'true' : 'false',
+        dropLine: dropOn === 'before' ? 'inset 0 2px 0 #4C8DFF' : dropOn === 'after' ? 'inset 0 -2px 0 #4C8DFF' : dropOn === 'into' ? 'inset 0 0 0 2px #4C8DFF' : 'none',
+        dragStart: (e) => {
+          this.rowDrag = { kind, key: it.key };
+          e.dataTransfer.setData('application/x-jstream-tree', it.key);
+          e.dataTransfer.effectAllowed = 'move';
+        },
+        dragEnd: () => { this.rowDrag = null; this.setState({ dropAt: null }); },
+        dragOver: (e) => {
+          const d = this.rowDrag;
+          if (!d || d.kind !== kind) return;
+          e.preventDefault(); e.stopPropagation();
+          const r = e.currentTarget.getBoundingClientRect();
+          const f = (e.clientY - r.top) / r.height;
+          // Containers take a drop in their middle; elsewhere the row splits in half.
+          // In Scenes only folders take a drop inside; a scene's children are its keyframes.
+          const mode = it.isGroup && (kind !== 'scenes' || it.key.startsWith('f:')) ? (f < 0.25 ? 'before' : f > 0.75 ? 'after' : 'into')
+            : (f < 0.5 ? 'before' : 'after');
+          const cur = this.state.dropAt;
+          if (!cur || cur.key !== it.key || cur.mode !== mode || cur.kind !== kind) this.setState({ dropAt: { kind, key: it.key, mode } });
+        },
+        dragLeave: () => {},
+        ctx: (e) => {
+          if (typeof this.props.openctx !== 'function') return;
+          e.preventDefault(); e.stopPropagation();
+          this.props.openctx(kind, it.key, e.clientX, e.clientY);
+        },
+        drop: (e) => {
+          const d = this.rowDrag;
+          if (!d || d.kind !== kind) return;
+          e.preventDefault(); e.stopPropagation();
+          const at = this.state.dropAt;
+          if (at && at.key === it.key && !it.ref) {
+            this.props.treemove(kind, d.key, it.key, at.mode);
+            if (at.mode === 'into') this.setState({ collapsed: { ...this.state.collapsed, [ck]: false } });
+          }
+          this.rowDrag = null;
+          this.setState({ dropAt: null });
+        },
+        canMark: !folder && !it.ref,
+        fav,
+        favOn: fav ? 'on' : '',
+        starFill: fav ? '#F2C14E' : 'none',
+        starStroke: fav ? '#F2C14E' : '#9AA1AC',
+        toggleFav: () => this.toggleFav(it.key),
+        chips: labels.map((l) => ({ name: l.name, color: l.color, icon: ICONS[l.icon][1], tint: tint(l.color, 0.16) })),
+        tagOpen: st.tagOpen === it.key,
+        tagOn: st.tagOpen === it.key ? 'on' : '',
+        toggleTag: () => this.setState({ tagOpen: st.tagOpen === it.key ? null : it.key, filterOpen: false }),
+        assign: m.labels.map((l) => {
+          const checked = (m.assign[mk] || []).includes(l.id);
+          return {
+            name: l.name, color: l.color, icon: ICONS[l.icon][1], checked,
+            tick: checked ? '✓' : '',
+            boxBg: checked ? l.color : 'transparent',
+            boxBorder: checked ? l.color : '#4D535E',
+            toggle: () => this.toggleLabel(it.key, l.id)
+          };
+        })
+      };
+    });
+  }
+
+  trVals() {
+    const T = this.props.trans;
+    const empty = { presetOpts: [], ed: { kinds: [], fields: [], selects: [] }, ctxChips: [], itemFields: [], itemSelects: [], itemGo: [] };
+    if (!T || !T.presets) return empty;
+    const KINDS = ['Cut', 'Fade', 'Move'];
+    const PCOL = ['#7FD6A8', '#B5CEFF', '#8AB4FF', '#F5C77E', '#B07CFF', '#FF8A8F'];
+    const what = (p) => (p.kind === 'Cut' ? 'Cut' : p.kind + ' · ' + p.duration + ' ms');
+    const st = this.state;
+    const selKey = this.props.sel || '';
+    const selScene = selKey.startsWith('scene:') ? selKey.slice(6) : null;
+    const selItem = selKey.startsWith('obj:') ? selKey.slice(4) : null;
+    const sel = (label, path, opts, value) => ({ label, value, opts: opts.map((o) => ({ o })), change: (e) => T.set(path, e.target.value) });
+    const colorOf = (id) => PCOL[T.presets.findIndex((p) => p.id === id) % PCOL.length];
+    const it = selItem ? T.item(selItem) : null;
+    // The preset being edited: picked in the dropdown, else the selected scene's, else the default.
+    const editId = T.presets.some((p) => p.id === st.trEdit) ? st.trEdit : (selScene && T.inOf(selScene)) || T.defaultId;
+    const ep = T.presets.find((p) => p.id === editId);
+
+    let ed = null;
+    if (ep) {
+      const pre = 'p.' + ep.id + '.';
+      const isDefault = ep.id === T.defaultId;
+      const u = T.usage(ep.id);
+      ed = {
+        name: ep.name,
+        setName: (e) => T.setPreset(ep.id, { name: e.target.value }),
+        kinds: KINDS.map((k) => ({ name: k, on: ep.kind === k, bg: ep.kind === k ? '#22324A' : 'transparent', pick: () => T.setPreset(ep.id, { kind: k }) })),
+        fields: ep.kind === 'Cut' ? [] : [
+          this.field('tr:' + pre + 'duration', 'Duration', 300, { step: 10, unit: 'ms', min: 0, max: 10000 }),
+          ...(ep.kind === 'Move' ? [this.field('tr:' + pre + 'stagger', 'Stagger per item', 0, { step: 10, unit: 'ms', min: 0, max: 1000 })] : [])
+        ],
+        selects: ep.kind === 'Cut' ? [] : [
+          sel('Easing', pre + 'easing', ['Ease in-out', 'Ease out', 'Linear', 'Spring'], ep.easing),
+          ...(ep.kind === 'Move' ? [sel('Items in one scene only', pre + 'unmatched', ['Fade', 'Scale', 'Slide'], ep.unmatched)] : [])
+        ],
+        note: (isDefault ? 'The default: used unless a scene overrides it. ' : '') + 'Overrides: ' + u.into + ' in, ' + u.out + ' out.',
+        canDefault: !isDefault,
+        makeDefault: () => T.setDefault(ep.id),
+        remove: () => { T.removePreset(ep.id); this.setState({ trEdit: null }); }
+      };
+    }
+    const presetOpts = [
+      ...T.presets.map((p) => ({ id: p.id, label: p.name + ' — ' + what(p) + (p.id === T.defaultId ? ' (default)' : '') })),
+      { id: '__new', label: '+ New preset…' }
+    ];
+    const out = {
+      presetOpts, editId, hasEdit: !!ed, ed: ed || { kinds: [], fields: [], selects: [] },
+      pickEdit: (e) => { const v = e.target.value; this.setState({ trEdit: v === '__new' ? T.addPreset() : v }); }
+    };
+    return out;
+  }
+
+  // A scene's transition overrides (Inspector): Default or a preset, for in and out.
+  sceneTransVals(sel) {
+    const T = this.props.trans;
+    if (!T || !T.presets || !sel.startsWith('scene:')) return [];
+    const n = sel.slice(6);
+    const def = T.presets.find((p) => p.id === T.defaultId);
+    const opts = [{ id: '', label: 'Default (' + (def ? def.name : '') + ')' }, ...T.presets.map((p) => ({ id: p.id, label: p.name }))];
+    const mk = (label, dir, cur, short) => ({
+      label, value: cur || '', opts, short: short + ' ' + ((T.presets.find((p) => p.id === cur) || {}).name || ''),
+      change: (e) => T.setOverride(n, dir, e.target.value || null)
+    });
+    return [mk('Transition in', 'into', T.inOf(n), 'in'), mk('Transition out', 'outOf', T.outOfScene(n), 'out')];
+  }
+
+  // The selected item's own behaviour when scenes switch (Inspector section).
+  swVals(sel) {
+    const T = this.props.trans;
+    if (!T || !T.item || !sel.startsWith('obj:')) return { fields: [], selects: [], go: [], changed: false };
+    const id = sel.slice(4);
+    const it = T.item(id);
+    const isel = (label, k, opts) => ({ label, value: it[k], opts: opts.map((o) => ({ o })), change: (e) => T.setItem(id, k, e.target.value) });
+    const go = T.scenes.filter((n) => n !== T.current).map((n) => {
+      const r = T.resolve(T.current, n);
+      const has = T.sceneHas(n, id);
+      const outFx = (it.out === 'Inherit' ? r.unmatched || 'Fade' : it.out).toLowerCase();
+      const [w, c] = r.kind === 'Cut' ? ['cuts', '#9AA1AC']
+        : has && r.kind === 'Move' && it.match !== 'Never' ? ['glides to its place', '#7FD6A8']
+        : has ? ['cross-fades', '#C9CED6']
+        : r.kind === 'Move' ? ['leaves · ' + outFx, '#E8A33D'] : ['fades out', '#E8A33D'];
+      return { to: n, what: w, color: c, go: () => T.go(n) };
+    });
+    return {
+      fields: [this.field('tri:' + id + '|delay', 'Delay', 0, { step: 10, unit: 'ms', min: 0, max: 3000 })],
+      selects: [
+        isel('Easing', 'easing', ['Inherit', 'Ease in-out', 'Ease out', 'Linear', 'Spring']),
+        isel('Glide to other scenes', 'match', ['Auto', 'Never']),
+        isel('Appear', 'in', ['Inherit', 'Fade', 'Scale', 'Slide', 'None']),
+        isel('Disappear', 'out', ['Inherit', 'Fade', 'Scale', 'Slide', 'None'])
+      ],
+      go,
+      changed: it.delay > 0 || it.easing !== 'Inherit' || it.match !== 'Auto' || it.in !== 'Inherit' || it.out !== 'Inherit'
+    };
+  }
+
+  renderVals() {
+    const st = this.state;
+    const kind = this.props.kind ?? 'scenes';
+    const sel = this.props.sel ?? st.localSel;
+    const m = this.meta();
+    const pick = (key, additive) => {
+      if (typeof this.props.picker === 'function') this.props.picker(key, { additive, kind });
+      else this.setState({ localSel: key });
+    };
+    const isTree = kind === 'scenes' || kind === 'objects';
+    const rows = isTree ? this.treeRows(this.treeItems(kind), sel, pick, kind) : [];
+    const filtering = st.search.trim() !== '' || st.favOnly || st.labelFilter.length > 0;
+
+    const labelFilters = m.labels.map((l) => {
+      const active = st.labelFilter.includes(l.id);
+      return {
+        name: l.name, color: l.color, icon: ICONS[l.icon][1], active,
+        bg: active ? tint(l.color, 0.22) : 'transparent',
+        border: active ? l.color : '#2E333B',
+        tick: active ? '✓' : '',
+        boxBg: active ? l.color : 'transparent',
+        boxBorder: active ? l.color : '#4D535E',
+        toggle: () => this.setState({ labelFilter: active ? st.labelFilter.filter((x) => x !== l.id) : [...st.labelFilter, l.id] })
+      };
+    });
+
+    const mlabels = m.labels.map((l) => ({
+      name: l.name, color: l.color, icon: ICONS[l.icon][1],
+      rename: (e) => this.updateLabel(l.id, { name: e.target.value }),
+      remove: () => {
+        const mm = copy(m);
+        mm.labels = mm.labels.filter((x) => x.id !== l.id);
+        for (const k of Object.keys(mm.assign)) mm.assign[k] = mm.assign[k].filter((x) => x !== l.id);
+        this.setMeta(mm);
+        this.setState({ labelFilter: st.labelFilter.filter((x) => x !== l.id) });
+      },
+      swatches: SWATCHES.map((c) => ({ c, ring: c === l.color ? '#E6E8EB' : 'transparent', pick: () => this.updateLabel(l.id, { color: c }) })),
+      iconsOpen: st.iconFor === l.id,
+      toggleIcons: () => this.setState({ iconFor: st.iconFor === l.id ? null : l.id }),
+      iconGroups: ICON_GROUPS.map((g) => ({
+        title: g.title,
+        icons: g.ids.map((id) => ({
+          n: ICONS[id][0], d: ICONS[id][1],
+          bg: id === l.icon ? tint(l.color, 0.22) : '#0F1115',
+          border: id === l.icon ? l.color : '#2E333B',
+          pick: () => this.updateLabel(l.id, { icon: id })
+        }))
+      }))
+    }));
+
+    // Inspector
+    const fav = !!m.favs[this.src(sel)];
+    const assigned = m.assign[this.src(sel)] || [];
+    let insp, sceneFields = [], fieldSections = [], listSections = [];
+    let blend = { opts: [], fields: [] }, linked = { rows: [], empty: true };
+    // In a keyframe only placement and visibility are editable here.
+    const kfNow = (this.props.keyframes || {})[this.props.scenename || ''];
+    const kfLockNote = kfNow && sel.startsWith('obj:') ? 'Keyframe of “' + kfNow.parent + '”: blending, filters and properties follow it. Only placement and visibility change here.' : '';
+    // Every Inspector section folds; the choice is remembered per section name.
+    const fold = (title, hint) => {
+      const open = !st.secClosed[title];
+      return { open, caret: open ? '▾' : '▸', hint: !open && hint ? ' · ' + hint : '', toggle: () => this.setState({ secClosed: { ...this.state.secClosed, [title]: open } }) };
+    };
+    const labelChips = m.labels.map((l) => {
+      const checked = assigned.includes(l.id);
+      return {
+        name: l.name, color: checked ? l.color : '#7D8590', icon: ICONS[l.icon][1], checked,
+        hint: checked ? 'Remove label' : 'Add label',
+        text: checked ? '#E6E8EB' : '#7D8590',
+        bg: checked ? tint(l.color, 0.18) : 'transparent',
+        border: checked ? l.color : '#2E333B',
+        toggle: () => this.toggleLabel(sel, l.id)
+      };
+    });
+    const byIdL = Object.fromEntries(m.labels.map((l) => [l.id, l]));
+    const common = {
+      fav, labels: labelChips,
+      chips: assigned.map((id) => byIdL[id]).filter(Boolean).map((l) => ({ name: l.name, color: l.color, icon: ICONS[l.icon][1], tint: tint(l.color, 0.16) })),
+      tagOpen: st.tagOpen === 'insp:' + sel,
+      tagOn: st.tagOpen === 'insp:' + sel ? 'on' : '',
+      toggleTag: () => this.setState({ tagOpen: this.state.tagOpen === 'insp:' + sel ? null : 'insp:' + sel, filterOpen: false }),
+      assign: m.labels.map((l) => {
+        const checked = assigned.includes(l.id);
+        return { name: l.name, color: l.color, icon: ICONS[l.icon][1], checked, tick: checked ? '✓' : '', boxBg: checked ? l.color : 'transparent', boxBorder: checked ? l.color : '#4D535E', toggle: () => this.toggleLabel(sel, l.id) };
+      }),
+      more: '',
+      italic: this.isRef(sel) ? 'italic' : 'normal',
+      starFill: fav ? '#F2C14E' : 'none', starStroke: fav ? '#F2C14E' : '#9AA1AC',
+      toggleFav: () => this.toggleFav(sel)
+    };
+    if (sel.startsWith('out:')) {
+      const T = { 'out:program': 'Program output', 'out:youtube': 'YouTube stream', 'out:record': 'Recording', 'out:vcam': 'Virtual camera' };
+      insp = { ...common, isScene: false, isObject: false, title: T[sel] || sel, icon: OUT_ICON, subtitle: 'Output', kindTag: sel === 'out:program' ? 'Master chain' : 'Output', italic: 'normal', chips: [], more: '' };
+    } else if (sel.startsWith('scene:')) {
+      const n = sel.slice(6);
+      const info = SCENE_INFO[n] || { count: 0, usedIn: 'none', hotkey: 'none', icon: 'layers' };
+      const kfp = (this.props.keyframes || {})[n];
+      insp = { ...common, isScene: true, isObject: false, title: kfp ? kfp.label : (this.props.names && this.props.names[sel]) || n, icon: ICONS[kfp ? 'keyframe' : info.icon][1], subtitle: kfp ? 'Keyframe of ' + kfp.parent : 'Scene', kindTag: kfp ? 'Keyframe of “' + kfp.parent + '”' : 'Scene', count: info.count, usedIn: info.usedIn, hotkey: info.hotkey };
+    } else {
+      const o = this.info(sel) || OBJ_INFO.webcam;
+      const extra = (this.props.selids ?? []).length - 1;
+      insp = { ...common, isScene: false, isObject: true, title: this.nameFor(sel), icon: ICONS[o.icon][1], subtitle: extra > 0 ? o.subtitle + ' · +' + extra + ' more selected' : o.subtitle, kindTag: o.subtitle.split(' · ')[0].replace(' source', ''), more: extra > 0 ? '+' + extra : '' };
+      const tf = ['X', 'Y', 'W', 'H'].map((nm, i) => this.field(sel + ':' + nm, nm, o.t[i], { step: 1, unit: 'px', min: nm === 'W' || nm === 'H' ? 1 : -10000 }));
+      // The same width and height again, as a % of the source's own size.
+      tf.push(this.field(sel + ':Wpct', 'W', 100, { step: 1, unit: '%', min: 0.1, max: 10000 }));
+      tf.push(this.field(sel + ':Hpct', 'H', 100, { step: 1, unit: '%', min: 0.1, max: 10000 }));
+      tf.push(this.field(sel + ':rot', 'Rotation', o.t[4], { step: 0.5, dec: 1, unit: '°', min: -360, max: 360 }));
+      const cf = ['Left', 'Right', 'Top', 'Bottom'].map((nm, i) => this.field(sel + ':crop' + nm, nm, o.c[i], { step: 1, unit: 'px', min: 0, max: 4000 }));
+      const lk = this.state.aspectLock;
+      if (o.audioOnly) insp.audioOnly = true;
+      fieldSections = o.audioOnly ? [] : [
+        { title: 'PARAMETERS', fields: tf, hasLink: true, linkOn: lk,
+          linkLabel: lk ? 'Width and height are linked (keeps the aspect ratio). Click to unlink.' : 'Width and height are independent. Click to link them.',
+          linkIcon: lk ? 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1' : 'M9 15l-1.5 1.5a3.2 3.2 0 0 1-4.5-4.5L4.5 10.5 M15 9l1.5-1.5a3.2 3.2 0 0 1 4.5 4.5l-1.5 1.5 M8 4v3 M4 8h3 M16 20v-3 M20 16h-3',
+          linkBg: lk ? '#22324A' : 'transparent', linkBorder: lk ? '#4C8DFF' : '#2E333B', linkColor: lk ? '#B5CEFF' : '#9AA1AC',
+          toggleLink: () => this.setState({ aspectLock: !this.state.aspectLock }) },
+        { title: '3D', fields: [
+          this.field(sel + ':rotX', 'Tilt (X)', 0, { step: 0.5, dec: 1, unit: '°', min: -180, max: 180 }),
+          this.field(sel + ':rotY', 'Turn (Y)', 0, { step: 0.5, dec: 1, unit: '°', min: -180, max: 180 }),
+          this.field(sel + ':posZ', 'Depth (Z)', 0, { step: 1, unit: 'px', min: -5000, max: 5000 }),
+          this.field(sel + ':persp', 'Perspective', 1200, { step: 10, unit: 'px', min: 100, max: 20000 })
+        ], hasLink: false },
+        { title: 'CROP', fields: cf, hasLink: false }
+      ];
+      const id = sel.slice(4);
+      const sid = this.src(sel).slice(4);
+      const xfo = (this.props.xf && this.props.xf[sid]) || {};
+      blend = {
+        value: xfo.blend || 'Normal',
+        opts: BLEND_NAMES.map((o2) => ({ o: o2 })),
+        change: (e) => { if (typeof this.props.xfset === 'function') this.props.xfset(id, 'blend', e.target.value); },
+        fields: [this.field('obj:' + sid + ':opacity', 'Opacity', 100, { step: 1, unit: '%', min: 0, max: 100 })]
+      };
+      listSections = [];
+    }
+
+    const MS = this.props.master;
+    // Meter orientation: set from the Mixer's title bar; until then it follows where it's docked.
+    const mo = this.props.mixorient || st.mixOrientLocal || '';
+    const mixVertical = mo === 'v' || (mo !== 'h' && this.props.vertical === 'yes');
+    // Only sources whose audio is on reach the Mixer.
+    const channels0 = (this.props.mixer || [
+      { id: 'mic', n: 'Mic · ES-9 Line', db: -3 },
+      { id: 'desk', n: 'Desktop audio', db: -8.5 },
+      { id: 'alerts', n: 'Alerts', db: -12 }
+    ]);
+    const channels = channels0.map((c) => {
+      const f = this.field('mix:' + c.id, c.n + (MS && MS.privacy && c.id === 'mic' ? ' · muted (privacy)' : ''), c.db, { step: 0.5, dec: 1, unit: 'dB', min: -60, max: 12, axis: mixVertical ? 'y' : 'x' });
+      const v = this.val('mix:' + c.id, c.db);
+      return { ...f, short: c.n.split(' · ')[0], level: Math.round(Math.max(0, Math.min(100, ((v + 60) / 72) * 100))) };
+    });
+
+    const chat = st.chat.map((c) => {
+      const featured = st.featured === c.id;
+      return {
+        time: c.time, author: c.author, color: c.color, text: c.text,
+        badge: c.badge || '', badgeColor: c.badgeColor || '#9AA1AC',
+        bg: featured ? '#22324A' : (c.superChat ? 'rgba(232,163,61,0.12)' : 'transparent'),
+        edge: featured ? '#4C8DFF' : (c.superChat ? '#E8A33D' : 'transparent'),
+        featureLabel: featured ? 'On stream' : 'Show',
+        feature: () => this.setState({ featured: featured ? null : c.id })
+      };
+    });
+
+    return {
+      is: { filters: kind === 'filters', ytstats: kind === 'ytstats', transform: kind === 'transform', tree: isTree, scenes: kind === 'scenes', objects: kind === 'objects', inspector: kind === 'inspector', chat: kind === 'chat', mixer: kind === 'mixer', outputs: kind === 'outputs', transitions: kind === 'transitions', agent: kind === 'agent' },
+      treeName: kind === 'scenes' ? 'scenes' : 'objects',
+      uid: this.uid,
+      popKey: (e) => { if (e.key === 'Escape') { e.stopPropagation(); this.setState({ filterOpen: false, tagOpen: null, addOpen: false }); } },
+      starIcon: ICONS.star[1],
+      tagIcon: ICONS.tag[1],
+      search: st.search,
+      onSearch: (e) => this.setState({ search: e.target.value }),
+      favFilter: {
+        active: st.favOnly,
+        bg: st.favOnly ? 'rgba(242,193,78,0.16)' : 'transparent',
+        border: st.favOnly ? '#F2C14E' : '#2E333B',
+        fill: st.favOnly ? '#F2C14E' : 'none',
+        tick: st.favOnly ? '✓' : '',
+        boxBg: st.favOnly ? '#F2C14E' : 'transparent',
+        boxBorder: st.favOnly ? '#F2C14E' : '#4D535E',
+        toggle: () => this.setState({ favOnly: !st.favOnly })
+      },
+      filterOpen: st.filterOpen,
+      toggleFilter: () => this.setState({ filterOpen: !st.filterOpen }),
+      filterCount: (st.favOnly ? 1 : 0) + st.labelFilter.length + (st.search.trim() ? 1 : 0),
+      filterBg: (st.favOnly || st.labelFilter.length) ? '#22324A' : '#0F1115',
+      filterBorder: (st.favOnly || st.labelFilter.length) ? '#4C8DFF' : '#2E333B',
+      filterColor: (st.favOnly || st.labelFilter.length) ? '#B5CEFF' : '#9AA1AC',
+      labelFilters,
+      filtering,
+      clearFilters: () => this.setState({ search: '', favOnly: false, labelFilter: [] }),
+      manage: st.manage,
+      manageBg: st.manage ? '#2B313A' : '#0F1115',
+      toggleManage: () => this.setState({ manage: !st.manage, iconFor: null }),
+      openManage: () => this.setState({ manage: true, tagOpen: null, filterOpen: false }),
+      mlabels,
+      addLabel: () => {
+        const mm = copy(m);
+        const id = 'l' + Date.now();
+        mm.labels.push({ id, name: 'New label', icon: 'tag', color: SWATCHES[mm.labels.length % SWATCHES.length] });
+        this.setMeta(mm);
+        this.setState({ iconFor: id });
+      },
+      rows,
+      noRows: isTree && rows.length === 0,
+      yt: this.ytVals(),
+      fl: this.flVals(),
+      tx: this.props.tx ?? { summary: 'Shown in the workspace with live selection.', alignBtns: [], distBtns: [], actions: [] },
+      treeCtx: (e) => {
+        if (typeof this.props.openctx !== 'function') return;
+        e.preventDefault();
+        this.props.openctx(kind, null, e.clientX, e.clientY);
+      },
+      kfLock: kfLockNote, srcSecs: !(insp && insp.audioOnly) && !kfLockNote,
+      insp, sceneFields, listSections: (kfLockNote ? [] : listSections).map((x) => ({ ...x, ...fold(x.title, x.fields.length ? x.fields.length + '' : '') })),
+      fieldSections: fieldSections.map((x) => {
+        // A folded section says whether anything in it is set.
+        const used = (fs) => fs.some((f) => parseFloat(String(f.display).replace('−', '-')) !== 0);
+        const hint = x.title === '3D' ? (used(x.fields.slice(0, 3)) ? 'in use' : '') : x.title === 'CROP' ? (used(x.fields) ? 'cropped' : '') : '';
+        return { ...x, ...fold(x.title, hint) };
+      }),
+      sw: this.swVals(sel),
+      secSwitch: fold('SCENE SWITCHES', this.swVals(sel).changed ? 'customised' : ''),
+      sceneTrans: this.sceneTransVals(sel),
+      secTrans: fold('TRANSITIONS', this.sceneTransVals(sel).filter((f) => f.value).map((f) => f.short).join(', ')),
+      secScene: fold('SCENE'), secBlend: fold('BLENDING', blend.value && blend.value !== 'Normal' ? blend.value : ''),
+      blend, linked, visual: !(insp && insp.audioOnly), audioOnly: !!(insp && insp.audioOnly), linkIcon: LINK_ICON,
+      fsTitle: sel.startsWith('scene:') ? 'SCENE FILTERS' : 'SOURCE FILTERS · EVERYWHERE',
+      fsum: this.filterSummary(sel),
+      fsumEmpty: this.filterSummary(sel).length === 0,
+      editFilters: () => { if (typeof this.props.showpanel === 'function') this.props.showpanel('filters'); },
+      channels,
+      chat,
+      chatDraft: st.chatDraft,
+      onChatDraft: (e) => this.setState({ chatDraft: e.target.value }),
+      chatKey: (e) => { if (e.key === 'Enter') { e.preventDefault(); this.sendChatNow(); } },
+      sendChat: (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        const t = st.chatDraft.trim();
+        if (!t) return;
+        this.setState({ chatDraft: '', chat: [...st.chat, { id: Date.now(), time: 'now', author: 'JStream', color: '#E6E8EB', badge: 'OWNER', badgeColor: '#F2C14E', text: t }] });
+      },
+      // The Mixer shows the master; its channels fold underneath (folded by default).
+      mixOpen: !!st.mixOpen, mixCaret: st.mixOpen ? '▾' : '▸',
+      // Docked in a side column the channels become vertical strips.
+      mixHorz: !!st.mixOpen && !mixVertical,
+      // Flips the meters between horizontal and vertical (until then: vertical in side columns).
+      mixFlip: () => { if (typeof this.props.setmixorient === 'function') this.props.setmixorient(mixVertical ? 'h' : 'v'); else this.setState({ mixOrientLocal: mixVertical ? 'h' : 'v' }); },
+      mixFlipIcon: mixVertical ? 'M7 20V9 M12 20V4 M17 20V13' : 'M4 7h11 M4 12h16 M4 17h7',
+      mixFlipTip: mixVertical ? 'Meters: vertical · click for horizontal' : 'Meters: horizontal · click for vertical',
+      mixHorzMode: !mixVertical, mixVertMode: mixVertical,
+      mixCount: channels.length + (channels.length === 1 ? ' channel' : ' channels'),
+      mixToggle: () => this.setState({ mixOpen: !this.state.mixOpen }),
+      tr: this.trVals(),
+      ms: MS ? { ...MS, monitorLabel: MS.monitorPost ? 'Hear: after FX' : 'Hear: before FX', monitorShort: MS.monitorPost ? 'Hear post' : 'Hear pre', tpColor: MS.tpOver ? '#FF8A8F' : '#7FD6A8', tpNote: MS.tpOver ? 'over 0 dBTP: add a true-peak limiter' : 'safe' } : { fx: 0, outputs: [] },
+      outs: MS ? [
+        { name: 'Program output', status: 'master', indent: 4, weight: 600, bg: '#1F232A', fx: MS.fx, open: MS.openFx, tip: 'Filters on everything leaving JStream', fxBg: '#22324A', fxBorder: '#4C8DFF' },
+        ...MS.outputs.map((o) => ({ name: o.name, status: o.status, indent: 18, weight: 400, bg: 'transparent', fx: o.fx, open: o.open, tip: 'Filters for ' + o.name + ' only', fxBg: o.fx ? '#22324A' : 'transparent', fxBorder: o.fx ? '#4C8DFF' : '#2E333B' }))
+      ] : [],
+      sceneName: this.props.scenename || 'Desktop + Cam'
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-13T23:30:00Z"},
+  "title": "JStream UI concepts",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 900, "title": "A · Studio Classic", "expand": "fill"},
+    "CanvasFirst.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 900, "title": "B · Canvas First", "expand": "fill"},
+    "ShowControl.dc.html": {"x": 3040, "y": 0, "w": 1440, "h": 900, "title": "C · Show Control", "expand": "fill"},
+    "Docking.dc.html": {"x": 0, "y": 1320, "w": 1440, "h": 900, "title": "D · Dockable workspace (interactive)", "expand": "fill", "is_interactive": true},
+    "Panel.dc.html": {"x": 1520, "y": 1320, "w": 320, "h": 520, "title": "Panel contents (used by D)"}
+  },
+  "order": ["Main.dc.html", "CanvasFirst.dc.html", "ShowControl.dc.html", "Docking.dc.html", "Panel.dc.html"],
+  "notes": {
+    "heading": {"x": 0, "y": -300, "text": "JStream main window: three directions", "kind": "title1", "maxW": 4480},
+    "heading2": {"x": 0, "y": 1020, "text": "Chosen direction: dockable workspace", "kind": "title1", "maxW": 1840}
+  },
+  "designSystems": []
+}

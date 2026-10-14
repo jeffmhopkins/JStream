@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Show Control</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0F1115}
+a{color:#8AB4FF}a:hover{color:#B5CEFF}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="min-height: 900px; display: flex; flex-direction: column; background: #0F1115; color: #E6E8EB; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 8px 14px; background: #16191E; border-bottom: 1px solid #262A31">
+<div style="display: flex; align-items: center; gap: 10px">
+<div style="width: 22px; height: 22px; border-radius: 6px; background: {{accent}}"></div>
+<strong style="font-size: 15px; font-weight: 600">JStream</strong>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 5px 10px; background: #3A1416; border: 1px solid #C62F36; border-radius: 6px">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: #FF5C63"></span>
+<span style="font-weight: 600; color: #FFD3D5">LIVE</span>
+<span style="font-family: 'IBM Plex Mono', monospace; color: #FFD3D5">01:24:07</span>
+</div>
+<div style="flex: 1 1 auto"></div>
+<div style="display: flex; gap: 14px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: #9AA1AC">
+<span>6.0 Mbps</span><span>0 dropped</span><span>CPU 4%</span>
+</div>
+<button style="background: #1F232A; color: #E6E8EB; border: 1px solid #2E333B; border-radius: 6px; padding: 8px 14px">Edit layout</button>
+<button style="background: #1F232A; color: #FFD3D5; border: 1px solid #C62F36; border-radius: 6px; padding: 8px 14px">End stream</button>
+</header>
+
+<div style="flex: 1 1 auto; display: flex; flex-wrap: wrap; gap: 12px; padding: 12px; min-height: 0">
+
+<div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+
+<div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch">
+<section aria-label="Preview" style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; justify-content: space-between; color: #9AA1AC"><span style="font-weight: 600; letter-spacing: 0.8px; font-size: 12px">PREVIEW</span><span>Just Chatting</span></div>
+<div style="position: relative; aspect-ratio: 16 / 9; background: #1B2633; outline: 2px solid #3FB27F">
+<div style="position: absolute; left: 22%; top: 10%; width: 56%; height: 70%; background: #3A2F45; display: flex; align-items: center; justify-content: center; color: #CDB9E3">Webcam</div>
+<div style="position: absolute; left: 4%; bottom: 8%; padding: 6px 10px; background: #0F1115">jeff · Q&amp;A</div>
+</div>
+</section>
+<div style="flex: 0 0 auto; display: flex; flex-direction: column; justify-content: center; gap: 8px">
+<button style="background: #1F232A; color: #E6E8EB; border: 1px solid #2E333B; border-radius: 6px; padding: 12px 18px; font-weight: 600">Cut</button>
+<button style="background: {{accent}}; color: #0F1115; border: 0; border-radius: 6px; padding: 12px 18px; font-weight: 600">Fade</button>
+<span style="text-align: center; color: #9AA1AC; font-family: 'IBM Plex Mono', monospace; font-size: 11px">300 ms</span>
+</div>
+<section aria-label="Program" style="flex: 1 1 300px; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; justify-content: space-between; color: #9AA1AC"><span style="font-weight: 600; letter-spacing: 0.8px; font-size: 12px; color: #FF8A8F">PROGRAM</span><span>Desktop + Cam</span></div>
+<div style="position: relative; aspect-ratio: 16 / 9; background: #1B2633; outline: 2px solid #C62F36">
+<div style="position: absolute; left: 4%; top: 6%; width: 66%; height: 70%; background: #243447; border: 1px solid #34506E; display: flex; align-items: flex-end; padding: 8px; box-sizing: border-box; color: #A9C1DB; font-size: 12px">Display 1</div>
+<div style="position: absolute; right: 4%; bottom: 8%; width: 24%; aspect-ratio: 1 / 1; border-radius: 50%; background: #3A2F45; border: 2px solid #6B5A80"></div>
+<div style="position: absolute; left: 4%; bottom: 8%; padding: 6px 10px; background: #0F1115">jeff · building a stream app in Rust</div>
+</div>
+</section>
+</div>
+
+<section aria-label="Scene switcher" style="display: flex; flex-direction: column; gap: 8px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">SCENES</h2>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px">
+<button style="display: flex; flex-direction: column; gap: 6px; background: #16191E; border: 1px solid #262A31; border-radius: 6px; padding: 8px; color: #E6E8EB; text-align: left"><span style="display: block; width: 100%; aspect-ratio: 16 / 9; background: #1F2733"></span><span>1 · Starting Soon</span></button>
+<button style="display: flex; flex-direction: column; gap: 6px; background: #2A1517; border: 1px solid #C62F36; border-radius: 6px; padding: 8px; color: #E6E8EB; text-align: left"><span style="display: block; width: 100%; aspect-ratio: 16 / 9; background: #243447"></span><span>2 · Desktop + Cam</span></button>
+<button style="display: flex; flex-direction: column; gap: 6px; background: #142A20; border: 1px solid #3FB27F; border-radius: 6px; padding: 8px; color: #E6E8EB; text-align: left"><span style="display: block; width: 100%; aspect-ratio: 16 / 9; background: #3A2F45"></span><span>3 · Just Chatting</span></button>
+<button style="display: flex; flex-direction: column; gap: 6px; background: #16191E; border: 1px solid #262A31; border-radius: 6px; padding: 8px; color: #E6E8EB; text-align: left"><span style="display: block; width: 100%; aspect-ratio: 16 / 9; background: #1F2733"></span><span>4 · BRB</span></button>
+<button style="display: flex; flex-direction: column; gap: 6px; background: #16191E; border: 1px solid #262A31; border-radius: 6px; padding: 8px; color: #E6E8EB; text-align: left"><span style="display: block; width: 100%; aspect-ratio: 16 / 9; background: #1F2733"></span><span>5 · Ending</span></button>
+</div>
+</section>
+
+<section aria-label="Audio console" style="display: flex; flex-direction: column; gap: 8px; background: #16191E; border: 1px solid #262A31; border-radius: 8px; padding: 12px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">AUDIO</h2>
+<div style="display: flex; flex-wrap: wrap; gap: 18px">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 84px">
+<div style="display: flex; gap: 6px; height: 120px; align-items: flex-end">
+<div style="width: 8px; height: 100%; background: #22262D; border-radius: 3px; display: flex; align-items: flex-end"><div style="width: 100%; height: 64%; background: #3FB27F; border-radius: 3px"></div></div>
+<div style="width: 8px; height: 100%; background: #22262D; border-radius: 3px; display: flex; align-items: flex-end"><div style="width: 100%; height: 60%; background: #3FB27F; border-radius: 3px"></div></div>
+<div style="width: 22px; height: 100%; position: relative"><div style="position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #2E333B"></div><div style="position: absolute; left: 0; top: 30%; width: 22px; height: 12px; background: #E6E8EB; border-radius: 2px"></div></div>
+</div>
+<span>Mic</span><span style="font-family: 'IBM Plex Mono', monospace; color: #9AA1AC; font-size: 11px">−3.0 dB</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 84px">
+<div style="display: flex; gap: 6px; height: 120px; align-items: flex-end">
+<div style="width: 8px; height: 100%; background: #22262D; border-radius: 3px; display: flex; align-items: flex-end"><div style="width: 100%; height: 42%; background: #3FB27F; border-radius: 3px"></div></div>
+<div style="width: 8px; height: 100%; background: #22262D; border-radius: 3px; display: flex; align-items: flex-end"><div style="width: 100%; height: 45%; background: #3FB27F; border-radius: 3px"></div></div>
+<div style="width: 22px; height: 100%; position: relative"><div style="position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #2E333B"></div><div style="position: absolute; left: 0; top: 45%; width: 22px; height: 12px; background: #E6E8EB; border-radius: 2px"></div></div>
+</div>
+<span>Desktop</span><span style="font-family: 'IBM Plex Mono', monospace; color: #9AA1AC; font-size: 11px">−8.5 dB</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 84px">
+<div style="display: flex; gap: 6px; height: 120px; align-items: flex-end">
+<div style="width: 8px; height: 100%; background: #22262D; border-radius: 3px; display: flex; align-items: flex-end"><div style="width: 100%; height: 12%; background: #3FB27F; border-radius: 3px"></div></div>
+<div style="width: 8px; height: 100%; background: #22262D; border-radius: 3px; display: flex; align-items: flex-end"><div style="width: 100%; height: 10%; background: #3FB27F; border-radius: 3px"></div></div>
+<div style="width: 22px; height: 100%; position: relative"><div style="position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #2E333B"></div><div style="position: absolute; left: 0; top: 55%; width: 22px; height: 12px; background: #E6E8EB; border-radius: 2px"></div></div>
+</div>
+<span>Alerts</span><span style="font-family: 'IBM Plex Mono', monospace; color: #9AA1AC; font-size: 11px">−12.0 dB</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 84px">
+<div style="display: flex; gap: 6px; height: 120px; align-items: flex-end">
+<div style="width: 8px; height: 100%; background: #22262D; border-radius: 3px; display: flex; align-items: flex-end"><div style="width: 100%; height: 0%; background: #3FB27F; border-radius: 3px"></div></div>
+<div style="width: 8px; height: 100%; background: #22262D; border-radius: 3px; display: flex; align-items: flex-end"><div style="width: 100%; height: 0%; background: #3FB27F; border-radius: 3px"></div></div>
+<div style="width: 22px; height: 100%; position: relative"><div style="position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #2E333B"></div><div style="position: absolute; left: 0; top: 40%; width: 22px; height: 12px; background: #7D8590; border-radius: 2px"></div></div>
+</div>
+<span>Music</span><span style="color: #FF8A8F; font-size: 11px">muted</span>
+</div>
+<div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 84px; padding-left: 18px; border-left: 1px solid #262A31">
+<div style="display: flex; gap: 6px; height: 120px; align-items: flex-end">
+<div style="width: 8px; height: 100%; background: #22262D; border-radius: 3px; display: flex; align-items: flex-end"><div style="width: 100%; height: 70%; background: #3FB27F; border-radius: 3px"></div></div>
+<div style="width: 8px; height: 100%; background: #22262D; border-radius: 3px; display: flex; align-items: flex-end"><div style="width: 100%; height: 66%; background: #3FB27F; border-radius: 3px"></div></div>
+<div style="width: 22px; height: 100%; position: relative"><div style="position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #2E333B"></div><div style="position: absolute; left: 0; top: 25%; width: 22px; height: 12px; background: #E6E8EB; border-radius: 2px"></div></div>
+</div>
+<span style="font-weight: 600">Stream bus</span><span style="font-family: 'IBM Plex Mono', monospace; color: #9AA1AC; font-size: 11px">−1.0 dB</span>
+</div>
+</div>
+</section>
+</div>
+
+<aside style="flex: 1 1 300px; max-width: 360px; display: flex; flex-direction: column; gap: 12px">
+<section aria-label="Outputs" style="background: #16191E; border: 1px solid #262A31; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">OUTPUTS</h2>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 10px; background: #1F232A; border-radius: 6px">
+<div style="display: flex; justify-content: space-between"><span style="font-weight: 600">YouTube</span><span style="color: #FF8A8F">live</span></div>
+<div style="display: flex; justify-content: space-between; color: #9AA1AC; font-family: 'IBM Plex Mono', monospace; font-size: 12px"><span>1080p60 · 6.0 Mbps</span><span>health good</span></div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 10px; background: #1F232A; border-radius: 6px">
+<div style="display: flex; justify-content: space-between"><span style="font-weight: 600">Virtual camera</span><span style="color: #7FD6A8">on</span></div>
+<div style="color: #9AA1AC; font-size: 12px">Program feed · in use by Zoom</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 4px; padding: 10px; background: #1F232A; border-radius: 6px">
+<div style="display: flex; justify-content: space-between"><span style="font-weight: 600">Recording</span><span style="color: #9AA1AC">off</span></div>
+<button style="align-self: flex-start; background: none; border: 0; color: #8AB4FF; padding: 2px 0">Start recording</button>
+</div>
+</section>
+
+<section aria-label="Agent activity" style="flex: 1 1 auto; background: #16191E; border: 1px solid #262A31; border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; align-items: center">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.8px; color: #9AA1AC">AGENT ACTIVITY</h2>
+<span style="color: #9AA1AC; font-size: 12px">1 agent connected</span>
+</div>
+<ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+<li style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid #22262D"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #7D8590">01:23:51 · MCP</span><span>Switched program to “Desktop + Cam”</span></li>
+<li style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 8px; border-bottom: 1px solid #22262D"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #7D8590">01:22:10 · MCP</span><span>Mic gain −1.5 dB → −3.0 dB</span></li>
+<li style="display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #7D8590">01:20:02 · MCP</span><span>Updated lower third text</span></li>
+</ol>
+<button style="align-self: flex-start; margin-top: auto; background: #1F232A; border: 1px solid #2E333B; color: #E6E8EB; border-radius: 5px; padding: 6px 10px">Undo last agent change</button>
+</section>
+</aside>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#4C8DFF","options":["#4C8DFF","#3FB27F","#E8A33D","#B07CFF"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return { accent: this.props.accent ?? '#4C8DFF' };
+}
+}
+</script>
+</body>
+</html>

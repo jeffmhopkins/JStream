@@ -155,3 +155,11 @@ relied_on = "ADR conventions (Context/Decision/Consequences)"
 review_every = "365d"
 status = "ok"
 checked_note = "Page loads"
+
+[[external]]
+id = "ui-prototype-artifact"
+url = "https://claude.ai/artifact/JtfdfPAbhubDN5tEcspTvN"
+relied_on = "The live UI prototype (claude.ai Design canvas artifact) whose source is design/ui-prototype/"
+review_every = "180d"
+status = "unverified"
+checked_note = "Private artifact (sign-in required), so the sweep can't fetch it; the link is visible in this public repo but only the maintainer can open it"
