@@ -2,7 +2,7 @@
 id = "ADR-0024"
 title = "Scene structure: groups, keyframe scenes, folders and organisation"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
@@ -13,8 +13,9 @@ tier = "maintainer"
 M1b builds scenes, scenes as sources, and placing items
 ([ROADMAP](../../ROADMAP.md#m1)). The chosen UI prototype
 ([design/ui-prototype](../../design/ui-prototype/README.md#settles), direction D) adds
-four structures on top that no doc describes yet. Its decision register
-(`design/ui-prototype/decision-register.md`, entries D4 to D7 and D42) analyses them:
+four structures on top that no doc describes yet. Its
+[decision register](../../design/ui-prototype/decision-register.md) (entries D4 to D7 and
+D42) analyses them:
 - **groups**: "a group is a nested scene". Grouping moves the selected objects into a new
   scene, nested in place, and the group's children are edited inline on the parent
   canvas;

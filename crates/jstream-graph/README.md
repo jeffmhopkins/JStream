@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:71a1ff1101c4bbf6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency protocol#design's Undo subsection now points to ADR-0032 for undo/redo requests; graph still returns inverses with no expected_rev for core's history to choose, consistent with the ADR" }
+verified = { hash = "b3:e599ca0b99a37915", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model changed to ADR-0024 target state; Purpose describes only what is built (flat scenes, items with transform, crop, visible) and still matches src; ADR-0024 fields are not built" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

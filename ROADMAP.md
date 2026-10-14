@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:935465d03f8c01b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b expanded per maintainer: browser source (ADR-0021, after S4), scenes as sources with cycle rejection, shared vs duplicate sources, transform+crop, source filters vs item effects; M1a/c/d unchanged" }
+verified = { hash = "b3:f2dc467e34b19648", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0024 to M1b: added groups as scenes (role, item.move keeping ids, scene_id addressing limited to own scene until variants); other M1 bullets unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -68,6 +68,10 @@ verified = { hash = "b3:935465d03f8c01b9", by = "agent:claude@session_01QBbMRwRu
   - Scene graph and sources: window, webcam (incl. MJPEG decode), image, color, text, and
     **browser** ([ADR-0021](docs/adr/0021-browser-source.md); after spike S4).
   - **Scenes as sources**: a scene placed inside another scene, with cycles rejected.
+  - **Groups as scenes** ([ADR-0024](docs/adr/0024-scene-structure.md)): a scene `role`
+    (`scene` or `group`), `item.move` between scenes keeping the item's id, and the
+    optional `scene_id` addressing of placement edits (own scene only until keyframe
+    scenes are built).
   - **Shared sources:** adding an existing source places the *same* instance (one capture,
     one set of source filters) in another scene. **Duplicate** makes an independent copy.
   - Place, move, resize, rotate and **crop** scene items (2D transform + crop), with golden
@@ -88,7 +92,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "UI bullet now names canvas editing: drag-to-place, resize/rotate, crop handles, snapping, add-existing vs duplicate; Leptos/preview/Tauri/studio items unchanged and still match ADR-0002" }
+verified = { hash = "b3:a37f73a4b2b5dda4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0024: M2 gains keyframe scenes, folders, organisation metadata incl. background and hotkeys, built with the UI that uses them; existing M2 items unchanged and still match ADR-0002" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
@@ -100,6 +104,10 @@ verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRu
 - `jstream-desktop` (Tauri) and `jstream-daemon` serving the same UI. Token pairing for
   remote browsers.
 - Studio mode (Preview/Program) and transitions.
+- Built with the UI that uses them ([ADR-0024](docs/adr/0024-scene-structure.md)):
+  keyframe scenes (variants with per-item overrides), scene folders, organisation
+  metadata (labels, favourites, scene icons and colours, show in multiview, scene
+  background colour) and hotkey bindings.
 
 **Demo:** everything from M1, done by hand in the desktop app and in a browser.
 

@@ -162,15 +162,19 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "b3:92b0462b389879d4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read merged section: shared-source/duplicate, scenes-as-sources (merged with main's Nesting bullet, no duplicate), filters vs effects, and main's Built-so-far graph paragraph all consistent" }
+depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0024-scene-structure.md"]
+verified = { hash = "b3:653b22a1da8d1297", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0024 (now a dependency): tree gains folders, labels, hotkeys; Scene gains role, variant_of, overrides, folder, background, icon, color, favourite, show_in_multiview; Source gains labels, favourite; new bullets for groups/item.move, keyframe variants with overrides and the variant-parent cycle edge, scene_id addressing, and folders/metadata as collection state; Built so far lists all of it under Not yet, matching jstream-graph model/" }
 -->
 
 ```
 Collection (JSON on disk, schema_version, rev: u64)
-├── sources        Source { id, kind, settings, filters[] }   video and/or audio; independent of scenes
-├── scenes         Scene { id, name, items[] }
+├── sources        Source { id, kind, settings, filters[], labels, favourite }   video and/or audio; independent of scenes
+├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
+│                          icon, color, favourite, show_in_multiview, items[] }   flat display order
 │                  SceneItem { id, source_id, transform: Transform3D, crop, visible, blend, effects[] }
+├── folders        Folder { id, name }   ordered, one level; organising only
+├── labels         Label { id, name, icon, color }   ordered
+├── hotkeys        [{ chord, action }]   chord → protocol action request
 ├── studio         { program_scene, preview_scene, transition }   (studio-mode state)
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
 ├── audio          sends: (source_id, bus_id) → gain_db
@@ -190,6 +194,31 @@ Collection (JSON on disk, schema_version, rev: u64)
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
   scenes nest. A scene never contains itself at any depth, so the graph rejects the edit
   that would close a cycle.
+- **Groups and keyframe scenes** ([ADR-0024](adr/0024-scene-structure.md)):
+  - A **group** is a scene with `role = group`. The role changes no engine behaviour: a
+    group renders, nests and takes filters like any scene, and clients hide groups from
+    the scene list. A group shares its parent's coordinate space, so its children keep
+    their coordinates and a client can edit them inline. `item.move` moves an item
+    to another scene and keeps its id; grouping and ungrouping are client-built batches
+    of `scene.create`, `source.create`, `item.add` and `item.move`.
+  - A **keyframe scene** (variant) is a real scene with `variant_of` naming its parent,
+    which is not itself a variant. It has no items of its own: it shows the parent's
+    items with per-item `overrides` of placement and visibility (an absent field follows
+    the parent); everything else, including the background, follows the parent. A
+    variant can be on program, nested and hotkeyed. The cycle check counts the
+    variant → parent edge. Deleting a parent is rejected while it has variants.
+  - Placement edits take an optional `scene_id`: absent or the item's own scene changes
+    the item; a variant writes that variant's override; `item.clear_override` removes one.
+- **Folders and organisation are collection state:** folders, labels, favourites, scene
+  icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable
+  edits and saved with the collection, so every client and agent sees the same thing
+  ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not
+  per person). Folders change no rendering, switching or nesting; scenes keep their flat
+  display order, and a variant sits under its parent, never in a folder. Labels and
+  favourites on a source belong to the source, so every placement shares them. A hotkey
+  binds only an action, never an edit; which client listens for the keys is a client
+  decision. `Scene.background` (absent means transparent) is scene model, not metadata,
+  because the compositor draws it wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
   is used. `SceneItem.effects[]` and `crop` belong to that one placement.
 - The preview shown in the UI is a protocol stream, not an `Output`.
@@ -205,7 +234,10 @@ Collection (JSON on disk, schema_version, rev: u64)
   order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
   they never copy them. Deleting a source an item still places, or a scene a source
   still shows, is rejected. Not yet: settings, filters, effects, blend, the 3D
-  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
+  transform, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
+  variants and overrides, folders, labels, favourites and other organisation metadata,
+  `background`, hotkeys, and everything outside `sources` and `scenes`. Nothing is
+  persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -269,7 +301,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:9a70e815e411c6c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added Live values (live.set/live.cancel actions, live.changed/live.ended) and History (history.undo/redo, a fourth call kind) bullets citing ADR-0032; covered control/server/protocol READMEs changed only as verified in this PR; other bullets still match the code" }
+verified = { hash = "b3:c63dc7acbc0c60ea", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edits bullet names ADR-0024's item.move and optional scene_id addressing, marked not built; covered control/server/protocol READMEs changed only by verifies in this PR; protocol 0.3 code has neither edit, other bullets still match" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -281,7 +313,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Edits** (`scene.create`, `item.set_transform`, `audio.set_send`, …): typed, undoable,
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
-  batch increments `rev` by one.
+  batch increments `rev` by one. `item.move` moves an item between scenes keeping its
+  id, and placement edits take an optional `scene_id` so they can write a keyframe
+  scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.

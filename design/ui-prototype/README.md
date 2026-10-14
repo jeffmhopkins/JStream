@@ -125,8 +125,8 @@ engine behind it.
 These decisions belong in the docs, through PRs. The
 [decision register](decision-register.md) works through all of them (and more the
 prototype implies), with options, a recommendation, a tier and an urgency for each:
-- `docs/ARCHITECTURE.md` data model: groups as scenes, keyframe scenes, reference/clone
-  semantics, per-source audio switch, video/audio filter chains with scene inputs, program
+- `docs/ARCHITECTURE.md` data model: groups as scenes and keyframe scenes (decided in
+  [ADR-0024](../../docs/adr/0024-scene-structure.md)), reference/clone semantics, per-source audio switch, video/audio filter chains with scene inputs, program
   and per-output chains (with latency compensation), transition presets and overrides.
 - An ADR for the source type list (product scope: maintainer tier).
 - An ADR for the Move transition and per-item transition settings.
