@@ -1,21 +1,63 @@
 //! Source images: an uploaded RGBA8 buffer, or a texture already on this device.
+//!
+//! The composite pass samples with a linear filter. Filtering straight-alpha texels blends
+//! the colour of fully transparent neighbours into an edge, which darkens it (a fringe), so
+//! uploaded bytes are premultiplied once, on upload, in linear light: sRGB decode, then
+//! RGB times alpha, stored as `Rgba16Float`. Imported textures are sampled as they are.
 
 use std::sync::Arc;
 
 use jstream_platform::{FrameSync, GpuFrame};
 
+use crate::color::srgb_channel_to_linear;
 use crate::error::RenderError;
 use crate::gpu::Gpu;
 
-/// A sampled sRGB image on the compositor's device.
+/// The format uploaded images are stored in: premultiplied linear light.
+pub(crate) const UPLOAD_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+
+/// How the composite shader reads an image's samples.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Alpha {
+    /// Premultiplied linear (uploads). Filtering is exact at transparent edges.
+    Premultiplied,
+    /// Straight sRGB (imports). The shader premultiplies after the filter, which is exact
+    /// where alpha is 1, as in a captured frame, and fringes at partly transparent edges.
+    Straight,
+}
+
+/// Which [`crate::Compositor`] made an image. The image keeps a clone, so the allocation
+/// the identity compares by cannot be reused while the image is alive.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Owner(Arc<()>);
+
+impl Owner {
+    pub(crate) fn is(&self, other: &Owner) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+/// Everything an image needs from the compositor that makes it.
+pub(crate) struct Maker<'a> {
+    pub gpu: &'a Gpu,
+    pub layout: &'a wgpu::BindGroupLayout,
+    pub sampler: &'a wgpu::Sampler,
+    pub owner: &'a Owner,
+}
+
+/// A sampled image on the compositor's device.
 ///
 /// The bind group is created once, with the compositor's linear sampler, so a frame that
-/// redraws the same images does not allocate one.
+/// redraws the same images does not allocate one. An image only draws in the
+/// [`crate::Compositor`] that made it; another one refuses it with
+/// [`RenderError::Invalid`].
 pub struct Image {
     texture: wgpu::Texture,
     bind_group: wgpu::BindGroup,
     width: u32,
     height: u32,
+    alpha: Alpha,
+    owner: Owner,
     sync: Option<Arc<dyn FrameSync>>,
 }
 
@@ -30,13 +72,22 @@ impl Image {
         self.height
     }
 
-    /// The sampled texture.
+    /// The sampled texture. For an uploaded image it is `Rgba16Float` holding
+    /// premultiplied linear light; for an imported one it is the texture that was given.
     pub fn texture(&self) -> &wgpu::Texture {
         &self.texture
     }
 
     pub(crate) fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
+    }
+
+    pub(crate) fn alpha(&self) -> Alpha {
+        self.alpha
+    }
+
+    pub(crate) fn owner(&self) -> &Owner {
+        &self.owner
     }
 
     pub(crate) fn sync(&self) -> Option<&Arc<dyn FrameSync>> {
@@ -50,15 +101,14 @@ impl std::fmt::Debug for Image {
             .field("width", &self.width)
             .field("height", &self.height)
             .field("format", &self.texture.format())
+            .field("alpha", &self.alpha)
             .field("synced", &self.sync.is_some())
             .finish_non_exhaustive()
     }
 }
 
 pub(crate) fn upload(
-    gpu: &Gpu,
-    layout: &wgpu::BindGroupLayout,
-    sampler: &wgpu::Sampler,
+    maker: &Maker<'_>,
     width: u32,
     height: u32,
     rgba: &[u8],
@@ -86,41 +136,52 @@ pub(crate) fn upload(
             expected,
         });
     }
-    check_dimension(gpu, width, height)?;
-    let texture = gpu.device.create_texture(&wgpu::TextureDescriptor {
+    check_dimension(maker.gpu, width, height)?;
+    let texture = maker.gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("jstream-render-image"),
         size: extent(width, height),
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        format: UPLOAD_FORMAT,
         usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         view_formats: &[],
     });
-    let padded = pad_rows(width, height, rgba);
-    let stride = padded_stride(width);
-    gpu.queue.write_texture(
+    let row_bytes = width.checked_mul(8).ok_or(RenderError::TooLarge {
+        what: "image",
+        width,
+        height,
+        limit: maker.gpu.max_texture_dimension_2d,
+    })?;
+    let texels = premultiply_to_f16(rgba);
+    // `write_texture`, unlike a buffer-to-texture copy, does not need 256-byte rows.
+    maker.gpu.queue.write_texture(
         wgpu::TexelCopyTextureInfo {
             texture: &texture,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
         },
-        &padded,
+        &texels,
         wgpu::TexelCopyBufferLayout {
             offset: 0,
-            bytes_per_row: Some(stride),
+            bytes_per_row: Some(row_bytes),
             rows_per_image: Some(height),
         },
         extent(width, height),
     );
-    Ok(finish(texture, width, height, None, gpu, layout, sampler))
+    Ok(finish(
+        maker,
+        texture,
+        width,
+        height,
+        Alpha::Premultiplied,
+        None,
+    ))
 }
 
 pub(crate) fn import(
-    gpu: &Gpu,
-    layout: &wgpu::BindGroupLayout,
-    sampler: &wgpu::Sampler,
+    maker: &Maker<'_>,
     texture: wgpu::Texture,
     sync: Option<Arc<dyn FrameSync>>,
 ) -> Result<Image, RenderError> {
@@ -149,54 +210,51 @@ pub(crate) fn import(
             ),
         });
     }
-    check_dimension(gpu, width, height)?;
-    Ok(finish(texture, width, height, sync, gpu, layout, sampler))
+    check_dimension(maker.gpu, width, height)?;
+    Ok(finish(maker, texture, width, height, Alpha::Straight, sync))
 }
 
-pub(crate) fn import_frame(
-    gpu: &Gpu,
-    layout: &wgpu::BindGroupLayout,
-    sampler: &wgpu::Sampler,
-    frame: &GpuFrame,
-) -> Result<Image, RenderError> {
+pub(crate) fn import_frame(maker: &Maker<'_>, frame: &GpuFrame) -> Result<Image, RenderError> {
     import(
-        gpu,
-        layout,
-        sampler,
+        maker,
         frame.texture().clone(),
         Some(Arc::clone(frame.sync())),
     )
 }
 
 fn finish(
+    maker: &Maker<'_>,
     texture: wgpu::Texture,
     width: u32,
     height: u32,
+    alpha: Alpha,
     sync: Option<Arc<dyn FrameSync>>,
-    gpu: &Gpu,
-    layout: &wgpu::BindGroupLayout,
-    sampler: &wgpu::Sampler,
 ) -> Image {
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let bind_group = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("jstream-render-image"),
-        layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(&view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::Sampler(sampler),
-            },
-        ],
-    });
+    let bind_group = maker
+        .gpu
+        .device
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("jstream-render-image"),
+            layout: maker.layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(maker.sampler),
+                },
+            ],
+        });
     Image {
         texture,
         bind_group,
         width,
         height,
+        alpha,
+        owner: maker.owner.clone(),
         sync,
     }
 }
@@ -223,23 +281,139 @@ fn extent(width: u32, height: u32) -> wgpu::Extent3d {
     }
 }
 
-fn padded_stride(width: u32) -> u32 {
-    let row = width.saturating_mul(4);
-    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-    row.div_ceil(align) * align
+/// Straight sRGB RGBA8 to premultiplied linear `Rgba16Float` texels, little-endian.
+///
+/// RGB is decoded with the sRGB transfer, then multiplied by alpha. Alpha is linear in the
+/// source and stays so. A fully transparent texel becomes all zero whatever its RGB was.
+fn premultiply_to_f16(rgba: &[u8]) -> Vec<u8> {
+    let linear: [f32; 256] = std::array::from_fn(|i| srgb_channel_to_linear(i as f32 / 255.0));
+    let mut out = Vec::with_capacity(rgba.len() * 2);
+    for px in rgba.chunks_exact(4) {
+        let a = f32::from(px[3]) / 255.0;
+        for value in [
+            linear[usize::from(px[0])] * a,
+            linear[usize::from(px[1])] * a,
+            linear[usize::from(px[2])] * a,
+            a,
+        ] {
+            out.extend_from_slice(&f16_bits(value).to_le_bytes());
+        }
+    }
+    out
 }
 
-fn pad_rows(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
-    let row = width as usize * 4;
-    let stride = padded_stride(width) as usize;
-    if stride == row {
-        return rgba.to_vec();
+/// IEEE 754 binary16 bits of `value`, rounded to nearest, ties to even.
+///
+/// Only for the values [`premultiply_to_f16`] produces: finite and in `0..=1`, so there is
+/// no sign, overflow, infinity or NaN to handle.
+fn f16_bits(value: f32) -> u16 {
+    debug_assert!((0.0..=1.0).contains(&value), "{value} is outside 0..=1");
+    let bits = value.to_bits();
+    let exponent = ((bits >> 23) & 0xff) as i32 - 127 + 15;
+    let mantissa = bits & 0x7f_ffff;
+    let (full, shift) = if exponent >= 1 {
+        // Normal in binary16: rebias the exponent and drop 13 mantissa bits.
+        ((exponent as u32) << 23 | mantissa, 13)
+    } else if exponent >= -10 {
+        // Subnormal in binary16: the implicit leading 1 becomes a mantissa bit.
+        (mantissa | 0x80_0000, (14 - exponent) as u32)
+    } else {
+        // Below half the smallest subnormal (2^-25), including zero: rounds to zero.
+        return 0;
+    };
+    let kept = full >> shift;
+    let rest = full & ((1 << shift) - 1);
+    let half = 1 << (shift - 1);
+    // A carry out of the mantissa moves into the exponent, which is the correct result.
+    let rounded = if rest > half || (rest == half && kept & 1 == 1) {
+        kept + 1
+    } else {
+        kept
+    };
+    rounded as u16
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Owner, f16_bits, premultiply_to_f16};
+
+    /// binary16 bits to f32, written independently of [`f16_bits`].
+    fn decode(bits: u16) -> f32 {
+        let exponent = i32::from((bits >> 10) & 0x1f);
+        let mantissa = f32::from(bits & 0x3ff);
+        if exponent == 0 {
+            mantissa * 2f32.powi(-24)
+        } else {
+            (1.0 + mantissa / 1024.0) * 2f32.powi(exponent - 15)
+        }
     }
-    let mut padded = vec![0u8; stride * height as usize];
-    for y in 0..height as usize {
-        let src = y * row;
-        let dst = y * stride;
-        padded[dst..dst + row].copy_from_slice(&rgba[src..src + row]);
+
+    fn texel(bytes: &[u8], channel: usize) -> f32 {
+        decode(u16::from_le_bytes([
+            bytes[channel * 2],
+            bytes[channel * 2 + 1],
+        ]))
     }
-    padded
+
+    #[test]
+    fn f16_known_values() {
+        assert_eq!(f16_bits(0.0), 0x0000);
+        assert_eq!(f16_bits(1.0), 0x3c00);
+        assert_eq!(f16_bits(0.5), 0x3800);
+        assert_eq!(f16_bits(0.25), 0x3400);
+        // Smallest normal and smallest subnormal.
+        assert_eq!(f16_bits(2f32.powi(-14)), 0x0400);
+        assert_eq!(f16_bits(2f32.powi(-24)), 0x0001);
+        // Half of the smallest subnormal ties to even (zero); just above rounds up.
+        assert_eq!(f16_bits(2f32.powi(-25)), 0x0000);
+        assert_eq!(f16_bits(2f32.powi(-25) * 1.5), 0x0001);
+        // 1 - 2^-12 is halfway between 0x3bff (odd) and 1.0; ties to even goes up.
+        assert_eq!(f16_bits(1.0 - 2f32.powi(-12)), 0x3c00);
+        // 0.5 + 2^-12 is halfway between 0x3800 (even) and 0x3801; it stays down.
+        assert_eq!(f16_bits(0.5 + 2f32.powi(-12)), 0x3800);
+    }
+
+    #[test]
+    fn f16_round_trips_within_half_an_ulp() {
+        // Every value an upload can produce: linear(r/255) * a/255, and alpha itself.
+        for r in 0..=255u16 {
+            let linear = super::srgb_channel_to_linear(f32::from(r) / 255.0);
+            for a in 0..=255u16 {
+                let value = linear * f32::from(a) / 255.0;
+                let got = decode(f16_bits(value));
+                // Half an ulp: 2^-11 relative for normals, 2^-25 absolute below them.
+                let tolerance = (value * 2f32.powi(-11)).max(2f32.powi(-25));
+                assert!((got - value).abs() <= tolerance, "{value} encoded as {got}");
+            }
+        }
+    }
+
+    #[test]
+    fn transparent_texels_premultiply_to_zero_and_opaque_ones_keep_their_colour() {
+        let bytes = premultiply_to_f16(&[255, 0, 0, 255, 255, 255, 255, 0]);
+        assert_eq!(bytes.len(), 16);
+        assert_eq!(
+            [0, 1, 2, 3].map(|c| texel(&bytes[..8], c)),
+            [1.0, 0.0, 0.0, 1.0]
+        );
+        assert!(bytes[8..].iter().all(|b| *b == 0), "{:?}", &bytes[8..]);
+    }
+
+    #[test]
+    fn premultiplication_happens_after_the_srgb_decode() {
+        // sRGB 188 is about 0.5029 linear; at alpha 128 (0.502) that is about 0.2524.
+        let bytes = premultiply_to_f16(&[188, 188, 188, 128]);
+        let a = 128.0 / 255.0;
+        let expected = super::srgb_channel_to_linear(188.0 / 255.0) * a;
+        assert!((texel(&bytes, 0) - expected).abs() < 1e-3);
+        assert!((texel(&bytes, 3) - a).abs() < 1e-3);
+    }
+
+    #[test]
+    fn owners_compare_by_identity() {
+        let one = Owner::default();
+        let other = Owner::default();
+        assert!(one.is(&one.clone()));
+        assert!(!one.is(&other));
+    }
 }

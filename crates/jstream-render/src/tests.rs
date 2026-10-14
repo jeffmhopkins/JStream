@@ -231,6 +231,97 @@ fn half_opacity_blends_in_linear_light() {
     near(&snapshot, 1, 1, [encoded, encoded, encoded, 255], 2);
 }
 
+/// The review case: a 2x1 image, opaque red then fully transparent, drawn so a pixel
+/// samples between the two texels. Filtering straight alpha would mix in the transparent
+/// texel's black and resolve to red 188 at alpha 128 for the half-way sample; filtering
+/// premultiplied texels keeps red at 255.
+#[test]
+fn transparent_edges_filter_without_a_dark_fringe() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let image = opened
+        .compositor
+        .upload_rgba8(2, 1, &[255, 0, 0, 255, 0, 0, 0, 0])
+        .expect("invariant: the image bytes match");
+
+    // Half a pixel to the right: pixel 1's centre (x 1.5) samples u 0.5, half-way
+    // between the texel centres.
+    let offset = [item(
+        &image,
+        Placement {
+            position: [0.5, 0.0],
+            ..Placement::IDENTITY
+        },
+        Crop::NONE,
+        1.0,
+    )];
+    let snapshot = draw(&mut opened.compositor, 3, 1, Color::TRANSPARENT, &offset);
+    near(&snapshot, 1, 0, [255, 0, 0, 128], 2);
+
+    // Twice as wide: pixel 1 is 3/4 red texel, pixel 2 is 1/4. Straight filtering would
+    // give red 225 and 137 there.
+    let scaled = [item(
+        &image,
+        Placement {
+            scale: [2.0, 1.0],
+            ..Placement::IDENTITY
+        },
+        Crop::NONE,
+        1.0,
+    )];
+    let snapshot = draw(&mut opened.compositor, 4, 1, Color::TRANSPARENT, &scaled);
+    near(&snapshot, 0, 0, [255, 0, 0, 255], 1);
+    near(&snapshot, 1, 0, [255, 0, 0, 191], 2);
+    near(&snapshot, 2, 0, [255, 0, 0, 64], 2);
+    near(&snapshot, 3, 0, [0, 0, 0, 0], 1);
+}
+
+/// An imported sRGB texture is straight alpha, so at a texel centre half-transparent red
+/// over black is linear red 0.5, not the full red a premultiplied read would give.
+#[test]
+fn an_imported_texture_is_read_as_straight_alpha() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let srgb = srgb_texture(&opened.compositor, 2, 2, [255, 0, 0, 128]);
+    let image = opened.compositor.import(srgb, None).unwrap();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &items);
+    let alpha = 128.0 / 255.0;
+    let red = (linear_to_srgb(alpha) * 255.0).round() as u8;
+    near(&snapshot, 1, 1, [red, 0, 0, 255], 2);
+}
+
+#[test]
+fn an_image_from_another_compositor_is_refused() {
+    let Some(opened) = open() else {
+        return;
+    };
+    // Same device, as two `on_context` calls would make, so no second device is created
+    // under the WARP lock. Declared after `opened`, so it drops first.
+    let mut other = opened.compositor.sibling();
+    let image = solid(&opened.compositor, 1, 1, [255, 0, 0, 255]);
+    for visible in [true, false] {
+        let items = [Item {
+            visible,
+            ..item(&image, Placement::IDENTITY, Crop::NONE, 1.0)
+        }];
+        let scene = Scene {
+            canvas: FrameSize::new(1, 1).unwrap(),
+            background: Color::BLACK,
+            items: &items,
+        };
+        assert!(
+            matches!(
+                other.render(&scene, false),
+                Err(RenderError::Invalid { what: "image", .. })
+            ),
+            "visible = {visible}"
+        );
+    }
+}
+
 #[test]
 fn hidden_and_fully_cropped_items_draw_nothing() {
     let Some(mut opened) = open() else {
@@ -295,7 +386,7 @@ fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
     let Some(mut opened) = open() else {
         return;
     };
-    let uploaded = solid(&opened.compositor, 2, 2, [255, 0, 0, 255]);
+    let srgb = srgb_texture(&opened.compositor, 2, 2, [255, 0, 0, 255]);
     let count = Arc::new(AtomicUsize::new(0));
     let info = VideoFrameInfo {
         size: FrameSize::new(2, 2).unwrap(),
@@ -306,11 +397,7 @@ fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
         },
         pts: MediaTime::zero(Timebase::NANOS),
     };
-    let frame = GpuFrame::new(
-        uploaded.texture().clone(),
-        info,
-        Arc::new(CountSync(Arc::clone(&count))),
-    );
+    let frame = GpuFrame::new(srgb, info, Arc::new(CountSync(Arc::clone(&count))));
     let image = opened.compositor.import_frame(&frame).unwrap();
     let items = [
         item(&image, Placement::IDENTITY, Crop::NONE, 1.0),
@@ -343,6 +430,46 @@ fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
         0,
         "a hidden item is not staged"
     );
+}
+
+/// A straight-alpha `Rgba8UnormSrgb` texture, the kind `import` takes, filled with one colour.
+fn srgb_texture(compositor: &Compositor, width: u32, height: u32, rgba: [u8; 4]) -> wgpu::Texture {
+    let size = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let texture = compositor
+        .device()
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("jstream-render-test-srgb"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+    let pixels: Vec<u8> = std::iter::repeat_n(rgba, (width * height) as usize)
+        .flatten()
+        .collect();
+    compositor.queue().write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        &pixels,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 4),
+            rows_per_image: Some(height),
+        },
+        size,
+    );
+    texture
 }
 
 struct CountSync(Arc<AtomicUsize>);

@@ -21,10 +21,11 @@ pub enum RenderError {
         /// The backend's message.
         detail: String,
     },
-    /// A placement, colour or opacity is non-finite or outside the range the compositor draws.
+    /// A placement, colour or opacity is non-finite or outside the range the compositor
+    /// draws, an image size is zero, or an item's image was made by another compositor.
     #[error("invalid {what}: {detail}")]
     Invalid {
-        /// Which value was refused (`placement`, `color`, `opacity`).
+        /// Which value was refused (`placement`, `color`, `opacity`, `image`).
         what: &'static str,
         /// What is wrong with it.
         detail: String,

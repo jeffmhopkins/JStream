@@ -603,7 +603,7 @@ verified = { hash = "b3:81881727ea640a2e", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:fc7f04c2f78b2546", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against place.rs. Placement is still legacy_quad. The NotFinite match is not a pipeline step. Steps 1-2 and 4-6, fit modes, 3D and the ADR-0027 output path are unchanged." }
+verified = { hash = "b3:40d6041b79574568", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the one-scene paragraph against the premultiply-on-upload change: the composite still writes premultiplied linear into Rgba16Float and resolves to Rgba8UnormSrgb, blend still premultiplied src-over; source alpha handling is detailed in the crate README, not here. Steps 1-6 unchanged." }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

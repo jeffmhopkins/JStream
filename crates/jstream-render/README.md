@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:8b039c7bd68d0f9f", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the API bullet against place.rs. place still calls legacy_quad. The only code change is that GeometryError::NotFinite stays the non-finite message and any other variant keeps its own. Fit modes and 3D are still not drawn. Readback is still the video.snapshot PNG." }
+verified = { hash = "b3:10fb68e90ec3ddda", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rewrote the source-image bullet: uploads are premultiplied in linear light into Rgba16Float (image.rs premultiply_to_f16), imports stay Rgba8/Bgra8UnormSrgb read as straight alpha (Alpha::Straight). Added the bullet that render refuses another compositor's Image with Invalid (Owner check in prepare). Placement via legacy_quad, readback and not-in-this-cut list unchanged." }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -60,12 +60,19 @@ and calls this crate.
   path: no interop (the fakes, CI, a headless machine). It opens a device itself,
   software adapter first, as ARCH principle 7 and that section's "when there is no
   interop" paragraph say.
-- A source image is either RGBA8 bytes the compositor uploads, or a `GpuFrame` /
-  `wgpu::Texture` already on this device. Sampled formats are `Rgba8UnormSrgb` and
-  `Bgra8UnormSrgb` only, so the shader can treat every sample as linear sRGB. A
+- A source image is either straight-alpha sRGB RGBA8 bytes the compositor uploads, or
+  a `GpuFrame` / `wgpu::Texture` already on this device. An upload is premultiplied in
+  linear light and stored as `Rgba16Float`, so filtering cannot darken transparent
+  edges ([Passes](#design)). An imported texture must be `Rgba8UnormSrgb` or
+  `Bgra8UnormSrgb`, so the sampler decodes it to linear, and is read as straight
+  alpha: exact for an opaque capture, a fringe at partly transparent edges. A
   `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
   before the submit that samples it. Staging stays the safe method on
   `jstream-platform`. This crate never calls wgpu-hal.
+- An `Image` draws only in the `Compositor` that made it. It carries that
+  compositor's identity, and `render` refuses an item whose image came from another
+  one with `RenderError::Invalid` before any GPU work, instead of reaching wgpu's panic
+  on a foreign bind group.
 - The public scene types stay `Placement` and `Crop`: the same fields as the
   protocol's `ItemTransform` and `Crop` (top-left `position`, `scale`, clockwise
   `rotation_deg`; crop insets in source pixels), so the engine's mapping is field by
@@ -88,7 +95,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:3bd4488bcd79701c", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the placement subsection against legacy_quad. The error mapping does not change the quad. Clip space stays in this crate. R-RT-002 still holds: no control-plane wait, no file or network I/O." }
+verified = { hash = "b3:8c2fbfe838d7906d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rewrote Passes 1-2 against image.rs/composite.wgsl/compositor.rs: CPU sRGB-decode LUT, premultiply, binary16 into Rgba16Float via write_texture without row padding; shader multiplies by sampled alpha only for straight imports, then by opacity; vertex is six f32 (24 bytes). Added the foreign-image Invalid case. Resolve, readback (still 256-byte rows), resources table and R-RT-002 still hold; the owner check allocates only on error." }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -103,15 +110,34 @@ Working space is linear light in an `Rgba16Float` colour target, as ARCH's data 
 requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
 
 1. **Upload** (when the image is new, not per frame). Tightly packed straight RGBA8
-   sRGB bytes go into an `Rgba8UnormSrgb` texture (`TEXTURE_BINDING | COPY_DST`). The
-   bind group (texture + linear sampler) is created once and stored on `Image`.
+   sRGB bytes are converted on the CPU: a 256-entry table decodes each RGB byte with
+   the sRGB transfer, RGB is multiplied by alpha, and each channel is rounded to
+   binary16. The result goes into an `Rgba16Float` texture (`TEXTURE_BINDING |
+   COPY_DST`) with `queue.write_texture`, which needs no row padding. The bind group
+   (texture + linear sampler) is created once and stored on `Image`.
+
+   **Why premultiply first.** The linear filter averages neighbouring texels. Averaging
+   straight alpha mixes a transparent texel's RGB into its opaque neighbour, so a
+   scaled, rotated or off-pixel edge darkens: half-way between opaque red and
+   transparent black resolves to red about 188 at alpha 128 instead of 255. Premultiplied
+   texels average correctly. `Rgba16Float` keeps the linear, premultiplied values
+   without the banding 8 bits would give in the darks; it costs 8 bytes per texel
+   instead of 4, and the conversion is CPU work at upload time only.
+
+   **Imported textures** (`import`, `import_frame`) are not converted: a capture
+   changes every frame while its `Image` lives, so a conversion would be a per-frame
+   pass. They are sampled as straight alpha and premultiplied after the filter. For an
+   opaque texture, such as a captured frame, that is exact and costs nothing extra.
+   A partly transparent import still fringes at its edges.
 2. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
    by alpha). Each visible item is two triangles. The vertex buffer holds clip-space
-   positions, UVs and opacity; the fragment shader samples, multiplies alpha by
-   opacity and outputs premultiplied linear. Blend is `One, OneMinusSrcAlpha` on
-   colour and alpha. No depth buffer: stacking order is draw order. No cull, so a
-   negative scale still draws (it flips the quad). The viewport clips to the canvas.
+   positions, UVs, opacity and the image's alpha mode (six `f32`s, 24 bytes). The
+   fragment shader samples; for a straight import it multiplies RGB by the sampled
+   alpha; then it multiplies all four channels by opacity and outputs premultiplied
+   linear. Blend is `One, OneMinusSrcAlpha` on colour and alpha. No depth buffer:
+   stacking order is draw order. No cull, so a negative scale still draws (it flips
+   the quad). The viewport clips to the canvas.
 3. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
    blending off. It `textureLoad`s the FP16 texel, un-premultiplies (zero RGB where
    alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
@@ -162,7 +188,8 @@ This crate then maps those canvas pixels into clip space:
 `x_ndc = x/canvas_w·2 − 1`, `y_ndc = 1 − y/canvas_h·2`.
 
 Opacity outside `[0, 1]` and any non-finite placement, colour or opacity is
-`RenderError::Invalid`, not a clamped draw.
+`RenderError::Invalid`, not a clamped draw. So is an item whose image another
+compositor made, visible or not.
 
 ### Device selection
 
@@ -189,7 +216,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:adf421079f97b0b5", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the device-lock paragraph against Opened in tests.rs. The lock and the compositor are one value, the device field is declared first, and each pixel test still opens its own compositor. Skip-outside-CI, panic-in-CI, lavapipe and WARP, and no hand-edited goldens still match R-TEST-003 and R-TEST-004." }
+verified = { hash = "b3:96c3b86ad5f1598c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added the alpha-edge, straight-import and foreign-compositor GPU tests and the adapter-free f16/premultiply/owner unit tests to What is checked. Fixed CI install: per open() in tests.rs a macOS runner without Metal panics because CI is set; the macos job is continue-on-error (ci.yml), not a skip. Device lock, skip-outside-CI and no goldens unchanged." }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -214,7 +241,13 @@ the golden tooling cannot update.
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
-staged once per submit and not staged when the item is hidden.
+staged once per submit and not staged when the item is hidden. Alpha edges: a 2x1
+opaque-red-then-transparent upload drawn half a pixel off and at scale 2 keeps red
+at 255 where it is partly covered (straight filtering gave 187 on lavapipe); an
+imported sRGB texture is read as straight alpha. An image from another compositor on
+the same device is refused. Without an adapter, unit tests still cover the binary16 encode
+(every value an upload can produce, within half an ulp), the premultiply order and
+the compositor identity.
 
 **One device at a time.** Each pixel test opens its own compositor and keeps the
 process lock in that same value until the value is dropped. The device field is
@@ -232,10 +265,12 @@ without rendering.
 `VK_DRIVER_FILES` pointed at lavapipe's ICD so the job cannot pick another driver.
 wgpu loads `libvulkan` at runtime; no new native crate and no `lint-deps` allowlist
 change ([R-DEP-002](../../docs/RULES.md#R-DEP-002)). Windows already has WARP through
-DX12; that job needs no package. macOS has no software adapter: Metal if the runner
-has one, otherwise the skip. The `macos` job is not required. Editing the workflow is
-a governance change because `.github/**` is protected; it adds a package so tests can
-render, and it does not weaken a check.
+DX12; that job needs no package. macOS has no software adapter, so the pixel tests
+use Metal if the runner has it. If it does not, they do not skip: GitHub sets `CI`,
+so the missing adapter panics and the job fails. The `macos` job is
+`continue-on-error` and not required, so that failure does not block a merge.
+Editing the workflow is a governance change because `.github/**` is protected; it
+adds a package so tests can render, and it does not weaken a check.
 
 **Not measured** ([R-RT-005](../../docs/RULES.md#R-RT-005)). No frame-time numbers.
 
@@ -256,7 +291,9 @@ render, and it does not weaken a check.
   let a later pass sample it into the platform `encode_target` on the real device.
 - **Capture formats.** WGC frames are not sRGB RGBA. A conversion into the sampled
   format has to land before `import` can take a capture `GpuFrame`. Who owns that
-  pass, this crate or the platform crate, is open.
+  pass, this crate or the platform crate, is open. That pass could also write
+  premultiplied linear, which would remove the straight-alpha fringe that a partly
+  transparent import (a browser source, a nested scene's output) still has.
 - **Opacity and blend ownership** was left open by ADR-0022 (decision-register D2).
   The snapshot puts opacity on the item because that is what ARCH's data model and
   the compositor consequences of
