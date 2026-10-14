@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:bdcef093ba5aa906", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Purpose says MCP streamable HTTP is served by jstream-server, not this crate (#37 N1), beside main's #96 events tool; matches the crate" }
+verified = { hash = "b3:53c2cad582ca104f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: only the tool_call span parent changed in server.rs; Server/Tools/Events contents and layering unchanged" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -44,7 +44,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:5d13c0dbd0ec49eb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Async and transports now say streamable HTTP is served by jstream-server (not built); open question 3 stays settled by ADR-0036 (main's #96) and question 4 records #37's decision; main's #98 Logging subsection kept; depends_on keeps ADR-0036" }
+verified = { hash = "b3:41a61af4dfd918de", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Logging paragraph now says tool_call is a child of mcp_session, so it keeps its session when the debug mcp_request span is off; matches info_span!(parent: &self.span) in Server::call" }
 -->
 
 ### Tools

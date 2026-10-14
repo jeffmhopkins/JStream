@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:fc8e87ad921d55a8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's README records #44's decisions (missing Origin to be allowed; bounded buffer with events.dropped) and that MCP streamable HTTP will be served here; main's #98 tracing text kept; Purpose matches the crate as built" }
+verified = { hash = "b3:d115c744cb49ce46", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: only the ServerConfig::extra_hosts rustdoc changed; contents list (Server, Configuration, Gate) unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e5585f21cdb18f70", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Admission text says a missing Origin is refused today and will be allowed (#44); open question 7 records the decided bounded buffer, not built; question 6 keeps main's logging-volume question from #98; matches gate.rs as built" }
+verified = { hash = "b3:701c9540a7f347fb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Extra hosts paragraph (name:port, one port, bracketed IPv6, refused at bind) already matches; this change brings the extra_hosts rustdoc in line with it and gate.rs check_extra_hosts" }
 -->
 
 ### Listening and admission

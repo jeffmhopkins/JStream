@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:55c6ac755b423dd5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "The crate-map encode row now states ADR-0027's sharing rule, matching this Purpose's sentence; main's #95 gap fix doesn't change the Purpose" }
+verified = { hash = "b3:7c97f89d0e3faea9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: the audio.rs fix only moves the silence-fill resume point; session/encode-thread/fan-out description and dependencies unchanged" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -68,7 +68,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:424cf8d0e4e184b7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's note that tracing is now a workspace dependency but encode doesn't use it yet; main's #95 Busy-gap design bullet kept; matches audio.rs" }
+verified = { hash = "b3:8e5cc0afca8f97bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Audio drop bullet now says encoded silence counts as sent, so a fill after a Busy block resumes where it ended; matches fill_gap setting next and the new a_busy_block_after_a_gap_fill_does_not_repeat_the_silence test" }
 -->
 
 ### Threads and pacing
