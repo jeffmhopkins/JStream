@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:cc5a80629b43ab24", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs bullet against the regression test and the drop-order change. The pipeline still emits starting then active or failed, and a publish failure still settles failed. The written steps are unchanged." }
+verified = { hash = "b3:4a2df3a9ccc32659", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs and tests bullets against the serial software-adapter lock and the 5s media wait. The pipeline still emits starting then active or failed, and a publish failure still settles failed. The written steps are unchanged." }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -67,7 +67,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:25a267fcf0550171", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Outputs and Locking against the drain guard. A later start still waits, without the collection lock, until the failed pipeline has finished joining, and that wait now also ends when the teardown panics. Lock order is unchanged." }
+verified = { hash = "b3:49e213149e4e27f2", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Outputs and Locking against the test-only scheduling change. The drain wait, the panic sentence, and the lock order are unchanged." }
 -->
 
 ### Engine and sessions
