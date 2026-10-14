@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:2969147481562753", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: dependency ARCH#crate-map changed only the jstream-sources row (ADR-0031); core stays layer 5 and its contents list still matches engine.rs/session.rs with this PR's tracing spans, so the purpose holds" }
+verified = { hash = "b3:0a9a4fe91df802f9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-core row and this Purpose are unchanged and still match the crate" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6ea4407957391152", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: dependency ARCH#protocol adds ADR-0028 meter frame fields, not built and not engine calls yet; the Calls, Events and this PR's Logging subsection (session/command spans, logging after the lock) still match engine.rs and session.rs" }
+verified = { hash = "b3:481c4d43d7675728", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains ADR-0034's planned YouTube actions (not built); Engine still applies only built edits and OutputStart/OutputStop" }
 -->
 
 ### Engine and sessions

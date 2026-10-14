@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:f9180ed11241021a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-platform row and this Purpose are unchanged and still match the crate" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
+verified = { hash = "b3:d38a0e067f4ee979", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Restored the ADR-0031 dependency a merge dropped; the codec traits backed only by OS and GPU-vendor APIs still match ADR-0031's media-codecs scope" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -98,7 +98,7 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:1d5f1888c41dc654", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ADR-0003 re-pointed to ADR-0031, which restates its OS/GPU media path unchanged; GpuFrame/EncodeTarget/FrameSync text still holds" }
+verified = { hash = "b3:9657b9c052bc6bc0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed only by re-verified lines in this merge; GpuFrame/EncodeTarget/FrameSync text unchanged and still holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
