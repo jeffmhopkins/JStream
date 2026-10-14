@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:94b1a6b6c7e52b4b", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against the output-pipeline paragraph. The RTMP client still carries FLV tag bodies the caller built. The Output trait, recording and vcam stay later. The core pipeline calls the publisher from its output thread." }
+verified = { hash = "b3:8c2f5db9cf515d0e", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against the threading edit. The RTMP client still carries FLV tag bodies the caller built. The Output trait, recording and vcam stay later. The core pipeline still calls the publisher from its output thread." }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

@@ -845,6 +845,244 @@ fn output_start_publishes_fake_audio_and_video() {
     assert!(engine.output_stats().is_none());
 }
 
+/// `output.stop` from a second session during `starting` cancels that start.
+/// The start does not settle `active`, and nothing is left running.
+#[test]
+fn output_stop_during_start_cancels_the_pipeline() {
+    use std::sync::{Condvar, Mutex};
+    use std::thread;
+    use std::time::Duration;
+
+    use jstream_media::{ChannelLayout, FrameSize, Timebase};
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::{Backends, Capture, CaptureTarget, PlatformError};
+
+    struct Hold {
+        ready: Mutex<bool>,
+        cv: Condvar,
+    }
+
+    impl Hold {
+        fn new() -> Arc<Self> {
+            Arc::new(Self {
+                ready: Mutex::new(false),
+                cv: Condvar::new(),
+            })
+        }
+
+        fn signal(&self) {
+            *self.ready.lock().expect("hold") = true;
+            self.cv.notify_all();
+        }
+
+        fn wait(&self) {
+            let mut ready = self.ready.lock().expect("hold");
+            while !*ready {
+                ready = self.cv.wait(ready).expect("hold");
+            }
+        }
+    }
+
+    struct HoldCapture {
+        inner: FakeCapture,
+        entered: Arc<Hold>,
+        release: Arc<Hold>,
+    }
+
+    impl Capture for HoldCapture {
+        fn targets(&self) -> Result<Vec<jstream_platform::CaptureTargetInfo>, PlatformError> {
+            self.inner.targets()
+        }
+
+        fn start(
+            &self,
+            target: &CaptureTarget,
+        ) -> Result<Box<dyn jstream_platform::CaptureStream>, PlatformError> {
+            self.entered.signal();
+            self.release.wait();
+            self.inner.start(target)
+        }
+    }
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let size = FrameSize::new(320, 180).expect("size");
+    let entered = Hold::new();
+    let release = Hold::new();
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        capture: Arc::new(HoldCapture {
+            inner: FakeCapture::new(clock, size),
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        }),
+        audio: Arc::new(audio),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_publish(Box::new(crate::RecordingPublish::new()));
+    let status = connected(&engine);
+    let starter = connected(&engine);
+    let stopper = connected(&engine);
+    let mut events = status.events();
+
+    let start_thread = thread::spawn(move || block_on(starter.call(output_call("yt", true))));
+    entered.wait();
+    let stop_thread = thread::spawn(move || block_on(stopper.call(output_call("yt", false))));
+    let mut saw_stopping = false;
+    for _ in 0..200 {
+        if output_state(&status, "yt") == OutputState::Stopping {
+            saw_stopping = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(saw_stopping, "stop did not observe the in-flight start");
+    release.signal();
+
+    let stopped = stop_thread.join().expect("stop thread");
+    let started = start_thread.join().expect("start thread");
+    stopped.expect("output.stop");
+    let start_error = started.expect_err("start lost to stop");
+    assert_eq!(code(&start_error), Some("action_failed"));
+    assert_eq!(output_state(&status, "yt"), OutputState::Stopped);
+    assert!(engine.output_stats().is_none());
+    let steps = output_steps(&mut events);
+    assert_eq!(
+        steps,
+        vec![
+            OutputState::Starting,
+            OutputState::Stopping,
+            OutputState::Stopped
+        ]
+    );
+}
+
+/// A publish failure after `active` settles `failed` and drops the pipeline.
+#[test]
+fn output_publish_failure_settles_failed() {
+    use std::io::Write;
+    use std::sync::atomic::AtomicBool;
+    use std::thread;
+    use std::time::Duration;
+
+    use jstream_media::{ChannelLayout, FrameSize, Timebase};
+    use jstream_mux::flv::FlvTag;
+    use jstream_platform::Backends;
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+
+    use crate::{LivePublish, PublishError};
+
+    struct FailPublish {
+        fail: Arc<AtomicBool>,
+    }
+
+    impl LivePublish for FailPublish {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.fail.load(Ordering::Relaxed) {
+                Err(PublishError::new("publish broken"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            if self.fail.load(Ordering::Relaxed) {
+                Err(PublishError::new("publish broken"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+    }
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let size = FrameSize::new(320, 180).expect("size");
+    let fail = Arc::new(AtomicBool::new(false));
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        capture: Arc::new(FakeCapture::new(clock, size)),
+        audio: Arc::new(audio),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_publish(Box::new(FailPublish {
+            fail: Arc::clone(&fail),
+        }));
+    let control = connected(&engine);
+    let mut events = control.events();
+    let started = block_on(control.call(output_call("yt", true)));
+    if let Err(err) = &started
+        && err.protocol().is_some_and(|error| {
+            matches!(error, ProtocolError::ActionFailed { reason } if reason.contains("no wgpu adapter"))
+        })
+    {
+        if std::env::var_os("CI").is_some() {
+            panic!("CI has no wgpu adapter: {err}");
+        }
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping publish-failure test, no adapter: {err}"
+        );
+        return;
+    }
+    started.expect("output.start");
+    assert_eq!(
+        output_steps(&mut events),
+        vec![OutputState::Starting, OutputState::Active]
+    );
+
+    fail.store(true, Ordering::Relaxed);
+    let mut failed = false;
+    for _ in 0..100 {
+        if output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none() {
+            failed = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(failed, "publish failure left the output running");
+    assert_eq!(output_steps(&mut events), vec![OutputState::Failed]);
+    // The watcher joins the pipeline after it publishes `failed`.
+    thread::sleep(Duration::from_millis(200));
+}
+
+fn output_state(control: &dyn Control, output: &str) -> OutputState {
+    match query(
+        control,
+        Query::OutputStatus {
+            output_id: OutputId::new(output),
+        },
+    )
+    .expect("status")
+    {
+        QueryResult::OutputStatus { state, .. } => state,
+        other => panic!("not an output status: {other:?}"),
+    }
+}
+
+fn output_steps(events: &mut EventStream) -> Vec<OutputState> {
+    drain(events)
+        .into_iter()
+        .map(|event| match event {
+            Event::OutputStateChanged { state, .. } => state,
+            other => panic!("unexpected event {other:?}"),
+        })
+        .collect()
+}
+
 /// `video.snapshot` composites the first scene on lavapipe (or WARP) and returns a PNG
 /// whose longest side is 1280. With no adapter the test returns; in CI that is a failure.
 #[test]

@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:7eccdcfa81224324", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read R-RT-001, R-RT-002 and R-RT-003 against the output-pipeline paragraph. The rules still bind the audio callback, render and encode threads. The core pipeline counts readbacks and does not move file or network I/O onto those threads." }
+verified = { hash = "b3:8c591e38b30c790c", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read R-RT-001 through R-RT-006 against the threading edit. The rules still bind the audio callback, render and encode threads. The cancel path and the publish watcher do not move file or network I/O onto those threads. Pipeline threads still do not catch_unwind." }
 -->
 
 <a id="R-RT-001"></a>

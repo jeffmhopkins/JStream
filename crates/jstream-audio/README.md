@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:ca1298c962aaa01a", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against the new output-pipeline paragraph. The mixer is still the first cut of ADR-0028: 48 kHz, block 1024, latency 1440. The core pipeline calls Mixer::poll; send matrix, filters and loudness stay later." }
+verified = { hash = "b3:8a9015c935941491", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against the threading edit. The mixer is still the first cut of ADR-0028: 48 kHz, block 1024, latency 1440. The core pipeline still calls Mixer::poll. Send matrix, filters and loudness stay later." }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -92,7 +92,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:69c81fbcf3ee4333", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against the output-pipeline paragraph and R-RT-001. InputProducer::push_packet and Mixer::poll still do not allocate after setup. The owned buffer the encoder queue takes is allocated in jstream-core, outside this crate. Rings and atomics are unchanged." }
+verified = { hash = "b3:285d4a3887ee2233", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against the threading edit and R-RT-001. InputProducer::push_packet and Mixer::poll still do not allocate after setup. The owned buffer the encoder queue takes is still allocated in jstream-core. Rings and atomics are unchanged." }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

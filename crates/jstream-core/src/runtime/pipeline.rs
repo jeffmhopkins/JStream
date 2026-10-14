@@ -7,8 +7,8 @@
 //! FLV and publishes it. None of those threads lock the engine's collection.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, RecvTimeoutError};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -83,10 +83,31 @@ impl PipelineStats {
 }
 
 /// Backends and the publish target for one engine, plus the pipeline if it is up.
+///
+/// `gate` is taken only while the collection lock is held. `gate_cv` is the wait
+/// for an in-flight start, and that wait does not hold the collection lock.
 pub(crate) struct MediaHost {
     pub(crate) backends: Mutex<Option<Backends>>,
     pub(crate) publish: Mutex<Option<Box<dyn LivePublish>>>,
-    pub(crate) running: Mutex<Option<Running>>,
+    pub(crate) gate: Mutex<Gate>,
+    pub(crate) gate_cv: Condvar,
+    pub(crate) next_generation: AtomicU64,
+}
+
+/// The pipeline slot. `pending` is a start that has emitted `starting` and has not
+/// settled yet. `watcher` receives a publish failure and settles `failed`.
+pub(crate) struct Gate {
+    pub(crate) running: Option<Running>,
+    pub(crate) pending: Option<Pending>,
+    pub(crate) watcher: Option<JoinHandle<()>>,
+}
+
+/// One `output.start` between the `starting` event and the settle.
+pub(crate) struct Pending {
+    pub(crate) output_id: OutputId,
+    pub(crate) generation: u64,
+    /// `output.stop` won this generation. The start must not settle `active`.
+    pub(crate) cancel: bool,
 }
 
 impl MediaHost {
@@ -94,7 +115,28 @@ impl MediaHost {
         Self {
             backends: Mutex::new(None),
             publish: Mutex::new(None),
-            running: Mutex::new(None),
+            gate: Mutex::new(Gate {
+                running: None,
+                pending: None,
+                watcher: None,
+            }),
+            gate_cv: Condvar::new(),
+            next_generation: AtomicU64::new(1),
+        }
+    }
+}
+
+impl Drop for MediaHost {
+    fn drop(&mut self) {
+        let (running, watcher) = {
+            let gate = self.gate.get_mut().unwrap_or_else(PoisonError::into_inner);
+            (gate.running.take(), gate.watcher.take())
+        };
+        drop(running);
+        if let Some(watcher) = watcher
+            && watcher.thread().id() != thread::current().id()
+        {
+            join("publish watcher", Some(watcher));
         }
     }
 }
@@ -102,6 +144,7 @@ impl MediaHost {
 /// Threads and sessions of one running output. Dropping it stops them.
 pub(crate) struct Running {
     output_id: OutputId,
+    generation: u64,
     stop: Arc<AtomicBool>,
     render: Option<JoinHandle<()>>,
     mixer: Option<JoinHandle<()>>,
@@ -116,6 +159,10 @@ pub(crate) struct Running {
 impl Running {
     pub(crate) fn output_id(&self) -> &OutputId {
         &self.output_id
+    }
+
+    pub(crate) fn generation(&self) -> u64 {
+        self.generation
     }
 
     pub(crate) fn stats(&self) -> OutputStats {
@@ -183,6 +230,8 @@ pub(crate) fn launch(
     parts: Parts,
     publish: Box<dyn LivePublish>,
     output_id: OutputId,
+    generation: u64,
+    fail_tx: Sender<String>,
 ) -> Result<Running, String> {
     let (size, capture) = open_capture(&parts)?;
     let format = engine_format()?;
@@ -232,7 +281,7 @@ pub(crate) fn launch(
         let video_sub = video.subscribe();
         let audio_sub = audio.subscribe();
         let stats = Arc::clone(&stats);
-        move || output_loop(publish, tagger, video_sub, audio_sub, stats)
+        move || output_loop(publish, tagger, video_sub, audio_sub, stats, fail_tx)
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -243,6 +292,7 @@ pub(crate) fn launch(
 
     let running = Running {
         output_id,
+        generation,
         stop,
         render: Some(render),
         mixer: Some(mixer_thread),
@@ -641,6 +691,7 @@ fn output_loop(
     video: Subscription,
     audio: Subscription,
     stats: Arc<PipelineStats>,
+    fail_tx: Sender<String>,
 ) {
     let started = match tagger.start() {
         Ok(tags) => publish_tags(&mut publish, &tags),
@@ -648,16 +699,19 @@ fn output_loop(
     };
     if let Err(err) = started {
         tracing::error!(error = %err, "FLV start failed");
+        let _ = fail_tx.send(err);
         return;
     }
     let mut video_done = false;
     let mut audio_done = false;
-    while !video_done || !audio_done {
+    let mut failed: Option<String> = None;
+    while failed.is_none() && (!video_done || !audio_done) {
         if !video_done {
             match video.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
-                    if !forward(&mut publish, &mut tagger, &packet) {
-                        break;
+                    if let Err(err) = forward(&mut publish, &mut tagger, &packet) {
+                        tracing::error!(error = %err, "publish failed");
+                        failed = Some(err);
                     }
                 }
                 Ok(None) => {}
@@ -667,11 +721,12 @@ fn output_loop(
                 }
             }
         }
-        if !audio_done {
+        if failed.is_none() && !audio_done {
             match audio.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
-                    if !forward(&mut publish, &mut tagger, &packet) {
-                        break;
+                    if let Err(err) = forward(&mut publish, &mut tagger, &packet) {
+                        tracing::error!(error = %err, "publish failed");
+                        failed = Some(err);
                     }
                 }
                 Ok(None) => {}
@@ -683,10 +738,15 @@ fn output_loop(
         }
         *lock(&stats.video_subscriber) = video.stats();
         *lock(&stats.audio_subscriber) = audio.stats();
-        if let Err(err) = publish.poll() {
+        if failed.is_none()
+            && let Err(err) = publish.poll()
+        {
             tracing::error!(error = %err, "publish poll failed");
-            break;
+            failed = Some(err.to_string());
         }
+    }
+    if let Some(err) = failed {
+        let _ = fail_tx.send(err);
     }
     if let Err(err) = publish.finish() {
         tracing::error!(error = %err, "publish finish failed");
@@ -699,18 +759,12 @@ fn forward(
     publish: &mut Box<dyn LivePublish>,
     tagger: &mut FlvTagger,
     packet: &jstream_media::Packet,
-) -> bool {
+) -> Result<(), String> {
     match tagger.push(packet) {
-        Ok(tags) => match publish_tags(publish, &tags) {
-            Ok(()) => true,
-            Err(err) => {
-                tracing::error!(error = %err, "publish failed");
-                false
-            }
-        },
+        Ok(tags) => publish_tags(publish, &tags),
         Err(err) => {
             tracing::warn!(error = %err, "dropping a packet the muxer rejected");
-            true
+            Ok(())
         }
     }
 }

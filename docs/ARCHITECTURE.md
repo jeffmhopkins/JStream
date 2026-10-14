@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:fcb748bcd06abf86", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the thread table and the new output-pipeline paragraph against runtime/. Render reads the capture mailbox, composites one scene at 1/30 s, repeats the last frame and counts the CPU readback. Mixer, encode sessions and the FLV output thread do not lock the collection. Arc-swap, the collector and a GPU encode target stay unbuilt. The clock, S3 and live-value paragraphs are unchanged." }
+verified = { hash = "b3:d11daf2ecbfba407", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the output-pipeline paragraph against runtime/. Render, mixer, encode and output threads still do not lock the collection. Stop during starting cancels that start. A publish failure is a channel message; the watcher emits failed and drops the pipeline." }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -382,7 +382,10 @@ This cut encodes that CPU readback, and the readback is counted. The mixer threa
 polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
 desktop loopback. Encode threads are the
 ones inside the encoder sessions. The output thread muxes FLV and sends tags to the
-publish target. None of those threads lock the collection. Frame hand-off is the
+publish target. None of those threads lock the collection. `output.stop` during
+`starting` cancels that start and emits `stopped` only after the start has dropped
+its threads. A publish failure is a channel message to a watcher the control thread
+started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
 encoder session queues. Arc-swap snapshots, the collector thread and a GPU encode
 target are still the rows above, not this cut.
 

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:9bd28adf3eaa957b", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the contents list against engine.rs, snapshot.rs and runtime/. with_backends and with_publish run the pipeline; without them outputs stay the placeholder. Snapshot, the two locks and the fake pipeline test are named. Undo, persistence and a GPU encode target stay out." }
+verified = { hash = "b3:0fda13cb6f195a05", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs bullet against engine.rs. The pipeline still emits starting then active or failed, stop emits stopping then stopped, a stop during starting cancels that start, and a publish failure after active settles failed. Pipeline threads still take neither lock." }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -45,7 +45,9 @@ placeholder state machine. Contents:
 - **Events** (`events.rs`): the per-subscription queues behind `Control::events`.
 - **Outputs** (`outputs.rs`): the outputs' runtime state. The placeholder path steps
   `starting` to `active` at once. The pipeline path emits `starting`, then `active`
-  or `failed` once the threads are up, and `stopping` then `stopped` on stop.
+  or `failed`. Stop emits `stopping` then `stopped`. A stop during `starting` cancels
+  that start and settles `stopped` only after its threads are gone. A publish failure
+  after `active` settles `failed`.
 - **Tests** (`tests.rs`, `tests/mcp.rs`): the protocol rules through
   `InProcessControl`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
@@ -65,7 +67,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:462fe2a465d18af9", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read sessions, snapshots, outputs and locking against engine.rs and runtime/. Placeholder outputs stay when no backends are injected. The pipeline emits starting then active or failed, and stop joins outside the collection lock. Snapshot is still the first scene at 1920x1080. The differential script still omits video.snapshot." }
+verified = { hash = "b3:5b432d834132f26c", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Calls, Outputs and Locking against start_pipeline, stop_pipeline and watch_publish. Batches and collection queries stay under the collection lock. A pipeline start keeps an in-flight generation until it settles, and stop during that window cancels it and waits until the threads are dropped. A publish send or poll failure settles failed from the watcher. The gate is taken after the collection lock and is not held across open or join." }
 -->
 
 ### Engine and sessions
@@ -112,10 +114,22 @@ crate.
 
 ### Calls
 
-Batches, actions and the collection queries execute under the collection lock, so
-calls from different sessions are serialized, and their events are queued in the
-order the changes happened. `video.snapshot` copies what it needs under that lock
-and composites after releasing it (see *Snapshots*).
+Batches and the collection queries run under the collection lock, so those calls
+are serialized across sessions and their events are queued in the order the changes
+happened. Placeholder output actions do too: they only step the state machine.
+`video.snapshot` copies what it needs under that lock and composites after releasing
+it (see *Snapshots*).
+
+A pipeline `output.start` or `output.stop` holds the collection lock only while it
+changes that output's state and queues events. Opening devices, waiting for the
+compositor and joining threads happen after the lock is released, so another
+session can run during that work. The two calls still cannot leave a live pipeline
+behind a successful stop. The start records an in-flight generation before it
+unlocks, and it settles `active` only while that generation is the one in flight.
+`output.stop` in that window cancels the generation, waits until the start has
+dropped any threads it opened, then settles `stopped`. The start answers
+`action_failed` and does not settle `active`. Once the pipeline is `active`, stop
+takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locking*.
 
 - **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule:
   `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
@@ -209,14 +223,25 @@ keep working when the host has not injected media.
 
 **Pipeline.** `with_backends` plus `with_publish` makes `output.start` launch threads
 instead. The call checks the output is idle and that no other pipeline is running,
-takes the publish target, emits `starting`, and drops the collection lock before it
-opens devices or joins anything. It then waits for the render thread to open the
-software compositor. Success emits `active`. Failure emits `failed` and
-`action_failed`, and drops the publish target so the host sets another before
-retrying. A second start while one pipeline is up fails with `action_failed` and
-leaves that pipeline alone. `output.stop` emits `stopping`, drops the running
-pipeline outside the lock (its drop sets the stop flag and joins the threads), then
-emits `stopped`. `failed` counts as idle, so start can be tried again.
+takes the publish target, records an in-flight generation, emits `starting`, and
+drops the collection lock before it opens devices or joins anything. It then waits
+for the render thread to open the software compositor. Success emits `active`.
+Failure emits `failed` and `action_failed`, and drops the publish target so the
+host sets another before retrying. A second start while one pipeline is up, or
+while a start is still in flight, fails with `action_failed` and leaves that
+pipeline alone. `output.stop` on an `active` pipeline emits `stopping`, drops it
+outside the lock (its drop sets the stop flag and joins the threads), then emits
+`stopped`. `output.stop` during the in-flight start cancels that generation, emits
+`stopping`, waits until the start has dropped whatever it opened, then emits
+`stopped`. The start then answers `action_failed` and does not emit `active`. The
+publish target is dropped on that path too.
+
+Once the pipeline is `active`, a `send_tag` or `poll` failure is sent on a channel.
+A watcher the control thread started settles `failed`, emits `output.state_changed`,
+and drops the pipeline so the render and mixer threads stop. `output_stats` is then
+empty. This cut does not reconnect. `failed` counts as idle, and a later start needs
+a new publish target. A `finish` error while a stop is tearing the session down is
+not a second failure.
 
 The render thread reads the platform capture mailbox, composites the primary target
 at 30 frames per second, repeats the last frame when capture is empty, and reads the
@@ -230,14 +255,18 @@ from the unit tests.
 ### Locking
 
 `std::sync::Mutex` locks, always taken in one order: a session's identity lock (held
-by `hello` while it registers the client), then the engine's collection lock, then a
-subscription queue's. The snapshot compositor's lock is separate and is taken only
-when the collection lock is not held. A stream's poll takes only its queue's lock.
-No lock is held across an `await` (there are none). The GPU wait of `video.snapshot`
-holds only the compositor lock. `output.start` drops the collection lock before
-`Compositor::open` and before joining threads on stop. The pipeline threads do not
-take the collection lock or the snapshot compositor lock; session counters the host
-reads sit on their own mutex. A poisoned lock is recovered rather than propagated:
+by `hello` while it registers the client), then the engine's collection lock, then
+the pipeline gate, then a subscription queue's. The snapshot compositor's lock is
+separate and is taken only when the collection lock is not held. A stream's poll
+takes only its queue's lock. No lock is held across an `await` (there are none).
+The GPU wait of `video.snapshot` holds only the compositor lock. `output.start`
+drops the collection lock before `Compositor::open`. The pipeline gate is not held
+across device open, that wait, or a join. `output.stop` waits for an in-flight
+start on the gate's condition variable without holding the collection lock. The
+publish watcher takes the collection lock only to settle `failed`, then joins the
+pipeline outside it. The render, mixer, encode and output threads do not take the
+collection lock or the snapshot compositor lock; session counters the host reads
+sit on their own mutex. A poisoned lock is recovered rather than propagated:
 `Graph::apply` changes a working copy and replaces the state only on success, and the
 engine's other changes are single inserts or assignments, so the data stays
 consistent. Nothing is logged while a lock is held.
