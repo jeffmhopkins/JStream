@@ -163,7 +163,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:3b95c26bd0517a59", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's ADR-0023 tree and bullets with ADR-0029's: SceneItem keeps opacity, blend and reserved effects[] and gains transition, Scene gains transition_in/out, studio drops transition for the transitions collection; Built-so-far now also lists the transition fields as not yet" }
+verified = { hash = "b3:625867e388bb1fa5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into ADR-0025: data-model keeps the Settings bullet next to the Transitions bullet and the transition fields in the tree; other sections changed only by main's text and verified lines" }
 -->
 
 ```
@@ -296,7 +296,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:883e8fef96b575d0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73: server test and README verified lines, no wire change) with ADR-0029's planned Transitions bullet; covered READMEs changed only by verified lines; body matches the code" }
+verified = { hash = "b3:a267c2d5813a5a13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into ADR-0025: data-model keeps the Settings bullet next to the Transitions bullet and the transition fields in the tree; other sections changed only by main's text and verified lines" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

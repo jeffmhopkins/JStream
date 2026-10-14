@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d456320db2215082", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol has ADR-0029's planned transition edits and optional preset on the switch action, none built; planned minor additions under R-API-001, preset edits are ordinary edits under R-API-004; main's R-API-002 rewording as verified there" }
+verified = { hash = "b3:4fab3c759f19aae0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into ADR-0025: data-model keeps the Settings bullet next to the Transitions bullet and the transition fields in the tree; other sections changed only by main's text and verified lines" }
 -->
 
 <a id="R-API-001"></a>
