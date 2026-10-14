@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:5936eb2c27fec878", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only renamed 'one per device' to 'one per stream'; R-RT-001..006 do not depend on the count and still hold" }
+verified = { hash = "b3:e28452b7fb2e58b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only gained the 'In the engine' paragraph about jstream-audio's port of the S3 loop; R-RT-001..006 do not depend on it and still hold (no-alloc test for jstream-audio is still pending, as the rule's test: entry allows)" }
 -->
 
 <a id="R-RT-001"></a>
