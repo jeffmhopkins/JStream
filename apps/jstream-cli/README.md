@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:db89f9d220a74f80", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-cli row is unchanged and this Purpose still matches it" }
+verified = { hash = "b3:44b28f8af7a3ed5d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #44 slow clients: run.rs only gains the events.dropped print arm; the Contents list (args, run, exit, block, mcp) and never-links-the-engine claim still hold" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:9847908e5df0513a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited only the mcp 'lost engine' bullet: events now also answers after the loss (buffered events, ended set) and a restart gives a new client with its own undo history, as tests/mcp.rs now asserts; covered src files unchanged" }
+verified = { hash = "b3:bd2b7788be6fb2ce", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the Events bullet: run.rs now prints events.dropped <count> for the server's drop notice (tested by events_golden_dropped_notice); --json still prints the event as the protocol serializes it; version line now reports protocol 0.4 via PROTOCOL_VERSION" }
 -->
 
 ```sh
@@ -115,6 +115,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `disconnected` or `io`, which appear only in JSON output.
 - **Events** are printed and flushed one by one until `--count` is reached or the
   stream ends. A stream that ends means the engine went away, so it exits with code 3.
+  When the server dropped events because the CLI read too slowly, it prints
+  `events.dropped <count>`.
 
 **MCP.** `jstream-cli mcp` is the stdio MCP proxy for an agent's MCP client to launch,
 for example:
@@ -170,7 +172,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:79c5a5f12d14ad80", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-control#design gains only open question 1's note on the decided server-side bounded buffer and events.dropped; the CLI subscribes to no event stream of its own and its mcp proxy stays stdio, so the design still holds" }
+verified = { hash = "b3:631fcfca56d36571", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against jstream-control#design's edits (open question 1 now says WsControl passes events.dropped on; mock covers 0.4 edits/queries): the CLI's block_on, connector seam and mcp proxy design are unchanged by the new event arm in run.rs" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

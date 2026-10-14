@@ -692,6 +692,26 @@ source: crates/jstream-protocol/src/fixtures.rs
             "state"
           ],
           "type": "object"
+        },
+        {
+          "description": "This connection's queued events were dropped because the client read them too\nslowly: the server keeps a bounded buffer per connection and empties it when it\noverflows. `state.changed` events may be among those lost, so the client re-reads\nthe state with `state.get`, which carries `rev`. Drops that happen before the\nnotice is sent add up in that one notice. Only events are dropped: every request\nstill gets its answer. Sent by the WebSocket server, never by an in-process engine.",
+          "properties": {
+            "count": {
+              "description": "How many events were dropped.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "events.dropped",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "count"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1573,5 +1593,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.3"
+  "title": "JStream protocol 0.4"
 }

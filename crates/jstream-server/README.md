@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:387f2fd593f08781", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: only the ServerConfig::extra_hosts rustdoc changed; contents list (Server, Configuration, Gate) unchanged" }
+verified = { hash = "b3:b38edc44a2c6346e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Session contents line to mention the bounded outbox in session.rs; lib.rs, config.rs, gate.rs unchanged, so the rest of the list holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -32,7 +32,8 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every upgrade passes
   ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
-  session and back.
+  session and back, with the bounded outbox that keeps a slow client from holding up
+  its events.
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
 Not here yet: serving the UI assets, the MCP streamable-HTTP transport (decided: served
@@ -48,7 +49,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:034a4650f90cc3c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read the admission table against R-SEC-002 (token on every upgrade, Origin and Host checked, 127.0.0.1 by default); today a missing Origin is refused, which the rule's wording still requires" }
+verified = { hash = "b3:a7fc6a1d7a48cfd4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: new Slow clients bullet (outbox + writer future, EVENT_BUFFER 1024 drop-all with one coalesced events.dropped, replies kept in order, REPLY_BACKLOG stops reading requests), close sends queued messages before the frame, warn log of the drop count, futures-util use, OQ7 now built with tuning open; admission and missing-Origin text untouched" }
 -->
 
 ### Listening and admission
@@ -117,13 +118,29 @@ task speaks the envelope
   keep the order, until the answer arrives or nothing is left in flight (or 1024 events
   are held). The last 1024 pairs are remembered. Other clients' `state.changed` events
   pass unchanged: their IDs mean nothing to this client.
+- **Slow clients.** The connection task never waits on the socket: what it sends goes
+  into an outbox, and a writer that owns the socket's sending half sends it, one message
+  at a time, while the task keeps reading the client and draining the session's events.
+  So a client that reads slowly leaves nothing piling up in the engine's subscription
+  queue, and never slows the engine or other clients. The outbox holds at most 1024
+  events (`EVENT_BUFFER`): about 100 KB of today's events, 17 seconds of a 60 Hz live
+  drag. When one more arrives, every queued event is dropped, one `events.dropped
+  {count}` notice is queued at the end, and the new event after it; while that notice
+  is still unsent, later drops add to its count instead of queuing another. Replies
+  (`welcome`, `response`, `error`) are never dropped, and what remains keeps its order,
+  so a `state.changed` that survives still follows its call's response. The client
+  re-reads the state with `state.get`. Each drop is logged at `warn` with its count
+  (see *Logging*). Replies are bounded instead by reading: while 1024 of them wait
+  unsent (`REPLY_BACKLOG`), the task reads no more requests, so a client that sends
+  requests without reading the answers is held back by the socket.
 - The connection ends when the client closes it, when the session's event stream ends
   (the engine went away; close code 1001), when the session reports `Disconnected`
   (close code 1011), or when the server shuts down.
 
 `serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
 open connection (close code 1001), so their clients' pending and later calls fail with
-`Disconnected` and their event streams end.
+`Disconnected` and their event streams end. Whenever the server closes a connection,
+what its outbox still holds is sent before the close frame.
 
 ### Logging
 
@@ -143,15 +160,17 @@ alone.
   `Connector` opens is created inside that span, so the engine's own `session` and
   `command` spans nest under it. The connection task logs the handshake's outcome
   (`client_id`, or the refusal's code) and how the connection ended, at `info`, or
-  `warn` when the engine failed (close code 1011). Message contents are never logged.
+  `warn` when the engine failed (close code 1011). A slow client's dropped events are
+  logged at `warn` (`client reads too slowly: events dropped`) with their count. Message
+  contents are never logged.
 - A request that isn't a WebSocket upgrade is logged at `debug`.
 
 ### Dependencies
 
 axum (features `http1`, `tokio`, `ws`, no defaults) for HTTP and the upgrade, which
 brings hyper, tower and `tokio-tungstenite` without TLS; tokio for the listener and the
-connection tasks; `futures-util` to split the socket and run calls concurrently
-(`FuturesUnordered`); `blake3` (the workspace's `pure` build, already used by `xtask`)
+connection tasks; `futures-util` to split the socket, run calls concurrently
+(`FuturesUnordered`) and box the writer's send in progress; `blake3` (the workspace's `pure` build, already used by `xtask`)
 for the token digest; `tracing` for the spans and events above. No TLS crate is in the tree, so no `ring` or `rustls`.
 
 ### Open questions
@@ -182,11 +201,8 @@ for the token digest; `tracing` for the spans and events above. No TLS crate is 
 6. **Logging volume.** Every refused upgrade is logged at `warn` (see *Logging*). A
    foreign page that keeps retrying can fill the log; whether refusals need rate
    limiting or a summary line is open.
-7. **Backpressure.** Decided, not built yet: each connection gets a bounded event
-   buffer. When it overflows, the server drops the queued events and sends one
-   `events.dropped` notice, and the client re-reads state (`state.get` carries `rev`).
-   The engine is never slowed down by one client. Today events and answers are written
-   as they come, and a client that stops reading makes the connection task wait on the
-   socket, which holds that session's events in its unbounded buffer
-   ([jstream-control open question 1](../jstream-control/README.md#design)). The buffer
-   size and the notice's fields are settled when it is built.
+7. **Backpressure.** Settled and built (see *Sessions*): each connection has a bounded
+   event buffer, and on overflow the server drops the queued events and sends one
+   `events.dropped` notice, so the engine is never slowed down by one client. What is
+   left open is tuning: whether 1024 events suits the high-rate events still to come
+   (`stats.tick`, meters), or wants a byte limit or per-event-kind limits once they exist.

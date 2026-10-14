@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:dc7262e94c457587", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: ARCH#data-model changed only in the hotkey re-point wording; this Purpose's model (Graph, State, Source, Scene, Item) and apply semantics don't cover hotkeys and still hold" }
+verified = { hash = "b3:f7ef00aee7b8f7ef", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main: protocol#design gained events.dropped and the 0.4 handshake (this PR) and ARCH#data-model only reworded hotkey re-pointing (#107); the model list (Graph, State, Source, Scene, Item) and apply semantics are untouched by either" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

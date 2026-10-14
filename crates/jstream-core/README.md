@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:df0a0a263c638e3e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read the batch and idempotency-key bullets against R-API-004 (optional expected_rev, optional idempotency key, per-client undo); they match" }
+verified = { hash = "b3:bc5bc42107cdc0e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events: subscriptions stay unbounded per #44's decision, and jstream-server now drains them as events arrive and bounds per connection itself; ordering, rev-gap and stream-end text re-read and unchanged" }
 -->
 
 ### Engine and sessions
@@ -119,8 +119,11 @@ edit rules here.
 
 Each `events()` call opens an independent subscription with an unbounded queue, so no
 event is dropped ([jstream-control open question 1](../jstream-control/README.md#design)
-covers backpressure). A batch emits `state.changed {rev, client_id, request_id}`, and
-an action emits one `output.state_changed` per step. Every subscription of every
+covers backpressure). `jstream-server` drains its connections' subscriptions as events
+arrive, however slowly a client reads, and bounds what it holds per connection itself
+([jstream-server › Design](../jstream-server/README.md#design)). A batch emits
+`state.changed {rev, client_id, request_id}`, and an action emits one
+`output.state_changed` per step. Every subscription of every
 session receives every event emitted after it opened, in the engine's order;
 `state.changed` events therefore arrive in `rev` order with no gap. Subscribers are
 woken after the engine's lock is released. A stream ends, after what it buffered, when
