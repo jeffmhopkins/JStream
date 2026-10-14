@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:3209f6acc31fb5a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by re-verified Purpose lines after this PR's jstream-youtube and jstream-sources crate-map rows; layer diagram and app roles unchanged" }
+verified = { hash = "b3:23907fecabd77c90", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed only by the daemon README's re-verified Design line (server dependency's extra-hosts and token text); layer diagram and app roles unchanged" }
 -->
 
 ```
@@ -410,7 +410,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:b65806c4da94ef9a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's planned YouTube bullet (youtube.chat.send, youtube.chat.feature, youtube.stats; not built) sits beside main's planned additions; covered control/core/server/protocol READMEs changed only by re-verified lines; bullets match protocol 0.3 as built" }
+verified = { hash = "b3:b792aec35d55d5eb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered server README changed by this PR's extra-hosts and token-compare text; main's planned additions (ADR-0022/0024/0025/0027/0028/0034) unchanged; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

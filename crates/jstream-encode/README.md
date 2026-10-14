@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:67d0ba0e5c7733c6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-encode row and this Purpose are unchanged and still match the crate" }
+verified = { hash = "b3:d57e3b61438733e7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Busy-from-fill_gap gap fix doesn't change the Purpose; main's ADR-0027 sharing sentence (no video chain shares by mix and profile) kept as merged" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -59,7 +59,8 @@ kept for video and audio; a full input queue drops and counts; a busy encoder at
 `finish` drops and counts; a slow subscriber loses packets while a fast one gets all;
 a late subscriber starts at the next keyframe with the stream's `info`; `finish`
 drains; an encoder error and a panic reach every subscriber; dropping a session closes
-the streams and joins the thread; dropped audio blocks become silence; the fan-out's
+the streams and joins the thread; dropped audio blocks become silence, also when that
+silence is first refused as busy; the fan-out's
 keyframe resync; and the registry.
 
 <a id="design"></a>
@@ -67,7 +68,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:5e2bb060404e1a32", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, encode, daemon, mcp) into the ADR-0031 acceptance: re-read against both; encode's ADR-0003 links re-pointed to ADR-0031, which restates its MF encoder scope unchanged; no other content change" }
+verified = { hash = "b3:5e24f5dbbb915cce", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's design bullet now says a Busy from fill_gap still records the gap and gap clears only after silence and block both succeed; matches audio.rs; main's dependency changes (ADR-0027/0028 text) don't affect the encode thread design" }
 -->
 
 ### Threads and pacing
@@ -105,8 +106,9 @@ crate.
   thread encodes silence from the end of the last block it encoded to the marked
   block's `pts` (in sample frames, the input format's time base), when that gap is
   positive and at most `max_audio_gap` (1 s by default). Gaps without a drop are left
-  alone, so rounding in upstream timestamps never inserts samples. Filled frames are
-  counted (`silence_frames`).
+  alone, so rounding in upstream timestamps never inserts samples. A block the encoder
+  refuses as `Busy`, or the silence before it, marks the next block the same way, so
+  that block's silence covers both holes. Filled frames are counted (`silence_frames`).
 - **Encoder busy.** An encoder that returns `Busy` despite `can_accept` drops the input
   (`dropped_encoder_busy`). At `finish`, queued inputs the encoder can't take within
   `finish_timeout` (2 s) are dropped the same way.

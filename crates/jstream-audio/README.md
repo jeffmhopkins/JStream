@@ -199,6 +199,21 @@ non-negative floats.
   must know the device format before opening the stream.
 - **Adding and removing inputs while the mixer runs,** through a lock-free command queue,
   with dropped rings going to the collector thread.
+- **State snapshots** ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). The
+  mixer's live state is atomics for the gains plus an input list fixed when it is built.
+  That fits ARCH's "continuous parameters bypass snapshots": a fader move is a store to
+  an atomic, and nothing structural changes while the mixer runs. The `arc-swap`
+  snapshot ARCH gives each subsystem comes with adding and removing inputs live (above),
+  when the input list starts to change.
+- **A panic in `on_packet` or `Mixer::poll`**
+  ([R-RT-006](../../docs/RULES.md#R-RT-006)). Nothing in this crate catches one or
+  mutes the bus. The test R-RT-006 names, `scenarios::rt_panic_is_reported`, doesn't
+  exist yet, so no test covers the audio path. Until it does, two thread boundaries do:
+  `InputProducer::on_packet` runs on the platform's audio thread, whose `catch_unwind`
+  (`guarded` in `jstream-platform-windows`) stops that stream and reports the panic to
+  the handler's `on_error` as `InvalidState`; and `Mixer::poll` runs on the engine
+  thread that calls it, which must catch a panic there, mute the bus and raise the
+  error event. `rt_panic_is_reported` lands with that engine thread.
 - **The rest of the audio model** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
   the activity gain per source, the send matrix and further buses, filters with keys and
   latency reporting, true peak and BS.1770 loudness, and monitor taps; and render-side

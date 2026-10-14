@@ -711,9 +711,7 @@ impl Drop for WgcStream {
     }
 }
 
-/// Platform tests on a real display (R-TEST-004): behind `hw-tests` and `#[ignore]`d,
-/// because CI machines have no display to capture. Run them on a Windows machine with a
-/// display: `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
+/// Tests that run on every Windows CI machine: they need no display or capture device.
 #[cfg(test)]
 mod tests {
     use jstream_platform::PlatformError;
@@ -791,6 +789,9 @@ mod tests {
     }
 }
 
+/// Platform tests on a real display (R-TEST-004): behind `hw-tests` and `#[ignore]`d,
+/// because CI machines have no display to capture. Run them on a Windows machine with a
+/// display: `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 #[cfg(all(test, feature = "hw-tests"))]
 mod device_tests {
     use std::time::{Duration, Instant};
