@@ -716,6 +716,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-encode"
+version = "0.0.0"
+dependencies = [
+ "jstream-platform",
+ "thiserror",
+]
+
+[[package]]
 name = "jstream-graph"
 version = "0.0.0"
 dependencies = [

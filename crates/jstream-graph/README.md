@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:3384b52017ddf16e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "After merging main (ADR-0023): dependencies changed only by this PR's apps-layer row wording and verified lines; Purpose describes only what is built and still matches src" }
+verified = { hash = "b3:fa5271c426e545d6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model gained ADR-0029's transition fields beside main's ADR-0023 edits; none of them is in the graph yet, and the model listed here matches the code" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

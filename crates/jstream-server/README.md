@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:73969a262000247a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #44 follow-up: config.rs (Token keeps a BLAKE3 digest), gate.rs (check_extra_hosts), error.rs (InvalidHost variant) and lib.rs (bind validates first) change existing modules only; contents list, layer 4 and the not-here-yet items still hold; crate-map dependency only reworded the CLI apps row" }
+verified = { hash = "b3:4c760c6c37dd2e78", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only tests.rs changed (shutdown test also asserts a second hello fails with Disconnected); contents list, layer 4 and deferred items unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9824b3b758c3592e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #72: this PR's Extra hosts (name:port required, InvalidHost at bind) and Token compare (BLAKE3 digest) paragraphs plus blake3 in Dependencies sit beside main's TLS open question (ring allowlisted for RTMPS) and daemon open question 5; all re-read together against config.rs/gate.rs" }
+verified = { hash = "b3:27a755f2c95a50d5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol has ADR-0029's planned transition edits and optional preset on the switch action, none built; the server forwards any Call unchanged; main's #73 test change verified there" }
 -->
 
 ### Listening and admission
