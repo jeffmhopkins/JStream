@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:49b0d14e36c25eee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading now holds this PR's privacy flag on the parameter channels (not built) beside main's ADR-0028 mixer row and pts paragraph and ADR-0035 CLAP host; platform traits unchanged by the output path order" }
+verified = { hash = "b3:ba53f3095483e962", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-platform row and this Purpose are unchanged and still match the crate" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -98,7 +98,7 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:ffbfce1abbf37e97", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH GPU pipeline's output path order (mix, master, output chain, privacy, colour conversion, encoder; not built) ends in the same encoder hand-off GpuFrame/EncodeTarget/FrameSync describe" }
+verified = { hash = "b3:9657b9c052bc6bc0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed only by re-verified lines in this merge; GpuFrame/EncodeTarget/FrameSync text unchanged and still holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

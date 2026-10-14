@@ -12,14 +12,14 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:73dd3d747e7191e3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-mux row and this Purpose are unchanged and still match the crate" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0034-youtube-interaction-scope-v2.md", "crates/jstream-media/README.md#purpose"]
+verified = { hash = "b3:8fd3121ff74ae458", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); depends_on and Docs line now cite ADR-0031 and ADR-0034 (the merge had kept the superseded ADR-0003/0009); the FLV muxer Purpose is unchanged by either" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):
 muxers are written in Rust, no FFmpeg). This first cut writes **FLV** for H.264 and AAC,
 the container M1a's RTMP(S) output sends to YouTube
-([ADR-0009](../../docs/adr/0009-youtube-rtmps-and-api.md)). It consumes
+([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)). It consumes
 [`jstream-media`](../jstream-media/README.md#purpose) `Packet`s, does no network I/O,
 has no `unsafe`, and depends only on `jstream-media` and `thiserror`.
 
@@ -69,5 +69,5 @@ Contents:
   input claims, and reports the byte offset of truncated input.
 - **Errors:** one `thiserror` enum, `MuxError`.
 
-**Not yet:** enhanced RTMP (HEVC and AV1 through FourCC video tags, which ADR-0009 calls
+**Not yet:** enhanced RTMP (HEVC and AV1 through FourCC video tags, which ADR-0034 calls
 for), MP4/fMP4, and a mid-stream change of SPS/PPS (a new sequence header).

@@ -2,7 +2,8 @@
 id = "ADR-0009"
 title = "YouTube via RTMPS plus optional Live API"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0034-youtube-interaction-scope-v2.md"
 -->
 
 # ADR-0009: YouTube via RTMPS plus optional Live API
