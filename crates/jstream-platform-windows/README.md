@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:1f31207158f0aa2d", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against the threading edit. WASAPI streams are still their own MMCSS threads. This crate is unchanged; the core pipeline is tested on the fakes, not on these backends." }
+verified = { hash = "b3:9e0c8b586d86f201", by = "agent:grok@stats-tick", note = "Re-read against the threading edit and the real-time rules. WASAPI streams are still their own MMCSS threads. This crate is unchanged; the sampler and the pipeline test run on the fakes, not on these backends." }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

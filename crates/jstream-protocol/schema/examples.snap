@@ -2,7 +2,7 @@
 source: crates/jstream-protocol/src/fixtures.rs
 ---
 # client -> server
-{"type":"hello","protocol":{"major":0,"minor":5},"client_name":"jstream-cli"}
+{"type":"hello","protocol":{"major":0,"minor":6},"client_name":"jstream-cli"}
 {"type":"request","id":"r0","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"},{"type":"scene.rename","scene_id":"scn_1","name":"Intro"},{"type":"scene.delete","scene_id":"scn_1"},{"type":"item.add","scene_id":"scn_1","item_id":"itm_1","source_id":"src_cam"},{"type":"item.add","scene_id":"scn_1","item_id":"itm_2","source_id":"src_cam","transform":{"position":{"x":0.0,"y":0.0},"scale":{"x":1.0,"y":1.0},"rotation_deg":0.0}},{"type":"item.remove","item_id":"itm_1"},{"type":"item.set_transform","item_id":"itm_2","transform":{"position":{"x":1280.0,"y":0.5},"scale":{"x":0.25,"y":3.4028235e+38},"rotation_deg":-90.0}},{"type":"item.set_visible","item_id":"itm_2","visible":false},{"type":"item.reorder","item_id":"itm_2","index":0},{"type":"scene.reorder","scene_id":"scn_1","index":2},{"type":"item.set_crop","item_id":"itm_2","crop":{"left":8,"top":0,"right":8,"bottom":120}},{"type":"source.create","source_id":"src_cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}},{"type":"source.create","source_id":"src_intro","name":"Intro scene","kind":{"type":"scene","scene_id":"scn_1"}},{"type":"source.duplicate","source_id":"src_cam","new_source_id":"src_cam_2","name":"Camera 2"},{"type":"source.delete","source_id":"src_cam_2"}]}}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.delete","scene_id":"scn_1"}],"expected_rev":12,"idempotency_key":"k-1"}}
 {"type":"request","id":"r10","call":{"kind":"action","action":{"type":"output.start","output_id":"out_yt"}}}
@@ -14,7 +14,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r24","call":{"kind":"query","query":{"type":"state.get"}}}
 {"type":"request","id":"r25","call":{"kind":"query","query":{"type":"video.snapshot"}}}
 # server -> client
-{"type":"welcome","protocol":{"major":0,"minor":5},"client_id":"cli_7","rev":12}
+{"type":"welcome","protocol":{"major":0,"minor":6},"client_id":"cli_7","rev":12}
 {"type":"response","id":"r0","result":{"kind":"batch","rev":13}}
 {"type":"response","id":"r10","result":{"kind":"action"}}
 {"type":"error","error":{"code":"handshake_required","message":"send `hello` before any request"}}
@@ -24,7 +24,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"item.list","rev":12,"scene_id":"scn_1","items":[{"item_id":"itm_1","source_id":"src_intro","transform":{"position":{"x":0.0,"y":0.0},"scale":{"x":1.0,"y":1.0},"rotation_deg":0.0},"crop":{"left":0,"top":0,"right":0,"bottom":0},"visible":true},{"item_id":"itm_2","source_id":"src_cam","transform":{"position":{"x":1280.0,"y":720.0},"scale":{"x":0.25,"y":0.25},"rotation_deg":0.0},"crop":{"left":8,"top":0,"right":8,"bottom":0},"visible":false}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"state.get","rev":12,"sources":[{"source_id":"src_cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}},{"source_id":"src_intro","name":"Intro scene","kind":{"type":"scene","scene_id":"scn_intro"}}],"scenes":[{"scene_id":"scn_1","name":"Main","items":[{"item_id":"itm_1","source_id":"src_intro","transform":{"position":{"x":0.0,"y":0.0},"scale":{"x":1.0,"y":1.0},"rotation_deg":0.0},"crop":{"left":0,"top":0,"right":0,"bottom":0},"visible":true},{"item_id":"itm_2","source_id":"src_cam","transform":{"position":{"x":1280.0,"y":720.0},"scale":{"x":0.25,"y":0.25},"rotation_deg":0.0},"crop":{"left":8,"top":0,"right":8,"bottom":0},"visible":false}]},{"scene_id":"scn_intro","name":"Intro","items":[]}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"video.snapshot","rev":12,"width":1,"height":1,"png":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII="}}}
-{"type":"error","id":"r1","error":{"code":"unsupported_version","client":{"major":9,"minor":0},"server":{"major":0,"minor":5},"message":"protocol version 9.0 is not supported; this server speaks 0.5"}}
+{"type":"error","id":"r1","error":{"code":"unsupported_version","client":{"major":9,"minor":0},"server":{"major":0,"minor":6},"message":"protocol version 9.0 is not supported; this server speaks 0.6"}}
 {"type":"error","id":"r1","error":{"code":"handshake_required","message":"send `hello` before any request"}}
 {"type":"error","id":"r1","error":{"code":"malformed","reason":"missing field `id`","message":"malformed message: missing field `id`"}}
 {"type":"error","id":"r1","error":{"code":"empty_batch","message":"a batch must contain at least one edit"}}
@@ -49,3 +49,4 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"event","event":{"type":"output.state_changed","output_id":"out_yt","state":"stopping"}}
 {"type":"event","event":{"type":"output.state_changed","output_id":"out_yt","state":"failed"}}
 {"type":"event","event":{"type":"events.dropped","count":1500}}
+{"type":"event","event":{"type":"stats.tick","seq":4,"drops":{"capture_frames":2,"audio_frames":5,"render_ticks":1,"encode_frames":4,"encode_blocks":6,"output_packets":7}}}

@@ -44,6 +44,21 @@ pub enum Event {
         /// How many events were dropped.
         count: u64,
     },
+    /// A sample of the pipeline's drop counters (R-RT-004).
+    ///
+    /// `drops` is a running total since the engine started, not the count since the
+    /// previous tick. A client that misses one subtracts the last tick it did see.
+    /// `seq` starts at 1 and increases by one per sample, so a gap means a missed tick
+    /// and not a reset. The engine sends it when its control thread asks, about once a
+    /// second once the media pipeline is running. Until event subscriptions exist, every
+    /// client receives it.
+    #[serde(rename = "stats.tick")]
+    StatsTick {
+        /// Monotonic sample number, starting at 1.
+        seq: u64,
+        /// Running drop totals.
+        drops: DropCounts,
+    },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -58,7 +73,54 @@ impl Event {
             Event::StateChanged { .. } => Some("state.changed"),
             Event::OutputStateChanged { .. } => Some("output.state_changed"),
             Event::EventsDropped { .. } => Some("events.dropped"),
+            Event::StatsTick { .. } => Some("stats.tick"),
             Event::Unknown => None,
+        }
+    }
+}
+
+/// Running totals of frames and packets the pipeline has dropped since the engine
+/// started (R-RT-004).
+///
+/// Each field sums one kind of drop across every stage that counts it. A stage that
+/// does not count that kind contributes nothing. Totals only grow: a client computes
+/// an interval by subtracting the previous tick.
+///
+/// Silence a stage inserts to cover a gap (an audio underrun, a device gap, encoder
+/// gap-fill) is not a drop and is not included.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct DropCounts {
+    /// Video frames a capture mailbox replaced before the reader took them.
+    pub capture_frames: u64,
+    /// Audio frames dropped before the mixer consumed them: a device ring that
+    /// overwrote unread frames, frames that arrived after the mixer had passed them,
+    /// and frames the mixer skipped because it fell behind the clock.
+    pub audio_frames: u64,
+    /// Render ticks that produced no new composite because the previous one had not
+    /// finished.
+    pub render_ticks: u64,
+    /// Video frames dropped before an encoder accepted them (its input queue was full,
+    /// or the encoder was busy).
+    pub encode_frames: u64,
+    /// Audio blocks dropped before an encoder accepted them (its input queue was full,
+    /// or the encoder was busy).
+    pub encode_blocks: u64,
+    /// Encoded packets dropped handing a stream to an output: a subscriber that fell
+    /// behind, or the output's own queue.
+    pub output_packets: u64,
+}
+
+impl DropCounts {
+    /// The field-wise sum, saturating at [`u64::MAX`] rather than wrapping.
+    #[must_use]
+    pub fn saturating_add(self, other: Self) -> Self {
+        Self {
+            capture_frames: self.capture_frames.saturating_add(other.capture_frames),
+            audio_frames: self.audio_frames.saturating_add(other.audio_frames),
+            render_ticks: self.render_ticks.saturating_add(other.render_ticks),
+            encode_frames: self.encode_frames.saturating_add(other.encode_frames),
+            encode_blocks: self.encode_blocks.saturating_add(other.encode_blocks),
+            output_packets: self.output_packets.saturating_add(other.output_packets),
         }
     }
 }
@@ -89,7 +151,40 @@ mod tests {
 
     #[test]
     fn unknown_events_from_a_newer_server_parse() {
-        let parsed = serde_json::from_value::<Event>(json!({"type": "stats.tick", "fps": 60}));
+        let parsed = serde_json::from_value::<Event>(json!({"type": "future.event", "fps": 60}));
         assert_eq!(parsed.ok(), Some(Event::Unknown));
+    }
+
+    #[test]
+    fn stats_tick_roundtrips_its_running_totals() {
+        let event = Event::StatsTick {
+            seq: 3,
+            drops: super::DropCounts {
+                capture_frames: 2,
+                audio_frames: 5,
+                render_ticks: 1,
+                encode_frames: 4,
+                encode_blocks: 6,
+                output_packets: 7,
+            },
+        };
+        let value = serde_json::to_value(&event).expect("serializes");
+        assert_eq!(
+            value,
+            json!({
+                "type": "stats.tick",
+                "seq": 3,
+                "drops": {
+                    "capture_frames": 2,
+                    "audio_frames": 5,
+                    "render_ticks": 1,
+                    "encode_frames": 4,
+                    "encode_blocks": 6,
+                    "output_packets": 7,
+                }
+            })
+        );
+        let parsed = serde_json::from_value::<Event>(value).expect("parses");
+        assert_eq!(parsed, event);
     }
 }

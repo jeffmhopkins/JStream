@@ -6,11 +6,11 @@
 //! naming and classification checks see every variant.
 
 use crate::{
-    Action, Batch, Call, CallResult, ClientId, ClientMessage, Command, CommandClass, Crop, Edit,
-    EntityKind, ErrorResponse, Event, EventMessage, Finite32, Hello, IdempotencyKey, ItemId,
-    ItemInfo, ItemTransform, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, Query,
-    QueryResult, Request, RequestId, Response, Rev, SceneId, SceneInfo, SceneSummary,
-    ServerMessage, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    Action, Batch, Call, CallResult, ClientId, ClientMessage, Command, CommandClass, Crop,
+    DropCounts, Edit, EntityKind, ErrorResponse, Event, EventMessage, Finite32, Hello,
+    IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputState, PROTOCOL_VERSION,
+    ProtocolError, Query, QueryResult, Request, RequestId, Response, Rev, SceneId, SceneInfo,
+    SceneSummary, ServerMessage, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -247,6 +247,17 @@ pub(crate) fn events() -> Vec<Event> {
         });
     }
     events.push(Event::EventsDropped { count: 1500 });
+    events.push(Event::StatsTick {
+        seq: 4,
+        drops: DropCounts {
+            capture_frames: 2,
+            audio_frames: 5,
+            render_ticks: 1,
+            encode_frames: 4,
+            encode_blocks: 6,
+            output_packets: 7,
+        },
+    });
     events
 }
 

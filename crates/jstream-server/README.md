@@ -49,7 +49,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:aa9fd8ea4953f2f5", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the shutdown paragraph against session.rs. drop(events) still runs before the close timeout, and CLOSE_TIMEOUT still drops a client that stopped reading. The new test checks the subscription count during that wait. Admission, the slow-client buffer and logging are unchanged." }
+verified = { hash = "b3:3a87f96621387261", by = "agent:grok@stats-tick", note = "Re-read Sessions and open question 7 against session.rs. The task still forwards every event, including stats.tick, and still drops a slow client's queued events. stats.tick is about once a second; meters are still to come. Shutdown still ends the subscription before the close timeout." }
 -->
 
 ### Listening and admission
@@ -206,5 +206,6 @@ for the token digest; `tracing` for the spans and events above. No TLS crate is 
 7. **Backpressure.** Settled and built (see *Sessions*): each connection has a bounded
    event buffer, and on overflow the server drops the queued events and sends one
    `events.dropped` notice, so the engine is never slowed down by one client. What is
-   left open is tuning: whether 1024 events suits the high-rate events still to come
-   (`stats.tick`, meters), or wants a byte limit or per-event-kind limits once they exist.
+   left open is tuning: whether 1024 events suits `stats.tick` (about once a second
+   while a pipeline runs) and the high-rate meters still to come, or wants a byte
+   limit or per-event-kind limits once they exist.

@@ -265,6 +265,56 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "DropCounts": {
+      "description": "Running totals of frames and packets the pipeline has dropped since the engine\nstarted (R-RT-004).\n\nEach field sums one kind of drop across every stage that counts it. A stage that\ndoes not count that kind contributes nothing. Totals only grow: a client computes\nan interval by subtracting the previous tick.\n\nSilence a stage inserts to cover a gap (an audio underrun, a device gap, encoder\ngap-fill) is not a drop and is not included.",
+      "properties": {
+        "audio_frames": {
+          "description": "Audio frames dropped before the mixer consumed them: a device ring that\noverwrote unread frames, frames that arrived after the mixer had passed them,\nand frames the mixer skipped because it fell behind the clock.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "capture_frames": {
+          "description": "Video frames a capture mailbox replaced before the reader took them.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "encode_blocks": {
+          "description": "Audio blocks dropped before an encoder accepted them (its input queue was full,\nor the encoder was busy).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "encode_frames": {
+          "description": "Video frames dropped before an encoder accepted them (its input queue was full,\nor the encoder was busy).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "output_packets": {
+          "description": "Encoded packets dropped handing a stream to an output: a subscriber that fell\nbehind, or the output's own queue.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "render_ticks": {
+          "description": "Render ticks that produced no new composite because the previous one had not\nfinished.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "capture_frames",
+        "audio_frames",
+        "render_ticks",
+        "encode_frames",
+        "encode_blocks",
+        "output_packets"
+      ],
+      "type": "object"
+    },
     "Edit": {
       "description": "A change to the collection state: undoable, batchable and atomic.\n\nSerialized with an internal `type` tag holding the command name (`noun.verb`,\nR-API-002). Every variant documents its inverse. The engine (`jstream-graph`)\ncomputes the inverse from the state *before* the edit, so the protocol has to be\nclosed under inversion: every inverse must itself be a sequence of edits, and it is.\n\nPositions are indexes: scenes in display order (0 is first), items in stacking order\nwithin their scene (0 is the bottom).",
       "oneOf": [
@@ -710,6 +760,31 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "count"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A sample of the pipeline's drop counters (R-RT-004).\n\n`drops` is a running total since the engine started, not the count since the\nprevious tick. A client that misses one subtracts the last tick it did see.\n`seq` starts at 1 and increases by one per sample, so a gap means a missed tick\nand not a reset. The engine sends it when its control thread asks, about once a\nsecond once the media pipeline is running. Until event subscriptions exist, every\nclient receives it.",
+          "properties": {
+            "drops": {
+              "$ref": "#/$defs/DropCounts",
+              "description": "Running drop totals."
+            },
+            "seq": {
+              "description": "Monotonic sample number, starting at 1.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "stats.tick",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "seq",
+            "drops"
           ],
           "type": "object"
         }
@@ -1643,5 +1718,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.5"
+  "title": "JStream protocol 0.6"
 }

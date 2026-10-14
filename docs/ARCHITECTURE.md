@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:7a409f3c31f7a4df", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Diagram parenthetical now says the snapshot PNG is in the JSON message and binary frames are preview and meters. Host table is unchanged. CLI src gained the video snapshot command only." }
+verified = { hash = "b3:0dd3f2386e2a9e78", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the host table and the diagram against the merged daemon README. The CLI still talks only through Control. stats.tick is still one event on that stream. The daemon is still the headless host and does not become a new client." }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:1adf430595bfaedf", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the jstream-render and jstream-core rows against their Cargo.toml files. Render stays layer 2, unsafe_allowed false, and the summary still matches; its dependency on jstream-protocol is layer 1. Core stays layer 5, unsafe_allowed false, and the summary still matches; jstream-audio, jstream-encode, jstream-mux, jstream-outputs, jstream-platform and jstream-render are all lower layers. Both row texts are unchanged." }
+verified = { hash = "b3:4aa5eb2c85281d25", by = "agent:grok@stats-tick", note = "Re-read the jstream-core and jstream-protocol rows against their Cargo.toml files. Core stays layer 5 and unsafe_allowed false; its new audio and encode deps are lower layers. Protocol stays layer 1. The row texts are unchanged." }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:b87308bea6c5a058", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the output-pipeline paragraph against runtime/. Render, mixer, encode and output threads still do not lock the collection. The watcher still emits failed and stops the pipeline. It no longer keeps the engine alive; that detail is in the core design." }
+verified = { hash = "b3:c3df993fd3d294b4", by = "agent:grok@stats-tick", note = "Re-read the output-pipeline paragraph against runtime/pipeline.rs. output.start starts jstream-stats, which is not a real-time thread and emits stats.tick about once a second. The render loop publishes capture skips and does not skip a late tick. Render, mixer, encode and output still do not lock the collection." }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -382,7 +382,11 @@ This cut encodes that CPU readback, and the readback is counted. The mixer threa
 polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
 desktop loopback. Encode threads are the
 ones inside the encoder sessions. The output thread muxes FLV and sends tags to the
-publish target. None of those threads lock the collection. `output.stop` during
+publish target. `output.start` also starts `jstream-stats`, which is not a
+real-time thread: it emits `stats.tick` about once a second from the stage
+counters. The render loop publishes capture mailbox skips and does not skip a
+late tick, so `render_ticks` stays 0 in this cut. None of those threads lock
+the collection. `output.stop` during
 `starting` cancels that start and emits `stopped` only after the start has dropped
 its threads. A publish failure is a channel message to a watcher the control thread
 started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
@@ -464,7 +468,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:7f56601a3fdcb734", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read transport and slow clients. The server still drains engine events into a bounded buffer and still ends the subscription when it closes a connection. Queries, events and binary streams are unchanged. subscriber_count is a mock test probe, not a protocol message." }
+verified = { hash = "b3:e040f9d7ff236dca", by = "agent:grok@stats-tick", note = "Re-read the events bullet against event.rs. stats.tick is protocol 0.6 and carries running drop totals; the fields live in the protocol design. video.snapshot remains the PNG query. The server still forwards every event." }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -512,7 +516,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
   `output.status`, `video.snapshot` → the program mix as a PNG in the JSON result,
   longest side at most 1280, with the layout `rev`; later `audio.levels`).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick`, …).
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, …).
+  `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
+  ([R-RT-004](RULES.md#R-RT-004)); the fields are in
+  [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).
 - **YouTube** (planned for M3, [ADR-0034](adr/0034-youtube-interaction-scope-v2.md)):
   the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
   the channel and goes to the audit log, and `youtube.chat.feature { message_id }`, which

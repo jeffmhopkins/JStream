@@ -100,7 +100,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:60c9b43fa65d91fa", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the one-engine bullet against the core design sentence about a panicking teardown. The daemon still builds one Engine and a Connector that calls connect, and never injects backends, so it does not start the pipeline. Clients still see each others events." }
+verified = { hash = "b3:2709f981058be57b", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the one-engine bullet against serve.rs and the merged core design. The daemon still builds one Engine with with_output only, so it does not start the pipeline or the sampler. Clients still see each others events." }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

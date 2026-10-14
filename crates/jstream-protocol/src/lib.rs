@@ -28,7 +28,7 @@ pub use envelope::{
     ServerMessage, Welcome,
 };
 pub use error::{EntityKind, ProtocolError, WireError};
-pub use event::{Event, OutputState};
+pub use event::{DropCounts, Event, OutputState};
 pub use finite::Finite32;
 pub use geometry::{
     CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, Placed,
