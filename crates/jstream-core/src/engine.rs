@@ -15,14 +15,13 @@ use crate::runtime::{
     Gate, LivePublish, MediaHost, OutputStats, Pending, Running, launch, parts_from,
 };
 use crate::session::InProcessControl;
-use crate::snapshot::{self, Frame, SourceFrameError};
+use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
 use jstream_graph::Graph;
 use jstream_platform::Backends;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, DropCounts, Event, IdempotencyKey, OutputId,
+    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, Event, IdempotencyKey, OutputId,
     OutputState, ProtocolError, Query, QueryResult, RequestId, Rev, SourceId,
 };
-use jstream_render::Compositor;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
@@ -57,12 +56,12 @@ pub struct Engine {
     drops: Arc<Mutex<DropLedger>>,
 }
 
-/// The collection lock and the compositor lock. They are never held together: a
-/// snapshot copies its shot, drops the collection lock, then waits on the GPU.
-/// The pipeline threads never take either lock.
+/// The collection lock, and the snapshot thread that owns the snapshot compositor. A
+/// snapshot copies its shot under the lock, drops it, then queues the shot for that
+/// thread. The pipeline threads never take the lock.
 struct Shared {
     state: Mutex<State>,
-    compositor: Mutex<Option<Compositor>>,
+    snapshots: SnapshotWorker,
 }
 
 impl Default for Engine {
@@ -70,7 +69,7 @@ impl Default for Engine {
         Self {
             shared: Arc::new(Shared {
                 state: Mutex::new(State::default()),
-                compositor: Mutex::new(None),
+                snapshots: SnapshotWorker::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -89,6 +88,7 @@ impl Engine {
     /// This is runtime state: it does not change `rev` and emits no event. A snapshot
     /// uses it when an item places that source. A frame may arrive before the source
     /// exists; it is kept either way. Replaces any frame already stored for the id.
+    /// A `source.delete` drops the deleted source's frame.
     ///
     /// # Errors
     /// [`SourceFrameError::Empty`] when a side is zero, [`SourceFrameError::TooLarge`]
@@ -200,6 +200,42 @@ impl Engine {
         }
     }
 
+    /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
+    /// Holds the collection and the ledger, not the [`MediaHost`], like the ticker.
+    pub(crate) fn stats_emitter(&self) -> Box<dyn FnOnce() + Send> {
+        let shared = Arc::clone(&self.shared);
+        let ledger = Arc::clone(&self.drops);
+        Box::new(move || emit_sampled(&shared, &ledger))
+    }
+
+    /// Whether a frame is stored for `source_id`.
+    #[cfg(test)]
+    pub(crate) fn has_source_frame(&self, source_id: &SourceId) -> bool {
+        lock(&self.shared.state).frames.contains_key(source_id)
+    }
+
+    /// Raises how long `output.start` waits for the compositor to open. The GPU tests
+    /// use it: lavapipe on a loaded CI runner can take longer than the 10 s default.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_open_timeout(self, timeout: std::time::Duration) -> Self {
+        if let Some(host) = &self.media {
+            *lock(&host.open_timeout) = timeout;
+        }
+        self
+    }
+
+    /// Replaces how the render thread composites. Tests use it to run the pipeline
+    /// without a wgpu adapter. Requires [`with_backends`](Self::with_backends) first.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_draw(self, open: crate::runtime::OpenDraw) -> Self {
+        if let Some(host) = &self.media {
+            *lock(&host.draw) = open;
+        }
+        self
+    }
+
     /// Opens a new client session. It must send `hello` before any call.
     pub fn connect(&self) -> InProcessControl {
         InProcessControl::new(self.clone())
@@ -231,12 +267,16 @@ impl Engine {
     /// is logged after the lock is released, so a slow log writer never holds up other
     /// sessions. Only names, IDs and error codes are logged, never a command's arguments
     /// (R-SEC-001).
+    ///
+    /// Every call but `video.snapshot` runs to completion here. A snapshot is queued
+    /// for the snapshot thread and comes back [`Executed::Pending`], with its span; its
+    /// outcome is logged when it completes.
     pub(crate) fn execute(
         &self,
         client_id: &ClientId,
         request_id: &RequestId,
         call: Call,
-    ) -> Result<CallResult, ProtocolError> {
+    ) -> Executed {
         let span = tracing::info_span!(
             "command",
             command = command_name(&call),
@@ -244,6 +284,15 @@ impl Engine {
             request_id = %request_id,
         );
         let _entered = span.enter();
+        if matches!(
+            call,
+            Call::Query {
+                query: Query::VideoSnapshot
+            }
+        ) {
+            drop(_entered);
+            return Executed::Pending(self.video_snapshot(), span);
+        }
         let output = match &call {
             Call::Action {
                 action: Action::OutputStart { output_id } | Action::OutputStop { output_id },
@@ -258,13 +307,6 @@ impl Engine {
                 }
             ) {
             self.run_media_action(call)
-        } else if matches!(
-            call,
-            Call::Query {
-                query: Query::VideoSnapshot
-            }
-        ) {
-            self.video_snapshot()
         } else {
             let mut wake = Vec::new();
             let result = lock(&self.shared.state).execute(client_id, request_id, call, &mut wake);
@@ -284,7 +326,7 @@ impl Engine {
             }
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
         }
-        result
+        Executed::Ready(result)
     }
 
     fn host(&mut self) -> Arc<MediaHost> {
@@ -355,7 +397,11 @@ impl Engine {
                     *lock(&host.publish) = Some(publish);
                     return Err(not_implemented("output.start"));
                 };
-                parts_from(backends)
+                parts_from(
+                    backends,
+                    Arc::clone(&lock(&host.draw)),
+                    *lock(&host.open_timeout),
+                )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
             gate.pending = Some(Pending {
@@ -407,6 +453,8 @@ impl Engine {
                                 &output_id,
                                 &mut wake,
                             );
+                            // Joined below, outside the locks. A new start waits.
+                            gate.draining = true;
                             StartOutcome::Failed(Some(running), reason)
                         }
                         Err(TryRecvError::Disconnected) => {
@@ -417,6 +465,7 @@ impl Engine {
                                 &output_id,
                                 &mut wake,
                             );
+                            gate.draining = true;
                             StartOutcome::Failed(
                                 Some(running),
                                 "the output thread ended before the pipeline was active".into(),
@@ -460,6 +509,7 @@ impl Engine {
                                         &output_id,
                                         &mut wake,
                                     );
+                                    gate.draining = true;
                                     StartOutcome::Failed(
                                         Some(running),
                                         format!("starting the publish watcher: {err}"),
@@ -486,6 +536,10 @@ impl Engine {
                 })
             }
             StartOutcome::Failed(running, reason) => {
+                // `failed` is already out and `pending` cleared, so `draining` (set
+                // above when there is a pipeline) holds a new start off until this
+                // join ends, including when it unwinds.
+                let _clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
                 drop(running);
                 Err(ProtocolError::ActionFailed { reason })
             }
@@ -522,6 +576,8 @@ impl Engine {
                     None => None,
                 };
                 let watcher = if running.is_some() {
+                    // A start for another output waits until this join ends.
+                    gate.draining = true;
                     gate.watcher.take()
                 } else {
                     None
@@ -544,14 +600,25 @@ impl Engine {
                     .unwrap_or_else(PoisonError::into_inner);
             }
         }
-        // Join outside the collection lock. `Running`'s drop stops the threads.
+        // Join outside the collection lock. `Running`'s drop stops the threads. If
+        // that teardown unwinds, the guards still settle the output (`failed`, since
+        // the teardown did not finish) and then clear `draining`, so it is not left
+        // `stopping` and a later start is not left waiting.
+        let clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
+        let mut settle = SettleOnDrop {
+            engine: self,
+            output_id: &output_id,
+            state: OutputState::Failed,
+        };
         drop(running);
         if let Some(watcher) = watcher
             && watcher.join().is_err()
         {
             tracing::error!("publish watcher panicked");
         }
-        self.settle(&output_id, OutputState::Stopped);
+        settle.state = OutputState::Stopped;
+        drop(settle);
+        drop(clear_drain);
         Ok(CallResult::Action {})
     }
 
@@ -565,15 +632,34 @@ impl Engine {
         wake_all(wake);
     }
 
-    /// `video.snapshot`. The shot is copied under the collection lock; readback runs
-    /// after that lock is released.
-    fn video_snapshot(&self) -> Result<CallResult, ProtocolError> {
+    /// `video.snapshot`. The shot is copied under the collection lock; the snapshot
+    /// thread renders it after that lock is released.
+    fn video_snapshot(&self) -> SnapshotReply {
         let shot = {
             let state = lock(&self.shared.state);
             snapshot::plan(&state.graph, &state.frames)
         };
-        let result = snapshot::draw(&shot, &self.shared.compositor)?;
-        Ok(CallResult::Query { result })
+        self.shared.snapshots.request(shot)
+    }
+}
+
+/// What [`Engine::execute`] produced: an answer, or a snapshot still being drawn.
+pub(crate) enum Executed {
+    Ready(Result<CallResult, ProtocolError>),
+    /// `video.snapshot`, answered by the snapshot thread, and the call's `command` span.
+    Pending(SnapshotReply, tracing::Span),
+}
+
+/// Settles an output in `state` when dropped, including during an unwind.
+struct SettleOnDrop<'a> {
+    engine: &'a Engine,
+    output_id: &'a OutputId,
+    state: OutputState,
+}
+
+impl Drop for SettleOnDrop<'_> {
+    fn drop(&mut self) {
+        self.engine.settle(self.output_id, self.state);
     }
 }
 
@@ -770,6 +856,7 @@ struct State {
     subscribers: Subscribers,
     /// The latest CPU frame of each source, keyed by id. Runtime state: not part of
     /// `rev`. A snapshot draws an item from this when the source is not itself a scene.
+    /// An applied `source.delete` removes the deleted source's entry.
     frames: BTreeMap<SourceId, Frame>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
@@ -817,6 +904,15 @@ impl State {
         let applied = self.graph.apply_batch(batch)?;
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, applied.rev);
+        }
+        // A deleted source's stored frame goes with it, unless the same batch made a
+        // new source under that id.
+        for edit in &batch.edits {
+            if let Edit::SourceDelete { source_id } = edit
+                && self.graph.state().source(source_id).is_none()
+            {
+                self.frames.remove(source_id);
+            }
         }
         self.subscribers.emit(
             &Event::StateChanged {

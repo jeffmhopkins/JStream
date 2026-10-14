@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:672d3c82d17f7177", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#126 N4/N6 follow-up: Open questions links now target an explicit open-questions anchor; the pruning note says the Windows delete is expected to succeed (FILE_SHARE_DELETE), untested; logging, rotation and crash bullets otherwise unchanged and match logs.rs/crash.rs" }
+verified = { hash = "b3:82514ef678233143", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#128) into #130: re-read Design with both; this PR's Open questions anchor and Windows prune note stand, and the daemon still builds one Engine with with_output only and never starts the pipeline, so #128's core changes need no mention; logging, rotation, crash and five-option bullets match logs.rs/crash.rs/args.rs" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

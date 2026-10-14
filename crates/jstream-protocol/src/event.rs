@@ -100,8 +100,7 @@ pub struct DropCounts {
     /// overwrote unread frames, frames that arrived after the mixer had passed them,
     /// and frames the mixer skipped because it fell behind the clock.
     pub audio_frames: u64,
-    /// Render ticks that produced no new composite because the previous one had not
-    /// finished.
+    /// Render ticks the render loop skipped to catch up with the media clock.
     pub render_ticks: u64,
     /// Video frames dropped before an encoder accepted them (its input queue was full,
     /// or the encoder was busy).

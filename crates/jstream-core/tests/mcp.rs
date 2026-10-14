@@ -13,7 +13,8 @@ use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 
 /// Runs a future that never waits: the MCP server only awaits the engine's futures,
-/// which are always ready.
+/// which are ready at once for every call this test makes (only `video.snapshot`
+/// waits, on the engine's snapshot thread).
 fn block_on<F: Future>(future: F) -> F::Output {
     let mut future = pin!(future);
     match future

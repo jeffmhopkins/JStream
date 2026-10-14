@@ -16,15 +16,24 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll, Wake, Waker};
 
-/// Runs a future to completion. The engine's futures are always ready.
+/// Runs a future to completion, parking this thread until it is woken. The engine's
+/// futures are ready at once, except `video.snapshot`'s, which the snapshot thread wakes.
 fn block_on<F: Future>(future: F) -> F::Output {
+    struct Unpark(std::thread::Thread);
+
+    impl Wake for Unpark {
+        fn wake(self: Arc<Self>) {
+            self.0.unpark();
+        }
+    }
+
+    let waker = Waker::from(Arc::new(Unpark(std::thread::current())));
     let mut future = pin!(future);
-    match future
-        .as_mut()
-        .poll(&mut Context::from_waker(Waker::noop()))
-    {
-        Poll::Ready(value) => value,
-        Poll::Pending => panic!("the in-process engine's futures are always ready"),
+    loop {
+        if let Poll::Ready(value) = future.as_mut().poll(&mut Context::from_waker(&waker)) {
+            return value;
+        }
+        std::thread::park();
     }
 }
 
@@ -782,6 +791,7 @@ fn output_start_publishes_fake_audio_and_video() {
     let engine = Engine::new()
         .with_output(OutputId::new("yt"))
         .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
         .with_publish(Box::new(publish.clone()));
     let control = connected(&engine);
     let mut events = control.events();
@@ -801,13 +811,7 @@ fn output_start_publishes_fake_audio_and_video() {
         return;
     }
     started.expect("output.start");
-    let steps: Vec<OutputState> = drain(&mut events)
-        .into_iter()
-        .map(|event| match event {
-            Event::OutputStateChanged { state, .. } => state,
-            other => panic!("unexpected event {other:?}"),
-        })
-        .collect();
+    let steps = output_steps(&mut events);
     assert_eq!(steps, vec![OutputState::Starting, OutputState::Active]);
 
     let mut saw_media = false;
@@ -836,13 +840,7 @@ fn output_start_publishes_fake_audio_and_video() {
     assert!(stats.readbacks >= 1, "the CPU path read a frame back");
 
     block_on(control.call(output_call("yt", false))).expect("output.stop");
-    let steps: Vec<OutputState> = drain(&mut events)
-        .into_iter()
-        .map(|event| match event {
-            Event::OutputStateChanged { state, .. } => state,
-            other => panic!("unexpected event {other:?}"),
-        })
-        .collect();
+    let steps = output_steps(&mut events);
     assert_eq!(steps, vec![OutputState::Stopping, OutputState::Stopped]);
     assert!(engine.output_stats().is_none());
 }
@@ -927,6 +925,7 @@ fn output_stop_during_start_cancels_the_pipeline() {
     let engine = Engine::new()
         .with_output(OutputId::new("yt"))
         .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
         .with_publish(Box::new(crate::RecordingPublish::new()));
     let status = connected(&engine);
     let starter = connected(&engine);
@@ -1022,6 +1021,7 @@ fn output_publish_failure_settles_failed() {
     let engine = Engine::new()
         .with_output(OutputId::new("yt"))
         .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
         .with_publish(Box::new(FailPublish {
             fail: Arc::clone(&fail),
         }));
@@ -1164,7 +1164,9 @@ fn output_start_returns_after_a_panicking_teardown() {
     }
 
     let clock = FakeClock::new(Timebase::MICROS);
-    let armed = Arc::new(AtomicBool::new(true));
+    // Armed only once the first start has succeeded: without an adapter that start
+    // fails, drops the streams, and the test must skip, not panic there.
+    let armed = Arc::new(AtomicBool::new(false));
     let audio = PanicAudio {
         inner: FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio"),
         armed: Arc::clone(&armed),
@@ -1182,6 +1184,7 @@ fn output_start_returns_after_a_panicking_teardown() {
     let engine = Engine::new()
         .with_output(OutputId::new("yt"))
         .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
         .with_publish(Box::new(FailPublish {
             fail: Arc::clone(&fail),
         }));
@@ -1202,6 +1205,7 @@ fn output_start_returns_after_a_panicking_teardown() {
         return;
     }
     started.expect("output.start");
+    armed.store(true, Ordering::Release);
 
     fail.store(true, Ordering::Relaxed);
     let mut failed = false;
@@ -1222,7 +1226,7 @@ fn output_start_returns_after_a_panicking_teardown() {
         let _ = tx.send(());
         result
     });
-    rx.recv_timeout(Duration::from_secs(15))
+    rx.recv_timeout(GPU_OPEN_TIMEOUT + Duration::from_secs(10))
         .expect("second output.start blocked after a panicking teardown");
     let restarted = restart_thread.join().expect("restart thread");
     restarted.expect("second output.start");
@@ -1282,6 +1286,7 @@ fn dropping_the_engine_stops_the_pipeline() {
     let engine = Engine::new()
         .with_output(OutputId::new("yt"))
         .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
         .with_publish(Box::new(FinishFlag {
             finished: Arc::clone(&finished),
         }));
@@ -1325,6 +1330,12 @@ fn output_state(control: &dyn Control, output: &str) -> OutputState {
     }
 }
 
+/// How long a GPU test's `output.start` waits for lavapipe or WARP to open. The
+/// engine's 10 s default only guards against a stuck adapter; on a loaded CI runner a
+/// software adapter can take longer, and that is not what these tests check. A real
+/// failure to open still fails the test, just later.
+const GPU_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+
 /// One software-adapter test at a time. Parallel compositors starve the pipeline
 /// test's media wait and crash WARP. The lock schedules tests; it is not engine state.
 fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
@@ -1333,11 +1344,14 @@ fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
+/// The output states among the buffered events. `stats.tick` is skipped: the
+/// pipeline emits one about once a second and a final one when it stops.
 fn output_steps(events: &mut EventStream) -> Vec<OutputState> {
     drain(events)
         .into_iter()
-        .map(|event| match event {
-            Event::OutputStateChanged { state, .. } => state,
+        .filter_map(|event| match event {
+            Event::OutputStateChanged { state, .. } => Some(state),
+            Event::StatsTick { .. } => None,
             other => panic!("unexpected event {other:?}"),
         })
         .collect()
@@ -1571,4 +1585,863 @@ fn a_removed_drop_source_keeps_its_total() {
         }],
         "removing an unknown source changes nothing"
     );
+}
+
+/// Deleting a source drops the frame stored for it, so `Engine::frames` does not grow
+/// with every source a collection ever had. A frame for a source not created yet stays.
+#[test]
+fn deleting_a_source_drops_its_frame() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let webcam_id = SourceId::new("webcam");
+    let later = SourceId::new("later");
+    engine
+        .set_source_frame(&webcam_id, 1, 1, &[1, 2, 3, 4])
+        .expect("frame");
+    engine
+        .set_source_frame(&later, 1, 1, &[1, 2, 3, 4])
+        .expect("frame");
+    batch(&control, Batch::single(webcam())).expect("create");
+    assert!(engine.has_source_frame(&webcam_id));
+    batch(
+        &control,
+        Batch::single(Edit::SourceDelete {
+            source_id: webcam_id.clone(),
+        }),
+    )
+    .expect("delete");
+    assert!(
+        !engine.has_source_frame(&webcam_id),
+        "the frame outlived its source"
+    );
+    assert!(
+        engine.has_source_frame(&later),
+        "a frame may arrive before its source"
+    );
+}
+
+// ---------------------------------------------------------------------------------------
+// The pipeline on a CPU stand-in for the compositor. These run without a wgpu adapter:
+// the render thread draws with `cpu_draw` (or a variant) instead of wgpu, and every
+// other stage is the platform fakes, so they cover the threads' failure handling on
+// any machine. The GPU path itself is covered by the tests above.
+
+mod cpu_pipeline {
+    use super::{block_on, code, connected, drain, output_call, output_state, output_steps};
+    use crate::runtime::{DrawFn, OpenDraw};
+    use crate::{Engine, LivePublish, PublishError, RecordingPublish};
+    use jstream_control::{Control, EventStream};
+    use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, Timebase};
+    use jstream_mux::flv::{FlvTag, TagType};
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::{
+        AudioDeviceInfo, AudioEncoder, AudioEncoderConfig, AudioInputHandler, AudioInputTarget,
+        AudioIo, AudioOutputHandler, AudioOutputTarget, AudioStream, Backends, Capture,
+        CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo, Codecs,
+        MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
+        VideoEncoderConfig, VideoSurface,
+    };
+    use jstream_protocol::{Event, OutputId, OutputState};
+    use std::panic::{self, AssertUnwindSafe};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Condvar, Mutex, mpsc};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    /// One base-rate period of the pipeline on a microsecond clock (1/30 s).
+    const PERIOD_US: u64 = 33_333;
+
+    /// Composites by copying: the capture as it is, or black.
+    fn cpu_draw() -> OpenDraw {
+        Arc::new(|| {
+            let draw: DrawFn =
+                Box::new(|size: FrameSize, rgba: Option<&[u8]>, out: &mut Vec<u8>| {
+                    out.clear();
+                    match rgba {
+                        Some(rgba) => out.extend_from_slice(rgba),
+                        None => out.resize(size.width() as usize * size.height() as usize * 4, 0),
+                    }
+                    Ok(())
+                });
+            Ok(draw)
+        })
+    }
+
+    struct Fakes {
+        clock: FakeClock,
+        audio: FakeAudioIo,
+        backends: Backends,
+    }
+
+    fn fakes() -> Fakes {
+        let clock = FakeClock::new(Timebase::MICROS);
+        let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+        let size = FrameSize::new(64, 36).expect("size");
+        let backends = Backends {
+            clock: Arc::new(clock.clone()),
+            capture: Arc::new(FakeCapture::new(clock.clone(), size)),
+            audio: Arc::new(audio.clone()),
+            codecs: Arc::new(FakeCodecs),
+            gpu: Arc::new(FakeGpuInterop),
+            vcam: None,
+        };
+        Fakes {
+            clock,
+            audio,
+            backends,
+        }
+    }
+
+    /// Another handle on the same backends (`Backends` is not `Clone`: its vcam is boxed).
+    fn share(backends: &Backends) -> Backends {
+        Backends {
+            clock: Arc::clone(&backends.clock),
+            capture: Arc::clone(&backends.capture),
+            audio: Arc::clone(&backends.audio),
+            codecs: Arc::clone(&backends.codecs),
+            gpu: Arc::clone(&backends.gpu),
+            vcam: None,
+        }
+    }
+
+    fn engine(backends: Backends, draw: OpenDraw, publish: Box<dyn LivePublish>) -> Engine {
+        Engine::new()
+            .with_output(OutputId::new("yt"))
+            .with_backends(backends)
+            .with_draw(draw)
+            .with_publish(publish)
+    }
+
+    /// Feeds both inputs and moves the clock on by 50 ms.
+    fn pump(clock: &FakeClock, audio: &FakeAudioIo) {
+        audio.deliver(2400, 0.2);
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(10));
+    }
+
+    /// Pumps until `done`, for at most five seconds.
+    fn pump_until(clock: &FakeClock, audio: &FakeAudioIo, mut done: impl FnMut() -> bool) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if done() {
+                return true;
+            }
+            pump(clock, audio);
+        }
+        done()
+    }
+
+    fn wait_until(mut done: impl FnMut() -> bool) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if done() {
+                return true;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+        done()
+    }
+
+    fn readbacks(engine: &Engine) -> u64 {
+        engine.output_stats().map_or(0, |stats| stats.readbacks)
+    }
+
+    fn start(control: &dyn Control, events: &mut EventStream) {
+        block_on(control.call(output_call("yt", true))).expect("output.start");
+        assert_eq!(
+            output_steps(events),
+            vec![OutputState::Starting, OutputState::Active]
+        );
+    }
+
+    /// Pumps until the output has settled `failed` and its pipeline is gone.
+    fn fails(engine: &Engine, control: &dyn Control, fakes: &Fakes) -> bool {
+        pump_until(&fakes.clock, &fakes.audio, || {
+            output_state(control, "yt") == OutputState::Failed && engine.output_stats().is_none()
+        })
+    }
+
+    /// A gate one thread waits on until another opens it.
+    #[derive(Default)]
+    struct Hold {
+        open: Mutex<bool>,
+        cv: Condvar,
+    }
+
+    impl Hold {
+        fn signal(&self) {
+            *self.open.lock().expect("hold") = true;
+            self.cv.notify_all();
+        }
+
+        fn wait(&self) {
+            let mut open = self.open.lock().expect("hold");
+            while !*open {
+                open = self.cv.wait(open).expect("hold");
+            }
+        }
+    }
+
+    // --- Item: an encoder that fails mid-stream fails the output.
+
+    struct FailingVideo {
+        inner: Box<dyn VideoEncoder>,
+        fail: Arc<AtomicBool>,
+    }
+
+    impl VideoEncoder for FailingVideo {
+        fn info(&self) -> &CodecInfo {
+            self.inner.info()
+        }
+
+        fn can_accept(&self) -> bool {
+            self.inner.can_accept()
+        }
+
+        fn encode(&mut self, frame: VideoSurface) -> Result<(), PlatformError> {
+            if self.fail.load(Ordering::Acquire) {
+                return Err(PlatformError::InvalidState {
+                    what: "encode",
+                    state: "the test broke the encoder",
+                });
+            }
+            self.inner.encode(frame)
+        }
+
+        fn poll(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
+            self.inner.poll(out)
+        }
+
+        fn finish(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
+            self.inner.finish(out)
+        }
+    }
+
+    struct FailingCodecs {
+        fail: Arc<AtomicBool>,
+    }
+
+    impl Codecs for FailingCodecs {
+        fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
+            FakeCodecs.list()
+        }
+
+        fn video_encoder(
+            &self,
+            config: &VideoEncoderConfig,
+        ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
+            Ok(Box::new(FailingVideo {
+                inner: FakeCodecs.video_encoder(config)?,
+                fail: Arc::clone(&self.fail),
+            }))
+        }
+
+        fn audio_encoder(
+            &self,
+            config: &AudioEncoderConfig,
+        ) -> Result<Box<dyn AudioEncoder>, PlatformError> {
+            FakeCodecs.audio_encoder(config)
+        }
+
+        fn video_decoder(
+            &self,
+            config: &VideoDecoderConfig,
+        ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+            FakeCodecs.video_decoder(config)
+        }
+    }
+
+    /// A video encoder that fails while the output is `active` ends its packet stream.
+    /// The output thread reports that, so the output settles `failed` instead of staying
+    /// `active` with audio alone.
+    #[test]
+    fn an_encoder_failure_mid_stream_fails_the_output() {
+        let mut fakes = fakes();
+        let fail = Arc::new(AtomicBool::new(false));
+        fakes.backends.codecs = Arc::new(FailingCodecs {
+            fail: Arc::clone(&fail),
+        });
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(RecordingPublish::new()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || readbacks(&engine) >= 2),
+            "the pipeline never drew"
+        );
+
+        fail.store(true, Ordering::Release);
+        assert!(
+            fails(&engine, &control, &fakes),
+            "a failed encoder left the output {:?}",
+            output_state(&control, "yt")
+        );
+        assert_eq!(output_steps(&mut events), vec![OutputState::Failed]);
+    }
+
+    // --- Item: render and mixer failures are reported, and capture errors are ridden out.
+
+    struct FlakyCapture {
+        inner: FakeCapture,
+        broken: Arc<AtomicBool>,
+    }
+
+    struct FlakyStream {
+        inner: Box<dyn CaptureStream>,
+        broken: Arc<AtomicBool>,
+    }
+
+    impl Capture for FlakyCapture {
+        fn targets(&self) -> Result<Vec<CaptureTargetInfo>, PlatformError> {
+            self.inner.targets()
+        }
+
+        fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+            Ok(Box::new(FlakyStream {
+                inner: self.inner.start(target)?,
+                broken: Arc::clone(&self.broken),
+            }))
+        }
+    }
+
+    impl CaptureStream for FlakyStream {
+        fn latest(&mut self) -> Result<Option<VideoSurface>, PlatformError> {
+            if self.broken.load(Ordering::Acquire) {
+                return Err(PlatformError::InvalidState {
+                    what: "latest",
+                    state: "the test broke the capture",
+                });
+            }
+            self.inner.latest()
+        }
+
+        fn stats(&self) -> CaptureStats {
+            self.inner.stats()
+        }
+    }
+
+    /// A capture stream that starts failing is a missing source frame: the render
+    /// thread keeps drawing the last one on every tick, and the output stays `active`.
+    #[test]
+    fn a_failing_capture_repeats_the_last_frame() {
+        let mut fakes = fakes();
+        let broken = Arc::new(AtomicBool::new(false));
+        fakes.backends.capture = Arc::new(FlakyCapture {
+            inner: FakeCapture::new(fakes.clock.clone(), FrameSize::new(64, 36).expect("size")),
+            broken: Arc::clone(&broken),
+        });
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(RecordingPublish::new()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(pump_until(&fakes.clock, &fakes.audio, || readbacks(
+            &engine
+        ) >= 2));
+
+        broken.store(true, Ordering::Release);
+        let before = readbacks(&engine);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || readbacks(&engine)
+                >= before + 5),
+            "the render thread stopped drawing when capture failed"
+        );
+        assert_eq!(output_state(&control, "yt"), OutputState::Active);
+        assert_eq!(output_steps(&mut events), vec![]);
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+    }
+
+    /// A panic inside a render tick is caught at the thread boundary and reported: the
+    /// output settles `failed` (R-RT-006), instead of staying `active` with no video.
+    #[test]
+    fn a_render_panic_fails_the_output() {
+        let fakes = fakes();
+        let armed = Arc::new(AtomicBool::new(false));
+        let draw: OpenDraw = {
+            let armed = Arc::clone(&armed);
+            Arc::new(move || {
+                let armed = Arc::clone(&armed);
+                let mut inner = (cpu_draw())()?;
+                let draw: DrawFn = Box::new(move |size, rgba, out| {
+                    assert!(!armed.load(Ordering::Acquire), "compositor blew up");
+                    inner(size, rgba, out)
+                });
+                Ok(draw)
+            })
+        };
+        let engine = engine(
+            share(&fakes.backends),
+            draw,
+            Box::new(RecordingPublish::new()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(pump_until(&fakes.clock, &fakes.audio, || readbacks(
+            &engine
+        ) >= 2));
+
+        armed.store(true, Ordering::Release);
+        assert!(
+            fails(&engine, &control, &fakes),
+            "a render panic left the output {:?}",
+            output_state(&control, "yt")
+        );
+        assert_eq!(output_steps(&mut events), vec![OutputState::Failed]);
+    }
+
+    /// A clock that panics when the mixer thread reads it, once armed.
+    struct MixerPanicClock {
+        inner: FakeClock,
+        armed: Arc<AtomicBool>,
+    }
+
+    impl MediaClock for MixerPanicClock {
+        fn timebase(&self) -> Timebase {
+            self.inner.timebase()
+        }
+
+        fn now(&self) -> MediaTime {
+            if thread::current().name() == Some("jstream-mixer")
+                && self.armed.swap(false, Ordering::AcqRel)
+            {
+                panic!("mixer blew up");
+            }
+            self.inner.now()
+        }
+    }
+
+    /// A panic on the mixer thread is caught at its boundary and fails the output.
+    #[test]
+    fn a_mixer_panic_fails_the_output() {
+        let mut fakes = fakes();
+        let armed = Arc::new(AtomicBool::new(false));
+        fakes.backends.clock = Arc::new(MixerPanicClock {
+            inner: fakes.clock.clone(),
+            armed: Arc::clone(&armed),
+        });
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(RecordingPublish::new()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        armed.store(true, Ordering::Release);
+        assert!(
+            fails(&engine, &control, &fakes),
+            "a mixer panic left the output {:?}",
+            output_state(&control, "yt")
+        );
+        assert!(!armed.load(Ordering::Acquire), "the mixer never panicked");
+        assert_eq!(output_steps(&mut events), vec![OutputState::Failed]);
+    }
+
+    // --- Item: a late tick skips to the clock and is counted.
+
+    /// The clock jumps ten periods past the last drawn tick. The render thread draws
+    /// the current tick, stamped with the clock, and counts the nine it skipped in
+    /// `render_ticks`. Before, it drew the stale tick and video fell behind audio.
+    #[test]
+    fn a_late_render_tick_skips_to_the_clock() {
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(publish.clone()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        let video_tags = || {
+            publish
+                .tags()
+                .iter()
+                .filter(|tag| tag.tag_type == TagType::Video && tag.body.get(1) == Some(&1))
+                .map(|tag| tag.timestamp)
+                .collect::<Vec<_>>()
+        };
+        // The frame drawn after the jump is the second one published.
+        let late_video = || video_tags().get(1).copied().unwrap_or(0);
+        // The first tick is drawn at the clock's zero, before it moves. Wait until it
+        // is published, so the encoder is idle and takes the next frame.
+        assert!(wait_until(|| readbacks(&engine) >= 1), "no first frame");
+        assert!(
+            wait_until(|| !video_tags().is_empty()),
+            "first frame not published: {:?}",
+            engine.output_stats()
+        );
+
+        fakes.clock.advance(10 * PERIOD_US);
+        assert!(wait_until(|| readbacks(&engine) >= 2), "no second frame");
+        assert!(
+            wait_until(|| late_video() >= 300),
+            "the second frame was stamped {} ms, not at the clock",
+            late_video()
+        );
+
+        engine.emit_stats_tick();
+        let render_ticks = drain(&mut events)
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::StatsTick { drops, .. } => Some(drops.render_ticks),
+                _ => None,
+            })
+            .next_back();
+        assert_eq!(render_ticks, Some(9));
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+    }
+
+    // --- Item: a failed start's teardown does not overlap the next start.
+
+    /// Fails its first tag. `finish`, which the output thread calls after it has sent
+    /// that failure, opens `sent`.
+    struct FailFirstTag {
+        sent: Arc<Hold>,
+    }
+
+    impl LivePublish for FailFirstTag {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            Err(PublishError::new("publish refused"))
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            self.sent.signal();
+            Ok(())
+        }
+    }
+
+    /// Audio whose first stream drop blocks until `release`, flagging `tearing_down`.
+    struct SlowTeardownAudio {
+        inner: FakeAudioIo,
+        armed: Arc<AtomicBool>,
+        tearing_down: Arc<AtomicBool>,
+        release: Arc<Hold>,
+    }
+
+    struct SlowStream {
+        inner: Box<dyn AudioStream>,
+        armed: Arc<AtomicBool>,
+        tearing_down: Arc<AtomicBool>,
+        release: Arc<Hold>,
+    }
+
+    impl AudioStream for SlowStream {
+        fn format(&self) -> jstream_media::AudioFormat {
+            self.inner.format()
+        }
+    }
+
+    impl Drop for SlowStream {
+        fn drop(&mut self) {
+            if self.armed.swap(false, Ordering::AcqRel) {
+                self.tearing_down.store(true, Ordering::Release);
+                self.release.wait();
+                self.tearing_down.store(false, Ordering::Release);
+            }
+        }
+    }
+
+    impl AudioIo for SlowTeardownAudio {
+        fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
+            self.inner.devices()
+        }
+
+        fn open_input(
+            &self,
+            target: &AudioInputTarget,
+            handler: Box<dyn AudioInputHandler>,
+        ) -> Result<Box<dyn AudioStream>, PlatformError> {
+            Ok(Box::new(SlowStream {
+                inner: self.inner.open_input(target, handler)?,
+                armed: Arc::clone(&self.armed),
+                tearing_down: Arc::clone(&self.tearing_down),
+                release: Arc::clone(&self.release),
+            }))
+        }
+
+        fn open_output(
+            &self,
+            target: &AudioOutputTarget,
+            handler: Box<dyn AudioOutputHandler>,
+        ) -> Result<Box<dyn AudioStream>, PlatformError> {
+            self.inner.open_output(target, handler)
+        }
+    }
+
+    /// Records whether a capture was opened while a teardown was in progress.
+    struct WatchCapture {
+        inner: FakeCapture,
+        tearing_down: Arc<AtomicBool>,
+        overlapped: Arc<AtomicBool>,
+    }
+
+    impl Capture for WatchCapture {
+        fn targets(&self) -> Result<Vec<CaptureTargetInfo>, PlatformError> {
+            self.inner.targets()
+        }
+
+        fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+            if self.tearing_down.load(Ordering::Acquire) {
+                self.overlapped.store(true, Ordering::Release);
+            }
+            self.inner.start(target)
+        }
+    }
+
+    /// A start that fails after `launch` returned a pipeline emits `failed` and then
+    /// joins that pipeline. A second start in that window waits for the join instead
+    /// of opening devices over the teardown.
+    #[test]
+    fn a_failed_start_holds_off_the_next_start_until_its_teardown_ends() {
+        let mut fakes = fakes();
+        let tearing_down = Arc::new(AtomicBool::new(false));
+        let overlapped = Arc::new(AtomicBool::new(false));
+        let release = Arc::new(Hold::default());
+        let sent = Arc::new(Hold::default());
+        fakes.backends.audio = Arc::new(SlowTeardownAudio {
+            inner: fakes.audio.clone(),
+            armed: Arc::new(AtomicBool::new(true)),
+            tearing_down: Arc::clone(&tearing_down),
+            release: Arc::clone(&release),
+        });
+        fakes.backends.capture = Arc::new(WatchCapture {
+            inner: FakeCapture::new(fakes.clock.clone(), FrameSize::new(64, 36).expect("size")),
+            tearing_down: Arc::clone(&tearing_down),
+            overlapped: Arc::clone(&overlapped),
+        });
+        // The compositor "opens" only once the output thread has reported the publish
+        // failure, so the start sees that failure right after `launch` returns.
+        let draw: OpenDraw = {
+            let sent = Arc::clone(&sent);
+            Arc::new(move || {
+                sent.wait();
+                (cpu_draw())()
+            })
+        };
+        let engine = engine(
+            share(&fakes.backends),
+            draw,
+            Box::new(FailFirstTag {
+                sent: Arc::clone(&sent),
+            }),
+        );
+        let status = connected(&engine);
+        let mut events = status.events();
+        let first = connected(&engine);
+        let first = thread::spawn(move || block_on(first.call(output_call("yt", true))));
+        assert!(
+            wait_until(|| output_state(&status, "yt") == OutputState::Failed),
+            "the first start never failed"
+        );
+        assert!(
+            wait_until(|| tearing_down.load(Ordering::Acquire)),
+            "the teardown never started"
+        );
+
+        let engine = engine.with_publish(Box::new(RecordingPublish::new()));
+        let second = connected(&engine);
+        let (done_tx, done_rx) = mpsc::channel();
+        let second = thread::spawn(move || {
+            let result = block_on(second.call(output_call("yt", true)));
+            let _ = done_tx.send(());
+            result
+        });
+        assert!(
+            done_rx.recv_timeout(Duration::from_millis(300)).is_err(),
+            "the second start finished while the first pipeline was still joining"
+        );
+        release.signal();
+        let first = first.join().expect("first start");
+        assert_eq!(
+            code(&first.expect_err("publish refused")),
+            Some("action_failed")
+        );
+        second
+            .join()
+            .expect("second start")
+            .expect("second output.start");
+        assert!(
+            !overlapped.load(Ordering::Acquire),
+            "the second start opened capture during the first teardown"
+        );
+        assert_eq!(
+            output_steps(&mut events),
+            vec![
+                OutputState::Starting,
+                OutputState::Failed,
+                OutputState::Starting,
+                OutputState::Active
+            ]
+        );
+    }
+
+    // --- Item: a panicking teardown during output.stop settles the output.
+
+    struct PanicOnDropAudio {
+        inner: FakeAudioIo,
+        armed: Arc<AtomicBool>,
+    }
+
+    struct PanicOnDrop {
+        inner: Box<dyn AudioStream>,
+        armed: Arc<AtomicBool>,
+    }
+
+    impl AudioStream for PanicOnDrop {
+        fn format(&self) -> jstream_media::AudioFormat {
+            self.inner.format()
+        }
+    }
+
+    impl Drop for PanicOnDrop {
+        fn drop(&mut self) {
+            if !thread::panicking() && self.armed.swap(false, Ordering::AcqRel) {
+                panic!("audio stream teardown");
+            }
+        }
+    }
+
+    impl AudioIo for PanicOnDropAudio {
+        fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
+            self.inner.devices()
+        }
+
+        fn open_input(
+            &self,
+            target: &AudioInputTarget,
+            handler: Box<dyn AudioInputHandler>,
+        ) -> Result<Box<dyn AudioStream>, PlatformError> {
+            Ok(Box::new(PanicOnDrop {
+                inner: self.inner.open_input(target, handler)?,
+                armed: Arc::clone(&self.armed),
+            }))
+        }
+
+        fn open_output(
+            &self,
+            target: &AudioOutputTarget,
+            handler: Box<dyn AudioOutputHandler>,
+        ) -> Result<Box<dyn AudioStream>, PlatformError> {
+            self.inner.open_output(target, handler)
+        }
+    }
+
+    /// `output.stop` whose teardown panics does not leave the output `stopping`: it
+    /// settles `failed`, and a later start is not held off.
+    #[test]
+    fn a_panicking_stop_teardown_settles_the_output() {
+        let mut fakes = fakes();
+        let armed = Arc::new(AtomicBool::new(false));
+        fakes.backends.audio = Arc::new(PanicOnDropAudio {
+            inner: fakes.audio.clone(),
+            armed: Arc::clone(&armed),
+        });
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(RecordingPublish::new()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        armed.store(true, Ordering::Release);
+
+        let stopped = panic::catch_unwind(AssertUnwindSafe(|| {
+            block_on(control.call(output_call("yt", false)))
+        }));
+        assert!(stopped.is_err(), "the teardown did not panic");
+        assert!(!armed.load(Ordering::Acquire));
+        assert_eq!(output_state(&control, "yt"), OutputState::Failed);
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Stopping, OutputState::Failed]
+        );
+
+        let engine = engine.with_publish(Box::new(RecordingPublish::new()));
+        let restart = connected(&engine);
+        let (tx, rx) = mpsc::channel();
+        let restart = thread::spawn(move || {
+            let result = block_on(restart.call(output_call("yt", true)));
+            let _ = tx.send(());
+            result
+        });
+        rx.recv_timeout(Duration::from_secs(10))
+            .expect("a start after the panicking stop blocked");
+        restart
+            .join()
+            .expect("restart")
+            .expect("restart output.start");
+    }
+
+    // --- Item: stopping emits a final stats.tick.
+
+    /// The run's last drops reach clients when it stops: one `stats.tick` comes after
+    /// the threads stop and before `stopped`.
+    #[test]
+    fn stopping_emits_a_final_stats_tick() {
+        let fakes = fakes();
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(RecordingPublish::new()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(wait_until(|| readbacks(&engine) >= 1));
+        // Ten skipped ticks, so the final tick has something to report.
+        fakes.clock.advance(11 * PERIOD_US);
+        assert!(wait_until(|| readbacks(&engine) >= 2));
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        let events = drain(&mut events);
+        let stopped = events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event,
+                    Event::OutputStateChanged {
+                        state: OutputState::Stopped,
+                        ..
+                    }
+                )
+            })
+            .expect("stopped");
+        let stopping = events
+            .iter()
+            .position(|event| {
+                matches!(
+                    event,
+                    Event::OutputStateChanged {
+                        state: OutputState::Stopping,
+                        ..
+                    }
+                )
+            })
+            .expect("stopping");
+        let last_tick = events[stopping..stopped]
+            .iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::StatsTick { drops, .. } => Some(*drops),
+                _ => None,
+            });
+        let drops = last_tick.expect("no stats.tick between stopping and stopped");
+        assert_eq!(drops.render_ticks, 10, "{drops:?}");
+    }
 }

@@ -5,7 +5,14 @@
 //! reads the frame back and pushes CPU RGBA. The mixer thread polls the engine
 //! clock. Encode threads live inside the encoder sessions. The output thread muxes
 //! FLV and publishes it. None of those threads lock the engine's collection.
+//!
+//! The render and mixer threads catch a panic at their thread boundary, and every
+//! fatal error on the render, mixer and output threads goes to the same failure
+//! channel, so the publish watcher settles `failed` instead of leaving an output
+//! `active` with a dead stage (R-RT-006).
 
+use std::any::Any;
+use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex, PoisonError};
@@ -14,7 +21,7 @@ use std::time::Duration;
 
 use jstream_audio::{BusControl, InputControl, Mixer, MixerConfig};
 use jstream_encode::{
-    AudioInput, AudioSession, PushError, SessionOptions, SessionStats, SubscriberStats,
+    AudioInput, AudioSession, PushError, SessionOptions, SessionStats, StreamEnd, SubscriberStats,
     Subscription, VideoInput, VideoSession,
 };
 use jstream_media::{
@@ -33,7 +40,7 @@ use jstream_render::{Color, Compositor, Crop, Item, OpenOptions, Placement, Rend
 
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, AudioInputDrops, DropGuard, DropSnapshot, FnDropSource,
-    VideoEncodeDrops, capture_drops, output_packet_drops,
+    VideoEncodeDrops, capture_drops, output_packet_drops, render_tick_drops,
 };
 use crate::engine::Engine;
 use crate::lock;
@@ -47,8 +54,24 @@ const KEYFRAME_INTERVAL: u32 = 60;
 const VIDEO_KBPS: u32 = 2500;
 const AUDIO_KBPS: u32 = 160;
 const SAMPLE_RATE: u32 = 48_000;
-/// How long `output.start` waits for the software adapter.
-const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
+/// How long `output.start` waits for the render thread to open the compositor on the
+/// software adapter, unless the engine was given another bound. It only keeps a stuck
+/// adapter from blocking the call forever; a slower open is not a pipeline fault.
+pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
+/// Composite errors in a row that the render thread rides out by repeating the last
+/// frame. One more reports the output failed: one second at the base rate.
+const MAX_DRAW_ERRORS: u32 = 30;
+
+/// Composites one frame on the render thread: the captured RGBA8 frame, or black when
+/// there is none yet, at `size`, read back as RGBA8 into `out` (replacing its contents).
+/// Created on the render thread and kept there, so it need not be `Send`.
+pub(crate) type DrawFn =
+    Box<dyn FnMut(FrameSize, Option<&[u8]>, &mut Vec<u8>) -> Result<(), String>>;
+
+/// Opens the render thread's [`DrawFn`], on that thread. The engine's opens the wgpu
+/// compositor on the software adapter ([`gpu_draw`]). The crate's tests inject a CPU
+/// one so the pipeline runs without an adapter.
+pub(crate) type OpenDraw = Arc<dyn Fn() -> Result<DrawFn, String> + Send + Sync>;
 
 /// A fake Annex-B encoder does not emit SPS/PPS. FLV still needs a decoder
 /// configuration, so the tagger is given the mux crate's baseline sets.
@@ -95,6 +118,11 @@ impl PipelineStats {
 /// and a start that is waiting for a failed pipeline to finish joining.
 pub(crate) struct MediaHost {
     pub(crate) backends: Mutex<Option<Backends>>,
+    /// How the render thread composites. [`gpu_draw`] unless a test replaced it.
+    pub(crate) draw: Mutex<OpenDraw>,
+    /// How long a start waits for that compositor to open. [`OPEN_TIMEOUT`] unless a
+    /// test raised it.
+    pub(crate) open_timeout: Mutex<Duration>,
     pub(crate) publish: Mutex<Option<Box<dyn LivePublish>>>,
     pub(crate) gate: Mutex<Gate>,
     pub(crate) gate_cv: Condvar,
@@ -123,6 +151,8 @@ impl MediaHost {
     pub(crate) fn new() -> Self {
         Self {
             backends: Mutex::new(None),
+            draw: Mutex::new(gpu_draw()),
+            open_timeout: Mutex::new(OPEN_TIMEOUT),
             publish: Mutex::new(None),
             gate: Mutex::new(Gate {
                 running: None,
@@ -172,6 +202,9 @@ pub(crate) struct Running {
     mux_drops: Arc<AtomicU64>,
     drop_guard: Option<DropGuard>,
     ticker: Option<JoinHandle<()>>,
+    /// Emits one last `stats.tick` once the threads have stopped and the sources are
+    /// latched, so the run's final drops are reported when it ends.
+    final_tick: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl Running {
@@ -212,6 +245,7 @@ impl Running {
         ];
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
         self.ticker = engine.spawn_stats_ticker(Arc::clone(&self.stop));
+        self.final_tick = Some(engine.stats_emitter());
     }
 }
 
@@ -232,6 +266,9 @@ impl Drop for Running {
         join("stats", self.ticker.take());
         // After the threads stop, so the latch sees their final counters.
         self.drop_guard.take();
+        if let Some(tick) = self.final_tick.take() {
+            tick();
+        }
     }
 }
 
@@ -255,14 +292,51 @@ pub(crate) struct Parts {
     capture: Arc<dyn Capture>,
     audio: Arc<dyn AudioIo>,
     codecs: Arc<dyn Codecs>,
+    draw: OpenDraw,
+    open_timeout: Duration,
 }
 
-pub(crate) fn parts_from(backends: &Backends) -> Parts {
+pub(crate) fn parts_from(backends: &Backends, draw: OpenDraw, open_timeout: Duration) -> Parts {
     Parts {
         clock: Arc::clone(&backends.clock),
         capture: Arc::clone(&backends.capture),
         audio: Arc::clone(&backends.audio),
         codecs: Arc::clone(&backends.codecs),
+        draw,
+        open_timeout,
+    }
+}
+
+/// The wgpu compositor on the software adapter, reading every frame back to the CPU.
+pub(crate) fn gpu_draw() -> OpenDraw {
+    Arc::new(|| {
+        let mut compositor =
+            Compositor::open(OpenOptions::headless()).map_err(|err| render_open_error(&err))?;
+        let draw: DrawFn = Box::new(move |size, rgba, out| {
+            let drawn = match rgba {
+                Some(rgba) => draw_image(&mut compositor, size, rgba, out),
+                None => readback(&mut compositor, size, &[], out),
+            };
+            drawn.map_err(|err| err.to_string())
+        });
+        Ok(draw)
+    })
+}
+
+/// Sends a fatal pipeline error to the publish watcher, which settles `failed`.
+fn report(fail: &Sender<String>, reason: String) {
+    tracing::error!(error = %reason, "pipeline failed");
+    // The receiver is gone once the pipeline is being torn down; nothing to tell.
+    let _ = fail.send(reason);
+}
+
+fn panic_message(panic: &(dyn Any + Send)) -> &str {
+    if let Some(text) = panic.downcast_ref::<&str>() {
+        text
+    } else if let Some(text) = panic.downcast_ref::<String>() {
+        text
+    } else {
+        "a non-string panic"
     }
 }
 
@@ -285,6 +359,9 @@ pub(crate) fn launch(
     } = open_audio(&parts, format)?;
     let bus = mixer.bus();
     let period = frame_period(parts.clock.timebase())?;
+    if period.ticks() <= 0 {
+        return Err("the media clock is too coarse for the frame rate".into());
+    }
     let video = Arc::new(open_video(&parts, size)?);
     let audio = Arc::new(open_audio_encoder(&parts, format)?);
     let capture_drops = DropSnapshot::new();
@@ -297,31 +374,32 @@ pub(crate) fn launch(
     let stats = PipelineStats::new();
     let (ready_tx, ready_rx) = mpsc::channel();
 
+    // Subscribe before any producer starts, so the first packets (the first video
+    // keyframe among them) are not encoded before the output thread is listening.
+    let video_sub = video.subscribe();
+    let audio_sub = audio.subscribe();
     let render = spawn("jstream-render", {
-        let input = video.input();
-        let clock = Arc::clone(&parts.clock);
-        let stop = Arc::clone(&stop);
-        let readbacks = Arc::clone(&stats);
-        let capture_cell = capture_drops.clone();
-        move || {
-            render_loop(RenderJob {
-                capture,
-                clock,
-                input,
-                size,
-                period,
-                stop,
-                ready: ready_tx,
-                stats: readbacks,
-                capture_drops: capture_cell,
-            });
-        }
+        let job = RenderJob {
+            capture,
+            open: Arc::clone(&parts.draw),
+            clock: Arc::clone(&parts.clock),
+            input: video.input(),
+            size,
+            period,
+            stop: Arc::clone(&stop),
+            ready: ready_tx,
+            stats: Arc::clone(&stats),
+            drops: capture_drops.clone(),
+            fail: fail_tx.clone(),
+        };
+        move || render_thread(job)
     })?;
     let mixer_thread = match spawn("jstream-mixer", {
         let input = audio.input();
         let clock = Arc::clone(&parts.clock);
         let stop = Arc::clone(&stop);
-        move || mixer_loop(mixer, clock, input, format, stop)
+        let fail = fail_tx.clone();
+        move || mixer_thread(mixer, clock, input, format, stop, fail)
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -330,11 +408,21 @@ pub(crate) fn launch(
         }
     };
     let output = match spawn("jstream-output", {
-        let video_sub = video.subscribe();
-        let audio_sub = audio.subscribe();
         let stats = Arc::clone(&stats);
         let mux = Arc::clone(&mux_drops);
-        move || output_loop(publish, tagger, video_sub, audio_sub, stats, mux, fail_tx)
+        let stop = Arc::clone(&stop);
+        move || {
+            output_loop(OutputJob {
+                publish,
+                tagger,
+                video: video_sub,
+                audio: audio_sub,
+                stats,
+                mux_drops: mux,
+                stop,
+                fail: fail_tx,
+            });
+        }
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -361,8 +449,9 @@ pub(crate) fn launch(
         mux_drops,
         drop_guard: None,
         ticker: None,
+        final_tick: None,
     };
-    match ready_rx.recv_timeout(OPEN_TIMEOUT) {
+    match ready_rx.recv_timeout(parts.open_timeout) {
         Ok(Ok(())) => Ok(running),
         Ok(Err(reason)) => {
             drop(running);
@@ -370,7 +459,10 @@ pub(crate) fn launch(
         }
         Err(RecvTimeoutError::Timeout) => {
             drop(running);
-            Err("the compositor did not open within 10s".into())
+            Err(format!(
+                "the compositor did not open within {}s",
+                parts.open_timeout.as_secs()
+            ))
         }
         Err(RecvTimeoutError::Disconnected) => {
             drop(running);
@@ -531,6 +623,7 @@ fn tagger(size: FrameSize, origin: MediaTime) -> Result<FlvTagger, String> {
 
 struct RenderJob {
     capture: Box<dyn CaptureStream>,
+    open: OpenDraw,
     clock: Arc<dyn MediaClock>,
     input: VideoInput,
     size: FrameSize,
@@ -538,12 +631,82 @@ struct RenderJob {
     stop: Arc<AtomicBool>,
     ready: mpsc::Sender<Result<(), String>>,
     stats: Arc<PipelineStats>,
-    capture_drops: DropSnapshot,
+    drops: DropSnapshot,
+    fail: Sender<String>,
 }
 
+/// The render thread's boundary: a panic outside a tick (opening the compositor,
+/// dropping the capture stream) is caught here and reported as fatal.
+fn render_thread(job: RenderJob) {
+    let fail = job.fail.clone();
+    if let Err(panic) = panic::catch_unwind(AssertUnwindSafe(|| render_loop(job))) {
+        report(
+            &fail,
+            format!("the render thread panicked: {}", panic_message(&*panic)),
+        );
+    }
+}
+
+/// What the render thread keeps between ticks. The buffers are reused, so a tick
+/// allocates only the frame the encoder takes ownership of.
+struct Frames {
+    /// The latest capture, converted to RGBA8. Empty until the first usable frame.
+    source: Vec<u8>,
+    /// The last frame composited in full. Repeated when a tick cannot draw.
+    shown: Vec<u8>,
+    /// Where a tick composites; swapped into `shown` when the draw succeeds.
+    scratch: Vec<u8>,
+    capture: jstream_platform::CaptureStats,
+    warned_format: bool,
+    capture_failing: bool,
+}
+
+impl Frames {
+    /// Reads the capture mailbox. An error or a missing frame keeps the last one.
+    fn read_capture(&mut self, capture: &mut dyn CaptureStream, size: FrameSize) {
+        match capture.latest() {
+            Ok(Some(surface)) => {
+                self.capture_failing = false;
+                if !rgba_from_surface(&surface, size, &mut self.source) && !self.warned_format {
+                    self.warned_format = true;
+                    tracing::warn!("capture frame is not CPU RGBA or BGRA at the encoder size");
+                }
+            }
+            Ok(None) => {}
+            Err(err) => {
+                if !self.capture_failing {
+                    self.capture_failing = true;
+                    tracing::warn!(error = %err, "capture failed; repeating the last frame");
+                }
+            }
+        }
+        self.capture = capture.stats();
+    }
+
+    /// Composites into `scratch` and, on success, makes that the shown frame.
+    fn draw(&mut self, draw: &mut DrawFn, size: FrameSize) -> Result<(), String> {
+        let source = (!self.source.is_empty()).then_some(self.source.as_slice());
+        draw(size, source, &mut self.scratch)?;
+        std::mem::swap(&mut self.scratch, &mut self.shown);
+        Ok(())
+    }
+}
+
+/// Composites on every base-rate tick of the media clock.
+///
+/// Recoverable: the capture mailbox failing or having no new frame repeats the last
+/// capture, and a composite error repeats the last composited frame, up to
+/// [`MAX_DRAW_ERRORS`] in a row. Fatal, reported on the failure channel: more composite
+/// errors than that, a panic inside a tick (the compositor's state is unknown), and a
+/// frame time that overflows. After a fatal error the thread keeps pushing the last
+/// frame until the pipeline stops, so the stream does not freeze before teardown. A
+/// tick that falls a whole period or more behind the clock skips to the current tick
+/// and counts the ticks it skipped in `render_ticks` (R-RT-004), so video pts stay on
+/// the clock that stamps audio.
 fn render_loop(job: RenderJob) {
     let RenderJob {
         mut capture,
+        open,
         clock,
         input,
         size,
@@ -551,21 +714,32 @@ fn render_loop(job: RenderJob) {
         stop,
         ready,
         stats,
-        capture_drops: capture_cell,
+        drops,
+        fail,
     } = job;
-    let mut compositor = match Compositor::open(OpenOptions::headless()) {
-        Ok(compositor) => compositor,
+    let mut draw = match open() {
+        Ok(draw) => draw,
         Err(err) => {
-            let _ = ready.send(Err(render_open_error(&err)));
+            let _ = ready.send(Err(err));
             return;
         }
     };
     if ready.send(Ok(())).is_err() {
         return;
     }
-    let mut last: Option<Vec<u8>> = None;
+    let mut frames = Frames {
+        source: Vec::new(),
+        shown: Vec::new(),
+        scratch: Vec::new(),
+        capture: jstream_platform::CaptureStats::default(),
+        warned_format: false,
+        capture_failing: false,
+    };
     let mut next: Option<MediaTime> = None;
-    let mut warned = false;
+    let mut skipped: u64 = 0;
+    let mut draw_errors: u32 = 0;
+    // Set by a fatal error: stop drawing and repeat `shown` until the pipeline stops.
+    let mut broken = false;
     while !stop.load(Ordering::Relaxed) {
         let now = clock.now();
         let due = next.unwrap_or(now);
@@ -573,48 +747,77 @@ fn render_loop(job: RenderJob) {
             thread::sleep(Duration::from_millis(1));
             continue;
         }
-        match capture.latest() {
-            Ok(Some(surface)) => match rgba_from_surface(&surface, size) {
-                Some(rgba) => last = Some(rgba),
-                None if !warned => {
-                    warned = true;
-                    tracing::warn!("capture frame is not CPU RGBA or BGRA at the encoder size");
-                }
-                None => {}
-            },
-            Ok(None) => {}
+        let (due, missed) = match catch_up(due, now, period) {
+            Ok(caught) => caught,
             Err(err) => {
-                tracing::warn!(error = %err, "capture stream failed");
+                report(&fail, err);
                 break;
+            }
+        };
+        skipped = skipped.saturating_add(missed);
+        if !broken {
+            let tick = panic::catch_unwind(AssertUnwindSafe(|| {
+                frames.read_capture(capture.as_mut(), size);
+                frames.draw(&mut draw, size)
+            }));
+            match tick {
+                Ok(Ok(())) => {
+                    draw_errors = 0;
+                    stats.readbacks.fetch_add(1, Ordering::Relaxed);
+                }
+                Ok(Err(err)) => {
+                    draw_errors += 1;
+                    if draw_errors == 1 {
+                        tracing::warn!(error = %err, "composite failed; repeating the last frame");
+                    }
+                    if draw_errors > MAX_DRAW_ERRORS {
+                        broken = true;
+                        report(
+                            &fail,
+                            format!("compositing failed {draw_errors} times in a row: {err}"),
+                        );
+                    }
+                }
+                Err(panic) => {
+                    broken = true;
+                    report(
+                        &fail,
+                        format!("the render thread panicked: {}", panic_message(&*panic)),
+                    );
+                }
             }
         }
-        // Mailbox skips are the capture stage's own counter. This loop does not
-        // skip a tick when it runs late: it draws the late one and keeps the
-        // period, so `render_ticks` stays 0.
-        capture_cell.publish(capture_drops(capture.stats()));
-        let drawn = match last.as_deref() {
-            Some(rgba) => draw_image(&mut compositor, size, rgba),
-            None => draw_black(&mut compositor, size),
-        };
-        let pixels = match drawn {
-            Ok(pixels) => pixels,
-            Err(err) => {
-                tracing::warn!(error = %err, "composite failed");
-                break;
-            }
-        };
-        stats.readbacks.fetch_add(1, Ordering::Relaxed);
-        if !push_frame(&input, size, due, &pixels) {
+        drops.publish(capture_drops(frames.capture).saturating_add(render_tick_drops(skipped)));
+        if !frames.shown.is_empty() && !push_frame(&input, size, due, &frames.shown) {
             break;
         }
         next = match due.checked_add(period) {
             Ok(next) => Some(next),
             Err(err) => {
-                tracing::warn!(error = %err, "frame time overflow");
+                report(&fail, format!("frame time overflow: {err}"));
                 break;
             }
         };
     }
+}
+
+/// The tick to draw when the clock reads `now` and the next tick was `due`, and how
+/// many whole periods before it were missed. Not late by a period: `due`, none missed.
+fn catch_up(due: MediaTime, now: MediaTime, period: MediaTime) -> Result<(MediaTime, u64), String> {
+    let overflow = |err: jstream_media::MediaError| format!("frame time overflow: {err}");
+    let late = now.checked_sub(due).map_err(overflow)?.ticks();
+    let step = period.ticks();
+    if step <= 0 || late < step {
+        return Ok((due, 0));
+    }
+    let missed = late / step;
+    let by = missed
+        .checked_mul(step)
+        .ok_or_else(|| "frame time overflow: skipped ticks".to_string())?;
+    let tick = due
+        .checked_add(MediaTime::new(by, period.timebase()))
+        .map_err(overflow)?;
+    Ok((tick, missed.unsigned_abs()))
 }
 
 fn render_open_error(err: &RenderError) -> String {
@@ -625,48 +828,52 @@ fn render_open_error(err: &RenderError) -> String {
     }
 }
 
-fn rgba_from_surface(surface: &VideoSurface, expected: FrameSize) -> Option<Vec<u8>> {
+/// Copies a CPU RGBA8 or BGRA8 capture at `expected` into `out` as RGBA8, reusing its
+/// allocation. `false`, leaving `out` as it was, when the frame is not usable.
+fn rgba_from_surface(surface: &VideoSurface, expected: FrameSize, out: &mut Vec<u8>) -> bool {
     let VideoSurface::Cpu(frame) = surface else {
-        return None;
+        return false;
     };
     let info = frame.info();
-    if info.size != expected {
-        return None;
+    if info.size != expected || !matches!(info.format, PixelFormat::Rgba8 | PixelFormat::Bgra8) {
+        return false;
     }
     let width = info.size.width() as usize;
     let height = info.size.height() as usize;
-    let mut out = vec![0u8; width.checked_mul(height)?.checked_mul(4)?];
-    match info.format {
-        PixelFormat::Rgba8 => {
-            for y in 0..height {
-                let row = frame.row(0, y as u32)?;
-                let start = y * width * 4;
-                let n = (width * 4).min(row.len());
-                out[start..start + n].copy_from_slice(&row[..n]);
-            }
+    let Some(len) = width.checked_mul(height).and_then(|n| n.checked_mul(4)) else {
+        return false;
+    };
+    let row_len = width * 4;
+    for y in 0..height {
+        match frame.row(0, y as u32) {
+            Some(row) if row.len() >= row_len => {}
+            _ => return false,
         }
-        PixelFormat::Bgra8 => {
-            for y in 0..height {
-                let row = frame.row(0, y as u32)?;
-                for x in 0..width {
-                    let i = x * 4;
-                    if i + 3 >= row.len() {
-                        return None;
-                    }
-                    let o = (y * width + x) * 4;
-                    out[o] = row[i + 2];
-                    out[o + 1] = row[i + 1];
-                    out[o + 2] = row[i];
-                    out[o + 3] = row[i + 3];
+    }
+    out.resize(len, 0);
+    for y in 0..height {
+        let Some(row) = frame.row(0, y as u32) else {
+            return false;
+        };
+        let dst = &mut out[y * row_len..(y + 1) * row_len];
+        match info.format {
+            PixelFormat::Rgba8 => dst.copy_from_slice(&row[..row_len]),
+            _ => {
+                for (d, s) in dst.chunks_exact_mut(4).zip(row[..row_len].chunks_exact(4)) {
+                    d.copy_from_slice(&[s[2], s[1], s[0], s[3]]);
                 }
             }
         }
-        _ => return None,
     }
-    Some(out)
+    true
 }
 
-fn draw_image(comp: &mut Compositor, size: FrameSize, rgba: &[u8]) -> Result<Vec<u8>, RenderError> {
+fn draw_image(
+    comp: &mut Compositor,
+    size: FrameSize,
+    rgba: &[u8],
+    out: &mut Vec<u8>,
+) -> Result<(), RenderError> {
     let image = comp.upload_rgba8(size.width(), size.height(), rgba)?;
     let items = [Item {
         image: &image,
@@ -675,18 +882,16 @@ fn draw_image(comp: &mut Compositor, size: FrameSize, rgba: &[u8]) -> Result<Vec
         opacity: 1.0,
         visible: true,
     }];
-    readback(comp, size, &items)
+    readback(comp, size, &items, out)
 }
 
-fn draw_black(comp: &mut Compositor, size: FrameSize) -> Result<Vec<u8>, RenderError> {
-    readback(comp, size, &[])
-}
-
+/// Renders `items` and copies the readback into `out`, reusing its allocation.
 fn readback(
     comp: &mut Compositor,
     size: FrameSize,
     items: &[Item<'_>],
-) -> Result<Vec<u8>, RenderError> {
+    out: &mut Vec<u8>,
+) -> Result<(), RenderError> {
     let scene = Scene {
         canvas: size,
         background: Color::BLACK,
@@ -694,7 +899,11 @@ fn readback(
     };
     let output = comp.render(&scene, true)?;
     match output.pixels() {
-        Some(snapshot) => Ok(snapshot.rgba().to_vec()),
+        Some(snapshot) => {
+            out.clear();
+            out.extend_from_slice(snapshot.rgba());
+            Ok(())
+        }
         None => Err(RenderError::Readback {
             detail: "the compositor returned no pixels".into(),
         }),
@@ -702,6 +911,9 @@ fn readback(
 }
 
 /// Pushes one frame. `false` when the session has closed.
+///
+/// The encoder session takes ownership of the frame's plane, so this is the one
+/// allocation a tick makes: `VideoInput::push` has no way to hand buffers back.
 fn push_frame(input: &VideoInput, size: FrameSize, pts: MediaTime, rgba: &[u8]) -> bool {
     let stride = size.width() as usize * 4;
     let info = VideoFrameInfo {
@@ -726,74 +938,127 @@ fn push_frame(input: &VideoInput, size: FrameSize, pts: MediaTime, rgba: &[u8]) 
     }
 }
 
-fn mixer_loop(
-    mut mixer: Mixer,
+/// The mixer thread's boundary: a panic is caught and reported as fatal. The encoder
+/// then gets no more audio, so the output cannot keep running.
+fn mixer_thread(
+    mixer: Mixer,
     clock: Arc<dyn MediaClock>,
     input: AudioInput,
     format: AudioFormat,
     stop: Arc<AtomicBool>,
+    fail: Sender<String>,
+) {
+    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+        mixer_loop(mixer, clock.as_ref(), &input, format, &stop, &fail);
+    }));
+    if let Err(panic) = result {
+        report(
+            &fail,
+            format!("the mixer thread panicked: {}", panic_message(&*panic)),
+        );
+    }
+}
+
+/// Mixes on the media clock. A rejected block or a poll error is fatal: both mean
+/// the mixer and the encoder disagree about the format, which no retry fixes.
+fn mixer_loop(
+    mut mixer: Mixer,
+    clock: &dyn MediaClock,
+    input: &AudioInput,
+    format: AudioFormat,
+    stop: &AtomicBool,
+    fail: &Sender<String>,
 ) {
     let samples_len = mixer.config().block_frames.saturating_mul(2);
     let mut samples = vec![0.0f32; samples_len];
     while !stop.load(Ordering::Relaxed) {
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
+                // The mix itself does not allocate. `AudioInput::push` takes an owned
+                // buffer and keeps it, so each block needs its own: this clone is
+                // forced by that API.
                 let buffer = match AudioBuffer::new(format, block.pts, samples.clone()) {
                     Ok(buffer) => buffer,
                     Err(err) => {
-                        tracing::error!(error = %err, "mixer block rejected");
+                        report(fail, format!("mixer block rejected: {err}"));
                         break;
                     }
                 };
-                // `Full` is counted by the session. The mix itself did not allocate;
-                // the encoder queue takes an owned buffer.
+                // `Full` is counted by the session. `Closed` means the encoder ended,
+                // which the output thread reports.
                 if matches!(input.push(buffer), Err(PushError::Closed)) {
                     break;
                 }
             }
             Ok(None) => thread::sleep(Duration::from_millis(1)),
             Err(err) => {
-                tracing::error!(error = %err, "mixer poll failed");
+                report(fail, format!("mixer poll failed: {err}"));
                 break;
             }
         }
     }
 }
 
-fn output_loop(
-    mut publish: Box<dyn LivePublish>,
-    mut tagger: FlvTagger,
+struct OutputJob {
+    publish: Box<dyn LivePublish>,
+    tagger: FlvTagger,
     video: Subscription,
     audio: Subscription,
     stats: Arc<PipelineStats>,
     mux_drops: Arc<AtomicU64>,
-    fail_tx: Sender<String>,
-) {
+    stop: Arc<AtomicBool>,
+    fail: Sender<String>,
+}
+
+/// Muxes both encoder streams and publishes them. A publish error, or an encoder
+/// stream that ends before the pipeline was told to stop (the encoder failed, or its
+/// session closed), is fatal and goes to the failure channel.
+fn output_loop(job: OutputJob) {
+    let OutputJob {
+        mut publish,
+        mut tagger,
+        video,
+        audio,
+        stats,
+        mux_drops,
+        stop,
+        fail: fail_tx,
+    } = job;
     let started = match tagger.start() {
         Ok(tags) => publish_tags(&mut publish, &tags),
         Err(err) => Err(format!("FLV start: {err}")),
     };
     if let Err(err) = started {
-        tracing::error!(error = %err, "FLV start failed");
-        let _ = fail_tx.send(err);
+        report(&fail_tx, err);
+        if let Err(err) = publish.finish() {
+            tracing::error!(error = %err, "publish finish failed");
+        }
         return;
     }
     let mut video_done = false;
     let mut audio_done = false;
     let mut failed: Option<String> = None;
+    // An end after `stop` is our own teardown; any other end is a failure.
+    let ended = |kind: &str, end: StreamEnd| -> Option<String> {
+        if stop.load(Ordering::Acquire) {
+            tracing::info!(%end, "{kind} subscription ended");
+            None
+        } else {
+            Some(format!("the {kind} encoder stream ended: {end}"))
+        }
+    };
     while failed.is_none() && (!video_done || !audio_done) {
         if !video_done {
             match video.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
                     if let Err(err) = forward(&mut publish, &mut tagger, &packet, &mux_drops) {
-                        tracing::error!(error = %err, "publish failed");
                         failed = Some(err);
                     }
                 }
                 Ok(None) => {}
                 Err(end) => {
-                    tracing::info!(%end, "video subscription ended");
                     video_done = true;
+                    failed = ended("video", end);
                 }
             }
         }
@@ -801,14 +1066,13 @@ fn output_loop(
             match audio.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
                     if let Err(err) = forward(&mut publish, &mut tagger, &packet, &mux_drops) {
-                        tracing::error!(error = %err, "publish failed");
                         failed = Some(err);
                     }
                 }
                 Ok(None) => {}
                 Err(end) => {
-                    tracing::info!(%end, "audio subscription ended");
                     audio_done = true;
+                    failed = ended("audio", end);
                 }
             }
         }
@@ -817,12 +1081,11 @@ fn output_loop(
         if failed.is_none()
             && let Err(err) = publish.poll()
         {
-            tracing::error!(error = %err, "publish poll failed");
-            failed = Some(err.to_string());
+            failed = Some(format!("publish poll failed: {err}"));
         }
     }
     if let Some(err) = failed {
-        let _ = fail_tx.send(err);
+        report(&fail_tx, err);
     }
     if let Err(err) = publish.finish() {
         tracing::error!(error = %err, "publish finish failed");
@@ -857,4 +1120,31 @@ fn publish_tags(
             .map_err(|err| format!("sending an FLV tag: {err}"))?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::catch_up;
+    use jstream_media::{MediaTime, Timebase};
+
+    fn us(ticks: i64) -> MediaTime {
+        MediaTime::new(ticks, Timebase::MICROS)
+    }
+
+    /// Less than a period late keeps the tick. A period or more skips to the latest
+    /// tick at or before the clock and counts the ones in between.
+    #[test]
+    fn a_late_tick_catches_up_to_the_clock() {
+        let period = us(33_333);
+        let (tick, missed) = catch_up(us(33_333), us(66_665), period).expect("on time");
+        assert_eq!((tick.ticks(), missed), (33_333, 0));
+        let (tick, missed) = catch_up(us(33_333), us(66_666), period).expect("one late");
+        assert_eq!((tick.ticks(), missed), (66_666, 1));
+        let (tick, missed) = catch_up(us(33_333), us(333_340), period).expect("nine late");
+        assert_eq!((tick.ticks(), missed), (333_330, 9));
+        assert!(
+            catch_up(us(i64::MIN), us(i64::MAX), period).is_err(),
+            "overflow"
+        );
+    }
 }

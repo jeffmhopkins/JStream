@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:e87cc2dd683adaeb", by = "agent:grok@stats-tick", note = "Re-read the capture bullet against the threading edit. The mailbox is still latest-frame, and CaptureStats still counts skipped frames, which the render thread publishes for stats.tick. None still means repeat. Traits are unchanged." }
+verified = { hash = "b3:3752fd31522c3c42", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the capture bullet against the ARCH#threading edit: the render thread takes from the mailbox without blocking, None or an error means repeat the last frame, and CaptureStats skips are still what it publishes. Traits unchanged." }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

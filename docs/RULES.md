@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:f3beda5e3400d79f", by = "agent:grok@stats-tick", note = "Re-read R-RT-001 through R-RT-006 against the threading edit. The rules still bind the audio, render and encode threads. jstream-stats is not one of those threads. R-RT-004 still names stats.tick and scenarios::overload_drops_and_counts. No rule text changed." }
+verified = { hash = "b3:743b474a5ba032ef", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the section and R-RT-001..006 against the edited ARCH#threading paragraph: the rules still bind audio, render and encode threads; the pipeline now catches render and mixer panics as R-RT-006 asks and counts skipped render ticks in stats.tick per R-RT-004. No rule text changed." }
 -->
 
 <a id="R-RT-001"></a>
