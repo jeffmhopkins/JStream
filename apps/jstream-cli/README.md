@@ -172,7 +172,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:631fcfca56d36571", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against jstream-control#design's edits (open question 1 now says WsControl passes events.dropped on; mock covers 0.4 edits/queries): the CLI's block_on, connector seam and mcp proxy design are unchanged by the new event arm in run.rs" }
+verified = { hash = "b3:7184f1e57f71f3e6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: control#design changed only by rewrapping its Auth bullet (Host, and Origin when present); the CLI still sends an Origin via WsControl and exit code 3 still covers a refused token, Origin or Host" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
