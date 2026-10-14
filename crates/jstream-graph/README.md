@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:018473b39ffde8cd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model gained ADR-0027's master, privacy and Output chains beside main's ADR-0023 edits; the graph still models only sources and scenes, as this section says" }
+verified = { hash = "b3:fa5271c426e545d6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model gained ADR-0029's transition fields beside main's ADR-0023 edits; none of them is in the graph yet, and the model listed here matches the code" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

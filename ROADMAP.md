@@ -104,7 +104,10 @@ verified = { hash = "b3:df29b2e4bf253fab", by = "agent:claude@session_01QBbMRwRu
 - Preview as low-res H.264 over binary WebSocket frames → WebCodecs → `<canvas>`, with a JPEG fallback.
 - `jstream-desktop` (Tauri) and `jstream-daemon` serving the same UI. Token pairing for
   remote browsers.
-- Studio mode (Preview/Program) and transitions.
+- Studio mode (Preview/Program) and transitions
+  ([ADR-0029](docs/adr/0029-transitions.md)): transition presets (Cut, Fade, Move) with a
+  default, per-scene "into" and "out of" overrides, Move pairing items by source, and
+  per-item delay, easing, glide and appear and disappear effects.
 - The program master chain, per-output chains with their cost shown, and the privacy
   screen ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
 

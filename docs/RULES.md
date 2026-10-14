@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:a66522cc06062238", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol: ADR-0027's planned privacy and encoder-session bullets, now also saying a batch naming privacy.set is refused whole as malformed, late joiners get privacy.changed after the handshake, and previews default to the pre-master stage; none built; planned minor additions under R-API-001, privacy.set is an action so R-API-004 is unaffected; main's R-API-002 rewording as verified there" }
+verified = { hash = "b3:d456320db2215082", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol has ADR-0029's planned transition edits and optional preset on the switch action, none built; planned minor additions under R-API-001, preset edits are ordinary edits under R-API-004; main's R-API-002 rewording as verified there" }
 -->
 
 <a id="R-API-001"></a>
