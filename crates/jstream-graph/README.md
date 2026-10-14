@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:866a347bf715e6bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Main's ADR-0022 (#79) adds canvas, geometry and legacy placements to ARCH data-model, not built; Purpose lists only built items (transform, crop, visible) and its Not yet points at ADR-0022; this PR's change (apps-row wording) does not touch it" }
+verified = { hash = "b3:a954d62c00fe8b94", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model now joins ADR-0022 canvas/geometry and ADR-0024 scene structure, none built; Purpose lists only built behaviour (items with 0.3 transform, crop, visible; nesting cycle check) and its Not yet points at ADR-0022" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

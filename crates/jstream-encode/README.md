@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:b2c774052f8909c6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Main's ADR-0022 changes item placement (canvas, geometry), not outputs or encoder profiles; encoder sharing by (mix, profile) as stated still matches ARCH" }
+verified = { hash = "b3:ebadf6366f317708", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0022 (canvas, geometry) and ADR-0024 (scene structure) change scenes and items, not outputs or encoder profiles; encoder sharing by (mix, profile) as stated still matches ARCH" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

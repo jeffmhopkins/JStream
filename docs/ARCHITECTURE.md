@@ -165,7 +165,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md"]
-verified = { hash = "b3:04b2b9fb9f194341", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0022 now keeps deprecated transforms as a stored legacy placement evaluated against the current source size every frame, converted only by an explicit item.set_geometry; Canvas and geometry bullet gains that, tree shows the target geometry, Filters bullet says geometry, Built-so-far unchanged and consistent" }
+verified = { hash = "b3:2047ab7805c8e8bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined main's ADR-0022 (canvas on the collection, SceneItem.geometry, legacy placement bullet) with ADR-0024 (Scene role, variant_of, overrides, folder, background, organisation fields; folders, labels, hotkeys) plus ADR-0023/0029 fields; depends_on lists 0022, 0023, 0024; variant overrides of placement now mean geometry; not-yet list names canvas, geometry and every ADR-0024 field" }
 -->
 
 ```
@@ -349,7 +349,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5d3dce913572ce52", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:cb5415aa6f063df9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Edits-bullet sentence on ADR-0024's item.move and scene_id addressing (not built) sits beside main's ADR-0022 and ADR-0029 planned edits; covered server README changed by #72's extra-host and token-compare text only; other bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
