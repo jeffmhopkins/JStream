@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:d238d8c2646f50d7", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Edited the API bullet and the not-in-this-cut paragraph: the shared formula is in jstream-protocol, and place.rs still evaluates the legacy 0.3 placement itself. Re-read the rest against compositor.rs and place.rs: canvas, opacity, src-over, open versus on_context, and RGBA8 readback are unchanged. ADR-0022 decision 5 and the GPU pipeline one-scene paragraph still match." }
+verified = { hash = "b3:01db8276b95e40f9", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the scene, API and not-in-this-cut bullets against the test-only lock. place.rs still evaluates the legacy 0.3 placement. Canvas, opacity, src-over, open versus on_context, and RGBA8 readback are unchanged." }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -89,7 +89,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:4e97d543c7bc7065", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read the pass and resource layout against compositor.rs, the WGSL and place.rs. R-RT-002 still holds: no control-plane wait, no file or network I/O, bind groups live on Image, readback is opt-in. ADR-0004's single wgpu pin is unchanged." }
+verified = { hash = "b3:a7152e228a215dc2", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the passes, resources and placement math against compositor.rs and place.rs. The test lock is not a pass. R-RT-002 still holds: no control-plane wait, no file or network I/O, readback stays opt-in." }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -185,7 +185,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:8449a55e83a4d38e", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read tests.rs: offscreen readback, interior-pixel tolerance, stderr skip when no adapter, panic when CI is set. R-TEST-003 still forbids hand-edited goldens, R-TEST-004 still requires no physical GPU, and the testing table's lavapipe and WARP rows are what CI uses." }
+verified = { hash = "b3:39df62cfdf345fbf", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read tests.rs against the new device-lock paragraph. Each pixel test still opens its own compositor and checks the same pixels; the lock only stops WARP from creating several Dx12 devices at once. Skip-outside-CI, panic-in-CI, lavapipe and WARP, and no hand-edited goldens still match R-TEST-003 and R-TEST-004." }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -211,6 +211,11 @@ stacking); crop; integer scale; 90° rotation about the top-left; opacity over a
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
 staged once per submit and not staged when the item is hidden.
+
+**One device at a time.** Each pixel test opens its own compositor and holds a process
+lock until that compositor is dropped. WARP (Microsoft Basic Render Driver)
+access-violates when several Dx12 devices are created and destroyed together. The
+tests still all run; they do not share one device.
 
 **Skipping.** `Compositor::open` returns `NoAdapter` when nothing can be created. The
 test helper writes one line to stderr and returns, so a laptop without lavapipe or
