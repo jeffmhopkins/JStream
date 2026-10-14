@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:fa5271c426e545d6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model gained ADR-0029's transition fields beside main's ADR-0023 edits; none of them is in the graph yet, and the model listed here matches the code" }
+verified = { hash = "b3:d0e55ec330615b07", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
