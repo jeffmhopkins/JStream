@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:ded3a66bf2d7c22e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0027's planned privacy.set/privacy.changed and output.status session reporting, none built; call() still takes one batch, action or query and the mock answers unknown variants with internal, true of the code" }
+verified = { hash = "b3:972ab46f45160847", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol: ADR-0027's planned privacy and encoder-session bullets, now also saying a batch naming privacy.set is refused whole as malformed, late joiners get privacy.changed after the handshake, and previews default to the pre-master stage; none built; call() takes one batch, action or query and the mock answers unknown variants with internal, true of the code" }
 -->
 
 ### The trait

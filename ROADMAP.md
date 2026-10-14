@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:a1aa0fa595215a9b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b encoder-sharing bullet now says the Output model reserves empty video/audio chains, as ADR-0027's consequences ask; other M1 items unchanged" }
+verified = { hash = "b3:c82b2bc5b6f493bc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's ADR-0023 M1b edits (reference/clone, opacity and blend, reserved effects) with ADR-0027's reserved Output chains line; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -70,10 +70,13 @@ verified = { hash = "b3:a1aa0fa595215a9b", by = "agent:claude@session_01QBbMRwRu
   - **Scenes as sources**: a scene placed inside another scene, with cycles rejected.
   - **Shared sources:** adding an existing source places the *same* instance (one capture,
     one set of source filters) in another scene. **Duplicate** makes an independent copy.
+    An item converts between reference and clone and keeps its id
+    ([ADR-0023](docs/adr/0023-placements-references-and-clones.md)).
   - Place, move, resize, rotate and **crop** scene items (2D transform + crop), with golden
     tests.
-  - **Filters and effects:** source filters apply everywhere the source appears, and item
-    effects apply to one placement.
+  - **Filters and effects:** source filters apply everywhere the source appears. Each
+    placement has its own opacity and blend; per-placement effects are not in v1, and the
+    model reserves a slot for them.
   - Bus-matrix mixer with filters and meters.
   - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
     The `Output` model reserves its video and audio chains, empty by default

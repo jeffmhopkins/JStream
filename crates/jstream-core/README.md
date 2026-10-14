@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:7d47e1eb10ec3894", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0027's planned privacy.set/privacy.changed and output.status session reporting, none built; engine's outputs are still a placeholder state machine and Not yet still lists real outputs, so the section holds" }
+verified = { hash = "b3:1e648172af80cff9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol: ADR-0027's planned privacy and encoder-session bullets, now also saying a batch naming privacy.set is refused whole as malformed, late joiners get privacy.changed after the handshake, and previews default to the pre-master stage; none built; engine actions are still output.start/stop only" }
 -->
 
 ### Engine and sessions

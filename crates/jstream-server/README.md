@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:c821449cc9dc66db", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #44 N1/N2: config.rs (Token::matches now length-independent, extra_hosts doc) and gate.rs (portless Host on port 80) change behaviour inside existing modules only; contents list (lib, config, gate, session, error), layer 4 and deferred items still hold" }
+verified = { hash = "b3:4c760c6c37dd2e78", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only tests.rs changed (shutdown test also asserts a second hello fails with Disconnected); contents list, layer 4 and deferred items unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:02ce490e9f331eb5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0027's planned privacy.set/privacy.changed and output.status session reporting, none built; the server forwards any Call unchanged, so the section holds" }
+verified = { hash = "b3:b676ca01df8b0e1a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol: ADR-0027's planned privacy and encoder-session bullets, now also saying a batch naming privacy.set is refused whole as malformed, late joiners get privacy.changed after the handshake, and previews default to the pre-master stage; none built; the server forwards any Call unchanged; main's #73 test change verified there" }
 -->
 
 ### Listening and admission
