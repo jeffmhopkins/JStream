@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:d575dca23a6b7d34", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #68 follow-ups: WgcCapture Frames bullet now says chroma is left-sited ([1 2 1] tap on the block's left column, rows averaged) as convert.rs does; Mailbox bullet says planes are reused and the mailbox boxes every frame (mailbox.rs put); new Start bullet: a target gone before CreateForWindow/Monitor is NotFound (create_item/target_gone); Not yet names the uncounted, unbudgeted CPU readback (ARCH step 6). Rest unchanged against main" }
+verified = { hash = "b3:596578f54094cdea", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #69 B1: Tests paragraph names the new Windows-run start-race test (destroyed message-only window -> NotFound via not_found_if_gone) and the hw-test calling the real CreateForWindow on a destroyed window; Start bullet unchanged and still true; target_gone doc notes handle reuse keeps the OS error (N1)" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -185,13 +185,15 @@ packet flags, positions across a device move), the capture helpers (BGRA to NV12
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding) and the
 H.264 helpers (configuration check, NV12 packing, `pts` mapping) run on every platform,
-and the QPC clock test runs on Windows. Tests against real devices, the OS encoder, the
+and the QPC clock test and the start-race test (a destroyed message-only window maps to
+`NotFound`) run on Windows. Tests against real devices, the OS encoder, the
 GPU and a display are platform tests: behind the `hw-tests` feature and `#[ignore]`d,
 because CI machines may have no audio devices, no Media Foundation, no GPU and no display
 ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
 target, stages it and checks that the shared fence passes the staged value. The capture
-tests list the displays and capture the primary display for a second, checking the
-frames' format and `pts`. Run them on a Windows machine with a microphone, speakers, a
+tests list the displays, capture the primary display for a second, checking the
+frames' format and `pts`, and start a capture of a destroyed window, which must be
+`NotFound`. Run them on a Windows machine with a microphone, speakers, a
 display and a DX12 GPU with a hardware H.264 encoder:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 

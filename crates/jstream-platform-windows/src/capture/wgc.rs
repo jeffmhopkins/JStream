@@ -181,19 +181,24 @@ fn resolve(target: &CaptureTarget) -> Result<Resolved, PlatformError> {
 fn create_item(resolved: &Resolved) -> Result<GraphicsCaptureItem, PlatformError> {
     let interop = windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
         .os("GraphicsCaptureItem activation factory")?;
-    create_item_for(&interop, &resolved.source).map_err(|e| {
-        if target_gone(&resolved.source) {
-            PlatformError::NotFound {
-                kind: resolved.kind,
-                id: resolved.id.clone(),
-            }
-        } else {
-            e
-        }
-    })
+    create_item_for(&interop, &resolved.source).map_err(|e| not_found_if_gone(e, resolved))
 }
 
-/// Whether the target `source` names no longer exists.
+/// `error`, or `NotFound` for `resolved` if its target no longer exists.
+fn not_found_if_gone(error: PlatformError, resolved: &Resolved) -> PlatformError {
+    if target_gone(&resolved.source) {
+        PlatformError::NotFound {
+            kind: resolved.kind,
+            id: resolved.id.clone(),
+        }
+    } else {
+        error
+    }
+}
+
+/// Whether the target `source` names no longer exists. A window handle that Windows has
+/// already reused for a new window counts as still there, so that rare case keeps the OS
+/// error.
 fn target_gone(source: &Source) -> bool {
     match *source {
         Source::Monitor(m) => targets::monitors()
@@ -709,6 +714,83 @@ impl Drop for WgcStream {
 /// Platform tests on a real display (R-TEST-004): behind `hw-tests` and `#[ignore]`d,
 /// because CI machines have no display to capture. Run them on a Windows machine with a
 /// display: `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
+#[cfg(test)]
+mod tests {
+    use jstream_platform::PlatformError;
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Gdi::HMONITOR;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, HWND_MESSAGE, WINDOW_EX_STYLE, WINDOW_STYLE,
+    };
+    use windows::core::w;
+
+    use super::{Resolved, Source, not_found_if_gone, target_gone};
+
+    /// A message-only window: a real window handle that needs no display or desktop.
+    pub(super) fn message_window() -> HWND {
+        // SAFETY: a predefined class, a message-only parent, no menu, instance or
+        // creation data.
+        unsafe {
+            CreateWindowExW(
+                WINDOW_EX_STYLE::default(),
+                w!("STATIC"),
+                w!("jstream test"),
+                WINDOW_STYLE::default(),
+                0,
+                0,
+                0,
+                0,
+                Some(HWND_MESSAGE),
+                None,
+                None,
+                None,
+            )
+        }
+        .expect("a message-only window")
+    }
+
+    pub(super) fn resolved(hwnd: HWND) -> Resolved {
+        Resolved {
+            source: Source::Window(hwnd),
+            monitor: HMONITOR::default(),
+            what: "window test".into(),
+            kind: "window",
+            id: "hwnd:0xtest".into(),
+        }
+    }
+
+    fn os_error() -> PlatformError {
+        PlatformError::Os {
+            call: "IGraphicsCaptureItemInterop::CreateForWindow",
+            code: None,
+            message: "test".into(),
+        }
+    }
+
+    /// The start race (#68 N4): a window destroyed after `resolve` checked it makes
+    /// `CreateForWindow` fail, and `start` must report `NotFound`, not the OS error.
+    #[test]
+    fn a_window_destroyed_before_the_capture_starts_is_not_found() {
+        let hwnd = message_window();
+        let target = resolved(hwnd);
+        assert!(!target_gone(&target.source), "the window is alive");
+        assert!(matches!(
+            not_found_if_gone(os_error(), &target),
+            PlatformError::Os { .. }
+        ));
+
+        // SAFETY: this thread created the window and destroys it once.
+        unsafe { DestroyWindow(hwnd) }.expect("destroyed");
+        assert!(target_gone(&target.source));
+        match not_found_if_gone(os_error(), &target) {
+            PlatformError::NotFound { kind, id } => {
+                assert_eq!((kind, id.as_str()), ("window", "hwnd:0xtest"));
+            }
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+}
+
 #[cfg(all(test, feature = "hw-tests"))]
 mod device_tests {
     use std::time::{Duration, Instant};
@@ -718,6 +800,20 @@ mod device_tests {
 
     use super::WgcCapture;
     use crate::QpcClock;
+
+    /// The whole start path for the race in `tests`: the real `CreateForWindow` on a
+    /// destroyed window gives `NotFound`.
+    #[test]
+    #[ignore = "needs Windows.Graphics.Capture"]
+    fn create_item_for_a_destroyed_window_is_not_found() {
+        let hwnd = super::tests::message_window();
+        // SAFETY: this thread created the window and destroys it once.
+        unsafe { windows::Win32::UI::WindowsAndMessaging::DestroyWindow(hwnd) }.expect("destroyed");
+        match super::create_item(&super::tests::resolved(hwnd)) {
+            Err(PlatformError::NotFound { kind: "window", .. }) => {}
+            other => panic!("expected NotFound, got {:?}", other.map(|_| "an item")),
+        }
+    }
 
     #[test]
     #[ignore = "needs a display and Windows.Graphics.Capture"]
