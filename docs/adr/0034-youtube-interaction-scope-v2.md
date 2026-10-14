@@ -69,7 +69,8 @@ session. The maintainer's choice was **"Yes, in M3"**.
   badge, text, and Super Chat amount, with styling settings (font, colours, background,
   padding, maximum width). It renders nothing while no message is featured. It sits in
   scenes like any other source.
-- Message text is untrusted and is drawn as plain text: no markup and no links.
+- Message text and author names are untrusted and are drawn as plain text: no markup
+  and no links.
 - It is a native source rather than a local page in a browser source
   ([ADR-0021](0021-browser-source.md)), so no page needs access to the control API to
   get the message.
@@ -82,16 +83,19 @@ session. The maintainer's choice was **"Yes, in M3"**.
   scope; that would need another ADR.
 
 **4. OAuth scopes.**
-- The read and manage features of ADR-0009 use
-  `https://www.googleapis.com/auth/youtube`.
-- **Sending chat adds** `https://www.googleapis.com/auth/youtube.force-ssl`, a write scope
-  on the channel.
-- JStream asks for it **incrementally**: only when the user first turns on chat sending,
-  not at sign-in. A user who never sends chat never grants it.
+- **Read-only features** (reading live chat with `liveChatMessages.list`, and the audience
+  stats from `videos.list`) use `https://www.googleapis.com/auth/youtube.readonly`.
+- **Broadcast control and sending chat** need `https://www.googleapis.com/auth/youtube`.
+  `liveBroadcasts.insert` and `bind` (ADR-0009's broadcast control) and
+  `liveChatMessages.insert` accept the same scopes (`youtube` or `youtube.force-ssl`), so
+  one grant covers both. JStream asks for it **incrementally**: the first time the user
+  uses broadcast control or turns chat sending on, not at sign-in.
+- **Chat sending is a JStream setting, not an OAuth boundary.** A user who has granted
+  `youtube` for broadcast control has granted a scope that can post chat. Sending stays
+  off until the user turns it on, and the engine refuses `youtube.chat.send` while it is
+  off, but the token itself could post.
 - The exact scope each API method accepts is re-checked against the API reference when
-  `jstream-youtube` is built. If one scope turns out to cover everything, JStream asks
-  for the narrowest set that works, and still asks for write access only when sending is
-  turned on.
+  `jstream-youtube` is built, and JStream asks for the narrowest set that works.
 - Tokens stay in the OS credential store ([R-SEC-001](../RULES.md#R-SEC-001)).
 
 **5. Quota.**
@@ -108,10 +112,12 @@ session. The maintainer's choice was **"Yes, in M3"**.
 ## Consequences
 - **Unchanged from ADR-0009:** the app needs a Google Cloud OAuth client, and token
   storage in the OS keychain.
-- **The consent screen grows** for users who send chat: the write scope lets JStream post
-  as the channel. Google requires verification of OAuth clients that use sensitive
-  scopes, so a release needs a verified client, or else users see the unverified-app
-  warning.
+- **Write access comes with broadcast control.** The `youtube` scope that broadcast
+  control needs already lets JStream post as the channel, so the sending switch protects
+  against mistakes, not against a compromised token. A user who only reads chat and stats
+  grants `youtube.readonly`. Google requires verification of OAuth clients that use
+  sensitive scopes, so a release needs a verified client, or else users see the
+  unverified-app warning.
 - **Agents can speak as the channel in public.** That is a deliberate consequence of
   ADR-0006's full access. The audit log and the "sent by an agent" marker are the
   safeguards, and there is no extra permission tier.

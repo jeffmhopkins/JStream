@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:a91af0a2ee30746d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-pointed depends_on and the generic RTMP/RTMPS link from superseded ADR-0009 to ADR-0034, which keeps that output unchanged; Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row, the outputs row unchanged" }
+verified = { hash = "b3:8b7d049138d4c3b7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ADR-0034 changed only its OAuth scope bullets, scope consequence and plain-text author names (review B2/N2); the generic RTMP/RTMPS output this client serves is unchanged" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

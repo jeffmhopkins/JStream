@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0034-youtube-interaction-scope-v2.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:135ebb6afbffacb2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-pointed the depends_on, the FLV/YouTube link and the enhanced-RTMP mention from superseded ADR-0009 to ADR-0034, which restates the RTMPS output and enhanced RTMP unchanged; Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row, this crate's row unchanged" }
+verified = { hash = "b3:b9dc297a18eb5eba", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ADR-0034 changed only its OAuth scope bullets, scope consequence and plain-text author names (review B2/N2); the FLV/RTMPS output and enhanced RTMP this section cites are unchanged" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md):
