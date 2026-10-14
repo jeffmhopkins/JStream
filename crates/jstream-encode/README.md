@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:d57e3b61438733e7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Busy-from-fill_gap gap fix doesn't change the Purpose; main's ADR-0027 sharing sentence (no video chain shares by mix and profile) kept as merged" }
+verified = { hash = "b3:55c6ac755b423dd5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "The crate-map encode row now states ADR-0027's sharing rule, matching this Purpose's sentence; main's #95 gap fix doesn't change the Purpose" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:62f26e4467ed08a3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's #96 events tool into the Purpose beside this PR's tracing; crate-map row unchanged; Purpose matches the crate" }
+verified = { hash = "b3:bdcef093ba5aa906", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Purpose says MCP streamable HTTP is served by jstream-server, not this crate (#37 N1), beside main's #96 events tool; matches the crate" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -36,14 +36,15 @@ Contents (a first cut; [Design](#design) explains the choices):
   `BufRead`/`Write` pair.
 - **Errors** (`error.rs`): `McpError`, a `thiserror` enum for a transport that stops.
 
-Not here yet: the streamable-HTTP transport ([Design](#design)).
+The streamable-HTTP transport is not in this crate: `jstream-server` serves it, and it is
+not built yet ([Design](#design)).
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:4c9c4b9df6baa5bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's Logging subsection (mcp_session/mcp_request/tool_call spans, never arguments) with main's #96 events tool row, malformed cursor and Events subsection; the Not implemented line now names both the events tool and tracing; depends_on keeps ADR-0036; matches server.rs" }
+verified = { hash = "b3:5d13c0dbd0ec49eb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Async and transports now say streamable HTTP is served by jstream-server (not built); open question 3 stays settled by ADR-0036 (main's #96) and question 4 records #37's decision; main's #98 Logging subsection kept; depends_on keeps ADR-0036" }
 -->
 
 ### Tools
@@ -191,8 +192,10 @@ one at a time, in order. Blank lines are skipped, a line that isn't UTF-8 gets a
 error, and end of input ends the transport. Nothing else may write to the stdout it is
 given.
 
-Streamable HTTP is deferred to `jstream-server`, which owns the HTTP stack and the token
-and `Origin` checks: it will feed request bodies to `Server::handle`.
+Streamable HTTP is served by `jstream-server` on the control port, behind the same token
+and `Origin` checks as the WebSocket API (decided, not built yet): it owns the HTTP stack
+and will feed request bodies to `Server::handle`. stdio stays in the CLI
+(`jstream-cli mcp`).
 
 ### Logging
 
@@ -244,8 +247,9 @@ official Rust SDK (`rmcp`):
    the `events` polling tool with a server-local cursor and a bounded buffer that
    reports dropped events ([Design](#design)). MCP notifications may be added beside
    it once the server has an outgoing channel.
-4. **Streamable HTTP.** Mounted by `jstream-server` (planned above), or a feature of this
-   crate on a small HTTP stack?
+4. **Streamable HTTP.** Decided: `jstream-server` serves it on the control port, behind
+   the same token and `Origin` checks, and stdio stays in the CLI
+   ([Async and transports](#design)). Not built yet; question 6 is still open for it.
 5. **Legacy support.** How long to keep the handshake-based era once clients move to
    2026-07-28.
 6. **One session per server.** Every MCP client of one server shares an undo history.

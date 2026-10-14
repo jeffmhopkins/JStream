@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0034-youtube-interaction-scope-v2.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:8fd3121ff74ae458", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); depends_on and Docs line now cite ADR-0031 and ADR-0034 (the merge had kept the superseded ADR-0003/0009); the FLV muxer Purpose is unchanged by either" }
+verified = { hash = "b3:c25ff9ab94fa904b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-mux row is unchanged and this Purpose still matches it" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):

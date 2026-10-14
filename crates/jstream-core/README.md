@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:dc254af0fc50b135", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds tracing to core's dependencies; Purpose (Engine, InProcessControl) unchanged by main's #95/#96" }
+verified = { hash = "b3:d95c349770fdfcac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed by the crate-map rows for encode, mcp and server and main's #98 tracing; core's row and Purpose unchanged" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9b4d6f53ee052d10", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Logging subsection (session and command spans, outcomes logged after the lock, never arguments) matches engine.rs/control.rs; main's #96 MCP events don't touch core" }
+verified = { hash = "b3:f5ae46b573596a85", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains decided-but-unbuilt Origin, slow-client, MCP-HTTP and transition-preset text; Engine still applies only built edits and OutputStart/OutputStop; main's #98 Logging subsection kept" }
 -->
 
 ### Engine and sessions

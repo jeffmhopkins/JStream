@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:aefc31c2bb5a6738", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds tracing; main's #95 extra-hosts and token-compare text kept; Purpose matches the crate" }
+verified = { hash = "b3:fc8e87ad921d55a8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's README records #44's decisions (missing Origin to be allowed; bounded buffer with events.dropped) and that MCP streamable HTTP will be served here; main's #98 tracing text kept; Purpose matches the crate as built" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -35,8 +35,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   session and back.
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
-Not here yet: serving the UI assets, the MCP streamable-HTTP mount and TLS
-([Open questions](#design)).
+Not here yet: serving the UI assets, the MCP streamable-HTTP transport (decided: served
+here on the control port) and TLS ([Open questions](#design)).
 
 Why a crate and not a module of `jstream-control` or `jstream-mcp`: it owns the HTTP
 stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:99bcb121169fd69a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's connection span and refusal logging (reason, never header values) with main's #95 extra-hosts rule (bracketed IPv6, one port) and BLAKE3 token compare; matches gate.rs and lib.rs" }
+verified = { hash = "b3:e5585f21cdb18f70", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Admission text says a missing Origin is refused today and will be allowed (#44); open question 7 records the decided bounded buffer, not built; question 6 keeps main's logging-volume question from #98; matches gate.rs as built" }
 -->
 
 ### Listening and admission
@@ -69,8 +69,10 @@ Each header must appear exactly once, and comparisons ignore ASCII case (except 
 token). The `Host` check defeats DNS rebinding: a page on an attacker's domain that
 resolves to `127.0.0.1` still sends its own name. The `Origin` check stops foreign
 pages, since browsers always send `Origin` on a WebSocket upgrade; native clients send
-the server's own. A request without `Origin` is refused too, so every client must send
-one. The token is never logged (see *Logging*), and `Token`'s `Debug` form hides it.
+the server's own. A request without `Origin` is refused too today, so every client must
+send one. That is decided to change (open question 4): a missing `Origin` will be
+accepted, because the token is the gate, and an `Origin` that is present must still pass
+this check. The token is never logged (see *Logging*), and `Token`'s `Debug` form hides it.
 
 **`Host` without a port.** A `Host` (or `Origin`) without a port names the scheme's
 default port, 80 for `http` and `ws`, and browsers leave `:80` out. So when the server
@@ -162,12 +164,15 @@ for the token digest; `tracing` for the spans and events above. No TLS crate is 
    design sends the token in `Sec-WebSocket-Protocol` instead
    ([jstream-control › Design](../jstream-control/README.md#design)); the subprotocol
    naming is not decided, so the server accepts only `Authorization` today.
-3. **UI assets and MCP over HTTP.** Serving the web UI and mounting the MCP
-   streamable-HTTP transport (`jstream_mcp::Server::handle`) are deferred; both go
-   behind the same gate.
-4. **Requests without `Origin`.** Refused today. Non-browser tools (`websocat`, scripts)
-   must send one; allowing a missing `Origin` together with a valid token is safe from
-   browsers but loosens the check, so it is the maintainer's call.
+3. **UI assets and MCP over HTTP.** Serving the web UI is deferred. Decided for MCP:
+   this server serves MCP's streamable-HTTP transport (`jstream_mcp::Server::handle`) on
+   the control port, behind the same token, `Origin` and `Host` checks, and stdio stays
+   in the CLI. Neither is built yet.
+4. **Requests without `Origin`.** Decided, not built yet: an upgrade with no `Origin`
+   header is allowed, because the token is the gate, so non-browser tools (`websocat`,
+   scripts) needn't invent one. An `Origin` that is present must still be the server's
+   own or a configured extra. Browsers always send `Origin`, so this doesn't open the
+   server to foreign pages. Today a missing `Origin` is still refused.
 5. **Default port and token file.** The host apps choose the port and create the
    user-only token file ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)),
    so the server takes both from its caller. `jstream-daemon` creates or reuses the
@@ -177,7 +182,11 @@ for the token digest; `tracing` for the spans and events above. No TLS crate is 
 6. **Logging volume.** Every refused upgrade is logged at `warn` (see *Logging*). A
    foreign page that keeps retrying can fill the log; whether refusals need rate
    limiting or a summary line is open.
-7. **Backpressure.** Events and answers are written as they come; a client that stops
-   reading makes the connection task wait on the socket, which holds that session's
-   events in its unbounded buffer
-   ([jstream-control open question 1](../jstream-control/README.md#design)).
+7. **Backpressure.** Decided, not built yet: each connection gets a bounded event
+   buffer. When it overflows, the server drops the queued events and sends one
+   `events.dropped` notice, and the client re-reads state (`state.get` carries `rev`).
+   The engine is never slowed down by one client. Today events and answers are written
+   as they come, and a client that stops reading makes the connection task wait on the
+   socket, which holds that session's events in its unbounded buffer
+   ([jstream-control open question 1](../jstream-control/README.md#design)). The buffer
+   size and the notice's fields are settled when it is built.
