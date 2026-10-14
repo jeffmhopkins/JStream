@@ -163,7 +163,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md"]
-verified = { hash = "b3:a3951ed0fff748f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0023 (now a dependency): SceneItem gains opacity, blend and reserved-empty effects[]; Source gains duplicated_from; reference/clone terms, no owner, item.set_source keeps the item; cycle check on every nesting edit; transform kept until ADR-0022 lands; Built so far lists the unbuilt ADR-0023 fields under Not yet, matching jstream-graph model/" }
+verified = { hash = "b3:6fe7ec61b99ca656", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0024: data-model tree joins both (duplicated_from, opacity and reserved effects with role, variants, folders, labels, hotkeys); variant overrides include opacity as ADR-0024 says; both not-yet lists kept; other sections changed only by verified lines or the merged data-model" }
 -->
 
 ```
@@ -210,9 +210,9 @@ Collection (JSON on disk, schema_version, rev: u64)
     of `scene.create`, `source.create`, `item.add` and `item.move`.
   - A **keyframe scene** (variant) is a real scene with `variant_of` naming its parent,
     which is not itself a variant. It has no items of its own: it shows the parent's
-    items with per-item `overrides` of placement, visibility and opacity (an absent field follows
-    the parent); everything else, including the background, follows the parent. A
-    variant can be on program, nested and hotkeyed. The cycle check counts the
+    items with per-item `overrides` of placement, visibility and opacity (an absent
+    field follows the parent); everything else, including the background, follows the
+    parent. A variant can be on program, nested and hotkeyed. The cycle check counts the
     variant → parent edge. Deleting a parent is rejected while it has variants.
   - Placement edits take an optional `scene_id`: absent or the item's own scene changes
     the item; a variant writes that variant's override; `item.clear_override` removes one.
@@ -311,7 +311,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:c63dc7acbc0c60ea", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edits bullet names ADR-0024's item.move and optional scene_id addressing, marked not built; covered control/server/protocol READMEs changed only by verifies in this PR; protocol 0.3 code has neither edit, other bullets still match" }
+verified = { hash = "b3:3972b3c2810c904b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0024: data-model tree joins both (duplicated_from, opacity and reserved effects with role, variants, folders, labels, hotkeys); variant overrides include opacity as ADR-0024 says; both not-yet lists kept; other sections changed only by verified lines or the merged data-model" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

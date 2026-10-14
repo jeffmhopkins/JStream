@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:75c2b581cfe4ce85", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0023 to M1b: filters bullet now says per-placement opacity and blend, no per-placement effects in v1, slot reserved; shared-sources bullet gains the reference/clone conversion that keeps the item; M1a/c/d unchanged" }
+verified = { hash = "b3:89d596d731107192", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0024: data-model tree joins both (duplicated_from, opacity and reserved effects with role, variants, folders, labels, hotkeys); variant overrides include opacity as ADR-0024 says; both not-yet lists kept; other sections changed only by verified lines or the merged data-model" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
