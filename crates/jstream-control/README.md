@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:afae665094c355bb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the Auth bullet: the server validates Host, and Origin when present; WsControl still sends the server's own origin unless WsConfig::origin names another (ws.rs unchanged)" }
+verified = { hash = "b3:f9c8578138437f44", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Mock bullets now say every collection query, and video.snapshot is internal because the mock has no compositor. Edit checks, idempotency and output events are unchanged. ARCH protocol's snapshot sentence matches that split." }
 -->
 
 ### The trait
@@ -101,7 +101,7 @@ protocol's rules for them:
   retry with a known key answers first; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol 0.4 edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit, with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
@@ -112,11 +112,13 @@ protocol's rules for them:
   - nesting cycles.
 
   Error messages may differ; clients match on codes and fields;
-- every protocol 0.4 query, answered from that state with the results
+- every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID) and `item.list` (bottom first; `not_found` for a missing
   scene), each at the current `rev`, and `output.status`. So it keeps everything an
-  edit sets: source names and kinds, and each item's transform, crop and visibility;
+  edit sets: source names and kinds, and each item's transform, crop and visibility.
+  `video.snapshot` is not one of those reads: the mock has no compositor and answers
+  it with `internal`, as it does for any protocol variant it does not implement;
 - `state.changed` events carrying the request ID, and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;

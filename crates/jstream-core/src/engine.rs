@@ -10,11 +10,13 @@ use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::session::InProcessControl;
+use crate::snapshot::{self, Frame, SourceFrameError};
 use jstream_graph::Graph;
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, Event, IdempotencyKey, OutputId, ProtocolError,
-    Query, QueryResult, RequestId, Rev,
+    Query, QueryResult, RequestId, Rev, SourceId,
 };
+use jstream_render::Compositor;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 use std::task::Waker;
@@ -27,19 +29,63 @@ use std::task::Waker;
 /// long as any handle or session does; when the last one goes away, every event stream
 /// ends after what it has buffered.
 ///
-/// So far it holds the control plane only: the scene graph (`jstream-graph`), the
-/// outputs' runtime state (a placeholder until the media pipeline lands), per-client
-/// idempotency keys and event fan-out. It starts no threads and needs no async runtime:
-/// every call completes before its future is first polled.
-#[derive(Clone, Default)]
+/// So far it holds the control plane, plus `video.snapshot`: the scene graph
+/// (`jstream-graph`), the outputs' runtime state (a placeholder until the media
+/// pipeline lands), the latest CPU frame of each source, per-client idempotency keys
+/// and event fan-out. It starts no threads and needs no async runtime: every call
+/// completes before its future is first polled. The snapshot compositor is opened on
+/// the first `video.snapshot`.
+#[derive(Clone)]
 pub struct Engine {
-    shared: Arc<Mutex<State>>,
+    shared: Arc<Shared>,
+}
+
+/// The collection lock and the compositor lock. They are never held together: a
+/// snapshot copies its shot, drops the collection lock, then waits on the GPU.
+struct Shared {
+    state: Mutex<State>,
+    compositor: Mutex<Option<Compositor>>,
+}
+
+impl Default for Engine {
+    fn default() -> Self {
+        Self {
+            shared: Arc::new(Shared {
+                state: Mutex::new(State::default()),
+                compositor: Mutex::new(None),
+            }),
+        }
+    }
 }
 
 impl Engine {
     /// An engine with an empty collection at `rev` 0 and no outputs.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Stores the latest straight-alpha sRGB RGBA8 frame of `source_id`.
+    ///
+    /// This is runtime state: it does not change `rev` and emits no event. A snapshot
+    /// uses it when an item places that source. A frame may arrive before the source
+    /// exists; it is kept either way. Replaces any frame already stored for the id.
+    ///
+    /// # Errors
+    /// [`SourceFrameError::Empty`] when a side is zero, [`SourceFrameError::TooLarge`]
+    /// when the buffer would not fit, and [`SourceFrameError::Length`] when `rgba` is
+    /// not `width * height * 4` bytes.
+    pub fn set_source_frame(
+        &self,
+        source_id: &SourceId,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+    ) -> Result<(), SourceFrameError> {
+        let frame = Frame::new(width, height, rgba)?;
+        lock(&self.shared.state)
+            .frames
+            .insert(source_id.clone(), frame);
+        Ok(())
     }
 
     /// Adds an output in the `stopped` state, so `output.start`, `output.stop` and
@@ -49,7 +95,7 @@ impl Engine {
     /// Outputs are configured this way until the protocol has edits for them.
     #[must_use]
     pub fn with_output(self, output_id: OutputId) -> Self {
-        lock(&self.shared).outputs.add(output_id);
+        lock(&self.shared.state).outputs.add(output_id);
         self
     }
 
@@ -60,12 +106,12 @@ impl Engine {
 
     /// The current state revision.
     pub fn rev(&self) -> Rev {
-        lock(&self.shared).graph.rev()
+        lock(&self.shared.state).graph.rev()
     }
 
     /// Assigns the next client ID and returns it with the current `rev`.
     pub(crate) fn register_client(&self) -> (ClientId, Rev) {
-        let mut state = lock(&self.shared);
+        let mut state = lock(&self.shared.state);
         state.clients += 1;
         let client_id = ClientId::new(format!("client_{}", state.clients));
         (client_id, state.graph.rev())
@@ -74,7 +120,7 @@ impl Engine {
     /// Opens an event subscription: the stream, and the weak handle its session keeps
     /// to end it.
     pub(crate) fn subscribe(&self) -> (Subscription, QueueRef) {
-        lock(&self.shared).subscribers.subscribe()
+        lock(&self.shared.state).subscribers.subscribe()
     }
 
     /// Executes `call` for `client_id`, whose request it is, and wakes the subscribers
@@ -104,7 +150,14 @@ impl Engine {
             _ => None,
         };
         let mut wake = Vec::new();
-        let result = lock(&self.shared).execute(client_id, request_id, call, &mut wake);
+        let result = if let Call::Query {
+            query: Query::VideoSnapshot,
+        } = &call
+        {
+            self.video_snapshot()
+        } else {
+            lock(&self.shared.state).execute(client_id, request_id, call, &mut wake)
+        };
         for waker in wake {
             waker.wake();
         }
@@ -120,6 +173,17 @@ impl Engine {
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
         }
         result
+    }
+
+    /// `video.snapshot`. The shot is copied under the collection lock; readback runs
+    /// after that lock is released.
+    fn video_snapshot(&self) -> Result<CallResult, ProtocolError> {
+        let shot = {
+            let state = lock(&self.shared.state);
+            snapshot::plan(&state.graph, &state.frames)
+        };
+        let result = snapshot::draw(&shot, &self.shared.compositor)?;
+        Ok(CallResult::Query { result })
     }
 }
 
@@ -146,6 +210,9 @@ struct State {
     /// How many sessions have completed `hello`; numbers the client IDs.
     clients: u64,
     subscribers: Subscribers,
+    /// The latest CPU frame of each source, keyed by id. Runtime state: not part of
+    /// `rev`. A snapshot draws an item from this when the source is not itself a scene.
+    frames: BTreeMap<SourceId, Frame>,
 }
 
 impl State {

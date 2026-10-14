@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:3dfb015f46e749d2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: tools.rs only changes the events tool description to name events.dropped; the module list (server, tools, events, jsonrpc, stdio, error) is unchanged" }
+verified = { hash = "b3:b203ed26b378d3bf", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Server bullet now says a video.snapshot result leads with an image block. tools.rs, events.rs, jsonrpc.rs, stdio.rs and error.rs are unchanged." }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -26,7 +26,7 @@ async runtime.
 Contents (a first cut; [Design](#design) explains the choices):
 - **Server** (`server.rs`): `Server`, which answers one JSON-RPC message at a time
   (`Server::handle`), with `MODERN_VERSION` and `LEGACY_VERSIONS`, the MCP revisions it
-  serves.
+  serves. A `video.snapshot` result leads with an image content block.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
   and the decoding of tool arguments into protocol calls.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
@@ -44,7 +44,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:cde5724ffa665fcf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the Access note: the streamable-HTTP listener must check the token and Host, and an Origin that is present (R-SEC-002's new wording); stdio unchanged" }
+verified = { hash = "b3:e6dfc87e04cc4cef", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "The noun table includes video. A successful video.snapshot leads content with an image/png block and still repeats the protocol Response as text and structuredContent, matching server.rs." }
 -->
 
 ### Tools
@@ -58,7 +58,7 @@ below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`item`, `output`, `scene`, `source`, `state` today) | `op`: one edit, action or query of that noun | an edit: a batch of one; an action: an action; a query: a query |
+| one per noun (`item`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action or query of that noun | an edit: a batch of one; an action: an action; a query: a query |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -107,7 +107,7 @@ batches (MCP removed them in 2025-06-18).
 
 | What happened | MCP answer |
 |---|---|
-| The engine answered | a result: `structuredContent` is the protocol `Response` (`{"id", "result"}`), repeated as JSON in a text block |
+| The engine answered | a result: `structuredContent` is the protocol `Response` (`{"id", "result"}`), repeated as JSON in a text block. A successful `video.snapshot` also leads `content` with an image block (`type` `image`, `mimeType` `image/png`, `data` the result's base64 PNG) |
 | The engine refused (`ControlError::Protocol`) | a result with `isError: true` and `{"error": <WireError>}`: the stable `code`, its details and the message |
 | The arguments don't fit the tool, or an `events` cursor is past the newest event | the same, with the protocol's `malformed` code and the reason |
 | The connection to the engine was lost during the call | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again ([Session and identity](#design)). |

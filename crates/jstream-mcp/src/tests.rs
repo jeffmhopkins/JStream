@@ -7,7 +7,8 @@ use crate::stdio::block_on;
 use crate::{LEGACY_VERSIONS, MODERN_VERSION, serve_stdio};
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
 use jstream_protocol::{
-    Call, ClientId, Event, Hello, OutputId, Response, Rev, Welcome, json_schema,
+    Call, CallResult, ClientId, Event, Hello, OutputId, Query, QueryResult, RequestId, Response,
+    Rev, Welcome, json_schema,
 };
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -212,7 +213,8 @@ fn handshake_list_and_call_round_trip() {
             "output",
             "scene",
             "source",
-            "state"
+            "state",
+            "video"
         ]
     );
     assert!(list.get("ttlMs").is_none() && list.get("resultType").is_none());
@@ -315,7 +317,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(8));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(9));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -713,6 +715,100 @@ fn stdio_reports_write_failures() {
     let input = br#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}"#;
     let error = serve_stdio(&f.server, &input[..], Broken).expect_err("fails");
     assert!(error.to_string().contains("pipe closed"), "{error}");
+}
+
+#[test]
+fn video_snapshot_on_the_mock_is_an_engine_error() {
+    let f = fixture();
+    f.initialize();
+    let result = f.call_tool("video", json!({"op": {"type": "video.snapshot"}}));
+    assert_eq!(result["content"][0]["type"], "text");
+    assert_eq!(result["content"].as_array().map(Vec::len), Some(1));
+    assert_eq!(tool_error(&result)["code"], "internal");
+}
+
+/// A session that answers `video.snapshot` with a fixed PNG and delegates the rest.
+struct PngSession {
+    inner: MockControl,
+    engine: MockEngine,
+}
+
+impl Control for PngSession {
+    fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
+        self.inner.hello(hello)
+    }
+
+    fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
+        if let Call::Query {
+            query: Query::VideoSnapshot,
+        } = call
+        {
+            let response = Response {
+                id: RequestId::new("req_png"),
+                result: CallResult::Query {
+                    result: QueryResult::VideoSnapshot {
+                        rev: Rev(3),
+                        width: 1,
+                        height: 1,
+                        png: "iVBORw0KGgo=".into(),
+                    },
+                },
+            };
+            return Box::pin(std::future::ready(Ok(response)));
+        }
+        self.inner.call(call)
+    }
+
+    fn events(&self) -> EventStream {
+        // `engine` keeps the mock that owns `inner` alive.
+        let _engine = &self.engine;
+        self.inner.events()
+    }
+}
+
+#[test]
+fn video_snapshot_result_leads_with_an_image_block() {
+    let engine = MockEngine::new();
+    let control = Arc::new(PngSession {
+        inner: engine.connect(),
+        engine,
+    });
+    let server = Server::new(Arc::clone(&control) as Arc<dyn Control>);
+    let init = json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "agent", "version": "1"}
+        }
+    });
+    let init_reply = block_on(server.handle(&init.to_string())).expect("initialize");
+    assert!(init_reply.contains("video.snapshot"), "{init_reply}");
+    let call = json!({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/call",
+        "params": {"name": "video", "arguments": {"op": {"type": "video.snapshot"}}}
+    });
+    let reply: Value =
+        serde_json::from_str(&block_on(server.handle(&call.to_string())).expect("call"))
+            .expect("json");
+    let result = &reply["result"];
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(result["content"][0]["type"], "image");
+    assert_eq!(result["content"][0]["mimeType"], "image/png");
+    assert_eq!(result["content"][0]["data"], "iVBORw0KGgo=");
+    assert_eq!(result["content"][1]["type"], "text");
+    let text: Value = serde_json::from_str(result["content"][1]["text"].as_str().expect("text"))
+        .expect("text is json");
+    assert_eq!(&text, &result["structuredContent"]);
+    assert_eq!(
+        result["structuredContent"]["result"]["result"]["png"],
+        "iVBORw0KGgo="
+    );
+    assert_eq!(result["structuredContent"]["result"]["result"]["rev"], 3);
 }
 
 #[test]

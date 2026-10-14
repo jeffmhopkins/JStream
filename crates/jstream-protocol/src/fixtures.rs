@@ -119,6 +119,7 @@ pub(crate) fn queries() -> Vec<Query> {
             scene_id: SceneId::new("scn_1"),
         },
         Query::StateGet,
+        Query::VideoSnapshot,
     ]
 }
 
@@ -207,6 +208,14 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     items: vec![],
                 },
             ],
+        },
+        // A 1×1 opaque black PNG, so the wire example stays small. The engine's
+        // encoder may produce different bytes for the same pixels.
+        QueryResult::VideoSnapshot {
+            rev: Rev(12),
+            width: 1,
+            height: 1,
+            png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=".into(),
         },
     ]
 }

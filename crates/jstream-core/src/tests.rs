@@ -720,3 +720,162 @@ fn the_engine_answers_like_the_mock() {
     assert_eq!(real_events, mock_events);
     assert!(real_events.len() >= 5);
 }
+
+/// `video.snapshot` composites the first scene on lavapipe (or WARP) and returns a PNG
+/// whose longest side is 1280. With no adapter the test returns; in CI that is a failure.
+#[test]
+fn video_snapshot_reads_the_program_mix_back_as_png() {
+    use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
+    use std::io::Write;
+
+    fn solid(width: u32, height: u32, pixel: [u8; 4]) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity((width as usize) * (height as usize) * 4);
+        for _ in 0..width * height {
+            bytes.extend_from_slice(&pixel);
+        }
+        bytes
+    }
+
+    fn skip(result: Result<QueryResult, ControlError>) -> Option<QueryResult> {
+        match result {
+            Ok(result) => Some(result),
+            Err(error) if error.protocol().is_some_and(is_no_adapter) => {
+                if std::env::var_os("CI").is_some() {
+                    panic!("CI has no wgpu adapter: {error}");
+                }
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "jstream-core: skipping video.snapshot GPU test, no adapter: {error}"
+                );
+                None
+            }
+            Err(error) => panic!("video.snapshot failed: {error}"),
+        }
+    }
+
+    fn image(result: &QueryResult) -> (Rev, u32, Vec<u8>) {
+        let QueryResult::VideoSnapshot {
+            rev,
+            width,
+            height,
+            png,
+        } = result
+        else {
+            panic!("not a snapshot: {result:?}");
+        };
+        let bytes = decode_base64(png).expect("png is base64");
+        let (w, h, rgba) = decode_png(&bytes).expect("png decodes");
+        assert_eq!((*width, *height), (w, h));
+        assert_eq!(
+            (w, h),
+            (1280, 720),
+            "the canvas is capped at 1280 on the long side"
+        );
+        (*rev, *width, rgba)
+    }
+
+    fn at(rgba: &[u8], width: u32, x: u32, y: u32) -> [u8; 4] {
+        let i = (y as usize * width as usize + x as usize) * 4;
+        [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+    }
+
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let mut events = control.events();
+    let Some(empty) = skip(query(&control, Query::VideoSnapshot)) else {
+        return;
+    };
+    let (rev, width, rgba) = image(&empty);
+    assert_eq!(rev, Rev(0));
+    assert_eq!(engine.rev(), Rev(0));
+    assert!(drain(&mut events).is_empty());
+    // A clear has no quad edge, so the corners are the background too.
+    assert_eq!(at(&rgba, width, 0, 0), [0, 0, 0, 255]);
+    assert_eq!(at(&rgba, width, 1279, 719), [0, 0, 0, 255]);
+
+    let built = batch(
+        &control,
+        Batch {
+            edits: vec![create("main"), webcam(), add("main", "layer", "webcam")],
+            expected_rev: None,
+            idempotency_key: None,
+        },
+    )
+    .expect("scene");
+    assert_eq!(built, Rev(1));
+    assert!(matches!(
+        drain(&mut events).as_slice(),
+        [Event::StateChanged { rev: Rev(1), .. }]
+    ));
+    engine
+        .set_source_frame(
+            &SourceId::new("webcam"),
+            1920,
+            1080,
+            &solid(1920, 1080, [255, 0, 0, 255]),
+        )
+        .expect("frame");
+    let shot = skip(query(&control, Query::VideoSnapshot)).expect("adapter already opened");
+    let (rev, width, rgba) = image(&shot);
+    assert_eq!(rev, Rev(1));
+    assert_eq!(engine.rev(), Rev(1));
+    // Inset samples stay off the quad edge, where a linear filter can mix in the clear.
+    assert_eq!(at(&rgba, width, 100, 100), [255, 0, 0, 255]);
+    assert_eq!(at(&rgba, width, 640, 360), [255, 0, 0, 255]);
+    assert!(drain(&mut events).is_empty());
+
+    batch(
+        &control,
+        Batch::single(Edit::ItemSetVisible {
+            item_id: ItemId::new("layer"),
+            visible: false,
+        }),
+    )
+    .expect("hide");
+    assert!(matches!(
+        drain(&mut events).as_slice(),
+        [Event::StateChanged { rev: Rev(2), .. }]
+    ));
+    let hidden = skip(query(&control, Query::VideoSnapshot)).expect("adapter already opened");
+    let (rev, width, rgba) = image(&hidden);
+    assert_eq!(rev, Rev(2));
+    assert_eq!(at(&rgba, width, 640, 360), [0, 0, 0, 255]);
+
+    // A scene source is the inner scene's composite, placed in the program scene.
+    let nested = Engine::new();
+    let control = connected(&nested);
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                create("program"),
+                create("inner"),
+                webcam(),
+                add("inner", "fill", "webcam"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("inner_src"),
+                    name: "Inner".into(),
+                    kind: SourceKind::Scene {
+                        scene_id: SceneId::new("inner"),
+                    },
+                },
+                add("program", "nest", "inner_src"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        },
+    )
+    .expect("nested scenes");
+    nested
+        .set_source_frame(
+            &SourceId::new("webcam"),
+            1920,
+            1080,
+            &solid(1920, 1080, [0, 255, 0, 255]),
+        )
+        .expect("frame");
+    let shot = skip(query(&control, Query::VideoSnapshot)).expect("adapter already opened");
+    let (_, width, rgba) = image(&shot);
+    assert_eq!(at(&rgba, width, 100, 100), [0, 255, 0, 255]);
+    assert_eq!(at(&rgba, width, 1100, 600), [0, 255, 0, 255]);
+}

@@ -20,6 +20,10 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 getrandom = { version = "0.3", default-features = false }
 globset = { version = "0.4", default-features = false }
 insta = { version = "1", default-features = false }
+# PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
+# Encoding is part of the crate. `default-features = false` leaves deflate on the
+# pure-Rust backend.
+png = { version = "0.17", default-features = false }
 jstream-control = { path = "crates/jstream-control" }
 jstream-core = { path = "crates/jstream-core" }
 jstream-encode = { path = "crates/jstream-encode" }
@@ -29,6 +33,7 @@ jstream-media = { path = "crates/jstream-media" }
 jstream-mux = { path = "crates/jstream-mux" }
 jstream-platform = { path = "crates/jstream-platform" }
 jstream-protocol = { path = "crates/jstream-protocol" }
+jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }
 pulldown-cmark = { version = "0.13", default-features = false }
 # Test-only certificates for the RTMPS tests; `ring` instead of the default aws-lc-rs (R-DEP-006).

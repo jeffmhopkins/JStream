@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:63afe37e31862640", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the scene, API and not-in-this-cut bullets against the Opened test lock. place.rs still evaluates the legacy 0.3 placement. Canvas, opacity, src-over, open versus on_context, and RGBA8 readback are unchanged." }
+verified = { hash = "b3:eb52f0da173d3ca8", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the purpose bullets against compositor.rs, place.rs and Opened in tests.rs. One canvas, legacy 0.3 placement in place.rs, formula in jstream-protocol and not called here, opacity and src-over, RGBA8 readback that jstream-core encodes as the video.snapshot PNG. Opened only keeps the test device alive until the lock drops." }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -73,7 +73,7 @@ and calls this crate.
   still evaluates the legacy placement in `place.rs` and does not call that function
   yet.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
-  BT.709 primaries. It is the snapshot path (`video.snapshot` later encodes it). It
+  BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.
 
 **Not in this cut.** The render thread (`frame_loop.rs`), arc-swap snapshots, NV12 or

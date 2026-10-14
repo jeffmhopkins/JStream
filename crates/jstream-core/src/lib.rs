@@ -16,11 +16,13 @@ mod engine;
 mod events;
 mod outputs;
 mod session;
+mod snapshot;
 #[cfg(test)]
 mod tests;
 
 pub use engine::Engine;
 pub use session::InProcessControl;
+pub use snapshot::SourceFrameError;
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 

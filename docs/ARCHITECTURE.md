@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:819e2fde4946e3b2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: apps changes are the CLI's events.dropped print and 0.4 version goldens; the host table (desktop, daemon, cli) and diagram are unaffected" }
+verified = { hash = "b3:7a409f3c31f7a4df", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Diagram parenthetical now says the snapshot PNG is in the JSON message and binary frames are preview and meters. Host table is unchanged. CLI src gained the video snapshot command only." }
 -->
 
 ```
@@ -29,7 +29,7 @@ verified = { hash = "b3:819e2fde4946e3b2", by = "agent:claude@session_01QBbMRwRu
    │ jstream-ui (Leptos→WASM)   jstream-mcp (MCP tools)   jstream-cli   3rd party │
    └───────────────┬──────────────────────────────────────────────────────────────┘
                    │  Control trait: in-process (InProcessControl), or WebSocket + token
-                   │  (JSON messages + binary frames: snapshots, preview, meters)
+                   │  (JSON messages, including video.snapshot's PNG; binary frames later: preview, meters)
                    ▼
 ┌───────────────────────────── jstream-core :: Engine ─────────────────────────────┐
 │ command bus → state (rev N) → events      per-client undo · audit log · persist │
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:aeec6a9d37c9813b", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read the new jstream-render Cargo.toml against its crate-map row: layer 2, unsafe_allowed false, and the summary matches the row's responsibility text. Other rows are unchanged." }
+verified = { hash = "b3:02d4acb55a28915d", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the jstream-core row against its Cargo.toml: layer 5, unsafe_allowed false, and the summary still matches. New deps are jstream-render, jstream-media and png; the row text is unchanged." }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:c4d44ff5396af27b", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the edits, queries, events, schema and transport bullets. geometry.rs is still a pure function, not a command, query or event. PROTOCOL_VERSION stays 0.4. The schema bullet still names the generated snapshot as the API review. Slow clients and events.dropped are unchanged." }
+verified = { hash = "b3:e872deb079228b47", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read queries, events and binary streams against the protocol design. video.snapshot is a JSON PNG. Binary frames stay preview and meters. Geometry types are still not commands. Slow clients, events.dropped and Origin-optional transport are unchanged." }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -494,7 +494,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   naming the outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
-  `output.status`; later `video.snapshot`, `audio.levels`).
+  `output.status`, `video.snapshot` → the program mix as a PNG in the JSON result,
+  longest side at most 1280, with the layout `rev`; later `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick`, …).
 - **YouTube** (planned for M3, [ADR-0034](adr/0034-youtube-interaction-scope-v2.md)):
   the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
@@ -503,12 +504,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   message source draws as plain text. Audience stats (concurrent viewers, likes, chat
   rate) come in a low-rate `youtube.stats` event and a query.
 - **Errors** carry a stable machine-readable `code`, detail fields and a message.
-- **Binary streams** (WebSocket binary frames): snapshots (PNG/JPEG), preview video,
-  meters. Not designed yet, except the meter frame's fields
+- **Binary streams** (WebSocket binary frames): preview video and meters. Not designed
+  yet, except the meter frame's fields
   ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
   (4× oversampled, BS.1770); per bus, also momentary, short-term and integrated loudness
   (LUFS). Loudness is computed only for the master bus and for subscribed buses and
-  sources. Integrated loudness is reset by the action `audio.reset_loudness`.
+  sources. Integrated loudness is reset by the action `audio.reset_loudness`. A
+  snapshot is the `video.snapshot` query's PNG, in the JSON result, not a binary frame.
 - **Schema:** the JSON Schema is generated from the Rust types, and its snapshot is
   the API review ([R-TEST-002](RULES.md#R-TEST-002)).
 - **Transport:** the `Control` trait is implemented in-process by core
@@ -535,11 +537,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:e9fa1c035e9dd062", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the grouped-tools, events, schema-size, names, snapshots and access bullets against the tools.snap diff. The only change is the two ItemTransform descriptions; tools stay grouped by noun and still carry full op schemas. Origin handling is unchanged." }
+verified = { hash = "b3:25e99f8ec6765b2f", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the noun list and snapshots bullet against tools.snap. Nouns include video. video.snapshot leads with an image block. ItemTransform descriptions name ItemGeometry. Tools stay grouped by noun." }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `output`, `scene`, `source` and `state` so far; `audio`, `studio`, `youtube`
+  (`item`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -555,7 +557,9 @@ verified = { hash = "b3:e9fa1c035e9dd062", by = "agent:grok@bc-154a1201-b120-575
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
-  the state `rev` they show.
+  the state `rev` they show. The `video` tool's `video.snapshot` result leads with an
+  image content block (`image/png`, the same base64 as the protocol result) and still
+  carries the full protocol `Response` as text and as `structuredContent`.
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
   streamable-HTTP transport (not built) is served by `jstream-server` on the control port,
@@ -573,7 +577,7 @@ verified = { hash = "b3:e9fa1c035e9dd062", by = "agent:grok@bc-154a1201-b120-575
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:08c25269076fba23", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against the test-only Opened lock. Placement is still the legacy 0.3 evaluation in place.rs. Fit modes and 3D are not drawn. Steps 1-2 and 4-6, transitions and the ADR-0027 output path are unchanged." }
+verified = { hash = "b3:631e06b3093202b1", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the one-scene paragraph against the render README and Opened. Placement is still the legacy 0.3 evaluation; fit modes and 3D are not drawn. The readback is RGBA8. Steps 1-2 and 4-6, transitions and the ADR-0027 output path are unchanged. Opened is not a pipeline step." }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

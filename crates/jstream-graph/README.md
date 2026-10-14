@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:ce4f5476c4d626cb", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the model list and apply semantics against the protocol design edits. No new edit: Item still stores transform, crop and visible, and the inverse rules are unchanged." }
+verified = { hash = "b3:c5a1c764932f5187", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the model and Graph::query against the merged protocol design. Item still stores transform, crop and visible. query returns None for output.status and video.snapshot. No geometry edit was added." }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -60,7 +60,7 @@ goes up by exactly one, and the result carries the **inverse batch**.
 **Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
 collection (`state.get`, `scene.list`, `source.list` and `item.list`) with the
 protocol's result shapes, at the current `rev`. It returns `None` for a query the graph
-doesn't hold the answer to (`output.status` reads runtime state), and fails only with
+doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
 `not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
 display order, items bottom first; `Source::to_info`, `Scene::to_info` and
 `Item::to_info` convert single objects. Reads change nothing.
