@@ -1,7 +1,8 @@
 //! The built binary end to end: it starts on a free `127.0.0.1` port with a token file
 //! it creates, `jstream-control`'s WebSocket client drives it (handshake, a batch, a
 //! query and the `state.changed` event), and a SIGINT stops it gracefully. A second run
-//! reuses the token. Hermetic: loopback only, files under the target directory.
+//! reuses the token. Hermetic: loopback only, files under the target directory (the
+//! platform data directory, where logs go by default, is pointed there too).
 
 use futures_util::StreamExt;
 use jstream_control::protocol::{
@@ -40,11 +41,37 @@ impl Drop for Daemon {
     }
 }
 
+/// The daemon's command, with its default data directory under the target directory,
+/// so a test that passes no `--log-dir` doesn't write into the real one.
 fn daemon() -> Command {
+    let home = Path::new(env!("CARGO_TARGET_TMPDIR")).join("daemon-home");
     let mut command = Command::new(env!("CARGO_BIN_EXE_jstream-daemon"));
     command.env_remove("JSTREAM_TOKEN_FILE");
     command.env_remove("RUST_LOG");
+    command.env_remove("XDG_DATA_HOME");
+    command.env("HOME", &home);
+    command.env("APPDATA", &home);
     command
+}
+
+/// The daemon's log files in `dir`, oldest first.
+fn log_files(dir: &Path) -> Vec<PathBuf> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .map(|entry| entry.expect("an entry").path())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| {
+                            name.starts_with("jstream-daemon-") && name.ends_with(".log")
+                        })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort();
+    files
 }
 
 /// Starts the daemon with `args` and waits for its `listening on <url>` line.
@@ -158,6 +185,8 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     let dir = scratch("serve");
     let token_file = dir.join("token");
     let token_arg = token_file.to_str().expect("a UTF-8 path");
+    let logs = dir.join("logs");
+    let logs_arg = logs.to_str().expect("a UTF-8 path");
     let mut daemon = start(&[
         "--token-file",
         token_arg,
@@ -165,6 +194,8 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         "0",
         "--output",
         "out_1",
+        "--log-dir",
+        logs_arg,
     ]);
     assert!(daemon.url.starts_with("ws://127.0.0.1:"), "{}", daemon.url);
     assert!(daemon.url.ends_with("/api/v1/ws"), "{}", daemon.url);
@@ -245,6 +276,18 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         !log.contains(WRONG_TOKEN),
         "the wrong token was logged: {log}"
     );
+    // The same lines are in the run's log file, with neither token either.
+    let files = log_files(&logs);
+    assert_eq!(files.len(), 1, "{files:?}");
+    let file = std::fs::read_to_string(&files[0]).expect("the log file is readable");
+    assert!(file.contains("jstream-daemon starting"), "{file}");
+    assert!(file.contains("connection refused"), "{file}");
+    assert!(file.contains("connection accepted"), "{file}");
+    assert!(!file.contains(token), "the token was logged: {file}");
+    assert!(
+        !file.contains(WRONG_TOKEN),
+        "the wrong token was logged: {file}"
+    );
     assert_eq!(timely(events.next()).await, None, "the event stream ends");
     match timely(control.call(Call::Query {
         query: Query::SceneList,
@@ -255,8 +298,16 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         other => panic!("expected Disconnected, got {other:?}"),
     }
 
-    // A restart reuses the token in the file, and the engine starts empty again.
-    let mut again = start(&["--token-file", token_arg]);
+    // A restart reuses the token in the file, and the engine starts empty again. It
+    // logs to a new file, at the level `--log-level` sets.
+    let mut again = start(&[
+        "--token-file",
+        token_arg,
+        "--log-dir",
+        logs_arg,
+        "--log-level",
+        "warn",
+    ]);
     assert_eq!(
         again.banner,
         [format!("token file: {token_arg} (existing token)")]
@@ -273,6 +324,13 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     let welcome = timely(control.hello(hello())).await.expect("welcome");
     assert_eq!(welcome.rev, Rev(0), "no persistence yet");
     stop(&mut again);
+    let files = log_files(&logs);
+    assert_eq!(files.len(), 2, "{files:?}");
+    let file = std::fs::read_to_string(&files[1]).expect("the log file is readable");
+    assert!(
+        !file.contains("connection accepted"),
+        "info is filtered out: {file}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -335,6 +393,78 @@ fn usage_errors_exit_2_and_start_nothing() {
         !token_file.exists(),
         "no token file is created on a usage error"
     );
+    // So is a `--log-level` that doesn't parse, which wins over a valid `RUST_LOG`; and
+    // no log directory is created.
+    let logs = dir.join("logs");
+    let output = daemon()
+        .args([
+            "--token-file",
+            token_arg,
+            "--log-level",
+            "jstream_core=loud",
+        ])
+        .arg("--log-dir")
+        .arg(&logs)
+        .env("RUST_LOG", "info")
+        .output()
+        .expect("the binary runs");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.starts_with("error: --log-level: "), "{stderr}");
+    assert!(!token_file.exists() && !logs.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A log directory that can't be created is a startup failure, before the token file
+/// is touched.
+#[test]
+fn an_unusable_log_directory_exits_1() {
+    let dir = scratch("unusable-logs");
+    let token_file = dir.join("token");
+    let not_a_dir = dir.join("file");
+    std::fs::write(&not_a_dir, "").expect("written");
+    let output = daemon()
+        .arg("--token-file")
+        .arg(&token_file)
+        .arg("--log-dir")
+        .arg(not_a_dir.join("logs"))
+        .output()
+        .expect("the binary runs");
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.starts_with("error: could not create the log directory"),
+        "{stderr}"
+    );
+    assert!(!token_file.exists());
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Without `--log-dir`, the logs go to `logs` in the platform data directory:
+/// `$XDG_DATA_HOME/jstream` here.
+#[cfg(all(unix, not(target_os = "macos")))]
+#[test]
+fn logs_go_to_the_data_directory_by_default() {
+    let dir = scratch("default-logs");
+    let token_file = dir.join("token");
+    std::fs::write(&token_file, "\n").expect("written");
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let user_only = std::fs::Permissions::from_mode(0o600);
+        std::fs::set_permissions(&token_file, user_only).expect("chmod");
+    }
+    // The empty token file makes it exit 1 right after logging starts.
+    let output = daemon()
+        .arg("--token-file")
+        .arg(&token_file)
+        .env("XDG_DATA_HOME", &dir)
+        .output()
+        .expect("the binary runs");
+    assert_eq!(output.status.code(), Some(1));
+    let files = log_files(&dir.join("jstream/logs"));
+    assert_eq!(files.len(), 1, "{files:?}");
+    let file = std::fs::read_to_string(&files[0]).expect("readable");
+    assert!(file.contains("jstream-daemon starting"), "{file}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:0dd3f2386e2a9e78", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the host table and the diagram against the merged daemon README. The CLI still talks only through Control. stats.tick is still one event on that stream. The daemon is still the headless host and does not become a new client." }
+verified = { hash = "b3:a773e72dee4fae13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the host table and diagram against the daemon's new logs.rs and crash.rs: the daemon stays the headless host serving the WebSocket API only; local log files and crash reports add no client, interface or engine link" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:4aa5eb2c85281d25", by = "agent:grok@stats-tick", note = "Re-read the jstream-core and jstream-protocol rows against their Cargo.toml files. Core stays layer 5 and unsafe_allowed false; its new audio and encode deps are lower layers. Protocol stays layer 1. The row texts are unchanged." }
+verified = { hash = "b3:ffeb76b8de905c81", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the apps/* row against apps/jstream-daemon/Cargo.toml: still layer 6 with unsafe_allowed false; the new direct deps tracing and blake3 are external crates (no new jstream crate edge), so the row text holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

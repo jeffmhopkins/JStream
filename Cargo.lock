@@ -795,6 +795,7 @@ name = "jstream-daemon"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "blake3",
  "futures-util",
  "getrandom 0.3.4",
  "jstream-control",
@@ -802,6 +803,7 @@ dependencies = [
  "jstream-protocol",
  "jstream-server",
  "tokio",
+ "tracing",
  "tracing-subscriber",
 ]
 
