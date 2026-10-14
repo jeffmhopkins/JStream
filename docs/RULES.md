@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:bcd8c2a1e1131c20", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; covered/depended Threads section gains ADR-0028's mixer row and pts paragraph and ADR-0035's out-of-process CLAP host, both consistent with R-RT-001..004 (the mixer never waits on a host; late blocks bypassed and counted)" }
+verified = { hash = "b3:f4ea80564c01f0a9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's lock-free privacy flag and fail-closed preallocated pass, consistent with R-RT-001/002, beside ADR-0028/0035 text" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:548fd593036e5cee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0028's new optional Source.audio, master bus, bus fields, meter fields and audio.reset_loudness, and main's ADR-0022/0024/0025 additions, are minor-release changes under R-API-001; collection migration for the master bus follows R-API-003" }
+verified = { hash = "b3:2a3bb21101378c53", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0027's master, privacy setting, output chains, privacy.set/privacy.changed and session reporting are additive minor-release changes under R-API-001, as are main's ADR-0022/0024/0025/0028 additions" }
 -->
 
 <a id="R-API-001"></a>

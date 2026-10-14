@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:a42dcd81eb6cd138", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-platform-windows row and this Purpose are unchanged and still match the crate" }
+verified = { hash = "b3:cdd9c66875ada2ee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading now holds this PR's privacy flag on the parameter channels (not built) beside main's ADR-0028 mixer row and pts paragraph and ADR-0035 CLAP host; WGC/MF/WASAPI implementations unchanged" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:41c7225248653edb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains ADR-0028's meter fields and audio.reset_loudness and main's ADR-0022/0024/0025 planned calls, none built; the Control trait and mock forward any Call unchanged, so the design holds" }
+verified = { hash = "b3:013d7d14b18e57e8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains privacy.set/privacy.changed and session reporting (not built) beside main's planned calls; Control and mock forward any Call unchanged" }
 -->
 
 ### The trait

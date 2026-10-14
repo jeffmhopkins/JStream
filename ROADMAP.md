@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:3c78f71437377d43", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b source-kinds bullet now lists ADR-0031's kinds (display, window, video capture device with MJPEG and audio, image formats, color, text, audio input, desktop and application audio, browser) beside main's ADR-0023/0024/0028 bullets; M1a/c/d unchanged" }
+verified = { hash = "b3:40d51e6f1cf12572", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b keeps this PR's reservation of Output video/audio chains beside main's ADR-0023/0024/0028/0031 bullets; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -89,6 +89,8 @@ verified = { hash = "b3:3c78f71437377d43", by = "agent:claude@session_01QBbMRwRu
     per-source and per-bus faders and mute, audio that follows the program
     (`when_shown`), filters, and peak, true-peak and loudness meters.
   - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
+    The `Output` model reserves its video and audio chains, empty by default
+    ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
 - **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the
   portable zip ([ADR-0020](docs/adr/0020-portable-windows-distribution.md); from spike S2).
 - **M1d Hardening:** RTMP reconnect with backoff, log rotation, local minidumps, `stats.tick`,
@@ -101,7 +103,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:eed1c82a752d1079", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M2 gains ADR-0031's media file, audio waveform and audio spectrum bullet between main's ADR-0029 transitions and ADR-0024 UI-built bullets; other M2 bullets unchanged" }
+verified = { hash = "b3:3a2c3ebbe214c9ef", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M2 keeps this PR's master chain, per-output chains and privacy screen bullet beside main's ADR-0029 transitions, ADR-0031 media-file/waveform/spectrum and ADR-0024 UI-built bullets" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
@@ -116,6 +118,8 @@ verified = { hash = "b3:eed1c82a752d1079", by = "agent:claude@session_01QBbMRwRu
   ([ADR-0029](docs/adr/0029-transitions.md)): transition presets (Cut, Fade, Move) with a
   default, per-scene "into" and "out of" overrides, Move pairing items by source, and
   per-item delay, easing, glide and appear and disappear effects.
+- The program master chain, per-output chains with their cost shown, and the privacy
+  screen ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
 - Source kinds ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)): **media
   file** (video or audio, looping; OS demux and decode, A/V sync on the media clock),
   **audio waveform** and **audio spectrum**.

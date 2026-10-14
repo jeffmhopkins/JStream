@@ -164,8 +164,8 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:e45efcf5eba44a05", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined ADR-0028 (Source.audio and SourceAudio, master bus, bus fader/mute/monitor, Audio and Shown-on-program bullets; 'independent of scenes' dropped) with main's ADR-0022 canvas/geometry, ADR-0024 scene structure and ADR-0025 Settings; depends_on lists 0022-0025 and 0028, not the superseded 0007; not-yet list adds source audio settings" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md"]
+verified = { hash = "b3:cd990defe31dbe5d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's master, privacy and per-output video/audio chains, the Master/output chains bullet, ADR-0027 encoder-sharing rule and Privacy bullet with main's ADR-0022/0024/0025/0028 tree and bullets; the old encoder-sharing bullet is replaced, not duplicated; depends_on adds 0027 and keeps 0028" }
 -->
 
 ```
@@ -190,7 +190,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  monitor { device, tap: PreFilters | PostFilters }
 │                  an audio filter may name a key source (sidechain)
 ├── encoders       EncoderProfile { id, codec, rate_control, … }
-└── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile }
+├── master         Master { video_filters[], audio_filters[] }   applies to everything leaving JStream
+├── privacy        Privacy { look: Blur { strength } | Slate { color | image }, muted_sources: [source_id] }
+└── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, video_filters[], audio_filters[] }
                    kind: Rtmp { target: Generic { url } | YouTube { broadcast_binding } } | Record { path, container } | VirtualCam
 ```
 
@@ -265,6 +267,27 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Unpaired items appear or disappear with their effect. The fields are reserved with
   neutral defaults while M1b builds the model; the behaviour comes before or during M2.
 - The preview shown in the UI is a protocol stream, not an `Output`.
+- **Master and output chains**
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)): the `master` stage applies
+  to every output, whichever mix and buses it takes, but not to the editing canvas or
+  audio monitoring. Its video chain runs once per tick on each mix some output consumes;
+  its audio chain runs on each bus that feeds an output, after the bus's own chain
+  (monitors tap the bus before it). Each output may add its own chains after the master
+  stage; `VirtualCam` has no audio, so it has only a video chain.
+- **Encoder sharing** ([ADR-0027](adr/0027-program-master-and-output-chains.md)):
+  outputs whose video chain is empty share one encoder session when they have the same
+  `(video_mix, encoder_profile)`, the master stage counting as part of the mix. An
+  output with a video chain, even one holding only disabled filters, gets its own render
+  pass and session, keyed by its output ID. An output's own audio chain gives it its own
+  audio encode and never affects video sharing. Hardware session caps differ by GPU
+  vendor, so the engine reports, per output, whether it shares and with which outputs,
+  plus the sessions in use. It does not guess the caps.
+- **Privacy screen** ([ADR-0027](adr/0027-program-master-and-output-chains.md)): whether
+  it is on is runtime state, set by an action and never stored in the collection; it
+  starts off. The collection's `privacy` setting only says how it looks (a blur or a
+  slate) and which sources it mutes, by default every audio input-device source,
+  independently of each source's own mute. While on, it covers every output and every
+  preview stream of a post-master stage.
 - **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
   matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
   send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
@@ -284,9 +307,6 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `when_shown` source's activity gain is `min(1, Σ w(r))` over the roots that reach it;
   an `always` source's is 1. The activity gain is runtime state, never an edit. Preview,
   other video mixes, projectors and editor previews never make a source shown.
-- **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
-  encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
-  count.
 - **Color:** compositing is done in linear light in an FP16 working format. Output is
   BT.709 limited range by default. HDR (FP16) capture is tone-mapped to SDR. HDR output is later.
 - **Undo** primitives (an edit plus its inverse) live in `jstream-graph`. The per-client
@@ -308,7 +328,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:eede437e183b3eb5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR edits the Mixer row (activity gains, keys in audio-graph order, latency compensation), adds the Audio timestamps paragraph (a block's pts is its input's media time; delay filter is a stamped shift) and ADR-0028 to depends_on; main's ADR-0035 CLAP host paragraph (latency d plus the plugin's own, compensated) agrees with it; none built beyond the first-cut mixer" }
+verified = { hash = "b3:892b195a6dd6cf3d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading now holds this PR's privacy flag on the parameter channels (not built) beside main's ADR-0028 mixer row and pts paragraph and ADR-0035 CLAP host; depends_on restored to ADR-0014 and ADR-0028 after the merge" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -379,12 +399,18 @@ lock-free parameter channels. On the wire they are live values, committed by one
 at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
+The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
+reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
+so it takes effect on the next tick and block. The blur or slate pass exists whenever an
+output does, so turning privacy on allocates nothing on a real-time thread. Not built
+yet.
+
 <a id="protocol"></a>
 ## Control protocol
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:8cbe42013fc01956", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered control/core/server/protocol READMEs changed only by re-verified Purpose lines after the ADR-0031 crate-map row; no protocol text changes in this PR; bullets match protocol 0.3 as built" }
+verified = { hash = "b3:1a6cbceab4a15a13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's planned privacy.set (refused inside a batch with malformed), privacy.changed after handshake, per-output session reporting and session-limit error sit beside main's ADR-0022/0024/0025/0028 additions; covered control/core/server READMEs changed only by re-verified lines; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -413,6 +439,21 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+- **Privacy screen** (planned): the action `privacy.set { on }` on the master stage, never
+  undoable or batchable and with no `rev` change; every change emits
+  `privacy.changed { on }` to every client and goes to the audit log
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)). A batch holds only edits,
+  so one naming `privacy.set` is refused whole with the stable code `malformed`, and
+  nothing in it is applied. A client that connects while privacy is on gets
+  `privacy.changed { on: true }` right after its handshake, so no client shows it as
+  off. Preview streams show the pre-master stage (the editing view) by
+  default; a client asks for the post-master stage to see what viewers see, and only
+  that stage is covered by the privacy screen.
+- **Encoder sessions** (planned): `output.status` reports, per output, whether it shares
+  an encoder session and with which outputs, plus the hardware sessions in use. When the
+  encoder refuses a session, `output.start` fails with a stable session-limit error code
+  naming the outputs that hold sessions, with no fallback to a software encoder
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
   `output.status`; later `video.snapshot`, `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `stats.tick`, …).
@@ -470,7 +511,7 @@ verified = { hash = "b3:e0616afe224f0007", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:a2d3a8425cd5572d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0029: added the not-built transition node (synthetic item list, control-thread pairing plan, render-thread interpolation and retargeting, shortest-way rotation, shared easing, compositor clamping); S1 steps and results unchanged" }
+verified = { hash = "b3:7d384e016afe5a8e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -526,6 +567,13 @@ The encoded output decodes to the test page's colours (BT.709 limited range). St
 
 wgpu is pinned exactly, because hal interop can change between releases. Effects are WGSL
 plus an `effect.toml` manifest.
+
+**Output path** ([ADR-0027](adr/0027-program-master-and-output-chains.md)), for each
+output: mix → master video chain → the output's own video chain → privacy stage → colour
+conversion (step 4) → encoder. The render plan has a master node per consumed mix, a
+node per output with a video chain, and a privacy node per output. The privacy stage
+comes last, so no output chain can undo it, and it fails closed: if its pass can't run,
+the output gets a black frame. None of this is built yet.
 
 <a id="persistence"></a>
 ## Persistence, config and secrets

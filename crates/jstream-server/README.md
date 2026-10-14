@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:67f447f6c8df8f56", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains ADR-0028's meter stream fields and audio.reset_loudness, not built; the server forwards Calls and events unchanged and has no binary meter stream yet, so the design holds" }
+verified = { hash = "b3:76e17c452361dab1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains privacy.set/privacy.changed and the late-join privacy notice (not built); the server forwards Calls and events unchanged and replays nothing yet" }
 -->
 
 ### Listening and admission

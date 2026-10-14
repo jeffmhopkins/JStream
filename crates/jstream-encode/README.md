@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:820e84e4173c54d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-encode row and this Purpose are unchanged and still match the crate" }
+verified = { hash = "b3:86945651f89e935c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Purpose's sharing sentence matches ADR-0027 (only outputs with no video chain share by mix and profile; a chained output gets its own session); main's ADR-0028 master bus doesn't change it" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -25,7 +25,8 @@ number of outputs subscribe to its packets. For M1a that is one video mix into t
 H.264 encoder and one bus into the MF AAC encoder, each feeding one RTMP output
 ([ROADMAP › M1](../../ROADMAP.md#m1)); the fan-out already takes N subscribers, so
 encoder sharing in M1b ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model):
-outputs with the same mix and encoder profile share one session) needs no new shape.
+outputs with no video chain and the same mix and encoder profile share one session, and
+an output with a video chain gets its own) needs no new shape.
 
 Its only JStream dependency is `jstream-platform` (layer 1), whose `media` re-export
 supplies the frame, sample and packet types; besides that, `thiserror`. Dev-dependency:
