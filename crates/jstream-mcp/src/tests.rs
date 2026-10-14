@@ -614,7 +614,9 @@ fn events_are_bounded_and_report_what_was_dropped() {
 }
 
 /// `stats.tick` comes once a second per running pipeline. If it were buffered, a few
-/// minutes of ticks would evict the `state.changed` an agent needs (ADR-0036).
+/// minutes of ticks would evict the `state.changed` an agent needs (ADR-0036); if it
+/// were dropped, agents would never see the drop counts (ADR-0006). Only the newest is
+/// kept, as `stats`.
 #[test]
 fn stats_ticks_are_not_buffered_and_evict_nothing() {
     let f = fixture();
@@ -649,6 +651,8 @@ fn stats_ticks_are_not_buffered_and_evict_nothing() {
         ),
         (json!(1), json!(0), json!(false))
     );
+    assert_eq!(page["stats"]["type"], "stats.tick");
+    assert_eq!(page["stats"]["seq"], json!(2 * ticks));
 }
 
 #[test]

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:3dadc7e9dabc1319", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the MCP fixes: the Server bullet now says the video.snapshot image block is the only place its PNG appears (server.rs take_snapshot_png); the Events bullet still describes events.rs, which now skips stats.tick before numbering; tools, jsonrpc, stdio and error modules unchanged" }
+verified = { hash = "b3:dfe97a6035d59185", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: events.rs still pumps one subscription into a bounded numbered buffer; the newest stats.tick now rides on each page as stats, which the Events bullet's description still covers" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:341e8873458baa7f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Tools, Results and errors, Session and Events against server.rs, events.rs, tools.rs and tools.snap: added the Snapshots paragraph (png placeholder '<in the image content block: N bytes of base64>', shape kept) and the stats.tick skip in Events (no seq, not in dropped, per ADR-0036 Consequences); tools.snap's events description says stats.tick is not returned; the table and session text still hold" }
+verified = { hash = "b3:218f3b2d2dc33daf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events (#124 review B1): stats.tick is kept out of the buffer but the newest tick is returned on every read as stats (running totals), so drop counts stay reachable per ADR-0006 and ticks evict nothing per ADR-0036; matches events.rs Buffer::push/read and the updated test" }
 -->
 
 ### Tools
@@ -167,11 +167,13 @@ The `events` tool exposes the engine's events
 `hello`, the server subscribes once to `Control::events()`. A thread drains that
 subscription into a buffer of the newest `BUFFER_CAPACITY` events (in `events.rs`),
 numbering them from 1 (`seq`), and parks until the subscription wakes it, so neither
-the buffer nor the `Control`'s own stream grows while the agent is idle. It skips
-`stats.tick`: about one a second per running pipeline would push `state.changed` and
-`output.state_changed` out of the buffer within minutes, and ADR-0036 keeps high-rate
-events out of the feed unless asked for, which no argument can do yet. A skipped event
-takes no `seq`, so it leaves no gap and is not counted in `dropped`. A read drains
+the buffer nor the `Control`'s own stream grows while the agent is idle. It keeps
+`stats.tick` out of the buffer: about one a second per running pipeline would push
+`state.changed` and `output.state_changed` out within minutes (ADR-0036,
+Consequences). A tick carries running totals, so the feed keeps only the newest one,
+outside the buffer, and every read returns it as `stats`; an agent still sees the drop
+counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
+counted in `dropped`. A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 

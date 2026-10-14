@@ -13,9 +13,12 @@
 //! thread's waker, so it sees every event the engine has delivered so far.
 //!
 //! `stats.tick` is not buffered: it arrives about once a second per running pipeline and
-//! would soon push `state.changed` and `output.state_changed` out of the buffer, and
-//! ADR-0036 keeps such high-rate events out of this feed unless an agent asks for them,
-//! which it can't yet. Skipped events get no sequence number, so they leave no gap.
+//! would soon push `state.changed` and `output.state_changed` out of the buffer
+//! (ADR-0036, Consequences). Each tick carries running totals, so the newest one says
+//! everything the earlier ones did: the feed keeps only that one, outside the buffer,
+//! and every read returns it as `stats`. So an agent still sees the drop counts (ADR-0006:
+//! every protocol capability over MCP), and ticks take no sequence number, leave no
+//! gap and evict nothing.
 //!
 //! Docs: crates/jstream-mcp/README.md#design, docs/adr/0036-mcp-events-polling-tool.md
 
@@ -53,6 +56,10 @@ pub(crate) struct Page {
     pub(crate) more: bool,
     /// Whether the subscription has ended (the session is gone): no event will follow.
     pub(crate) ended: bool,
+    /// The newest `stats.tick`, if one has arrived: running totals, so it stands for every
+    /// earlier tick. Kept outside the buffer, so ticks never evict other events.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) stats: Option<Event>,
 }
 
 /// A cursor past the newest event: it came from another server, or was made up.
@@ -70,6 +77,8 @@ pub(crate) struct Buffer {
     /// The sequence number of the next event pushed.
     next_seq: u64,
     ended: bool,
+    /// The newest `stats.tick`.
+    stats: Option<Event>,
 }
 
 impl Buffer {
@@ -79,11 +88,17 @@ impl Buffer {
             events: VecDeque::new(),
             next_seq: 1,
             ended: false,
+            stats: None,
         }
     }
 
-    /// Appends `event`, dropping the oldest one if the buffer is full.
+    /// Appends `event`, dropping the oldest one if the buffer is full. A `stats.tick`
+    /// replaces the kept one instead and takes no sequence number.
     pub(crate) fn push(&mut self, event: Event) {
+        if matches!(event, Event::StatsTick { .. }) {
+            self.stats = Some(event);
+            return;
+        }
         if self.events.len() == self.capacity {
             self.events.pop_front();
         }
@@ -118,6 +133,7 @@ impl Buffer {
             next,
             dropped,
             ended: self.ended,
+            stats: self.stats.clone(),
         })
     }
 }
@@ -135,11 +151,7 @@ impl Shared {
         let mut cx = Context::from_waker(waker);
         while let Some(stream) = self.stream.as_mut() {
             match stream.as_mut().poll_next(&mut cx) {
-                Poll::Ready(Some(event)) => {
-                    if is_buffered(&event) {
-                        self.buffer.push(event);
-                    }
-                }
+                Poll::Ready(Some(event)) => self.buffer.push(event),
                 Poll::Ready(None) => {
                     self.stream = None;
                     self.buffer.ended = true;
@@ -148,13 +160,6 @@ impl Shared {
             }
         }
     }
-}
-
-/// Whether the feed keeps `event`. High-rate telemetry (`stats.tick`) is left out, so it
-/// can't evict the state and output events agents follow
-/// (docs/adr/0036-mcp-events-polling-tool.md, Consequences).
-fn is_buffered(event: &Event) -> bool {
-    !matches!(event, Event::StatsTick { .. })
 }
 
 fn lock(mutex: &Mutex<Shared>) -> MutexGuard<'_, Shared> {

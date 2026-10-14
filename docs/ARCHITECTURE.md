@@ -560,7 +560,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:50e7559c8955790d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the MCP fixes: Events bullet now says stats.tick is left out of the events buffer (events.rs is_buffered, ADR-0036 Consequences); Snapshots bullet now says the image block is the only copy and the JSON png is a short placeholder (server.rs); tool grouping, schema size and access bullets unchanged" }
+verified = { hash = "b3:81881727ea640a2e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events bullet: stats.tick kept apart, newest one returned on each read as stats so drop counts stay visible and ticks can't evict state/output events; Snapshots bullet unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -569,8 +569,9 @@ verified = { hash = "b3:50e7559c8955790d", by = "agent:claude@session_01QBbMRwRu
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
-  ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is left
-  out, so it can't evict the state and output events.
+  ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
+  apart: each read returns the newest tick as `stats` (running totals), so it can't
+  evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
   The first cut does not do this yet: each tool carries its ops' full schemas (about 50 KB
