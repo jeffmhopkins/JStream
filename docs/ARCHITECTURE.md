@@ -293,7 +293,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:74b4749fd88bea01", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered control/server READMEs changed only by verified lines in this PR (crate-map re-check for ADR-0035); section body unchanged and still matches the code, which has no CLAP filter kind" }
+verified = { hash = "b3:809687bff08ecd3a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): covered changes are main's jstream-server test and README verified lines plus this PR's verified-line refreshes; no wire change, body unchanged and still matches the code" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -338,7 +338,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d4aacd37500005f3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp README changed only by a verified line in this PR (crate-map re-check for ADR-0035); tools, schema-size, names, access and undo bullets unchanged" }
+verified = { hash = "b3:1eaf80cd00e97d1b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): jstream-mcp's not-sent error wording and README additions per main's own verification, plus this PR's verified-line refresh; tools, schema-size, names (R-API-002 grouped by noun), access and undo bullets hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
