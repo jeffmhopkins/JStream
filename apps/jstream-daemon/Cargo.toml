@@ -17,6 +17,8 @@ workspace = true
 
 [dependencies]
 anyhow.workspace = true
+# Crash reports redact secrets by their BLAKE3 digests, never keeping their text.
+blake3.workspace = true
 # The control token's random bytes, from the OS.
 getrandom.workspace = true
 jstream-core.workspace = true
@@ -25,7 +27,10 @@ jstream-protocol.workspace = true
 jstream-server.workspace = true
 # The runtime the server runs on; `signal` for Ctrl-C (and SIGTERM on Unix).
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
-# The log subscriber: the libraries' `tracing` events, filtered by `RUST_LOG`, on stderr.
+# The startup log line, with the log file's path.
+tracing.workspace = true
+# The log subscriber: the libraries' `tracing` events, filtered by `--log-level` or
+# `RUST_LOG`, on stderr and in the rotating log files.
 tracing-subscriber.workspace = true
 
 [dev-dependencies]

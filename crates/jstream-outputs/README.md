@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:235969d21bee3d17", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading edit: the output still runs on its own std thread calling the blocking publisher, and poll_incoming still relies on a short read timeout, which core now sets only after publish returns. Client API unchanged." }
+verified = { hash = "b3:00f1097fc1cac728", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#127 reconnect) into #128: re-read Purpose with both changes; the Reconnect bullet (backoff, resync incl. cached AVC header, connect timeout kept until publish) matches reconnect.rs, and 'jstream-core does not use ReconnectingPublisher yet' still holds since #128's connect_rtmp keeps the 10 s timeout through publish then 1 ms, without reconnect" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -78,6 +78,37 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The server's
   status code and description are untrusted text, so `RtmpError::Rejected` replaces any
   echo of the key in them with `***`.
+- **Reconnect** (`reconnect`): `ReconnectingPublisher` wraps a published session and a
+  `Connector`, the function that opens and publishes a replacement (`rtmp_connector`
+  for TCP and TLS, built on `connect_publisher`). A send or `poll` that fails because
+  the link is gone (a write that fails or times out, a read error, the server
+  closing, an error status) drops the session and starts an outage; errors in the caller's input
+  (`PayloadSize`, timestamps) are returned and leave the link alone. Attempts follow
+  `ReconnectPolicy`: the wait before attempt *n* is `min(1 s × 2ⁿ, 30 s)` scaled by a
+  random factor in [0.5, 1] ("equal jitter", so outputs that lost the same ingest
+  don't retry in step, while each wait keeps a floor). It gives up when the next
+  attempt would start more than 5 minutes after the loss (or after `max_attempts`, no
+  limit by default). Five minutes rides out a router restart or a network change, and
+  still tells the operator within minutes that the stream is down rather than
+  retrying silently; with the 30 s cap, a recovered network is used again within
+  30 s. A session that drops again within 30 s of reconnecting continues the same
+  outage (attempt count, backoff step, start time), so a server that accepts and
+  then drops at once can't keep it retrying forever at the shortest wait. Each
+  attempt runs on its own short-lived thread, one at a time, and every call only
+  checks whether one has finished or is due, so the caller's thread never waits for
+  a reconnect. While the link is down, media is dropped and counted (`ReconnectStats`),
+  never queued ([R-RT-004](../../docs/RULES.md#R-RT-004)). The last `onMetaData`, AVC
+  sequence header and AAC sequence header are kept as they pass through. After a
+  reconnect, video and audio are dropped (and counted) until the next video keyframe;
+  `onMetaData` and the AVC sequence header go out just before it, and the AAC
+  sequence header just before the next audio packet, each at that packet's
+  timestamp. An audio-only stream resumes at once. Timestamps continue from the lost
+  session. `state()` is `Active`, `Reconnecting` or `Failed`, which a host maps onto
+  its output states; only giving up is an error (`RtmpError::ReconnectGaveUp`). The
+  backoff reads time through an injectable `Clock`. `connect_publisher` reads with
+  the connect timeout until publishing has started and only then shortens the read
+  timeout for polling, so the publish replies aren't cut off by the polling timeout.
+  Logs carry only `RtmpError` text, never the key ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **AMF0:** commands are encoded and server replies decoded with `jstream-mux`'s
   `amf0::Amf0Value`, the same codec that writes FLV script tags. Its decoder treats
   server input as untrusted (nesting limit, no allocation from claimed counts). Its
@@ -90,7 +121,9 @@ async runtime: the output runs on its own thread (a `std` thread, or tokio's
 `spawn_blocking`), so a slow ingest server never stalls the control runtime, and the
 same code runs over TCP, TLS, or the in-memory pipes the tests use. The session needs
 only one thread: `poll_incoming` reads what the server has sent without waiting, given a
-transport with a short read timeout (over TLS too, see Transport above). The `Output`
+transport with a short read timeout (over TLS too, see Transport above). Only a
+reconnect attempt, which blocks for up to its connect timeouts, runs on a thread of
+its own, so the output thread keeps dropping and counting media meanwhile. The `Output`
 layer will feed it from the encoder fan-out through a bounded queue that drops and
 counts packets under overload ([R-RT-004](../../docs/RULES.md#R-RT-004)); that queue is
 not part of this client.
@@ -104,9 +137,9 @@ trade-off: on Windows the local `ROOT` store is filled on demand by Windows Upda
 root no Windows program has needed yet may be missing (see
 [Open questions](#open-questions)).
 
-**Not yet:**
-- **Reconnect with backoff**, planned for M1d ([ROADMAP](../../ROADMAP.md#m1)).
-- Enhanced RTMP (HEVC/AV1), AMF3 payloads, and the signed ("complex") handshake.
+**Not yet:** enhanced RTMP (HEVC/AV1), AMF3 payloads, and the signed ("complex")
+handshake. `jstream-core`'s output thread does not use `ReconnectingPublisher` yet,
+so a live output still fails on the first lost connection.
 
 **Tests** are hermetic ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): exact handshake
 and chunk bytes, chunking across chunk-size boundaries, extended timestamps, and full
@@ -117,7 +150,14 @@ rustls server on loopback TCP with a CA and server certificate that `rcgen` gene
 for the test, and a client that trusts only that CA: a round trip over TLS 1.3 and 1.2,
 a full publish session, a read timeout that splits a TLS record during `poll_incoming`,
 a handshake timeout, and refusal of a certificate for another host or from an untrusted
-CA. Nothing contacts a real ingest server or reads the OS trust store. AMF0 tests live
+CA. Reconnect tests drive a clock the test advances by hand: a fake server on loopback
+TCP that hangs up mid-stream, after which the test checks the wait before the first
+attempt, the drop counts, the re-sent headers and the resume at the keyframe on the
+second connection, and the state sequence; a write that fails over an in-memory pipe
+(the failed packet counted, audio-only resuming at once); giving up after
+`max_attempts` and at the outage limit; a session that drops again at once
+continuing its outage, and one that stayed up starting a new one. Nothing contacts a
+real ingest server or reads the OS trust store. AMF0 tests live
 in `jstream-mux`.
 
 <a id="open-questions"></a>
@@ -131,5 +171,16 @@ in `jstream-mux`.
   missing roots and checks revocation; more dependencies), or allowing
   CDLA-Permissive-2.0 so `webpki-roots` can be compiled in (an R-DEP-001 change, the
   maintainer's call).
+- **Reconnect timestamps:** a resumed session continues the old timestamps rather
+  than starting again near 0. Whether YouTube (and other ingests) accept that on a
+  new connection has not been checked against a live ingest; rebasing would need the
+  offset applied to every later tag.
+- **Retrying rejections:** every failure is retried, including a `publish` rejection
+  on reconnect (for example a key revoked meanwhile), which then fails only at the
+  outage limit. A server that rejects a reconnect while the previous session still
+  holds the key is the reason not to fail fast; which codes are final is not known.
+- **Resume latency:** after a reconnect, video waits for the encoder's next keyframe
+  (up to one keyframe interval). A keyframe request would shorten that; see
+  [jstream-encode › Open questions](../jstream-encode/README.md#open-questions).
 - **Threading:** whether [ARCH › Threads](../../docs/ARCHITECTURE.md#threading) should
   list "one blocking thread per network output" explicitly once the `Output` layer lands.
