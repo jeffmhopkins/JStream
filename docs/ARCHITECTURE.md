@@ -260,7 +260,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:92455d2d37de3920", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-control README changed only the wss:// open question (ring already allowlisted); Transport bullet ('Plain ws:// for now; TLS is an open question') still holds" }
+verified = { hash = "b3:5eea4fa4bbb90457", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-server README changed only its TLS open question wording (ring already allowlisted); Transport bullet ('Plain ws:// for now; TLS is an open question there') still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
