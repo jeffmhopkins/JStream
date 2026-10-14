@@ -253,11 +253,20 @@ impl Server {
             Ok(Invocation::Call(call)) => call,
         };
         let client_name = client_name.unwrap_or_else(|| DEFAULT_CLIENT_NAME.to_owned());
-        let response = match self.open(client_name).await {
-            Ok(()) => self.control.call(call).await,
-            Err(error) => Err(error),
-        };
-        Ok(match response {
+        if let Err(error) = self.open(client_name).await {
+            return Ok(match error {
+                // The call was never sent. Over `WsControl` this is permanent: a closed
+                // connection never reopens, so every later `hello` fails the same way.
+                ControlError::Disconnected { reason } => disconnected(format!(
+                    "the engine session could not be opened: {reason}; this call was not \
+                     sent. Restart the MCP server to get a new session. It is a \
+                     new client of the engine, with its own undo history: edits made before \
+                     can't be undone from it"
+                )),
+                other => control_error(other),
+            });
+        }
+        Ok(match self.control.call(call).await {
             Ok(response) => match serde_json::to_value(&response) {
                 Ok(value) => tool_result(value, false),
                 Err(e) => protocol_error(
@@ -267,25 +276,16 @@ impl Server {
                     .into(),
                 ),
             },
-            Err(ControlError::Protocol(wire)) => protocol_error(wire),
             Err(ControlError::Disconnected { reason }) => {
                 // The session may be gone: say `hello` again before the next call.
                 self.opened.store(false, Ordering::Release);
-                let message = format!(
+                disconnected(format!(
                     "connection to the engine lost: {reason}; whether the call took effect \
-                     is unknown, so re-read the state before retrying"
-                );
-                tool_result(
-                    json!({"error": {"code": "disconnected", "message": message}}),
-                    true,
-                )
+                     is unknown, so re-read the state before retrying. The next call tries \
+                     to reopen the session"
+                ))
             }
-            Err(other) => protocol_error(
-                ProtocolError::Internal {
-                    reason: other.to_string(),
-                }
-                .into(),
-            ),
+            Err(other) => control_error(other),
         })
     }
 
@@ -352,6 +352,28 @@ fn tool_result(structured: Value, is_error: bool) -> Value {
         "structuredContent": structured,
         "isError": is_error,
     })
+}
+
+/// A tool error with the MCP-layer code `disconnected`: the engine session's connection
+/// was lost (crates/jstream-mcp/README.md#design).
+fn disconnected(message: String) -> Value {
+    tool_result(
+        json!({"error": {"code": "disconnected", "message": message}}),
+        true,
+    )
+}
+
+/// A tool error for a [`ControlError`] other than `Disconnected`.
+fn control_error(error: ControlError) -> Value {
+    match error {
+        ControlError::Protocol(wire) => protocol_error(wire),
+        other => protocol_error(
+            ProtocolError::Internal {
+                reason: other.to_string(),
+            }
+            .into(),
+        ),
+    }
 }
 
 /// A tool error carrying a protocol error: `{"error": {"code": …, …, "message": …}}`.
