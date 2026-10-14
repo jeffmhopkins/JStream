@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:86a303e69b7ff4c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon/README.md only had its design verified line refreshed (ADR-0032 dependency re-check); shape diagram, per-client undo in the engine box and host table unchanged and still hold" }
+verified = { hash = "b3:61d4d6aacbd20d05", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps READMEs changed only by verified lines in this PR (crate-map re-check); shape diagram, YouTube-bound RTMP output and host table unchanged and still hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:89b8da3eb137ab44", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#66, #69, #70): new crates/jstream-audio/Cargo.toml at layer 2 (deps jstream-media, jstream-platform L1, no unsafe) matches the L2 audio row; other rows and edges as on main" }
+verified = { hash = "b3:35ac6a9ffb139d61", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per accepted ADR-0034: jstream-youtube row adds chat sending as the channel and audience stats, jstream-sources row adds the YouTube chat message kind; layers, edges and other rows unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -139,7 +139,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
-| 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat). No media code. | no |
+| 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0034](adr/0034-youtube-interaction-scope-v2.md)). No media code. | no |
 | 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
@@ -148,7 +148,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; serves UI assets; mounts MCP over HTTP; token and Origin checks | no |
-| 4 | `jstream-sources` | `Source` trait plus built-ins (display, window, webcam, image, color, text, browser, media file, scene). Uses platform traits; backends are injected. | no |
+| 4 | `jstream-sources` | `Source` trait plus built-ins (display, window, webcam, image, color, text, browser, media file, scene, YouTube chat message ([ADR-0034](adr/0034-youtube-interaction-scope-v2.md))). Uses platform traits; backends are injected. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
@@ -269,7 +269,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:9a70e815e411c6c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added Live values (live.set/live.cancel actions, live.changed/live.ended) and History (history.undo/redo, a fourth call kind) bullets citing ADR-0032; covered control/server/protocol READMEs changed only as verified in this PR; other bullets still match the code" }
+verified = { hash = "b3:e8027b2bf38c832e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0034: planned YouTube bullet (chat send, featured message, youtube.stats); covered control/server READMEs changed only by verified lines in this PR" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -295,6 +295,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
   `output.status`; later `video.snapshot`, `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `stats.tick`, …).
+- **YouTube** (planned for M3, [ADR-0034](adr/0034-youtube-interaction-scope-v2.md)):
+  the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
+  the channel and goes to the audit log, and `youtube.chat.feature { message_id }`, which
+  sets or clears the featured message (runtime state, reported by an event) that the chat
+  message source draws as plain text. Audience stats (concurrent viewers, likes, chat
+  rate) come in a low-rate `youtube.stats` event and a query.
 - **Errors** carry a stable machine-readable `code`, detail fields and a message.
 - **Binary streams** (WebSocket binary frames): snapshots (PNG/JPEG), preview video,
   meters. Not designed yet.
@@ -314,7 +320,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stdio proxy renamed jstream-cli mcp after the maintainer kept the binary name jstream-cli; tools, schema-size, names, access and undo bullets unchanged" }
+verified = { hash = "b3:b22c57ced4477146", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp README changed only by a verified line in this PR; the youtube tool group is still listed as coming with its commands, which ADR-0034 adds in M3" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

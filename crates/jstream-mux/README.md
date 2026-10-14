@@ -12,14 +12,14 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:1c2e7abfb6d402f8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: amf0 bullet now the one shared codec (adds date, MAX_DEPTH lowered to outputs' 32, truncation offset from input start, no count pre-allocation); timestamps bullet names public flv::to_ms as the one dts-to-ms conversion used by outputs' timestamp_ms; FlvWriter::new builds start tags before the header; MetadataStyle::File note cites the outputs test; dependency line (jstream-media, thiserror) still true" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0034-youtube-interaction-scope-v2.md", "crates/jstream-media/README.md#purpose"]
+verified = { hash = "b3:135ebb6afbffacb2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-pointed the depends_on, the FLV/YouTube link and the enhanced-RTMP mention from superseded ADR-0009 to ADR-0034, which restates the RTMPS output and enhanced RTMP unchanged; Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row, this crate's row unchanged" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md):
 muxers are written in Rust, no FFmpeg). This first cut writes **FLV** for H.264 and AAC,
 the container M1a's RTMP(S) output sends to YouTube
-([ADR-0009](../../docs/adr/0009-youtube-rtmps-and-api.md)). It consumes
+([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)). It consumes
 [`jstream-media`](../jstream-media/README.md#purpose) `Packet`s, does no network I/O,
 has no `unsafe`, and depends only on `jstream-media` and `thiserror`.
 
@@ -69,5 +69,5 @@ Contents:
   input claims, and reports the byte offset of truncated input.
 - **Errors:** one `thiserror` enum, `MuxError`.
 
-**Not yet:** enhanced RTMP (HEVC and AV1 through FourCC video tags, which ADR-0009 calls
+**Not yet:** enhanced RTMP (HEVC and AV1 through FourCC video tags, which ADR-0034 calls
 for), MP4/fMP4, and a mid-stream change of SPS/PPS (a new sequence header).

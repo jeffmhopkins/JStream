@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:f7c54997bee67713", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Mock bullet now says clients use it without the engine and names jstream-core's InProcessControl as the real in-process implementation held to the mock's answers (core's differential test); rest of the contents list unchanged" }
+verified = { hash = "b3:30b8e47e6332da6d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row; this crate's own row and layer and the section's claims are unchanged" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:fa1d9d3c517f7e76", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gained ADR-0032's live and history bullets, not built; the trait's call() still takes one batch, action or query, and the mock still has no undo, both true of the code" }
+verified = { hash = "b3:2b12e7483cf0099e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0034's planned M3 YouTube actions (youtube.chat.send, youtube.chat.feature) and youtube.stats event, none built; call() still takes one batch, action or query and the mock answers unknown variants with internal, true of the code" }
 -->
 
 ### The trait

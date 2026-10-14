@@ -7,7 +7,7 @@
 [[external]]
 id = "yt-live-api"
 url = "https://developers.google.com/youtube/v3/live/getting-started"
-relied_on = "YouTube Live Streaming API: liveBroadcasts (insert/bind/transition), liveStreams (health), liveChatMessages"
+relied_on = "YouTube Live Streaming API: liveBroadcasts (insert/bind/transition), liveStreams (health), liveChatMessages (list, and insert to send chat as the channel), video statistics reads (concurrent viewers, likes), and the OAuth scopes youtube and youtube.force-ssl (ADR-0034)"
 review_every = "90d"
 status = "ok"
 checked_note = "Page loads; content not yet re-read against relied_on"

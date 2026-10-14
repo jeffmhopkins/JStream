@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:fed98921e9cf3c5e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New Parity fixture bullet for parity.rs behind the non-default fixtures feature (collection batch, reads at COLLECTION_REV, rejected batches; test support only, no wire change, so PROTOCOL_VERSION unchanged); layer 1, no I/O and WASM-safe claims still hold: the module is plain data built from existing types" }
+verified = { hash = "b3:20983ee7137530f5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row; this crate's own row and layer and the section's claims are unchanged" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined

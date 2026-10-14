@@ -2,7 +2,7 @@
 id = "ADR-0034"
 title = "YouTube interaction scope v2"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 

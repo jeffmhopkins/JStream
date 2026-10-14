@@ -12,14 +12,14 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md", "docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:9669db6a08ac19bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; the RTMP/RTMPS client and its threading are unaffected" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0003-media-stack-and-codecs.md"]
+verified = { hash = "b3:a91af0a2ee30746d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-pointed depends_on and the generic RTMP/RTMPS link from superseded ADR-0009 to ADR-0034, which keeps that output unchanged; Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row, the outputs row unchanged" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
 first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, written in Rust
 as [ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md) requires and needed for the
-generic RTMP/RTMPS output of [ADR-0009](../../docs/adr/0009-youtube-rtmps-and-api.md). The
+generic RTMP/RTMPS output of [ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md). The
 `Output` trait, recording and the virtual-camera output come later. Its JStream
 dependencies are `jstream-media` (for `MediaTime`) and the layer-2 `jstream-mux`, whose
 public `amf0` codec and `flv::to_ms` conversion the client uses. Its third-party

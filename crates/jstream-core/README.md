@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:ecc0e0713d34d826", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate: contents list matches engine.rs, session.rs, events.rs, outputs.rs, tests.rs and tests/mcp.rs; layer 5 per crate map; no runtime/ dir (ARCH#threading keeps that); not-yet list matches what is absent" }
+verified = { hash = "b3:209323f03365ffd6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row; this crate's own row and layer and the section's claims are unchanged" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b7bea814811e4853", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Not yet: per-client undo now names history.undo/redo and undo_conflict per ADR-0032, and live values are listed as not built; engine still keeps no history and drops Graph::apply's inverse, matching engine.rs" }
+verified = { hash = "b3:a62b2478e56f1d22", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0034's planned M3 YouTube actions (youtube.chat.send, youtube.chat.feature) and youtube.stats event, none built; engine actions are still output.start/stop only, later variants answer internal" }
 -->
 
 ### Engine and sessions

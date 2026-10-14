@@ -109,7 +109,9 @@ verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRu
 -->
 
 - Full 3D transforms; WGSL effect packs with hot reload.
-- `jstream-youtube`: OAuth, broadcasts, metadata, health, chat, all exposed over MCP.
+- `jstream-youtube`: OAuth, broadcasts, metadata, health, chat, sending chat as the
+  channel, a featured chat message shown on stream by a chat message source, and audience
+  stats, all exposed over MCP ([ADR-0034](docs/adr/0034-youtube-interaction-scope-v2.md)).
 - Direct NVENC/AMF encoders where measurements justify them; HEVC/AV1 via enhanced RTMP.
 - WASM automation plugins.
 - macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).

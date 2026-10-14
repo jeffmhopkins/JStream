@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d593b312e436e9a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "token.rs: a create_new failure other than AlreadyExists now still goes to read_existing when something is at the path (Windows reports a directory as AccessDenied), so 'is not a regular file' refusal holds on Windows too, as the text already says; nothing else changed" }
+verified = { hash = "b3:bd59ce530429d551", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row; this crate's own row and layer and the section's claims are unchanged" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:436c2dd6cdd03618", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Not-here-yet paragraph edited: jstream-daemon now serves a real engine (point --url at its printed URL and --token-file at its token file); --mock still needs the mock feature; contents list and CLI code unchanged" }
+verified = { hash = "b3:04b43ee3be9cfa60", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row; this crate's own row and layer and the section's claims are unchanged" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-types/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:0afe93daf4566ca2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only: this PR's jstream-sources (browser) and jstream-platform-windows (CEF backend) rows; this crate's row and purpose text are main's, unchanged" }
+verified = { hash = "b3:1f18d9a62ac22d14", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row; this crate's own row and layer and the section's claims are unchanged" }
 -->
 
 Layer-0 value types shared by every JStream crate. No dependencies on other JStream crates,
