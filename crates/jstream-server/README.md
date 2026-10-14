@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:b38edc44a2c6346e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Session contents line to mention the bounded outbox in session.rs; lib.rs, config.rs, gate.rs unchanged, so the rest of the list holds" }
+verified = { hash = "b3:6bbd3b1065449170", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: the Gate line (Host, Origin and token checks in gate.rs) still holds; only gate.rs's Origin handling changed" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -49,7 +49,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a7fc6a1d7a48cfd4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: new Slow clients bullet (outbox + writer future, EVENT_BUFFER 1024 drop-all with one coalesced events.dropped, replies kept in order, REPLY_BACKLOG stops reading requests), close sends queued messages before the frame, warn log of the drop count, futures-util use, OQ7 now built with tuning open; admission and missing-Origin text untouched" }
+verified = { hash = "b3:f60a16c5e0507262", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: admission table says Origin absent or allowed, Host and Authorization exactly once and Origin at most once, null refused, no Origin goes to the token check; open question 4 settled and built; matches gate.rs and the two tests" }
 -->
 
 ### Listening and admission

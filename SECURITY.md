@@ -42,7 +42,7 @@ advisory unless they ask not to be.
 ## What JStream promises
 <!-- @section
 depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002", "docs/RULES.md#R-SEC-003", "docs/RULES.md#R-SEC-004"]
-verified = { hash = "b3:7f95117ae49d93e2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read each bullet against R-SEC-001 (credential store, redaction), R-SEC-002 (token, Origin/Host, localhost bind), R-SEC-003 (WASM sandbox; CLAP not sandboxed, out of scope) and R-SEC-004 (no telemetry, local dumps)" }
+verified = { hash = "b3:056b96ea18360e39", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the control API bullet to R-SEC-002's new wording (checks Host, and Origin when one is present, token on every connection, localhost bind); other bullets re-read against R-SEC-001/003/004, unchanged" }
 -->
 
 A report is in scope when it breaks one of these. The rules they cite are the authority.

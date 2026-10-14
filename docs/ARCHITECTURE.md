@@ -62,7 +62,7 @@ verified = { hash = "b3:819e2fde4946e3b2", by = "agent:claude@session_01QBbMRwRu
 ## Core principles
 <!-- @section
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:67a80aa8d2b1bb42", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on moved from superseded ADR-0003 to ADR-0031; the 8 principles cite no codec specifics and still hold" }
+verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited principle 8: listeners require a token and check Host, and Origin when present, matching R-SEC-002's new wording; other principles unchanged" }
 -->
 
 1. **One API.** Every capability is part of `jstream-protocol` ([R-ARCH-001](RULES.md#R-ARCH-001)).
@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:371a51ce4dcaf96b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: Slow clients bullet now built (bounded per-connection buffer, server keeps draining events, one events.dropped {count} in protocol 0.4, answers never dropped) and Events list gains events.dropped; Origin/Transport bullet left as is (missing-Origin decision still pending)" }
+verified = { hash = "b3:65921ed3a3f6a07b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Transport: a missing Origin is now allowed (built), a present one must be on the allow list; Slow clients and Events text from #108 unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -535,7 +535,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:a976ee210bcf0acd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: the Events bullet (events tool, bounded buffer, reports drops) still holds; jstream-mcp's change is the events tool description naming events.dropped, no tool or op change" }
+verified = { hash = "b3:2dfd99573c6826a8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Access: streamable HTTP (not built) still validates Origin per the MCP spec; whether it lets a missing Origin through is left to that build, with the browser-preflight reason (#101 review N1)" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

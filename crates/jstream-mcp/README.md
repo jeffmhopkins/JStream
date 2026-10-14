@@ -44,7 +44,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:3a0a408315b6eec9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events: added that an events.dropped event in the feed is the server's per-connection drop (distinct from the buffer's dropped field), and the agent re-reads state; tools.snap regenerated, diff is only the events tool description" }
+verified = { hash = "b3:cde5724ffa665fcf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the Access note: the streamable-HTTP listener must check the token and Host, and an Origin that is present (R-SEC-002's new wording); stdio unchanged" }
 -->
 
 ### Tools

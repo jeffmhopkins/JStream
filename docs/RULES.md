@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:49a84db52f8c97a9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-API-001..004 against ARCH#protocol's Slow clients edit: events.dropped is an added event, so the protocol bumped minor 0.3 -> 0.4 per R-API-001; the name is noun.verb per R-API-002 (names_are_valid passes); no write path changed for R-API-004" }
+verified = { hash = "b3:c60ebc1542e86b02", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-API-001..004 against ARCH#protocol's Transport edit (Origin handling only): no protocol message, version or write path changed" }
 -->
 
 <a id="R-API-001"></a>

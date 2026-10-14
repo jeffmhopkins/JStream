@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:60a30e11697b68b0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited open question 1: server-side bounded buffer is now built and WsControl fans events.dropped out to subscribers like any event (ws.rs ServerMessage::Event arm, unchanged); mock list now says protocol 0.4 edits/queries, which match 0.3's since 0.4 only adds an event" }
+verified = { hash = "b3:afae665094c355bb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the Auth bullet: the server validates Host, and Origin when present; WsControl still sends the server's own origin unless WsConfig::origin names another (ws.rs unchanged)" }
 -->
 
 ### The trait
@@ -157,9 +157,9 @@ native targets only, so a `wasm32` build never pulls tokio, even with `ws` on.
   rather than the URL, so it stays out of logs: an `Authorization: Bearer` header from
   native clients, and later the `Sec-WebSocket-Protocol` header from browsers, which
   can't set others. The caller supplies the token (the CLI reads it from a token file).
-  The server validates `Host`, and `Origin` when present; browsers set `Origin` themselves, and the
-  native client sends the server's own origin (`http://<host>:<port>` of the URL) unless
-  `WsConfig::origin` names another.
+  The server validates `Host`, and `Origin` when present; browsers set `Origin`
+  themselves, and the native client sends the server's own origin
+  (`http://<host>:<port>` of the URL) unless `WsConfig::origin` names another.
 - **Session:** `hello` is the caller's first call. Requests get the IDs `req_1`,
   `req_2`, … per session, and the server reports the `state.changed` event a call
   causes with that same ID. The connection thread routes each `response` or `error` to
