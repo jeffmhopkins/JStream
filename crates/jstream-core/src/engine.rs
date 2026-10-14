@@ -664,13 +664,36 @@ fn watch_publish(
             None
         }
     };
+    // `pipeline` is bound after the guard. On the normal path it is dropped
+    // first, and an unwind (`wake_all`, or the join itself) drops it first too,
+    // so `draining` clears only after the join.
+    let _clear_drain = ClearDrain::arm(Arc::clone(&host), running.is_some());
+    let pipeline = running;
     wake_all(wake);
-    let took = running.is_some();
-    drop(running);
-    if took {
-        let mut gate = lock(&host.gate);
+    drop(pipeline);
+}
+
+/// Clears `Gate::draining` after the failed pipeline has been joined, including
+/// when that join unwinds.
+struct ClearDrain {
+    host: Arc<MediaHost>,
+    armed: bool,
+}
+
+impl ClearDrain {
+    fn arm(host: Arc<MediaHost>, armed: bool) -> Self {
+        Self { host, armed }
+    }
+}
+
+impl Drop for ClearDrain {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let mut gate = lock(&self.host.gate);
         gate.draining = false;
-        host.gate_cv.notify_all();
+        self.host.gate_cv.notify_all();
     }
 }
 

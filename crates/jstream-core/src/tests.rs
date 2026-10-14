@@ -12,8 +12,8 @@ use jstream_protocol::{
 };
 use std::future::Future;
 use std::pin::pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll, Wake, Waker};
 
 /// Runs a future to completion. The engine's futures are always ready.
@@ -754,6 +754,7 @@ fn output_start_without_a_publish_target_fails() {
 /// it when `CI` is set.
 #[test]
 fn output_start_publishes_fake_audio_and_video() {
+    let _gpu = one_gpu_test_at_a_time();
     use std::io::Write;
     use std::thread;
     use std::time::Duration;
@@ -810,7 +811,8 @@ fn output_start_publishes_fake_audio_and_video() {
     assert_eq!(steps, vec![OutputState::Starting, OutputState::Active]);
 
     let mut saw_media = false;
-    for _ in 0..40 {
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while std::time::Instant::now() < deadline {
         audio.deliver(2048, 0.2);
         clock.advance(50_000);
         thread::sleep(Duration::from_millis(20));
@@ -849,6 +851,7 @@ fn output_start_publishes_fake_audio_and_video() {
 /// The start does not settle `active`, and nothing is left running.
 #[test]
 fn output_stop_during_start_cancels_the_pipeline() {
+    let _gpu = one_gpu_test_at_a_time();
     use std::sync::{Condvar, Mutex};
     use std::thread;
     use std::time::Duration;
@@ -965,6 +968,7 @@ fn output_stop_during_start_cancels_the_pipeline() {
 /// A publish failure after `active` settles `failed` and drops the pipeline.
 #[test]
 fn output_publish_failure_settles_failed() {
+    let _gpu = one_gpu_test_at_a_time();
     use std::io::Write;
     use std::sync::atomic::AtomicBool;
     use std::thread;
@@ -1057,10 +1061,183 @@ fn output_publish_failure_settles_failed() {
     assert_eq!(output_steps(&mut events), vec![OutputState::Failed]);
 }
 
+/// A publish failure whose teardown panics still lets the next `output.start` return.
+///
+/// The panic is an audio stream's drop on the publish watcher. Encoder `finish`
+/// is caught inside the encode thread and comes back as an error, so it does not
+/// unwind this join. Without the drain guard the second start waits forever; the
+/// timeout fails that case instead of hanging the suite.
+#[test]
+fn output_start_returns_after_a_panicking_teardown() {
+    let _gpu = one_gpu_test_at_a_time();
+    use std::io::Write;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
+
+    use jstream_media::{ChannelLayout, FrameSize, Timebase};
+    use jstream_mux::flv::FlvTag;
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::{
+        AudioInputHandler, AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget,
+        AudioStream, Backends, PlatformError,
+    };
+
+    use crate::{LivePublish, PublishError, RecordingPublish};
+
+    struct FailPublish {
+        fail: Arc<AtomicBool>,
+    }
+
+    impl LivePublish for FailPublish {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.fail.load(Ordering::Relaxed) {
+                Err(PublishError::new("publish broken"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            if self.fail.load(Ordering::Relaxed) {
+                Err(PublishError::new("publish broken"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+    }
+
+    /// One drop panics, and only when this thread is not already unwinding.
+    struct PanicStream {
+        inner: Box<dyn AudioStream>,
+        armed: Arc<AtomicBool>,
+    }
+
+    impl AudioStream for PanicStream {
+        fn format(&self) -> jstream_media::AudioFormat {
+            self.inner.format()
+        }
+    }
+
+    impl Drop for PanicStream {
+        fn drop(&mut self) {
+            if !thread::panicking() && self.armed.swap(false, Ordering::AcqRel) {
+                panic!("audio stream teardown");
+            }
+        }
+    }
+
+    struct PanicAudio {
+        inner: FakeAudioIo,
+        armed: Arc<AtomicBool>,
+    }
+
+    impl AudioIo for PanicAudio {
+        fn devices(&self) -> Result<Vec<jstream_platform::AudioDeviceInfo>, PlatformError> {
+            self.inner.devices()
+        }
+
+        fn open_input(
+            &self,
+            target: &AudioInputTarget,
+            handler: Box<dyn AudioInputHandler>,
+        ) -> Result<Box<dyn AudioStream>, PlatformError> {
+            let inner = self.inner.open_input(target, handler)?;
+            Ok(Box::new(PanicStream {
+                inner,
+                armed: Arc::clone(&self.armed),
+            }))
+        }
+
+        fn open_output(
+            &self,
+            target: &AudioOutputTarget,
+            handler: Box<dyn AudioOutputHandler>,
+        ) -> Result<Box<dyn AudioStream>, PlatformError> {
+            self.inner.open_output(target, handler)
+        }
+    }
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let armed = Arc::new(AtomicBool::new(true));
+    let audio = PanicAudio {
+        inner: FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio"),
+        armed: Arc::clone(&armed),
+    };
+    let size = FrameSize::new(320, 180).expect("size");
+    let fail = Arc::new(AtomicBool::new(false));
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        capture: Arc::new(FakeCapture::new(clock, size)),
+        audio: Arc::new(audio),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_publish(Box::new(FailPublish {
+            fail: Arc::clone(&fail),
+        }));
+    let control = connected(&engine);
+    let started = block_on(control.call(output_call("yt", true)));
+    if let Err(err) = &started
+        && err.protocol().is_some_and(|error| {
+            matches!(error, ProtocolError::ActionFailed { reason } if reason.contains("no wgpu adapter"))
+        })
+    {
+        if std::env::var_os("CI").is_some() {
+            panic!("CI has no wgpu adapter: {err}");
+        }
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping panicking-teardown test, no adapter: {err}"
+        );
+        return;
+    }
+    started.expect("output.start");
+
+    fail.store(true, Ordering::Relaxed);
+    let mut failed = false;
+    for _ in 0..100 {
+        if output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none() {
+            failed = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(failed, "publish failure left the output running");
+
+    let engine = engine.with_publish(Box::new(RecordingPublish::new()));
+    let restart = connected(&engine);
+    let (tx, rx) = mpsc::channel();
+    let restart_thread = thread::spawn(move || {
+        let result = block_on(restart.call(output_call("yt", true)));
+        let _ = tx.send(());
+        result
+    });
+    rx.recv_timeout(Duration::from_secs(15))
+        .expect("second output.start blocked after a panicking teardown");
+    let restarted = restart_thread.join().expect("restart thread");
+    restarted.expect("second output.start");
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    assert!(
+        !armed.load(Ordering::Acquire),
+        "the first pipeline never dropped its audio stream"
+    );
+}
+
 /// Dropping the last engine handle stops a running pipeline. The publish watcher
 /// must not keep that handle alive.
 #[test]
 fn dropping_the_engine_stops_the_pipeline() {
+    let _gpu = one_gpu_test_at_a_time();
     use std::io::Write;
     use std::sync::atomic::AtomicBool;
 
@@ -1148,6 +1325,14 @@ fn output_state(control: &dyn Control, output: &str) -> OutputState {
     }
 }
 
+/// One software-adapter test at a time. Parallel compositors starve the pipeline
+/// test's media wait and crash WARP. The lock schedules tests; it is not engine state.
+fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
+    static SLOT: Mutex<()> = Mutex::new(());
+    SLOT.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 fn output_steps(events: &mut EventStream) -> Vec<OutputState> {
     drain(events)
         .into_iter()
@@ -1162,6 +1347,7 @@ fn output_steps(events: &mut EventStream) -> Vec<OutputState> {
 /// whose longest side is 1280. With no adapter the test returns; in CI that is a failure.
 #[test]
 fn video_snapshot_reads_the_program_mix_back_as_png() {
+    let _gpu = one_gpu_test_at_a_time();
     use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
     use std::io::Write;
 

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:a71990089486b37f", by = "agent:grok@stats-tick", note = "Re-read the engine, runtime and drop-count bullets against engine.rs and drops.rs. The ledger is a third mutex. output.start registers the capture cell, both encode sessions, both mixer inputs, the mix bus and muxer rejects, and jstream-stats emits about once a second. scenarios.rs still reports overload drops." }
+verified = { hash = "b3:b6e57f679154f0d4", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the engine, outputs, drop-count and tests bullets against the merged tree. The ledger is a third mutex and output.start still registers the stats.tick sources. The pipeline still emits starting then active or failed, and a publish failure still settles failed. The software-adapter tests still run one at a time." }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -72,7 +72,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:21e481d87f05dc65", by = "agent:grok@stats-tick", note = "Re-read Locking and Drop counts against emit_sampled and arm_stats. The ledger is released before the collection lock. The sampler is jstream-stats and is not real-time. render_ticks stays 0. Muxer rejects join output_packets. The watcher still holds weak pointers." }
+verified = { hash = "b3:114ad7181bd98bb0", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Locking, Drop counts and Outputs against the merge. The ledger is released before the collection lock, the sampler is jstream-stats and is not real-time, and a later start still waits until a failed pipeline has joined, including when that teardown panics." }
 -->
 
 ### Engine and sessions
@@ -289,8 +289,10 @@ pointers until that failure arrives, so it does not keep the engine alive: dropp
 the last engine handle and its sessions joins the pipeline. `output_stats` is then
 empty. This cut does not reconnect. `failed` counts as idle, and a later start needs
 a new publish target. That start waits until the failed pipeline has finished
-joining, so the new devices do not overlap the old teardown. A `finish` error while
-a stop is tearing the session down is not a second failure.
+joining, so the new devices do not overlap the old teardown. The wait also ends if
+that teardown panics, so a later start is not left waiting on a join that already
+unwound. A `finish` error while a stop is tearing the session down is not a second
+failure.
 
 The render thread reads the platform capture mailbox, composites the primary target
 at 30 frames per second, repeats the last frame when capture is empty, and reads the

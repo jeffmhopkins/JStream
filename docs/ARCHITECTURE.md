@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:0dd3f2386e2a9e78", by = "agent:grok@stats-tick", note = "Re-read the host table and the diagram against apps/jstream-cli. The CLI still talks only through Control. stats.tick is one more event on that stream, not a new host or a binary frame." }
+verified = { hash = "b3:0dd3f2386e2a9e78", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the host table and the diagram against the merged daemon README. The CLI still talks only through Control. stats.tick is still one event on that stream. The daemon is still the headless host and does not become a new client." }
 -->
 
 ```
