@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:f78c10be7991b250", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Tests line now names the parity cases from jstream_protocol::parity (reads and rejected batches) that read.rs runs; Reading paragraph unchanged and still matches Graph::query; graph() helper now builds the shared collection; apply.rs untouched" }
+verified = { hash = "b3:b984ebc763f26d29", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies ARCH#data-model (new Settings bullet, target design per ADR-0025) and protocol README (OQ 11/12 point to ADR-0025, not built) changed; this section describes built code: no settings, delete rejection with blockers, cycle check on item.add only, all still true of apply.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:e8ae47c79a1a16c2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: covered apps/ READMEs only had verified lines refreshed (cli, daemon design) for the TLS open-question rewording; shape diagram and daemon/cli rows unchanged" }
+verified = { hash = "b3:92e3e07882f581b8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ change is only the daemon README's refreshed verified line (its design text is unchanged); shape diagram and the desktop, daemon and cli rows still hold" }
 -->
 
 ```
@@ -162,8 +162,8 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "b3:92b0462b389879d4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read merged section: shared-source/duplicate, scenes-as-sources (merged with main's Nesting bullet, no duplicate), filters vs effects, and main's Built-so-far graph paragraph all consistent" }
+depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
+verified = { hash = "b3:f3613c94b3524758", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added Settings bullet (descriptor-described settings maps, typed scene/source/asset references tracked in cycle checks and delete rejection) pointing to ADR-0025, and the ADR in depends_on; it states target design like the other bullets, and Built-so-far still says no settings or filters, which matches jstream-graph today" }
 -->
 
 ```
@@ -192,6 +192,10 @@ Collection (JSON on disk, schema_version, rev: u64)
   that would close a cycle.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
   is used. `SceneItem.effects[]` and `crop` belong to that one placement.
+- **Settings:** a source's `settings`, and each filter's, are a map of values described by
+  its kind's descriptor, which the engine reports and validates against. References to
+  scenes, sources and asset files inside settings are typed, so the graph tracks them in
+  cycle checks and delete rejection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
   encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
@@ -268,7 +272,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:ead9d8ac84b9aaa2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged: covered server README now has both the RTMPS PR's TLS open-question wording and main's daemon open question 5; Transport bullet (plain ws://, TLS open question in the server README) still holds" }
+verified = { hash = "b3:36a1fb6ba24ecb5c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered protocol README changed only open questions 11 and 12 (now point to ADR-0025, marked not built); envelope, edits, actions, queries, events, errors, schema and transport bullets still describe the current first cut; ADR-0025's additions are future and additive" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -387,12 +391,16 @@ plus an `effect.toml` manifest.
 ## Persistence, config and secrets
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
-depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001"]
-verified = { hash = "b3:233514b2be0b9df3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: collections+migrations, jstream.toml, OS credential store, token file and local minidumps match R-API-003, R-SEC-001 and R-SEC-004" }
+depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
+verified = { hash = "b3:7ba4e2e08d90eee5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added Asset files bullet (collection- or app-relative storage, per-source kind descriptor version migrated on load) per ADR-0025, ADR added to depends_on; collections, jstream.toml, credential store, token and minidump bullets unchanged and still match R-API-003, R-SEC-001, R-SEC-004" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
   `jstream-graph`.
+- **Asset files** named in settings are stored relative to the collection folder or the
+  app asset folder when they are under one, so a moved or portable setup still finds them.
+  Each stored source and filter records its kind's descriptor version, migrated on load
+  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
 - **Control token:** a random token in a user-only file in the config directory
