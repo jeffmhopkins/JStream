@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:61d4d6aacbd20d05", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps READMEs changed only by verified lines in this PR (crate-map re-check); shape diagram, YouTube-bound RTMP output and host table unchanged and still hold" }
+verified = { hash = "b3:a45a848562e7adf4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: covered apps/ changed by main's daemon README and test harness (verified there) and this PR's verified-line refreshes; diagram and host table still hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:35ac6a9ffb139d61", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per accepted ADR-0034: jstream-youtube row adds chat sending as the channel and audience stats, jstream-sources row adds the YouTube chat message kind; layers, edges and other rows unchanged" }
+verified = { hash = "b3:36d9fa099119c409", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#74, new jstream-encode L3 row and Cargo.toml) with ADR-0034's jstream-youtube (chat sending, stats) and jstream-sources (chat message) row edits; layers and edges unchanged and strictly downward" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

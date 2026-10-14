@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:bd59ce530429d551", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row; this crate's own row and layer and the section's claims are unchanged" }
+verified = { hash = "b3:63e7d2bbb82928ed", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (review #70 N1 Serving-bullet order, verified there); dependency ARCH#crate-map only gained ADR-0034's youtube/sources row text, the apps row is unchanged" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -30,8 +30,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
-- **Serving** (`serve.rs`): builds the engine (with its placeholder outputs), binds the
-  server and installs the signal handlers that stop it.
+- **Serving** (`serve.rs`): builds the engine (with its placeholder outputs), installs
+  the signal handlers that stop it, then binds the server.
 - **Tests** (`serve.rs`, `token.rs`, `args.rs` unit tests; `tests/daemon.rs`, the
   built binary driven by `jstream-control`'s WebSocket client and stopped with SIGINT).
 
