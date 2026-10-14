@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:c4d089825b6d7198", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0025: data-model depends on both; main's placement bullet (opacity, blend, reserved effects) kept and the Settings bullet follows it unchanged; other sections changed only by verified lines or the merged data-model" }
+verified = { hash = "b3:7b5adb35e904a207", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model gained ADR-0029's transition fields; the encoder-sharing bullet this section relies on is unchanged" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
