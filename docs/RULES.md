@@ -544,14 +544,16 @@ validates the `Origin` and `Host` headers. Listeners bind to `127.0.0.1` by defa
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>
-### R-SEC-003: Plugins are sandboxed by default
+### R-SEC-003: WASM plugins are sandboxed by default
 <!-- @rule
 status = "active"
 enforced_by = ["test:jstream_plugin_wasm::no_ambient_capabilities"]
 applies_to = ["crates/jstream-plugin-wasm/**"]
 -->
 WASM plugins get no filesystem or network access unless the manifest declares it and the
-user grants it.
+user grants it. CLAP plugins are not sandboxed: they are native code the user chose to
+install, run in their own process, which isolates crashes, not capabilities
+([ADR-0035](adr/0035-clap-plugins-out-of-process.md)).
 
 <a id="R-SEC-004"></a>
 ### R-SEC-004: No telemetry; crash dumps stay local

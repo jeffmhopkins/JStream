@@ -154,12 +154,8 @@ platform crates land.
   the mixer, which M1b builds.
 - **Follow-on edits when this ADR is accepted** (not made while it is proposed):
   - ADR-0005: `status = "superseded"`, `superseded_by` pointing here.
-  - [R-UNSAFE-001](../RULES.md#R-UNSAFE-001) gains `jstream-plugin-clap` in its list, and
-    the lint-deps `unsafe` allowlist gains it. The `applies_to` of R-UNSAFE-002 to
-    R-UNSAFE-005 gain the crate. These are declared governance changes.
-  - [R-RT-001](../RULES.md#R-RT-001)'s `applies_to` gains the host's real-time module
-    (also a governance change). [R-SEC-003](../RULES.md#R-SEC-003) is reworded to say
-    that it covers WASM plugins, and that CLAP plugins are crash-isolated, not sandboxed.
+  - [R-SEC-003](../RULES.md#R-SEC-003) is reworded to say that it covers WASM plugins,
+    and that CLAP plugins are crash-isolated, not sandboxed.
   - [ARCH › Crate map](../ARCHITECTURE.md#crate-map): `jstream-plugin-proto` (L0),
     `jstream-plugin-clap` (L2, unsafe) and the `jstream-plugin-host` app.
   - [ARCH › Packaging](../ARCHITECTURE.md#packaging): the host exe in the zip.
@@ -167,3 +163,9 @@ platform crates land.
     non-waiting rings.
   - [ROADMAP › M3](../../ROADMAP.md#m3): CLAP audio filters, out of process.
   - `design/ui-prototype/README.md`: the CLAP filter is decided, and stays hidden until M3.
+- **Edits in the PR that creates the plugin crates** (M3), as declared governance changes,
+  because globs naming crates that don't exist yet match nothing:
+  - [R-UNSAFE-001](../RULES.md#R-UNSAFE-001) gains `jstream-plugin-clap` in its list, and
+    the lint-deps `unsafe` allowlist gains it. The `applies_to` of R-UNSAFE-002 to
+    R-UNSAFE-005 gain the crate.
+  - [R-RT-001](../RULES.md#R-RT-001)'s `applies_to` gains the host's real-time module.
