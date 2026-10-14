@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:71d7198133ccdc8e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): only tests.rs changed there; dependency ARCH#crate-map only gained ADR-0034's chat sending/stats on the jstream-youtube row and the chat message kind on jstream-sources; this crate's row unchanged" }
+verified = { hash = "b3:5fd206ada5d83eb5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): only tests.rs changed there; dependency ARCH#crate-map only gained ADR-0035's planned plugin rows, layer 4 and contents unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote

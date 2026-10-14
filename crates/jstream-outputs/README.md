@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:8b7d049138d4c3b7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ADR-0034 changed only its OAuth scope bullets, scope consequence and plain-text author names (review B2/N2); the generic RTMP/RTMPS output this client serves is unchanged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0034-youtube-interaction-scope-v2.md"]
+verified = { hash = "b3:6e1fe5ccd845a5e3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged; Dependency ARCH#threading only gained ADR-0035's planned out-of-process CLAP host paragraph; the RTMP client's threading is unaffected" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

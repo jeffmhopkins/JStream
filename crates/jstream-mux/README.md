@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0034-youtube-interaction-scope-v2.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:b9dc297a18eb5eba", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ADR-0034 changed only its OAuth scope bullets, scope consequence and plain-text author names (review B2/N2); the FLV/RTMPS output and enhanced RTMP this section cites are unchanged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose", "docs/adr/0034-youtube-interaction-scope-v2.md"]
+verified = { hash = "b3:6cbe587b08482964", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md):

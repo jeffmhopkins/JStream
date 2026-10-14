@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:63e7d2bbb82928ed", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (review #70 N1 Serving-bullet order, verified there); dependency ARCH#crate-map only gained ADR-0034's youtube/sources row text, the apps row is unchanged" }
+verified = { hash = "b3:79a287c9f7f32400", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
