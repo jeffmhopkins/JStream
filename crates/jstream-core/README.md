@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:00ab8d333895c344", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-control#design changed only its wss:// open question; InProcessControl has no transport, so nothing in core's design changes" }
+verified = { hash = "b3:b7bea814811e4853", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Not yet: per-client undo now names history.undo/redo and undo_conflict per ADR-0032, and live values are listed as not built; engine still keeps no history and drops Graph::apply's inverse, matching engine.rs" }
 -->
 
 ### Engine and sessions
@@ -161,9 +161,13 @@ consistent.
 ### Not yet
 
 - **Per-client undo** ([ADR-0013](../../docs/adr/0013-command-model.md)). The protocol
-  has no undo or redo request yet
-  ([protocol open question 4](../jstream-protocol/README.md#open-questions)), so the engine keeps no history and drops the inverse batch `Graph::apply` returns.
-  The history, and `undo_conflict`, come with those requests.
+  has no undo or redo request yet, so the engine keeps no history and drops the inverse
+  batch `Graph::apply` returns. The history, `history.undo` and `history.redo`, and
+  `undo_conflict` come together, as
+  [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md) decides.
+- **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
+  [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
+  parameter channels.
 - The audit log, persistence (the collection file) and settings.
 - Threads, the media clock and real-time hand-off
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)), and the subsystems:

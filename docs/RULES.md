@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e28452b7fb2e58b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only gained the 'In the engine' paragraph about jstream-audio's port of the S3 loop; R-RT-001..006 do not depend on it and still hold (no-alloc test for jstream-audio is still pending, as the rule's test: entry allows)" }
+verified = { hash = "b3:a356d168d6f85bf5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; R-RT-001..006 still hold, and R-RT-003's parameter channels are exactly what live values use" }
 -->
 
 <a id="R-RT-001"></a>
@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d08de9e1b58a6a72", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol changed only its Transport bullet (names InProcessControl); no message, schema or version change, so R-API-001..004 are unaffected" }
+verified = { hash = "b3:443a19bc0fe91573", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gained Live values and History bullets (ADR-0032); they are planned minor additions, so R-API-001..004 hold unchanged, and R-API-004's expected_rev, idempotency and per-client undo match the ADR's history calls" }
 -->
 
 <a id="R-API-001"></a>
