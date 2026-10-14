@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:6915cfa07bd1bbf9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading gained ADR-0035's planned CLAP host paragraph, which keeps the mixer free of syscalls and locks for plugins; R-RT-001..006 text unchanged and still hold (R-RT-001's applies_to update for the host is deferred as a governance change)" }
+verified = { hash = "b3:bcd8c2a1e1131c20", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; covered/depended Threads section gains ADR-0028's mixer row and pts paragraph and ADR-0035's out-of-process CLAP host, both consistent with R-RT-001..004 (the mixer never waits on a host; late blocks bypassed and counted)" }
 -->
 
 <a id="R-RT-001"></a>
@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2e713a39f858cc99", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025's kind versions migrate separately from PROTOCOL_VERSION and schema_version with fixture tests (R-API-003); the merged ADR-0022/0024 additions are minor-release changes too, and ADR-0022's 1.0 removal follows R-API-001" }
+verified = { hash = "b3:548fd593036e5cee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0028's new optional Source.audio, master bus, bus fields, meter fields and audio.reset_loudness, and main's ADR-0022/0024/0025 additions, are minor-release changes under R-API-001; collection migration for the master bus follows R-API-003" }
 -->
 
 <a id="R-API-001"></a>

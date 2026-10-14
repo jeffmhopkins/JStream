@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:89d596d731107192", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b gains ADR-0024's groups-as-scenes bullet (role = group, item.move keeping the item id, optional scene_id addressing, own scene only until variants land in M2) beside ADR-0023's shared-sources and per-placement opacity/blend text; M1a, M1c and M1d unchanged" }
+verified = { hash = "b3:219eb11af9244359", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b keeps this PR's mixer bullet (master bus, faders and mute, when_shown, peak/true-peak/loudness meters) beside main's ADR-0023 filters/effects and ADR-0024 groups-as-scenes bullets; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -81,7 +81,9 @@ verified = { hash = "b3:89d596d731107192", by = "agent:claude@session_01QBbMRwRu
   - **Filters and effects:** source filters apply everywhere the source appears. Each
     placement has its own opacity and blend; per-placement effects are not in v1, and the
     model reserves a slot for them.
-  - Bus-matrix mixer with filters and meters.
+  - Bus-matrix mixer ([ADR-0028](docs/adr/0028-audio-model-v2.md)): a master bus,
+    per-source and per-bus faders and mute, audio that follows the program
+    (`when_shown`), filters, and peak, true-peak and loudness meters.
   - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
 - **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the
   portable zip ([ADR-0020](docs/adr/0020-portable-windows-distribution.md); from spike S2).

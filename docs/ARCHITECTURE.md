@@ -164,13 +164,14 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:9aa77b9f57411e59", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Main's ADR-0022 canvas/geometry and ADR-0024 scene structure now sit beside this PR's Settings bullet (descriptor-described settings, typed scene/source/asset references in cycle checks and delete rejection); depends_on lists 0022-0025; settings are still in the not-yet list" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0028-audio-model-v2.md"]
+verified = { hash = "b3:e45efcf5eba44a05", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined ADR-0028 (Source.audio and SourceAudio, master bus, bus fader/mute/monitor, Audio and Shown-on-program bullets; 'independent of scenes' dropped) with main's ADR-0022 canvas/geometry, ADR-0024 scene structure and ADR-0025 Settings; depends_on lists 0022-0025 and 0028, not the superseded 0007; not-yet list adds source audio settings" }
 -->
 
 ```
 Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
-├── sources        Source { id, kind, settings, filters[], duplicated_from?, labels, favourite }   video and/or audio; independent of scenes
+├── sources        Source { id, kind, settings, filters[], duplicated_from?, labels, favourite, audio? }   video and/or audio
+│                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted, filters[] }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
 │                          items[] }   flat display order
@@ -183,8 +184,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind: Cut | Fade | Move, duration_ms, easing, unmatched, stagger_ms }
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
-├── audio          sends: (source_id, bus_id) → gain_db
-│                  Bus { id, name, filters[], monitor_device? }
+├── audio          master_bus: bus_id   (created with the collection, never deleted)
+│                  sends: (source_id, bus_id) → gain_db   (post-fader)
+│                  Bus { id, name, filters[], gain_db, muted, monitor? }
+│                  monitor { device, tap: PreFilters | PostFilters }
+│                  an audio filter may name a key source (sidechain)
 ├── encoders       EncoderProfile { id, codec, rate_control, … }
 └── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile }
                    kind: Rtmp { target: Generic { url } | YouTube { broadcast_binding } } | Record { path, container } | VirtualCam
@@ -261,6 +265,25 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Unpaired items appear or disappear with their effect. The fields are reserved with
   neutral defaults while M1b builds the model; the behaviour comes before or during M2.
 - The preview shown in the UI is a protocol stream, not an `Output`.
+- **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
+  matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
+  send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
+  fader and mute → activity gain → sends. Per bus: sum → filters → fader and mute.
+  `audio.enabled = false` closes the source's audio stream and removes its mixer channel
+  but keeps its sends; mute keeps it open and metered. A nested scene source has
+  `enabled` and `follow` only; its contents keep their own channels. A filter's key is the
+  key source after its fader, mute and activity gain. Sources and buses, with sends and
+  keys as edges, form an audio graph: an edit that closes a cycle is rejected, as is a
+  keyed filter on a bus its key sends to, a source keyed on itself, or deleting a source
+  that is still a key.
+- **Shown and on program** (D29): "shown" is relative to the Program mix only. Its roots
+  are `program_scene`, or both scenes of a running transition, weighted by the
+  transition's audio curve (weights sum to 1). A source is reachable from a scene through
+  `visible` items, following nested scene sources whose `audio.enabled` is on, to any
+  depth. A nested scene source set to `follow = always` is an extra root of weight 1. A
+  `when_shown` source's activity gain is `min(1, Σ w(r))` over the roots that reach it;
+  an `always` source's is 1. The activity gain is runtime state, never an edit. Preview,
+  other video mixes, projectors and editor previews never make a source shown.
 - **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
   encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
   count.
@@ -273,10 +296,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   order with `source_id`, protocol 0.3's 2D transform (top-left corner and scale, which
   ADR-0022 replaces), `crop` and `visible`. Items refer to sources; they never copy them.
   Deleting a source an item still places, or a scene a source still shows, is rejected.
-  Not yet: settings, filters, `opacity`, `blend`, the reserved `effects[]`,
-  `duplicated_from`, `item.set_source`, the transition fields, the canvas, `geometry`,
-  scene `role` and `item.move`, the `scene_id` addressing of placement edits, variants
-  and overrides, folders, labels, favourites and other organisation metadata,
+  Not yet: settings, filters, source audio settings, `opacity`, `blend`, the reserved
+  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
+  `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
+  variants and overrides, folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, and everything outside `sources` and `scenes`. Nothing is
   persisted yet.
 
@@ -284,8 +307,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
-depends_on = ["docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:ea8a6633ba07af4e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0035: added the planned, unbuilt CLAP host paragraph (per-instance process, MMCSS thread on the shared media clock, non-waiting rings with depth d, bypass and stats.tick count, latency, restart); clock, thread table, S3 result and snapshot text unchanged" }
+depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
+verified = { hash = "b3:eede437e183b3eb5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR edits the Mixer row (activity gains, keys in audio-graph order, latency compensation), adds the Audio timestamps paragraph (a block's pts is its input's media time; delay filter is a stamped shift) and ADR-0028 to depends_on; main's ADR-0035 CLAP host paragraph (latency d plus the plugin's own, compensated) agrees with it; none built beyond the first-cut mixer" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -299,7 +322,7 @@ every mix runs at the base rate divided by an integer.
 |---|---|---|
 | Control (tokio) | Commands, server, MCP, YouTube API, network outputs | May allocate and await. Talks to RT threads only through lock-free channels. |
 | Audio (one per stream) | Device I/O, resampling into the engine's ring | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio". |
-| Mixer | Sends, buses, filters, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
+| Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
@@ -341,6 +364,14 @@ what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, a
 timing error is absolute, so inputs line up with each other. That combination has been
 simulated (within 0.05 ms after settling), not yet measured on hardware.
 
+**Audio timestamps** ([ADR-0028](adr/0028-audio-model-v2.md)): every audio filter reports
+its latency in frames, and the mixer delays the shorter paths before each sum so all inputs
+line up. Every output block is stamped with `pts` = the media time of the input it was
+computed from, not the time it was produced, and muxers interleave by `pts` with a bounded
+wait. Filter latency therefore never shifts A/V sync and video is never delayed to match
+it. An audio delay filter is a deliberate shift: its output is stamped later by its delay,
+and its ring is allocated at its maximum on the control thread.
+
 **State to RT threads:** each subsystem (render, audio, outputs) gets its own immutable
 snapshot through `arc-swap`, rebuilt only when that subsystem's state changes.
 Continuous parameters (fader moves, transform drags) bypass snapshots and go through
@@ -353,7 +384,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e5ccc408953aa746", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered protocol README marks open questions 11 and 12 settled by ADR-0025 (kind.list/kind.describe, settings map validated per kind, blocker list on delete rejection, delete.plan; not built); main adds ADR-0022/0024 planned edits; the bullets here still match protocol 0.3 as built" }
+verified = { hash = "b3:5eab8da6b4065f76", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's binary-streams bullet (meter fields, subscribed-only loudness, audio.reset_loudness) sits beside main's ADR-0022/0024/0025 planned additions; covered control/core/server READMEs changed only by their re-verified lines; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -387,7 +418,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Events** (`state.changed{rev}`, `output.state_changed`, `stats.tick`, …).
 - **Errors** carry a stable machine-readable `code`, detail fields and a message.
 - **Binary streams** (WebSocket binary frames): snapshots (PNG/JPEG), preview video,
-  meters. Not designed yet.
+  meters. Not designed yet, except the meter frame's fields
+  ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
+  (4× oversampled, BS.1770); per bus, also momentary, short-term and integrated loudness
+  (LUFS). Loudness is computed only for the master bus and for subscribed buses and
+  sources. Integrated loudness is reset by the action `audio.reset_loudness`.
 - **Schema:** the JSON Schema is generated from the Rust types, and its snapshot is
   the API review ([R-TEST-002](RULES.md#R-TEST-002)).
 - **Transport:** the `Control` trait is implemented in-process by core
