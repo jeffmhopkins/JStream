@@ -203,10 +203,11 @@ pub fn audio_bus_drops(stats: BusStats) -> DropCounts {
     }
 }
 
-/// Render ticks skipped because the previous composite had not finished.
+/// Render ticks skipped because the render loop fell a whole period or more behind
+/// the media clock (a slow composite, or the thread not being scheduled).
 ///
-/// The compositor does not count this yet. The render loop publishes it through a
-/// [`DropSnapshot`] once the pipeline owns that loop.
+/// The pipeline's render loop skips to the current tick and publishes this running
+/// total, beside the capture mailbox's skips, through its [`DropSnapshot`].
 #[must_use]
 pub fn render_tick_drops(ticks: u64) -> DropCounts {
     DropCounts {

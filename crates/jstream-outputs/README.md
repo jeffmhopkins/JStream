@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:dc733a0a82b92d24", by = "agent:grok@stats-tick", note = "Re-read against the threading edit. The RTMP client still carries FLV tag bodies the caller built. The core output thread still calls the publisher. Muxer rejects are counted in core, not here. The Output trait stays later." }
+verified = { hash = "b3:235969d21bee3d17", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading edit: the output still runs on its own std thread calling the blocking publisher, and poll_incoming still relies on a short read timeout, which core now sets only after publish returns. Client API unchanged." }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

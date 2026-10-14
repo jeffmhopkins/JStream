@@ -1,6 +1,8 @@
 //! R-RT-004: under overload the stages drop and count, and `stats.tick` reports the
-//! totals. This drives the stages and fakes directly. `output.start` registers the
-//! same kinds of sources on the live pipeline.
+//! totals. This drives the stages and fakes directly, and publishes capture, render
+//! and output counts by hand beside them. `output.start` registers the same kinds of
+//! sources on the live pipeline, where the render thread publishes the capture skips
+//! and the render ticks it skipped to keep up with the clock.
 
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
@@ -31,7 +33,7 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
         .poll(&mut Context::from_waker(Waker::noop()))
     {
         Poll::Ready(value) => value,
-        Poll::Pending => panic!("the in-process engine's futures are always ready"),
+        Poll::Pending => panic!("only `video.snapshot` waits, and this test does not call it"),
     }
 }
 
@@ -136,9 +138,10 @@ fn overload_drops_and_counts() {
         bus_drops.audio_frames
     );
 
-    // What the render thread will copy out of a capture stream. The fake generates a
-    // frame when it is read, so it never replaces one; a real mailbox does, and this is
-    // that counter.
+    // What the render thread publishes for a capture stream: the mailbox's skips. The
+    // fake generates a frame when it is read, so it never replaces one; a real mailbox
+    // does, and this is that counter. The render thread publishes its skipped ticks
+    // into the same cell; `render_tick_drops(2)` stands in for them here.
     let capture = capture_drops(CaptureStats {
         frames_captured: 30,
         frames_skipped: 4,

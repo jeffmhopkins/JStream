@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:c3df993fd3d294b4", by = "agent:grok@stats-tick", note = "Re-read the output-pipeline paragraph against runtime/pipeline.rs. output.start starts jstream-stats, which is not a real-time thread and emits stats.tick about once a second. The render loop publishes capture skips and does not skip a late tick. Render, mixer, encode and output still do not lock the collection." }
+verified = { hash = "b3:942262ff185377c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after pipeline.rs moved the compositor-open timeout into MediaHost/Parts: the output-pipeline paragraph does not name the bound and its thread, failure and render_ticks text still holds." }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -384,12 +384,17 @@ desktop loopback. Encode threads are the
 ones inside the encoder sessions. The output thread muxes FLV and sends tags to the
 publish target. `output.start` also starts `jstream-stats`, which is not a
 real-time thread: it emits `stats.tick` about once a second from the stage
-counters. The render loop publishes capture mailbox skips and does not skip a
-late tick, so `render_ticks` stays 0 in this cut. None of those threads lock
-the collection. `output.stop` during
+counters, and once more when the pipeline stops. The render loop publishes capture
+mailbox skips, and a tick that falls a whole period behind the clock skips to the
+current tick and counts the skipped ones in `render_ticks`. None of those threads
+lock the collection. `output.stop` during
 `starting` cancels that start and emits `stopped` only after the start has dropped
-its threads. A publish failure is a channel message to a watcher the control thread
-started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
+its threads. The render and mixer threads catch a panic at their boundary
+([R-RT-006](RULES.md#R-RT-006)); a capture error or a missing frame repeats the last
+one, and a render panic repeats the last frame until teardown. A fatal error on the
+render, mixer or output thread (a publish failure, an encoder stream that ends
+before stop, a render or mixer panic) is a channel message to a watcher the control
+thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
 encoder session queues. Arc-swap snapshots, the collector thread and a GPU encode
 target are still the rows above, not this cut.
 
