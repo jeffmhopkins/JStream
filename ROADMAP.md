@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:935465d03f8c01b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b expanded per maintainer: browser source (ADR-0021, after S4), scenes as sources with cycle rejection, shared vs duplicate sources, transform+crop, source filters vs item effects; M1a/c/d unchanged" }
+verified = { hash = "b3:c19f99a50de1a941", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b mixer bullet now names ADR-0028's master bus, per-source and per-bus faders and mute, when_shown audio and peak/true-peak/loudness meters, as the ADR's consequences ask; M1a/c/d and other M1b bullets unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -74,7 +74,9 @@ verified = { hash = "b3:935465d03f8c01b9", by = "agent:claude@session_01QBbMRwRu
     tests.
   - **Filters and effects:** source filters apply everywhere the source appears, and item
     effects apply to one placement.
-  - Bus-matrix mixer with filters and meters.
+  - Bus-matrix mixer ([ADR-0028](docs/adr/0028-audio-model-v2.md)): a master bus,
+    per-source and per-bus faders and mute, audio that follows the program
+    (`when_shown`), filters, and peak, true-peak and loudness meters.
   - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
 - **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the
   portable zip ([ADR-0020](docs/adr/0020-portable-windows-distribution.md); from spike S2).

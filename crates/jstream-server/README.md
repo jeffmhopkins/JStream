@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:67b3d525013ef707", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gained ADR-0032's live and history bullets, not built; the server forwards any Call unchanged and has no keep-alive pings yet (ADR-0032 lists that as a consequence), so the section still holds" }
+verified = { hash = "b3:2a79ed57887cdf09", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0028 meter frame fields; binary streams are still unbuilt, so 'binary frames get malformed until binary streams are designed' still holds" }
 -->
 
 ### Listening and admission

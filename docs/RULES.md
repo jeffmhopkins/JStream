@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:a356d168d6f85bf5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; R-RT-001..006 still hold, and R-RT-003's parameter channels are exactly what live values use" }
+verified = { hash = "b3:e9d837ab915a418f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading gained ADR-0028 mixer work (activity gains, keys, latency compensation, metering), which the ADR requires to stay allocation-free; R-RT-001..006 unchanged and cover it" }
 -->
 
 <a id="R-RT-001"></a>
@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:443a19bc0fe91573", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gained Live values and History bullets (ADR-0032); they are planned minor additions, so R-API-001..004 hold unchanged, and R-API-004's expected_rev, idempotency and per-client undo match the ADR's history calls" }
+verified = { hash = "b3:860fb3052914660d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gained ADR-0028 meter frame fields and audio.reset_loudness, planned minor additions; R-API-001..004 unchanged and hold" }
 -->
 
 <a id="R-API-001"></a>

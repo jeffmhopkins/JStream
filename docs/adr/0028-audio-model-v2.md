@@ -2,7 +2,7 @@
 id = "ADR-0028"
 title = "Audio model v2: bus matrix with faders, scene-following audio, keys, meters"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:08235abb8c816a16", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; platform traits, GPU interop and capture hand-off are unaffected" }
+verified = { hash = "b3:9e176a4ee65823c3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading gained the ADR-0028 mixer row and pts contract; AudioIo handler RT rules, clock mapping and packet pts description unchanged and consistent" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
