@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:5fd67f50ff0b143a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-daemon row keeps the target (UI, WebSocket API, MCP over HTTP, --collection) and now says the first cut serves the WebSocket API only, linking its README; the app links core and server and wires InProcessControl sessions behind jstream-server; diagram and other rows unchanged" }
+verified = { hash = "b3:0288f441497ff857", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon changed only in token.rs (directory at the token path refused on Windows too); the daemon row (first cut serves the WebSocket API) and diagram still hold" }
 -->
 
 ```

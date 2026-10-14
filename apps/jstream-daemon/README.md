@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:8f2303ec10cef825", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New app: contents list matches main.rs, args.rs, token.rs, serve.rs and their unit tests plus tests/daemon.rs (binary driven by WsControl, SIGINT stop on Unix); layer 6 linking core and server per crate map; not-yet list (UI, MCP over HTTP, --collection, default port and token location) matches what is absent" }
+verified = { hash = "b3:d593b312e436e9a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "token.rs: a create_new failure other than AlreadyExists now still goes to read_existing when something is at the path (Windows reports a directory as AccessDenied), so 'is not a regular file' refusal holds on Windows too, as the text already says; nothing else changed" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -48,7 +48,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:e8da38e8e4db6a2c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Checked against args.rs USAGE/parse (token-file, port default 0, repeatable output, -V/-h, --collection refused by name), main.rs (JSTREAM_TOKEN_FILE fallback, stdout lines token file/listening on/stopped, exit 0/1/2) and token.rs (reuse, create_new 0600, empty/invalid/non-regular/mode-077 refusals left untouched, parent must exist)" }
+verified = { hash = "b3:1acb1fdd9f33d6c4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "token.rs: a create_new failure other than AlreadyExists now still goes to read_existing when something is at the path (Windows reports a directory as AccessDenied), so 'is not a regular file' refusal holds on Windows too, as the text already says; nothing else changed" }
 -->
 
 ```sh
@@ -93,7 +93,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:3b15b7efbbe78f58", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Checked against serve.rs (one Engine, a Connector session per connection via Engine::connect, ServerConfig::new with only the port changed, signal handlers installed before bind: SIGINT/SIGTERM on Unix, Ctrl-C/Ctrl-Break on Windows), token.rs (32 getrandom bytes as hex, drawn before create_new, failed write removes the file), main.rs (anyhow, best-effort stdout) and Cargo.toml (tokio rt-multi-thread+signal, getrandom 0.3 already in the lock); server/core design and ARCH persistence dependencies hold" }
+verified = { hash = "b3:ea0232de037ffc29", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "token.rs: a create_new failure other than AlreadyExists now still goes to read_existing when something is at the path (Windows reports a directory as AccessDenied), so 'is not a regular file' refusal holds on Windows too, as the text already says; nothing else changed" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

@@ -44,7 +44,12 @@ pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
             let token = Token::new(token).context("invariant: a hex token is valid")?;
             Ok((token, Provenance::Created))
         }
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+        // Windows reports a directory in the way as `AccessDenied`, not `AlreadyExists`,
+        // so anything already at `path` is judged by `read_existing`.
+        Err(error)
+            if error.kind() == io::ErrorKind::AlreadyExists
+                || fs::symlink_metadata(path).is_ok() =>
+        {
             Ok((read_existing(path)?, Provenance::Existing))
         }
         Err(error) => Err(error)
