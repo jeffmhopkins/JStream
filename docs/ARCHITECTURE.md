@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:07497799e53a9064", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: jstream-server's Cargo.toml only adds tokio's time feature (no new dependency, layer unchanged); every row still holds" }
+verified = { hash = "b3:aeec6a9d37c9813b", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read the new jstream-render Cargo.toml against its crate-map row: layer 2, unsafe_allowed false, and the summary matches the row's responsibility text. Other rows are unchanged." }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -573,7 +573,7 @@ verified = { hash = "b3:2dfd99573c6826a8", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:7d384e016afe5a8e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
+verified = { hash = "b3:a1ea68e404e5d206", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read the new one-scene paragraph against jstream-render: legacy 0.3 placement, opacity, src-over, Rgba16Float then Rgba8UnormSrgb readback, GpuContext or its own software-first device. Steps 1-2 and 4-6, transitions and the ADR-0027 output path are unchanged." }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -598,6 +598,17 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 6. **Fallbacks:** CPU readback/upload, counted in stats with a stated budget. On
    hybrid-GPU laptops, capture and render must use the same adapter, or the engine falls
    back and reports it.
+
+**One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
+one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement is
+the legacy 0.3 evaluation (crop in source pixels, scale against the current source size,
+top-left at `position`, clockwise rotation about that corner). Opacity is a straight
+multiplier in `[0, 1]` and the blend is premultiplied src-over. The composite pass writes
+premultiplied linear light into `Rgba16Float`; a resolve pass un-premultiplies into
+`Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
+when interop is present, and otherwise a device the crate opens with a software adapter
+first. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
+fit modes, 3D, effect packs, and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
 texture blend: during it, the program mix is a synthetic item list whose transforms and

@@ -1,0 +1,717 @@
+//! The two passes: composite in FP16 linear light, then resolve to straight sRGB.
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use jstream_platform::FrameSync;
+
+use crate::color::{self, premultiplied_linear};
+use crate::error::RenderError;
+use crate::gpu::{Gpu, OpenOptions};
+use crate::image::{self, Image};
+use crate::place::{self, Quad};
+use crate::scene::{Output, Scene, Snapshot};
+
+/// Bytes from one vertex to the next. Five floats of data plus one pad, so the stride is
+/// a multiple of 8: the `vec2` positions have to stay 8-byte aligned.
+const VERTEX_STRIDE: u64 = 24;
+const VERTICES_PER_ITEM: u32 = 6;
+
+struct Draw {
+    index: usize,
+    first_vertex: u32,
+}
+
+struct Targets {
+    width: u32,
+    height: u32,
+    /// The view holds the FP16 texture alive; the handle itself is not read again.
+    working_view: wgpu::TextureView,
+    output: wgpu::Texture,
+    output_view: wgpu::TextureView,
+    resolve_bind: wgpu::BindGroup,
+}
+
+/// Draws one scene on a wgpu device.
+///
+/// Build it with [`Self::open`] when the platform has no GPU interop, or with
+/// [`Self::on_context`] on the device `jstream-platform` opened. Images uploaded or
+/// imported here are the only ones [`Self::render`] samples.
+pub struct Compositor {
+    gpu: Gpu,
+    sampler: wgpu::Sampler,
+    image_layout: wgpu::BindGroupLayout,
+    composite: wgpu::RenderPipeline,
+    resolve_layout: wgpu::BindGroupLayout,
+    resolve: wgpu::RenderPipeline,
+    targets: Option<Targets>,
+    vertices: Vec<u8>,
+    vertex_buffer: wgpu::Buffer,
+    draws: Vec<Draw>,
+    staged: Vec<Arc<dyn FrameSync>>,
+}
+
+impl Compositor {
+    /// Opens a device and compiles the compositor pipelines.
+    ///
+    /// # Errors
+    /// [`RenderError::NoAdapter`] when nothing can be created, and [`RenderError::Device`]
+    /// when an adapter refuses the device.
+    pub fn open(options: OpenOptions) -> Result<Self, RenderError> {
+        Ok(Self::new(Gpu::open(options)?))
+    }
+
+    /// Pipelines on the platform's device. The context's own drop order is unchanged:
+    /// this only clones the device, queue and adapter.
+    pub fn on_context(ctx: &jstream_platform::GpuContext) -> Self {
+        Self::new(Gpu::from_context(ctx))
+    }
+
+    /// Uploads tightly packed straight-alpha sRGB RGBA8.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] for a zero dimension, [`RenderError::ImageBytes`] when
+    /// `rgba` is not `width * height * 4` bytes, and [`RenderError::TooLarge`] when a
+    /// side exceeds the adapter limit.
+    pub fn upload_rgba8(&self, width: u32, height: u32, rgba: &[u8]) -> Result<Image, RenderError> {
+        image::upload(
+            &self.gpu,
+            &self.image_layout,
+            &self.sampler,
+            width,
+            height,
+            rgba,
+        )
+    }
+
+    /// Samples `texture`, which must already be on this device: 2D, one sample,
+    /// `Rgba8UnormSrgb` or `Bgra8UnormSrgb`, with `TEXTURE_BINDING`. `sync` is staged
+    /// on each frame that draws the image.
+    ///
+    /// # Errors
+    /// [`RenderError::UnsupportedFormat`], [`RenderError::UnsupportedTexture`] or
+    /// [`RenderError::TooLarge`].
+    pub fn import(
+        &self,
+        texture: wgpu::Texture,
+        sync: Option<Arc<dyn FrameSync>>,
+    ) -> Result<Image, RenderError> {
+        image::import(&self.gpu, &self.image_layout, &self.sampler, texture, sync)
+    }
+
+    /// [`Self::import`] of a [`jstream_platform::GpuFrame`], keeping its [`FrameSync`] hold.
+    ///
+    /// # Errors
+    /// As for [`Self::import`].
+    pub fn import_frame(&self, frame: &jstream_platform::GpuFrame) -> Result<Image, RenderError> {
+        image::import_frame(&self.gpu, &self.image_layout, &self.sampler, frame)
+    }
+
+    /// Composites `scene`. When `readback` is set, the output carries a CPU copy.
+    ///
+    /// Readback waits on the GPU. A tick that only feeds an encoder leaves it false.
+    /// Does not wait on the control plane and does no file or network I/O (R-RT-002).
+    /// Bind groups live on the [`Image`]s; the vertex buffer and the scratch lists grow
+    /// only when the scene outgrows them.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] for a bad colour, opacity or placement,
+    /// [`RenderError::TooLarge`] for the canvas, [`RenderError::Sync`] when staging a
+    /// source frame fails, [`RenderError::TooManyItems`] or [`RenderError::Readback`].
+    /// A failed `stage` may already have armed the queue's next submit: the platform
+    /// attaches the fences to whichever submit happens next.
+    pub fn render(&mut self, scene: &Scene<'_>, readback: bool) -> Result<Output, RenderError> {
+        color::validate(scene.background)?;
+        self.prepare(scene)?;
+        self.stage_sources(scene)?;
+        let width = scene.canvas.width();
+        let height = scene.canvas.height();
+        self.ensure_targets(width, height)?;
+        self.ensure_vertex_buffer()?;
+        if !self.vertices.is_empty() {
+            self.gpu
+                .queue
+                .write_buffer(&self.vertex_buffer, 0, &self.vertices);
+        }
+
+        let readback_buffer = if readback {
+            Some(self.readback_buffer(width, height)?)
+        } else {
+            None
+        };
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render"),
+            });
+        self.record(&mut encoder, scene);
+        if let Some(buffer) = &readback_buffer {
+            let targets = self
+                .targets
+                .as_ref()
+                .expect("invariant: ensure_targets just set them");
+            encoder.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &targets.output,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                wgpu::TexelCopyBufferInfo {
+                    buffer,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(padded_row_bytes(width)),
+                        rows_per_image: Some(height),
+                    },
+                },
+                wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+            );
+        }
+        self.gpu.queue.submit([encoder.finish()]);
+
+        let pixels = match readback_buffer {
+            Some(buffer) => Some(map_snapshot(&self.gpu.device, buffer, width, height)?),
+            None => None,
+        };
+        let targets = self
+            .targets
+            .as_ref()
+            .expect("invariant: ensure_targets just set them");
+        Ok(Output::new(targets.output.clone(), width, height, pixels))
+    }
+
+    /// The device images and targets are created on.
+    pub fn device(&self) -> &wgpu::Device {
+        &self.gpu.device
+    }
+
+    /// The queue [`Self::render`] submits to.
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.gpu.queue
+    }
+
+    /// The adapter the device was opened on.
+    pub fn adapter(&self) -> &wgpu::Adapter {
+        &self.gpu.adapter
+    }
+
+    /// A one-line description of the adapter, for logs and test output.
+    pub fn adapter_description(&self) -> String {
+        self.gpu.description()
+    }
+
+    fn new(gpu: Gpu) -> Self {
+        let sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("jstream-render-linear"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+            ..Default::default()
+        });
+        let image_layout = image_layout(&gpu.device);
+        let composite_shader = shader(
+            &gpu.device,
+            "jstream-render-composite",
+            include_str!("composite.wgsl"),
+        );
+        let composite = composite_pipeline(&gpu.device, &image_layout, &composite_shader);
+        let resolve_layout = resolve_layout(&gpu.device);
+        let resolve_shader = shader(
+            &gpu.device,
+            "jstream-render-resolve",
+            include_str!("resolve.wgsl"),
+        );
+        let resolve = resolve_pipeline(&gpu.device, &resolve_layout, &resolve_shader);
+        let vertex_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("jstream-render-vertices"),
+            size: VERTEX_STRIDE * u64::from(VERTICES_PER_ITEM),
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        Self {
+            gpu,
+            sampler,
+            image_layout,
+            composite,
+            resolve_layout,
+            resolve,
+            targets: None,
+            vertices: Vec::new(),
+            vertex_buffer,
+            draws: Vec::new(),
+            staged: Vec::new(),
+        }
+    }
+
+    fn prepare(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
+        self.vertices.clear();
+        self.draws.clear();
+        let canvas_w = scene.canvas.width() as f32;
+        let canvas_h = scene.canvas.height() as f32;
+        for (index, item) in scene.items.iter().enumerate() {
+            if !item.opacity.is_finite() || !(0.0..=1.0).contains(&item.opacity) {
+                return Err(RenderError::Invalid {
+                    what: "opacity",
+                    detail: format!("{} is not a finite value in 0..=1", item.opacity),
+                });
+            }
+            let quad = place::quad(
+                item.image.width(),
+                item.image.height(),
+                item.placement,
+                item.crop,
+            )?;
+            if !item.visible || item.opacity == 0.0 {
+                continue;
+            }
+            let Some(quad) = quad else { continue };
+            let first_vertex = u32::try_from(self.draws.len())
+                .ok()
+                .and_then(|n| n.checked_mul(VERTICES_PER_ITEM))
+                .ok_or(RenderError::TooManyItems {
+                    count: scene.items.len(),
+                })?;
+            push_quad(&mut self.vertices, &quad, canvas_w, canvas_h, item.opacity);
+            self.draws.push(Draw {
+                index,
+                first_vertex,
+            });
+        }
+        let limit = self.gpu.max_texture_dimension_2d;
+        let width = scene.canvas.width();
+        let height = scene.canvas.height();
+        if width > limit || height > limit {
+            return Err(RenderError::TooLarge {
+                what: "canvas",
+                width,
+                height,
+                limit,
+            });
+        }
+        Ok(())
+    }
+
+    fn stage_sources(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
+        self.staged.clear();
+        for draw in &self.draws {
+            let Some(sync) = scene.items[draw.index].image.sync() else {
+                continue;
+            };
+            if self.staged.iter().any(|held| Arc::ptr_eq(held, sync)) {
+                continue;
+            }
+            sync.stage(self.queue()).map_err(RenderError::Sync)?;
+            self.staged.push(Arc::clone(sync));
+        }
+        Ok(())
+    }
+
+    fn ensure_vertex_buffer(&mut self) -> Result<(), RenderError> {
+        let needed = (self.vertices.len() as u64).max(4);
+        if self.vertex_buffer.size() >= needed {
+            return Ok(());
+        }
+        let size = needed
+            .next_power_of_two()
+            .max(VERTEX_STRIDE * u64::from(VERTICES_PER_ITEM));
+        if size > self.gpu.max_buffer_size {
+            return Err(RenderError::TooManyItems {
+                count: self.draws.len(),
+            });
+        }
+        self.vertex_buffer = self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("jstream-render-vertices"),
+            size,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        Ok(())
+    }
+
+    fn ensure_targets(&mut self, width: u32, height: u32) -> Result<(), RenderError> {
+        if self
+            .targets
+            .as_ref()
+            .is_some_and(|t| t.width == width && t.height == height)
+        {
+            return Ok(());
+        }
+        let working = texture(
+            &self.gpu.device,
+            "jstream-render-working",
+            width,
+            height,
+            wgpu::TextureFormat::Rgba16Float,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
+        let working_view = working.create_view(&wgpu::TextureViewDescriptor::default());
+        let output = texture(
+            &self.gpu.device,
+            "jstream-render-output",
+            width,
+            height,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
+        let output_view = output.create_view(&wgpu::TextureViewDescriptor::default());
+        let resolve_bind = self
+            .gpu
+            .device
+            .create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("jstream-render-resolve"),
+                layout: &self.resolve_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&working_view),
+                }],
+            });
+        self.targets = Some(Targets {
+            width,
+            height,
+            working_view,
+            output,
+            output_view,
+            resolve_bind,
+        });
+        Ok(())
+    }
+
+    fn record(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene<'_>) {
+        let targets = self
+            .targets
+            .as_ref()
+            .expect("invariant: ensure_targets just set them");
+        let clear = premultiplied_linear(scene.background);
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-composite"),
+                color_attachments: &[Some(color_attachment(
+                    &targets.working_view,
+                    wgpu::LoadOp::Clear(wgpu::Color {
+                        r: f64::from(clear[0]),
+                        g: f64::from(clear[1]),
+                        b: f64::from(clear[2]),
+                        a: f64::from(clear[3]),
+                    }),
+                ))],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            if !self.draws.is_empty() {
+                pass.set_pipeline(&self.composite);
+                pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+                for draw in &self.draws {
+                    pass.set_bind_group(0, scene.items[draw.index].image.bind_group(), &[]);
+                    pass.draw(
+                        draw.first_vertex..draw.first_vertex + VERTICES_PER_ITEM,
+                        0..1,
+                    );
+                }
+            }
+        }
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-resolve"),
+                color_attachments: &[Some(color_attachment(
+                    &targets.output_view,
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                ))],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.resolve);
+            pass.set_bind_group(0, &targets.resolve_bind, &[]);
+            pass.draw(0..3, 0..1);
+        }
+    }
+
+    fn readback_buffer(&self, width: u32, height: u32) -> Result<wgpu::Buffer, RenderError> {
+        let stride = u64::from(padded_row_bytes(width));
+        let size = stride
+            .checked_mul(u64::from(height))
+            .filter(|size| *size <= self.gpu.max_buffer_size)
+            .ok_or(RenderError::Readback {
+                detail: format!("the {width}x{height} readback does not fit in a buffer"),
+            })?;
+        Ok(self.gpu.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("jstream-render-readback"),
+            size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        }))
+    }
+}
+
+impl std::fmt::Debug for Compositor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Compositor")
+            .field("adapter", &self.adapter_description())
+            .finish_non_exhaustive()
+    }
+}
+
+fn push_quad(buf: &mut Vec<u8>, quad: &Quad, canvas_w: f32, canvas_h: f32, opacity: f32) {
+    let corner = |i: usize| {
+        let [x, y] = quad.corners[i];
+        let [u, v] = quad.uvs[i];
+        (x / canvas_w * 2.0 - 1.0, 1.0 - y / canvas_h * 2.0, u, v)
+    };
+    // Two triangles: 0-1-2 and 0-2-3.
+    for index in [0, 1, 2, 0, 2, 3] {
+        let (x, y, u, v) = corner(index);
+        push_f32(buf, x);
+        push_f32(buf, y);
+        push_f32(buf, u);
+        push_f32(buf, v);
+        push_f32(buf, opacity);
+        push_f32(buf, 0.0);
+    }
+}
+
+fn push_f32(buf: &mut Vec<u8>, value: f32) {
+    buf.extend_from_slice(&value.to_le_bytes());
+}
+
+fn padded_row_bytes(width: u32) -> u32 {
+    let row = width.saturating_mul(4);
+    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    row.div_ceil(align) * align
+}
+
+fn map_snapshot(
+    device: &wgpu::Device,
+    buffer: wgpu::Buffer,
+    width: u32,
+    height: u32,
+) -> Result<Snapshot, RenderError> {
+    let (send, recv) = std::sync::mpsc::channel();
+    buffer
+        .slice(..)
+        .map_async(wgpu::MapMode::Read, move |result| {
+            let _ = send.send(result);
+        });
+    device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .map_err(|e| RenderError::Readback {
+            detail: e.to_string(),
+        })?;
+    recv.recv_timeout(Duration::from_secs(30))
+        .map_err(|_| RenderError::Readback {
+            detail: "the readback map did not finish within 30s".into(),
+        })?
+        .map_err(|e| RenderError::Readback {
+            detail: e.to_string(),
+        })?;
+    let stride = padded_row_bytes(width) as usize;
+    let snapshot = {
+        let view = buffer
+            .slice(..)
+            .get_mapped_range()
+            .map_err(|e| RenderError::Readback {
+                detail: e.to_string(),
+            })?;
+        Snapshot::from_padded(width, height, &view, stride)
+    };
+    buffer.unmap();
+    Ok(snapshot)
+}
+
+fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
+    device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some(label),
+        source: wgpu::ShaderSource::Wgsl(source.into()),
+    })
+}
+
+fn image_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("jstream-render-image"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                count: None,
+            },
+        ],
+    })
+}
+
+fn resolve_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("jstream-render-resolve"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                view_dimension: wgpu::TextureViewDimension::D2,
+                multisampled: false,
+            },
+            count: None,
+        }],
+    })
+}
+
+fn composite_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    shader: &wgpu::ShaderModule,
+) -> wgpu::RenderPipeline {
+    let attributes = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32];
+    let buffers = [Some(wgpu::VertexBufferLayout {
+        array_stride: VERTEX_STRIDE,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &attributes,
+    })];
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("jstream-render-composite"),
+        bind_group_layouts: &[Some(layout)],
+        immediate_size: 0,
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("jstream-render-composite"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("vs"),
+            compilation_options: Default::default(),
+            buffers: &buffers,
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("fs"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba16Float,
+                blend: Some(wgpu::BlendState {
+                    color: premultiplied_blend(),
+                    alpha: premultiplied_blend(),
+                }),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+fn resolve_pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    shader: &wgpu::ShaderModule,
+) -> wgpu::RenderPipeline {
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("jstream-render-resolve"),
+        bind_group_layouts: &[Some(layout)],
+        immediate_size: 0,
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("jstream-render-resolve"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: shader,
+            entry_point: Some("vs"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: Default::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: shader,
+            entry_point: Some("fs"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+fn premultiplied_blend() -> wgpu::BlendComponent {
+    wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+        operation: wgpu::BlendOperation::Add,
+    }
+}
+
+fn texture(
+    device: &wgpu::Device,
+    label: &str,
+    width: u32,
+    height: u32,
+    format: wgpu::TextureFormat,
+    usage: wgpu::TextureUsages,
+) -> wgpu::Texture {
+    device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage,
+        view_formats: &[],
+    })
+}
+
+fn color_attachment(
+    view: &wgpu::TextureView,
+    load: wgpu::LoadOp<wgpu::Color>,
+) -> wgpu::RenderPassColorAttachment<'_> {
+    wgpu::RenderPassColorAttachment {
+        view,
+        depth_slice: None,
+        resolve_target: None,
+        ops: wgpu::Operations {
+            load,
+            store: wgpu::StoreOp::Store,
+        },
+    }
+}
