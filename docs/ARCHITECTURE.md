@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:e706591283751343", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by their re-verified Purpose lines (crate-map's jstream-sources row moved to ADR-0031); layer diagram and app roles unchanged" }
+verified = { hash = "b3:3209f6acc31fb5a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by re-verified Purpose lines after this PR's jstream-youtube and jstream-sources crate-map rows; layer diagram and app roles unchanged" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:477a5e1a4581d82a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR rewrites the jstream-sources row for ADR-0031 (kinds by milestone, images and fonts via pure-Rust crates) beside main's ADR-0035 plugin rows; other rows match main; checked against each crate's [package.metadata.jstream]" }
+verified = { hash = "b3:830f789f5a30eea5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds ADR-0034's chat sending and audience stats to the jstream-youtube row and its chat message kind (M3) to main's ADR-0031 jstream-sources row; other rows match main" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -410,7 +410,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1a6cbceab4a15a13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's planned privacy.set (refused inside a batch with malformed), privacy.changed after handshake, per-output session reporting and session-limit error sit beside main's ADR-0022/0024/0025/0028 additions; covered control/core/server READMEs changed only by re-verified lines; bullets match protocol 0.3 as built" }
+verified = { hash = "b3:b65806c4da94ef9a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's planned YouTube bullet (youtube.chat.send, youtube.chat.feature, youtube.stats; not built) sits beside main's planned additions; covered control/core/server/protocol READMEs changed only by re-verified lines; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -486,7 +486,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:e0616afe224f0007", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp and CLI READMEs changed only by re-verified Purpose lines after the ADR-0031 crate-map row; MCP grouping, schema size and naming bullets unchanged" }
+verified = { hash = "b3:d5ba2ff9794ff37f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp and CLI READMEs changed only by re-verified Purpose lines; the youtube tool noun named in the grouping bullet is planned, matching ADR-0034's MCP exposure" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

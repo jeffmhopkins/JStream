@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2a3bb21101378c53", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0027's master, privacy setting, output chains, privacy.set/privacy.changed and session reporting are additive minor-release changes under R-API-001, as are main's ADR-0022/0024/0025/0028 additions" }
+verified = { hash = "b3:6b91d4f329169329", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0034's youtube.chat.send/feature actions and youtube.stats event are additive minor-release changes under R-API-001 and follow R-API-002 noun.verb, beside main's additive ADR-0022/0024/0025/0027/0028 changes" }
 -->
 
 <a id="R-API-001"></a>
