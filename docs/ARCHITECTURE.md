@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b88009c4d3bb7cc0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed only by the daemon README's re-verified Design line (ADR-0025 persistence dependency); the layer diagram and app roles are unchanged" }
+verified = { hash = "b3:aa6a0d78cde90271", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed only by the daemon README's re-recorded Design line (server extra-host and token wording); the daemon's role and the diagram's WebSocket + token path are unchanged" }
 -->
 
 ```
@@ -353,7 +353,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e5ccc408953aa746", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered protocol README marks open questions 11 and 12 settled by ADR-0025 (kind.list/kind.describe, settings map validated per kind, blocker list on delete rejection, delete.plan; not built); main adds ADR-0022/0024 planned edits; the bullets here still match protocol 0.3 as built" }
+verified = { hash = "b3:10dd99916c2652b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only jstream-server's extra-host parsing and token wording changed; the Transport bullet (token required, Origin/Host validated, link to server Design) still holds, protocol and control untouched" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

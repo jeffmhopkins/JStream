@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:bb78b7c2a937e136", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:a20d6b087917a826", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "gate.rs gained extra_host_port (stricter extra-host parsing) and a reworded token doc; the Gate bullet (Host, Origin and token checks) and the module list still match src" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e1b849fcf169a47f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Main's #72 changed this section's body (extra hosts need name:port, token compared by BLAKE3 digest); dependency ARCH#protocol gains ADR-0024's item.move/scene_id, not built; the server forwards every Call unchanged, so the design holds" }
+verified = { hash = "b3:94f6c27433a386de", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Extra hosts paragraph now says one port and bracketed IPv6 (refuses name:80:80 and bare fe80::1), matching gate.rs extra_host_port; Token compare and the Authorization row now describe the BLAKE3 digest compare in config.rs Token::matches; Host-without-port and Origin text unchanged" }
 -->
 
 ### Listening and admission
@@ -63,7 +63,7 @@ Every upgrade request passes three checks, in this order, before a session is op
 |---|---|---|
 | `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra; without a port only on port 80 (below) | 403 |
 | `Origin` | present, and `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
-| `Authorization` | `Bearer <token>`, compared in time that reveals neither the token nor its length | 401 with `WWW-Authenticate: Bearer` |
+| `Authorization` | `Bearer <token>`, matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` |
 
 Each header must appear exactly once, and comparisons ignore ASCII case (except the
 token). The `Host` check defeats DNS rebinding: a page on an attacker's domain that
@@ -78,15 +78,17 @@ listens on port 80, `localhost` is the same as `localhost:80` and is accepted (a
 `http://localhost` is its own origin). On any other port, the default and ephemeral
 ones included, a `Host` without a port names a different port and is refused.
 
-**Extra hosts.** Each configured extra host must be `name:port` with a port from 1 to
-65535. An entry without a port could never match, since the gate compares hosts with
-their port, so `Server::bind` refuses it (`ServerError::InvalidHost`) before opening
-the socket rather than ignoring it.
+**Extra hosts.** Each configured extra host must be `name:port` with one port from 1
+to 65535, and an IPv6 address must be in brackets (`[::1]:4455`), as it is in a
+request's `Host`. Any other entry (no port, two ports as in `name:80:80`, or a bare
+`fe80::1`) could never match, since the gate compares hosts with their port, so
+`Server::bind` refuses it (`ServerError::InvalidHost`) before opening the socket rather
+than ignoring it.
 
 **Token compare.** `Token` keeps only the BLAKE3 digest of the token. The presented
-value is hashed to the same fixed 32 bytes and the digests are compared with
-`blake3::Hash`'s constant-time equality, so the time taken depends only on the
-presented value's length: neither the first difference nor the token's length shows.
+value is hashed with BLAKE3 too, and the two 32-byte digests are compared with
+`blake3::Hash`'s constant-time equality. So the compare reveals nothing about the
+token: not where the two differ, and not its length.
 
 ### Sessions
 

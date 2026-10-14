@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:41175fbdb4edc840", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:34d75e42c0dbcf7d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Frames bullet rewrapped (NV12 even-dimension sentence, text unchanged); Start bullet now says NotFound except a reused window handle, matching target_gone's IsWindow doc; wgc.rs only moved the hw-tests doc comment back onto device_tests and gave tests its own, which the Tests paragraph already describes" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -87,10 +87,9 @@ The code is ported from spikes S1 to S3. This first cut has:
     and converted to NV12 in BT.709 limited range, which is what the H.264 encoder's CPU
     path takes. Chroma is left-sited, the H.264 default: each chroma sample filters the
     two rows of its block with a `[1 2 1]` tap centred on the block's left column. NV12
-    needs even
-    dimensions, so an odd width or height loses its last column or row. When the content
-    size changes, the pool is recreated at the new size, and the frames after it have
-    that size.
+    needs even dimensions, so an odd width or height loses its last column or row. When
+    the content size changes, the pool is recreated at the new size, and the frames
+    after it have that size.
   - **Mailbox:** frames go to a single-slot mailbox, one atomic pointer that both sides
     swap, so `latest` never waits ([R-RT-002](../../docs/RULES.md#R-RT-002)). A frame
     replaced before `latest` took it counts in `frames_skipped`, and its planes are reused
@@ -110,7 +109,7 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Threads:** each capture keeps the process MTA alive (`CoIncrementMTAUsage`), so it
     can be started, read and dropped from threads that never initialised COM.
   - **Start:** a target that goes between the lookup and the start of the capture is
-    `NotFound`, as for a target that was never there.
+    `NotFound` (except a reused window handle), as for a target that was never there.
   - **Not yet:** the GPU path, capture into shared textures (ARCH steps 1 and 2). The
     CPU readback is not yet counted in stats or measured against a budget, as ARCH step
     6 asks.

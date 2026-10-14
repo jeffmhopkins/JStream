@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:668eb5582615dc51", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025 settings and ADR-0022/0024 changes don't touch outputs or encoder profiles; encoder sharing by (mix, profile) as stated still matches ARCH" }
+verified = { hash = "b3:93e59723f6857e4a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Tests list adds silence that is first refused as busy (a_busy_gap_fill_still_leaves_a_gap_to_fill, BusyAudio wrapping RecordingAudio); API and the one-session-per-encoder shape unchanged by the audio.rs gap fix" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -58,7 +58,8 @@ kept for video and audio; a full input queue drops and counts; a busy encoder at
 `finish` drops and counts; a slow subscriber loses packets while a fast one gets all;
 a late subscriber starts at the next keyframe with the stream's `info`; `finish`
 drains; an encoder error and a panic reach every subscriber; dropping a session closes
-the streams and joins the thread; dropped audio blocks become silence; the fan-out's
+the streams and joins the thread; dropped audio blocks become silence, also when that
+silence is first refused as busy; the fan-out's
 keyframe resync; and the registry.
 
 <a id="design"></a>
@@ -66,7 +67,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:cbab9c6628116bcf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section, checked against session.rs/fanout.rs/audio.rs/video.rs/registry.rs: can_accept-gated recv and park+poll every poll_interval, try_send drop-newest input queue, silence fill only after a marked drop up to max_audio_gap, busy and finish_timeout drops, per-subscriber try_send with keyframe resync and Joining skip uncounted, end recorded before queues drop, catch_unwind, abort-and-join on drop, defaults 8/512/4ms/2s/1s match SessionOptions::default" }
+verified = { hash = "b3:6a6c56417d74e425", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Audio drops bullet now says a Busy refusal of a block or of its gap-fill silence marks the next block, matching audio.rs encode setting gap on any Busy from fill_gap or encode and clearing it only on success; queue, busy-drop and subscriber bullets unchanged" }
 -->
 
 ### Threads and pacing
@@ -104,8 +105,9 @@ crate.
   thread encodes silence from the end of the last block it encoded to the marked
   block's `pts` (in sample frames, the input format's time base), when that gap is
   positive and at most `max_audio_gap` (1 s by default). Gaps without a drop are left
-  alone, so rounding in upstream timestamps never inserts samples. Filled frames are
-  counted (`silence_frames`).
+  alone, so rounding in upstream timestamps never inserts samples. A block the encoder
+  refuses as `Busy`, or the silence before it, marks the next block the same way, so
+  that block's silence covers both holes. Filled frames are counted (`silence_frames`).
 - **Encoder busy.** An encoder that returns `Busy` despite `can_accept` drops the input
   (`dropped_encoder_busy`). At `finish`, queued inputs the encoder can't take within
   `finish_timeout` (2 s) are dropped the same way.
