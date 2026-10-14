@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:668eb5582615dc51", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025 settings and ADR-0022/0024 changes don't touch outputs or encoder profiles; encoder sharing by (mix, profile) as stated still matches ARCH" }
+verified = { hash = "b3:820e84e4173c54d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-encode row and this Purpose are unchanged and still match the crate" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -65,8 +65,8 @@ keyframe resync; and the registry.
 ## Design
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
-depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:25bc6c1381b53dca", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited only the Not yet tracing bullet: tracing is a workspace dependency now but unused here; any spans go on the control side, not the per-frame encode loop (R-RT-002). Session, fan-out and drop text untouched" }
+depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
+verified = { hash = "b3:664a3e678042b2d3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: depends_on now cites ADR-0031 instead of the superseded ADR-0003, whose codec rules it carries over; this PR only rewrote the Not yet tracing bullet (unused here, spans would stay off the per-frame loop per R-RT-002)" }
 -->
 
 ### Threads and pacing

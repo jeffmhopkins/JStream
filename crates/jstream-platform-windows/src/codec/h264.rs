@@ -6,7 +6,7 @@
 //! pipeline, step 6).
 //!
 //! Hardware encoders are tried first and the OS software encoder after them, as
-//! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0003).
+//! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0031).
 //! Hardware MFTs are usually asynchronous: they ask for input and announce output
 //! through events, which `poll` pumps.
 

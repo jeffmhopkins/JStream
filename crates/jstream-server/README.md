@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:9c05db2cc44dae15", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "lib.rs now serves with connect info and gate.rs gained admit(); the module list (lib, config, gate, session, error) and the not-yet list are unchanged, so the purpose holds" }
+verified = { hash = "b3:dc1eb0ac0ac09fc2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: dependency ARCH#crate-map changed only the jstream-sources row; server stays layer 4 and its module list (lib, config, gate with admit, session, error) holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a608256822d3def8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: new Logging subsection matching lib.rs/gate.rs/session.rs (ConnectInfo peer for logging only, warn 'connection refused' with peer and reason and no header values, info connection{id,peer} span around the connector call and the task, handshake and close logged, warn on 1011); Dependencies add tracing; open question 6 is now refusal log volume" }
+verified = { hash = "b3:d73b92e27b51a2ea", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: dependency ARCH#protocol adds ADR-0028 meter fields to binary streams, which this server doesn't carry yet (binary frames still get malformed); admission, sessions and this PR's Logging subsection still match lib.rs, gate.rs and session.rs" }
 -->
 
 ### Listening and admission

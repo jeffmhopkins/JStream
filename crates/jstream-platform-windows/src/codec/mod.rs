@@ -32,7 +32,7 @@ mod backend {
     use super::h264::MfH264Encoder;
     use super::mf::{self, MfRuntime};
 
-    /// Codecs through Media Foundation, the OS codecs ADR-0003 chooses.
+    /// Codecs through Media Foundation, the OS codecs ADR-0031 chooses.
     ///
     /// It holds no COM objects, so it is `Send + Sync`. Each session starts Media
     /// Foundation for itself and can be driven from any thread. Open sessions from a

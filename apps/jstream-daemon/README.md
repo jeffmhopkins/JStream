@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:301d9c944703c936", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: Startup bullet now says main.rs installs the stderr log subscriber filtered by RUST_LOG; tests bullet still matches tests/daemon.rs, which now also checks stderr for the refusal and for no token" }
+verified = { hash = "b3:c64436df2e6c29c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: dependency ARCH#crate-map changed only the jstream-sources row; the daemon stays a layer-6 app linking core and server, and the Startup bullet (stderr subscriber via RUST_LOG) matches main.rs" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a

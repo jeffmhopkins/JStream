@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:6915cfa07bd1bbf9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading gained ADR-0035's planned CLAP host paragraph, which keeps the mixer free of syscalls and locks for plugins; R-RT-001..006 text unchanged and still hold (R-RT-001's applies_to update for the host is deferred as a governance change)" }
+verified = { hash = "b3:bcd8c2a1e1131c20", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; covered/depended Threads section gains ADR-0028's mixer row and pts paragraph and ADR-0035's out-of-process CLAP host, both consistent with R-RT-001..004 (the mixer never waits on a host; late blocks bypassed and counted)" }
 -->
 
 <a id="R-RT-001"></a>
@@ -319,8 +319,8 @@ running unless the error is fatal and reported.
 <a id="dependencies"></a>
 ## Dependencies
 <!-- @section
-depends_on = ["docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:f959f56035f4a804", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1 on #26: R-DEP-001 and R-DEP-002 now name the single CEF-runtime exception (LGPL-2.1 FFmpeg inside libcef, in-page decode only, no JStream crate calls its codecs) exactly as ADR-0021 scopes it; R-DEP-003..007 unchanged" }
+depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
+verified = { hash = "b3:3880b2102b8ccc98", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and R-DEP-002's link moved to ADR-0031; R-DEP-002 gains ADR-0031's sentence that pure-Rust image and font crates are not banned codec libraries; deny.toml bans and lint-deps allowlist enforcement unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -342,12 +342,13 @@ status = "active"
 enforced_by = ["deny:bans", "ci:lint-deps"]
 applies_to = ["Cargo.toml", "deny.toml"]
 -->
-Per [ADR-0003](adr/0003-media-stack-and-codecs.md). Known binding crates are banned in
+Per [ADR-0031](adr/0031-source-types-and-decoding-scope.md). Known binding crates are banned in
 `deny.toml`. lint-deps also checks every crate with a `links =` key or a build script
 that compiles C against an allowlist. Non-media C dependencies (e.g. `ring`) are
 allowed only through that allowlist. The one media exception is the prebuilt CEF runtime, whose
 internal media stack decodes in-page audio and video only; no JStream crate calls its
-codecs ([ADR-0021](adr/0021-browser-source.md)).
+codecs ([ADR-0021](adr/0021-browser-source.md)). Pure-Rust image and font crates are not
+banned codec libraries.
 
 <a id="R-DEP-003"></a>
 ### R-DEP-003: Workspace-managed versions
@@ -470,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2e713a39f858cc99", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025's kind versions migrate separately from PROTOCOL_VERSION and schema_version with fixture tests (R-API-003); the merged ADR-0022/0024 additions are minor-release changes too, and ADR-0022's 1.0 removal follows R-API-001" }
+verified = { hash = "b3:548fd593036e5cee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0028's new optional Source.audio, master bus, bus fields, meter fields and audio.reset_loudness, and main's ADR-0022/0024/0025 additions, are minor-release changes under R-API-001; collection migration for the master bus follows R-API-003" }
 -->
 
 <a id="R-API-001"></a>

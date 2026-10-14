@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:42695fde4472e945", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "engine.rs and session.rs gained tracing spans only; the contents list (Engine, InProcessControl, events, outputs, tests) and the not-yet list are unchanged, so the purpose holds" }
+verified = { hash = "b3:2969147481562753", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: dependency ARCH#crate-map changed only the jstream-sources row (ADR-0031); core stays layer 5 and its contents list still matches engine.rs/session.rs with this PR's tracing spans, so the purpose holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:d9f416b05cee1094", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: tracing added to Dependencies; new Logging subsection matching engine.rs/session.rs (info spans session{client_id} and command{command,client_id,request_id}, outcome logged after the engine lock, info for output actions, debug otherwise, no arguments); Locking notes nothing logs under a lock; tracing bullet dropped from Not yet" }
+verified = { hash = "b3:6ea4407957391152", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: dependency ARCH#protocol adds ADR-0028 meter frame fields, not built and not engine calls yet; the Calls, Events and this PR's Logging subsection (session/command spans, logging after the lock) still match engine.rs and session.rs" }
 -->
 
 ### Engine and sessions

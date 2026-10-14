@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:3a18a29fab5061ae", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "server.rs gained mcp_session/mcp_request/tool_call spans and call() now wraps call_tool(); module list and layer-3, no-runtime claims still hold (tracing needs no runtime)" }
+verified = { hash = "b3:ed42f3e048f95be3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: dependency ARCH#crate-map changed only the jstream-sources row; mcp stays layer 3 with no runtime, and the module list still matches server.rs with this PR's mcp_session/mcp_request/tool_call spans" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context

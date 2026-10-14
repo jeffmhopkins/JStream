@@ -12,13 +12,13 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md", "docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:048c9f9a2f86e6d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: tracing added to the third-party dependencies; Transport bullet now says native_roots logs each rustls-native-certs load error and the unparsable-certificate count at warn, and fails with NoRootCertificates only when no root is left, as transport.rs does" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md"]
+verified = { hash = "b3:272721704f691848", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: the RTMP client is now justified by ADR-0031 (superseding ADR-0003), with depends_on updated; this PR's native_roots logging text (warn per load error and for the unparsable count) and the tracing dependency still match transport.rs" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
 first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, written in Rust
-as [ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md) requires and needed for the
+as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) requires and needed for the
 generic RTMP/RTMPS output of [ADR-0009](../../docs/adr/0009-youtube-rtmps-and-api.md). The
 `Output` trait, recording and the virtual-camera output come later. Its JStream
 dependencies are `jstream-media` (for `MediaTime`) and the layer-2 `jstream-mux`, whose
