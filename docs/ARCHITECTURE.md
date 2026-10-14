@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:6e7e2d6e5176717c", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the jstream-render row against its Cargo.toml. Layer stays 2, unsafe_allowed stays false, and the summary still matches. The new dependency is jstream-protocol, layer 1. The core row is unchanged: layer 5, and its png dependency is already on main." }
+verified = { hash = "b3:521805ffbcb8eaf1", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the jstream-audio row against its Cargo.toml. Layer stays 2, unsafe_allowed stays false, and the summary still matches. The new dependency is crossbeam-channel, not a JStream crate, so the layer rule is unchanged. Other rows are unchanged." }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:b3acfef215377e3b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds the Live-value handover paragraph (per-subsystem generation counter, RT threads publish with one atomic store, live values released once every reader reports the commit's generation; R-RT-001/002; not built) beside main's ADR-0028/0035 text" }
+verified = { hash = "b3:a89a2bc8c4b8f1e8", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the engine paragraph against the mixer. Inputs are added and removed on a lock-free queue, and a released ring is freed on the collector thread. The thread table, clock, S3 result and live-value handover are unchanged." }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -404,7 +404,9 @@ in 20 minutes, haven't been measured.
 **In the engine:** `jstream-audio` runs S3's drift fit and PI loop with S3's tuning on
 each input's audio thread, resampling into a per-input ring indexed by engine frame
 that the mixer reads on the engine clock
-([its real-time design](../crates/jstream-audio/README.md#realtime)). It differs from
+([its real-time design](../crates/jstream-audio/README.md#realtime)). Inputs are added
+and removed through a lock-free command queue while the mixer runs, and a ring released
+by the mixer or the audio thread is freed on the collector thread. It differs from
 what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, and the
 timing error is absolute, so inputs line up with each other. That combination has been
 simulated (within 0.05 ms after settling), not yet measured on hardware.

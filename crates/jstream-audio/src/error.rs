@@ -31,4 +31,11 @@ pub enum AudioError {
         /// What was passed.
         got: usize,
     },
+    /// The mixer already has as many inputs as it can install without allocating on the
+    /// mixer thread.
+    #[error("the mixer already has the maximum number of inputs")]
+    TooManyInputs,
+    /// Input changes are waiting for the mixer to apply them, and the queue is full.
+    #[error("the mixer input command queue is full")]
+    CommandQueueFull,
 }

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:fe7b063aa9a3acbf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: ARCH#data-model changed only in the hotkey re-point wording; the encoder-sharing rule this Purpose restates is unchanged" }
+verified = { hash = "b3:e00aec38bc2d145c", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read against the new audio sentence in Threads. Encoder sessions, fan-out and the layer are unchanged, and this Purpose does not describe the mixer." }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

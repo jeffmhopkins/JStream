@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:cf5b8b9fa1c6b9cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's live-value handover (one atomic store per RT thread, nothing waits), consistent with R-RT-001/002" }
+verified = { hash = "b3:4d76e1aed48fdce7", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Rule text unchanged. R-RT-001 still holds: the callback and the mixer's steady state do not allocate; an add is allocated on the control thread. R-RT-003 matches the command queue and the collector." }
 -->
 
 <a id="R-RT-001"></a>

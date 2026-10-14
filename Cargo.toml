@@ -13,6 +13,9 @@ publish = false
 anyhow = "1"
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
+# Lock-free bounded queues for the audio mixer's commands and the collector (R-RT-003).
+# A send on a bounded channel does not allocate. `std` is the only feature.
+crossbeam-channel = { version = "0.5", default-features = false, features = ["std"] }
 futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 # OS randomness (the daemon's control token). Already in the tree through tungstenite's

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:90ae979ac1b6f7a2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading gains the live-value handover paragraph (not built); Purpose's mapping of the first cut onto ADR-0028 unchanged" }
+verified = { hash = "b3:ccc42ae51496ef10", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the API list against MixerControl. add_input still returns a producer and a control handle. Live add and remove go through MixerControl and are applied on the next block, up to 64 inputs. The ADR-0028 first cut is otherwise unchanged." }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -38,11 +38,15 @@ stamped on the clock, and no device is the master.
 - `Mixer::new(MixerConfig)`: engine rate, block size (default 1024 frames, one AAC
   access unit), latency (default 1440 frames, 30 ms) and ring size (default 16384
   frames) per input. `MixerConfig::validate` checks the ranges.
-- `Mixer::add_input(format)` takes the stream's format (device rate, mono, stereo or 5.1,
-  interleaved `f32`; 8 to 192 kHz at a 48 kHz engine) and returns an `InputProducer`, which
-  implements `jstream_platform::AudioInputHandler` and goes to `AudioIo::open_input` as
-  the stream's handler, and an `InputControl` for the control plane. It allocates, so it
-  is called while setting up.
+- `Mixer::add_input(format)` and `MixerControl::add_input` (from `Mixer::control`)
+  take the stream's format (device rate, mono, stereo or 5.1, interleaved `f32`; 8 to
+  192 kHz at a 48 kHz engine) and return an `InputProducer`, which implements
+  `jstream_platform::AudioInputHandler` and goes to `AudioIo::open_input` as the
+  stream's handler, and an `InputControl` for the control plane. Both allocate on the
+  caller. `Mixer::add_input` installs the input before it returns. `MixerControl` does
+  not borrow the mixer, so another thread can add or `InputControl::remove` while
+  `poll` runs; the mixer applies those commands at the start of the next block and
+  does not allocate to do it. At most 64 inputs.
 - `Mixer::poll(now, out)` mixes the next block once the media clock `now` has passed its
   end by the latency, into `out` (interleaved stereo), and returns its `Block` (first
   frame, length, and `pts` in ticks of `1 / rate`). The first call starts the time line
@@ -92,7 +96,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:43434459da3385a2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-RT-001 (no alloc, lock, block or log in steady state; assert_no_alloc test still listed as not yet enforced) and R-RT-003 (rings and atomics only; collector hand-off deferred to live input changes)" }
+verified = { hash = "b3:8e9c95fbf7452a66", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the new command-queue paragraph against cmd.rs and retire.rs. The mixer applies a bounded crossbeam queue between blocks and does not allocate to install into the reserved list. Both Arc holders retire the ring onto the collector thread. Steady-state push_packet and poll still share only the ring and atomics. R-RT-001 and R-RT-003 still match." }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -176,6 +180,18 @@ ramps the bus gain, replaces any non-finite output with 0, and meters inputs (po
 and the bus. Peaks use a `fetch_max` on the bits, which order like the values for
 non-negative floats.
 
+**Adding and removing inputs** (`cmd.rs`, `retire.rs`). The control thread allocates
+the ring and the producer and sends them on a bounded lock-free queue
+(`crossbeam-channel`, 128 commands). The mixer applies that queue at the start of the
+next block. Its input list is reserved for 64 inputs, so installing one does not
+allocate, and removing one unlinks it. The mixer and the producer each hold an `Arc`
+of the ring. Releasing either reference hands that `Arc` to the collector thread,
+which is where the ring is freed
+([R-RT-003](../../docs/RULES.md#R-RT-003)), including when the producer is dropped on
+the audio thread after the mixer is already gone. The collector is started when the
+mixer is built and then lives for the process. A full command queue refuses the add
+or the removal rather than blocking the mixer.
+
 **Not yet enforced or measured:**
 - No test proves the absence of allocation. R-RT-001 names
   `jstream_audio::rt::callback_does_not_allocate`, which needs `assert_no_alloc`, not yet
@@ -183,9 +199,6 @@ non-negative floats.
 - CPU cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 - Catching a panic at the thread boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) is the engine's job, where the threads are.
-- A producer is dropped when its platform stream is. That is teardown, not steady
-  state, and the collector hand-off ([R-RT-003](../../docs/RULES.md#R-RT-003)) comes with
-  adding and removing inputs while running.
 
 <a id="follow-ups"></a>
 ## Not yet
@@ -197,14 +210,11 @@ non-negative floats.
   the format to build the producer. Until the platform API reports it up front (for
   example, a format query per target, or the format in the first callback), the engine
   must know the device format before opening the stream.
-- **Adding and removing inputs while the mixer runs,** through a lock-free command queue,
-  with dropped rings going to the collector thread.
-- **State snapshots** ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). The
-  mixer's live state is atomics for the gains plus an input list fixed when it is built.
-  That fits ARCH's "continuous parameters bypass snapshots": a fader move is a store to
-  an atomic, and nothing structural changes while the mixer runs. The `arc-swap`
-  snapshot ARCH gives each subsystem comes with adding and removing inputs live (above),
-  when the input list starts to change.
+- **State snapshots** ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). Gains
+  stay atomics, which is ARCH's "continuous parameters bypass snapshots". The input
+  list changes through the command queue in [Real-time design](#realtime), not through
+  an `arc-swap` snapshot. The snapshot ARCH gives each subsystem, for the rest of the
+  audio graph (sends beyond the implicit master, filters), is still later.
 - **A panic in `on_packet` or `Mixer::poll`**
   ([R-RT-006](../../docs/RULES.md#R-RT-006)). Nothing in this crate catches one or
   mutes the bus. The test R-RT-006 names, `scenarios::rt_panic_is_reported`, doesn't

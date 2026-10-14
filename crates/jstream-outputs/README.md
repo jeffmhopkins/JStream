@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:8a01bf338b54dcb4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed by the crate-map encode/mcp/server rows and the Threads handover paragraph; outputs' row and RTMP(S) Purpose unchanged" }
+verified = { hash = "b3:4282320bb5d01baa", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read against the new audio sentence in Threads. The RTMP client and its layer are unchanged, and this Purpose does not describe the mixer." }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
