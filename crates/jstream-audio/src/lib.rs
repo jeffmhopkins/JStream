@@ -34,7 +34,7 @@ mod handle;
 mod rt;
 
 pub use error::AudioError;
-pub use handle::{BusControl, BusStats, InputControl, InputStats};
+pub use handle::{BusControl, BusStats, InputControl, InputId, InputStats};
 pub use rt::input::InputProducer;
-pub use rt::mixer::{Block, Mixer, MixerConfig};
+pub use rt::mixer::{Block, Mixer, MixerConfig, MixerControl};
 pub use rt::shared::MeterReading;

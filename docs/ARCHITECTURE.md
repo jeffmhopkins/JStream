@@ -429,7 +429,9 @@ in 20 minutes, haven't been measured.
 **In the engine:** `jstream-audio` runs S3's drift fit and PI loop with S3's tuning on
 each input's audio thread, resampling into a per-input ring indexed by engine frame
 that the mixer reads on the engine clock
-([its real-time design](../crates/jstream-audio/README.md#realtime)). It differs from
+([its real-time design](../crates/jstream-audio/README.md#realtime)). Inputs are added
+and removed through a lock-free command queue while the mixer runs, and a ring released
+by the mixer or the audio thread is freed on the collector thread. It differs from
 what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, and the
 timing error is absolute, so inputs line up with each other. That combination has been
 simulated (within 0.05 ms after settling), not yet measured on hardware.

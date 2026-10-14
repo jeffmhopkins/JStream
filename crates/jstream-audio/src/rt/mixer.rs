@@ -19,18 +19,20 @@
 //! RMS.
 //!
 //! [`Mixer::mix`] and [`Mixer::poll`] do not allocate, lock, block or log (R-RT-001); the
-//! buffers are sized in [`Mixer::new`] and [`Mixer::add_input`].
+//! buffers are sized in [`Mixer::new`], and an input the control plane adds is installed
+//! from a command that was allocated off this thread.
 
 use std::sync::Arc;
 
-use jstream_media::{AudioFormat, MediaTime, Rounding, SampleFormat, Timebase};
+use crossbeam_channel::Receiver;
+use jstream_media::{MediaTime, Rounding, Timebase};
 
-use super::input::{InputProducer, InputShared};
+use super::cmd::{self, Command, ControlPlane};
+use super::input::InputShared;
 use super::ring::FrameRing;
 use super::shared::{Counter, GainParam, Meter, levels};
-use super::sinc::{MAX_DOWN_RATIO, MAX_UP_RATIO};
 use crate::error::AudioError;
-use crate::handle::{BusControl, InputControl};
+use crate::handle::{BusControl, InputControl, InputId};
 
 /// How the mixer is set up. Fixed for the mixer's lifetime.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -110,10 +112,20 @@ pub(crate) struct BusShared {
 
 #[derive(Debug)]
 struct Slot {
+    id: u64,
     ring: Arc<FrameRing>,
     shared: Arc<InputShared>,
     /// The gain applied at the end of the previous block, where the next ramp starts.
     gain_now: f32,
+}
+
+/// Adds and removes inputs while [`Mixer::poll`] runs on another thread.
+///
+/// Cloning shares the command queue. [`Mixer::add_input`] is the same operation
+/// applied before it returns, for a mixer that is not running yet.
+#[derive(Clone)]
+pub struct MixerControl {
+    plane: Arc<ControlPlane>,
 }
 
 /// The stereo mix bus and its inputs. Owned by the mixer thread.
@@ -122,6 +134,8 @@ pub struct Mixer {
     config: MixerConfig,
     timebase: Timebase,
     inputs: Vec<Slot>,
+    commands: Receiver<Command>,
+    plane: Arc<ControlPlane>,
     bus: Arc<BusShared>,
     bus_gain_now: f32,
     /// The next block's first frame, once started.
@@ -141,10 +155,19 @@ impl Mixer {
             Timebase::per_second(config.sample_rate).map_err(|_| AudioError::InvalidConfig {
                 what: "sample_rate must be non-zero",
             })?;
+        super::retire::start();
+        let (tx, commands) = crossbeam_channel::bounded(cmd::COMMAND_CAP);
+        let plane = Arc::new(ControlPlane::new(
+            tx,
+            config.sample_rate,
+            config.ring_frames,
+        ));
         Ok(Self {
             config,
             timebase,
-            inputs: Vec::new(),
+            inputs: Vec::with_capacity(cmd::MAX_INPUTS),
+            commands,
+            plane,
             bus: Arc::new(BusShared {
                 gain: GainParam::new(),
                 meter: Meter::default(),
@@ -159,40 +182,32 @@ impl Mixer {
     }
 
     /// Adds an input of `format` (the device's own rate and layout, interleaved `f32`, as
-    /// [`AudioStream::format`](jstream_platform::AudioStream::format) reports it). Returns
-    /// the producer for the input's audio thread and a control handle. Allocates: call it
-    /// while setting the mixer up, not from the mixer thread's loop.
+    /// [`AudioStream::format`](jstream_platform::AudioStream::format) reports it) and
+    /// installs it before returning. Allocates: call it from the control thread, or
+    /// while setting the mixer up. To add an input while [`Self::poll`] is running on
+    /// another thread, use [`MixerControl::add_input`] from [`Self::control`].
     ///
     /// # Errors
-    /// [`AudioError::UnsupportedFormat`] for planar samples, and
+    /// [`AudioError::UnsupportedFormat`] for planar samples,
     /// [`AudioError::UnsupportedRate`] for a rate more than 4 times above or 6 times below
-    /// the engine rate.
+    /// the engine rate, [`AudioError::TooManyInputs`] past 64 inputs, and
+    /// [`AudioError::CommandQueueFull`] when the mixer has not yet applied a full queue
+    /// of input changes.
     pub fn add_input(
         &mut self,
-        format: AudioFormat,
-    ) -> Result<(InputProducer, InputControl), AudioError> {
-        if format.sample_format() != SampleFormat::F32Interleaved {
-            return Err(AudioError::UnsupportedFormat);
+        format: jstream_media::AudioFormat,
+    ) -> Result<(super::input::InputProducer, InputControl), AudioError> {
+        let (producer, control) = self.control().add_input(format)?;
+        self.apply_commands();
+        Ok((producer, control))
+    }
+
+    /// A handle that adds and removes inputs without borrowing the mixer, so it can be
+    /// used while [`Self::poll`] runs.
+    pub fn control(&self) -> MixerControl {
+        MixerControl {
+            plane: Arc::clone(&self.plane),
         }
-        let rate = format.sample_rate();
-        let engine = self.config.sample_rate;
-        if u64::from(rate) > u64::from(engine) * u64::from(MAX_DOWN_RATIO)
-            || u64::from(rate) * u64::from(MAX_UP_RATIO) < u64::from(engine)
-        {
-            return Err(AudioError::UnsupportedRate { rate, engine });
-        }
-        let ring = Arc::new(FrameRing::new(self.config.ring_frames));
-        let shared = Arc::new(InputShared::new());
-        if let Some(pos) = self.position {
-            ring.set_read_pos(pos);
-        }
-        self.inputs.push(Slot {
-            ring: Arc::clone(&ring),
-            shared: Arc::clone(&shared),
-            gain_now: shared.gain.effective(),
-        });
-        let producer = InputProducer::new(format, engine, ring, Arc::clone(&shared));
-        Ok((producer, InputControl::new(shared)))
     }
 
     /// The bus's control handle.
@@ -225,6 +240,7 @@ impl Mixer {
     /// # Errors
     /// [`AudioError::OutputLength`] when `out` has the wrong length.
     pub fn poll(&mut self, now: MediaTime, out: &mut [f32]) -> Result<Option<Block>, AudioError> {
+        self.apply_commands();
         self.check_out(out)?;
         let Some(now) = self.engine_frame(now) else {
             return Ok(None);
@@ -256,6 +272,7 @@ impl Mixer {
     /// # Errors
     /// [`AudioError::OutputLength`] when `out` has the wrong length.
     pub fn mix(&mut self, frame: i64, out: &mut [f32]) -> Result<Block, AudioError> {
+        self.apply_commands();
         self.check_out(out)?;
         let n = self.config.block_frames;
         let end = frame.saturating_add(n as i64);
@@ -300,6 +317,42 @@ impl Mixer {
         })
     }
 
+    /// Installs inputs the control plane queued, and retires the ones it removed.
+    /// Pushing stays within the capacity reserved in [`Mixer::new`].
+    fn apply_commands(&mut self) {
+        while let Ok(command) = self.commands.try_recv() {
+            match command {
+                Command::Add { id, ring, shared } => {
+                    if self.inputs.len() >= cmd::MAX_INPUTS {
+                        super::retire::ring(ring);
+                        super::retire::shared(shared);
+                        continue;
+                    }
+                    if let Some(pos) = self.position {
+                        ring.set_read_pos(pos);
+                    }
+                    let gain_now = shared.gain.effective();
+                    self.inputs.push(Slot {
+                        id,
+                        ring,
+                        shared,
+                        gain_now,
+                    });
+                }
+                Command::Remove(id) => self.retire_id(id),
+            }
+        }
+    }
+
+    fn retire_id(&mut self, id: u64) {
+        let Some(index) = self.inputs.iter().position(|slot| slot.id == id) else {
+            return;
+        };
+        let slot = self.inputs.swap_remove(index);
+        super::retire::ring(slot.ring);
+        super::retire::shared(slot.shared);
+    }
+
     fn check_out(&self, out: &[f32]) -> Result<(), AudioError> {
         let expected = self.config.block_frames * 2;
         if out.len() == expected {
@@ -310,6 +363,46 @@ impl Mixer {
                 got: out.len(),
             })
         }
+    }
+}
+
+impl Drop for Mixer {
+    /// Retired rings are freed on the collector thread, not on whichever thread drops
+    /// the mixer. Pending adds that the mixer never installed go there too.
+    fn drop(&mut self) {
+        loop {
+            match self.commands.try_recv() {
+                Ok(Command::Add { ring, shared, .. }) => {
+                    super::retire::ring(ring);
+                    super::retire::shared(shared);
+                }
+                Ok(Command::Remove(id)) => self.retire_id(id),
+                Err(_) => break,
+            }
+        }
+        for slot in self.inputs.drain(..) {
+            super::retire::ring(slot.ring);
+            super::retire::shared(slot.shared);
+        }
+    }
+}
+
+impl MixerControl {
+    /// Adds an input while the mixer is running. The mixer installs it at the start of
+    /// its next [`Mixer::poll`] or [`Mixer::mix`]. The returned producer may push audio
+    /// immediately; the ring holds it until then.
+    ///
+    /// # Errors
+    /// The same as [`Mixer::add_input`].
+    pub fn add_input(
+        &self,
+        format: jstream_media::AudioFormat,
+    ) -> Result<(super::input::InputProducer, InputControl), AudioError> {
+        let (producer, id, shared) = self.plane.add(format)?;
+        Ok((
+            producer,
+            InputControl::new(InputId(id), shared, Arc::clone(&self.plane)),
+        ))
     }
 }
 
@@ -335,10 +428,11 @@ fn apply_gain(frames: &mut [[f32; 2]], from: f32, to: f32) {
 
 #[cfg(test)]
 mod tests {
-    use jstream_media::ChannelLayout;
+    use jstream_media::{AudioFormat, ChannelLayout, SampleFormat};
     use jstream_platform::{AudioPacket, AudioPacketFlags};
 
     use super::*;
+    use crate::InputProducer;
 
     const RATE: u32 = 48_000;
 
@@ -562,5 +656,116 @@ mod tests {
                 got: 3
             })
         ));
+    }
+
+    /// The control thread can add an input while the mixer thread is the one calling
+    /// `mix`. The next block includes it, and removing it drops it from later blocks.
+    #[test]
+    fn an_input_added_while_the_mixer_runs_is_mixed_then_removed() {
+        let mut mixer = Mixer::new(config(480)).unwrap();
+        let ops = mixer.control();
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (done_tx, done_rx) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let (mut producer, control) = ops.add_input(stereo48()).unwrap();
+            feed(&mut producer, 0.5, 0.5, 1.0);
+            ready_tx.send(control).unwrap();
+            let _ = done_rx.recv();
+            producer
+        });
+        let control = ready_rx.recv().unwrap();
+        let mut out = vec![0.0; 960];
+        // The 8192-frame ring still holds frame 40000 of the second of audio.
+        mixer.mix(40_000, &mut out).unwrap();
+        assert!(
+            out.iter().all(|sample| (*sample - 0.5).abs() < 1e-3),
+            "the input added on another thread was not mixed"
+        );
+        assert!(control.remove());
+        mixer.mix(40_480, &mut out).unwrap();
+        assert!(
+            out.iter().all(|sample| *sample == 0.0),
+            "a removed input was still mixed"
+        );
+        assert!(
+            !control.remove(),
+            "a second remove should not find the input"
+        );
+        let _ = done_tx.send(());
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn the_mixer_refuses_more_inputs_than_it_reserved() {
+        let mixer = Mixer::new(MixerConfig::default()).unwrap();
+        let ops = mixer.control();
+        let mut controls = Vec::new();
+        for _ in 0..64 {
+            controls.push(ops.add_input(stereo48()).unwrap().1);
+        }
+        assert!(matches!(
+            ops.add_input(stereo48()),
+            Err(AudioError::TooManyInputs)
+        ));
+        assert!(controls[0].remove());
+        assert!(ops.add_input(stereo48()).is_ok());
+    }
+
+    /// Dropping the producer on another thread, then the mixer's reference, frees the
+    /// ring on the collector thread.
+    #[test]
+    fn a_removed_ring_is_freed_on_the_collector_thread() {
+        let mut mixer = Mixer::new(config(480)).unwrap();
+        let (producer, control) = mixer.add_input(stereo48()).unwrap();
+        let (hook_tx, hook_rx) = std::sync::mpsc::channel();
+        producer.ring().on_drop(hook_tx);
+        let audio = std::thread::spawn(move || {
+            let id = std::thread::current().id();
+            drop(producer);
+            id
+        });
+        let audio_id = audio.join().unwrap();
+        assert!(
+            hook_rx.try_recv().is_err(),
+            "the ring was freed while the mixer still held it"
+        );
+        assert!(control.remove());
+        let mut out = vec![0.0; 960];
+        mixer.mix(0, &mut out).unwrap();
+        let freed_on = hook_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        assert_eq!(freed_on, super::super::retire::collector_thread());
+        assert_ne!(freed_on, audio_id);
+        assert_ne!(freed_on, std::thread::current().id());
+    }
+
+    /// The case from #75 review N1: the mixer is dropped first, and the producer is
+    /// dropped later on the audio thread. The ring is still freed on the collector.
+    #[test]
+    fn dropping_the_mixer_first_still_frees_the_ring_on_the_collector() {
+        let mut mixer = Mixer::new(config(480)).unwrap();
+        let (producer, _control) = mixer.add_input(stereo48()).unwrap();
+        let (hook_tx, hook_rx) = std::sync::mpsc::channel();
+        producer.ring().on_drop(hook_tx);
+        let mixer_id = std::thread::current().id();
+        drop(mixer);
+        assert!(
+            hook_rx.try_recv().is_err(),
+            "the ring was freed while the producer still held it"
+        );
+        let audio_id = std::thread::spawn(move || {
+            let id = std::thread::current().id();
+            drop(producer);
+            id
+        })
+        .join()
+        .unwrap();
+        let freed_on = hook_rx
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .unwrap();
+        assert_eq!(freed_on, super::super::retire::collector_thread());
+        assert_ne!(freed_on, audio_id);
+        assert_ne!(freed_on, mixer_id);
     }
 }

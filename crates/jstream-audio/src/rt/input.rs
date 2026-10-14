@@ -125,7 +125,7 @@ impl InputShared {
 /// engine frame of the next output.
 #[derive(Debug)]
 struct Sink {
-    writer: RingWriter,
+    writer: Option<RingWriter>,
     stage: Box<[[f32; 2]]>,
     staged: usize,
     /// The engine frame the next output lands on.
@@ -146,7 +146,10 @@ impl Sink {
             }
             Output::Silence(n) => {
                 self.flush();
-                let r = self.writer.fill_silence(n);
+                let r = match self.writer.as_mut() {
+                    Some(writer) => writer.fill_silence(n),
+                    None => unreachable!("writer used after drop"),
+                };
                 self.add(r);
                 self.next_out = self
                     .next_out
@@ -156,19 +159,27 @@ impl Sink {
     }
 
     fn flush(&mut self) {
-        if self.staged > 0 {
-            let r = self.writer.write(&self.stage[..self.staged]);
-            self.add(r);
-            self.staged = 0;
+        let n = self.staged;
+        if n == 0 {
+            return;
         }
+        let r = match self.writer.as_mut() {
+            Some(writer) => writer.write(&self.stage[..n]),
+            None => unreachable!("writer used after drop"),
+        };
+        self.add(r);
+        self.staged = 0;
     }
 
     /// Moves the next output to engine frame `n` (forward only, after the first time).
     fn seek(&mut self, n: i64) {
         self.flush();
-        let r = self.writer.seek(n);
+        let (r, pos) = match self.writer.as_mut() {
+            Some(writer) => (writer.seek(n), writer.position()),
+            None => unreachable!("writer used after drop"),
+        };
         self.add(r);
-        self.next_out = self.writer.position().unwrap_or(n);
+        self.next_out = pos.unwrap_or(n);
     }
 
     fn add(&mut self, r: WriteReport) {
@@ -204,7 +215,7 @@ pub struct InputProducer {
     seen_packet: bool,
     pi: Pi,
     smooth: Ema,
-    shared: Arc<InputShared>,
+    shared: Option<Arc<InputShared>>,
 }
 
 impl InputProducer {
@@ -223,7 +234,7 @@ impl InputProducer {
             downmix: Downmix::for_layout(format.layout()),
             resampler: Resampler::new(rate, engine_rate),
             sink: Sink {
-                writer: RingWriter::new(ring),
+                writer: Some(RingWriter::new(ring)),
                 stage: vec![[0.0; 2]; STAGE_FRAMES].into_boxed_slice(),
                 staged: 0,
                 next_out: 0,
@@ -239,14 +250,32 @@ impl InputProducer {
             seen_packet: false,
             pi: Pi::new(LOOP_BANDWIDTH_HZ, LOOP_DAMPING, MAX_CORRECTION),
             smooth: Ema::new(ERROR_SMOOTHING_S),
-            shared,
+            shared: Some(shared),
+        }
+    }
+
+    fn shared(&self) -> &InputShared {
+        match self.shared.as_ref() {
+            Some(shared) => shared,
+            // Drop takes the handle and does not call back in.
+            None => unreachable!("shared used after drop"),
+        }
+    }
+
+    /// The ring this producer writes. Tests attach a drop hook to see which thread
+    /// frees it.
+    #[cfg(test)]
+    pub(crate) fn ring(&self) -> &FrameRing {
+        match self.sink.writer.as_ref() {
+            Some(writer) => writer.ring(),
+            None => unreachable!("ring used after drop"),
         }
     }
 
     /// Processes one device packet. Called on the audio thread; does not allocate,
     /// lock, block or log.
     pub fn push_packet(&mut self, packet: &AudioPacket<'_>) {
-        self.shared.packets.add(1);
+        self.shared().packets.add(1);
         let frames = packet.samples.len() / self.channels;
         if frames == 0 {
             return;
@@ -260,10 +289,10 @@ impl InputProducer {
             .map(|t| t.as_secs_f64())
             .filter(|t| t.is_finite() && t.abs() < MAX_STAMP_S);
         if time.is_none() {
-            self.shared.timestamps_missing.add(1);
+            self.shared().timestamps_missing.add(1);
         }
         if packet.flags.discontinuity && !first {
-            self.shared.discontinuities.add(1);
+            self.shared().discontinuities.add(1);
             self.need_anchor = true;
         }
 
@@ -273,7 +302,7 @@ impl InputProducer {
             Continuity::First => self.pos0 = Some(pos),
             Continuity::Continuous => {}
             Continuity::Gap(n) => {
-                self.shared.gap_frames.add(n);
+                self.shared().gap_frames.add(n);
                 if self.anchored {
                     let sink = &mut self.sink;
                     self.resampler.push_silence(n, &mut |o| sink.accept(o));
@@ -281,7 +310,7 @@ impl InputProducer {
                 }
             }
             Continuity::Reset(_) => {
-                self.shared.resets.add(1);
+                self.shared().resets.add(1);
                 self.restart_segment();
             }
         }
@@ -294,7 +323,7 @@ impl InputProducer {
                 self.anchor(t);
             }
             if !self.anchored {
-                self.shared.unanchored_frames.add(frames as u64);
+                self.shared().unanchored_frames.add(frames as u64);
                 self.publish();
                 return;
             }
@@ -334,13 +363,13 @@ impl InputProducer {
             && let Some(pred) = self.fit.predict_y(x)
             && (y - pred).abs() > OUTLIER_S
         {
-            self.shared.outliers.add(1);
+            self.shared().outliers.add(1);
             self.outlier_run += 1;
             if self.outlier_run < OUTLIER_RUN_RESET {
                 return false;
             }
             // The line moved: this stamp starts a new segment.
-            self.shared.resets.add(1);
+            self.shared().resets.add(1);
             self.restart_segment();
         }
         self.outlier_run = 0;
@@ -355,9 +384,9 @@ impl InputProducer {
         // 2^61 and the conversion is exact in range.
         let target = (t * self.rate_out).ceil() as i64;
         self.sink.flush();
-        let n = match self.sink.writer.position() {
+        let n = match self.sink.writer.as_ref().and_then(RingWriter::position) {
             Some(cur) if cur > target => {
-                self.shared.late_frames.add((cur - target).unsigned_abs());
+                self.shared().late_frames.add((cur - target).unsigned_abs());
                 cur
             }
             _ => target,
@@ -368,7 +397,7 @@ impl InputProducer {
         self.stamp = Some((0.0, t));
         self.smooth.reset();
         if self.anchored {
-            self.shared.reanchors.add(1);
+            self.shared().reanchors.add(1);
         }
         self.anchored = true;
         self.need_anchor = false;
@@ -393,21 +422,34 @@ impl InputProducer {
         if let Some(smoothed) = self.smooth.update(e, dt) {
             let u = self.pi.update(smoothed, dt);
             self.resampler.set_correction(u);
-            self.shared.timing_error.store(smoothed);
-            self.shared.correction_ppm.store(u * 1e6);
+            self.shared().timing_error.store(smoothed);
+            self.shared().correction_ppm.store(u * 1e6);
         }
     }
 
     /// Publishes the counters that accumulate locally.
     fn publish(&mut self) {
         let r = std::mem::take(&mut self.sink.report);
-        self.shared.late_frames.add(r.late);
-        self.shared.overrun_frames.add(r.overwritten);
+        self.shared().late_frames.add(r.late);
+        self.shared().overrun_frames.add(r.overwritten);
         if let Some(ppm) = self.fit.ppm() {
-            self.shared.drift_ppm.store(ppm);
+            self.shared().drift_ppm.store(ppm);
         }
         if let Some(sd) = self.fit.residual_sd() {
-            self.shared.jitter.store(sd);
+            self.shared().jitter.store(sd);
+        }
+    }
+}
+
+impl Drop for InputProducer {
+    /// Hands this thread's references to the collector. The audio thread must not free
+    /// the ring, including when it holds the last one (the mixer was already dropped).
+    fn drop(&mut self) {
+        if let Some(writer) = self.sink.writer.take() {
+            super::retire::ring(writer.into_ring());
+        }
+        if let Some(shared) = self.shared.take() {
+            super::retire::shared(shared);
         }
     }
 }
@@ -419,7 +461,7 @@ impl AudioInputHandler for InputProducer {
 
     fn on_error(&mut self, _error: &PlatformError) {
         // The control plane reads the flag; logging is not allowed here (R-RS-005).
-        self.shared.failed.store(true, Ordering::Relaxed);
+        self.shared().failed.store(true, Ordering::Relaxed);
     }
 }
 
