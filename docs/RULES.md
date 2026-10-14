@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:5936eb2c27fec878", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only renamed 'one per device' to 'one per stream'; R-RT-001..006 do not depend on the count and still hold" }
+verified = { hash = "b3:a356d168d6f85bf5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; R-RT-001..006 still hold, and R-RT-003's parameter channels are exactly what live values use" }
 -->
 
 <a id="R-RT-001"></a>
@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:bf319d6ac8604c1b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "R-API-002 prose edited to say tools are generated and grouped by noun (op noun.verb under the noun's tool, each command/query in exactly one tool, unique names), as tool_names_are_valid checks; regex, enforced_by and applies_to unchanged; R-API-001/003/004 untouched" }
+verified = { hash = "b3:dce523f0b1c2ca35", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #73: R-API-002 prose describes noun-grouped MCP tools (regex, enforced_by, applies_to unchanged); dependency ARCH#protocol changed only via main's ADR-0032 bullets, which R-API-001..004 already govern" }
 -->
 
 <a id="R-API-001"></a>

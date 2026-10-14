@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6e2060f17bf8d039", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#70 daemon open question 5): this PR only extends tests.rs (a second hello on a WsControl after shutdown fails with Disconnected); design text, including main's daemon question, still holds" }
+verified = { hash = "b3:7204683d5adf91a2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #73: this PR only extends the shutdown test (a second hello on a closed WsControl fails Disconnected); design text is main's (TLS open question, daemon open question 5) and still holds" }
 -->
 
 ### Listening and admission
@@ -126,8 +126,9 @@ connection tasks; `futures-util` to split the socket and run calls concurrently
 ### Open questions
 
 1. **TLS.** Plain `ws://` on loopback is the first cut. Remote browsers need `wss://`
-   with rustls and the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)), which
-   puts `ring` on the lint-deps native-code allowlist: a governance change.
+   with rustls and the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)): a TLS
+   feature and its wiring. `ring` is already on the lint-deps native-code allowlist, for
+   `jstream-outputs`' RTMPS, so that needs no further governance change.
 2. **Browser token.** Browsers can't set `Authorization` on a WebSocket. The client
    design sends the token in `Sec-WebSocket-Protocol` instead
    ([jstream-control › Design](../jstream-control/README.md#design)); the subprotocol

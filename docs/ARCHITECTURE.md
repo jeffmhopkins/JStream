@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:0288f441497ff857", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon changed only in token.rs (directory at the token path refused on Windows too); the daemon row (first cut serves the WebSocket API) and diagram still hold" }
+verified = { hash = "b3:86a303e69b7ff4c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon/README.md only had its design verified line refreshed (ADR-0032 dependency re-check); shape diagram, per-client undo in the engine box and host table unchanged and still hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:5f6fbb149a0ef9d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main with #68: new apps/jstream-daemon/Cargo.toml at layer 6 (deps core L5, server L4, protocol, control-ws dev) and jstream-platform-windows' WGC features; daemon row says the first cut serves the WebSocket API only; all edges point strictly down (lint-deps ok)" }
+verified = { hash = "b3:89b8da3eb137ab44", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#66, #69, #70): new crates/jstream-audio/Cargo.toml at layer 2 (deps jstream-media, jstream-platform L1, no unsafe) matches the L2 audio row; other rows and edges as on main" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -212,7 +212,7 @@ Collection (JSON on disk, schema_version, rev: u64)
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:d5982cd49a11dfac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Thread table: audio threads are one per stream, not per device (an output and its loopback are two streams on one endpoint; #56 review N3). Clock text, S3 result and the rest of the table unchanged" }
+verified = { hash = "b3:1882506d5cf34ee5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: the parameter-channel sentence now says continuous parameters are live values on the wire, committed by one batch (ADR-0032); clock, thread table, S3 result and arc-swap snapshot text unchanged and still match" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -249,10 +249,19 @@ Still open: the mic and the output share the ES-9's crystal, so the relative dri
 only −0.12 ppm. Drift between two independent devices, and events rarer than about once
 in 20 minutes, haven't been measured.
 
+**In the engine:** `jstream-audio` runs S3's drift fit and PI loop with S3's tuning on
+each input's audio thread, resampling into a per-input ring indexed by engine frame
+that the mixer reads on the engine clock
+([its real-time design](../crates/jstream-audio/README.md#realtime)). It differs from
+what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, and the
+timing error is absolute, so inputs line up with each other. That combination has been
+simulated (within 0.05 ms after settling), not yet measured on hardware.
+
 **State to RT threads:** each subsystem (render, audio, outputs) gets its own immutable
 snapshot through `arc-swap`, rebuilt only when that subsystem's state changes.
 Continuous parameters (fader moves, transform drags) bypass snapshots and go through
-lock-free parameter channels. GPU resources are owned by `render`, keyed by ID, created
+lock-free parameter channels. On the wire they are live values, committed by one batch
+at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
 <a id="protocol"></a>
@@ -260,7 +269,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:4f7d8bd20718519b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased: covered changes are jstream-mcp's re-hello error wording and README (no wire change) and a jstream-server test; Transport and error bullets still hold" }
+verified = { hash = "b3:cacfe8c85e4bcc84", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #73: covered changes are jstream-mcp's not-sent error wording/README and a server test, beside main's ADR-0032 live/history bullets; no wire change, Transport and Errors bullets hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -276,6 +285,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
+- **Live values** (`live.set`, `live.cancel`; events `live.changed`, `live.ended`):
+  actions that override live-adjustable parameters during a drag or a live dialog, with
+  no `rev` bump or undo step; one batch commits the gesture
+  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+- **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
+  of call that applies a step's inverse (or the step again) as one `rev` bump
+  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
   `output.status`; later `video.snapshot`, `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `stats.tick`, …).
