@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:c19f99a50de1a941", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b mixer bullet now names ADR-0028's master bus, per-source and per-bus faders and mute, when_shown audio and peak/true-peak/loudness meters, as the ADR's consequences ask; M1a/c/d and other M1b bullets unchanged" }
+verified = { hash = "b3:28f61eb03c553fa2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: M1b keeps ADR-0023's filters/effects bullet (opacity, blend, reserved effects) and ADR-0028's mixer bullet; rest unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +

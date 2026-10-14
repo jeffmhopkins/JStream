@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:dce523f0b1c2ca35", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #73: R-API-002 prose describes noun-grouped MCP tools (regex, enforced_by, applies_to unchanged); dependency ARCH#protocol changed only via main's ADR-0032 bullets, which R-API-001..004 already govern" }
+verified = { hash = "b3:0d461a9d141b2c04", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: covered/depended sections changed only by ADR-0023/0028 doc text and verified lines; R-API rules unchanged and the ADRs' additions remain minor-release additive" }
 -->
 
 <a id="R-API-001"></a>

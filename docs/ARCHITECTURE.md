@@ -163,7 +163,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md", "docs/adr/0023-placements-references-and-clones.md"]
-verified = { hash = "b3:81d6f4dc6d28a5f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for ADR-0028: depends_on moved from ADR-0007; sources gain SourceAudio (enabled, follow, gain_db, muted, filters) and lose 'independent of scenes'; audio gains master bus, bus fader/mute, keys, monitor {device, tap}; bullets for signal order, graph rules and the D29 shown/on-program definition match the ADR; Built so far lists source audio as not yet" }
+verified = { hash = "b3:6150e1bf68db9c07", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 from main with ADR-0028: depends_on lists both; Source has duplicated_from? and audio?; SceneItem keeps opacity/blend/effects; Built-so-far not-yet list has both ADRs' unbuilt fields" }
 -->
 
 ```
@@ -311,7 +311,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e05a1dee1edbd4bc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for ADR-0028: binary streams bullet now records the decided meter frame fields (peak, RMS, true peak; LUFS per bus), subscription-limited loudness and the audio.reset_loudness action; the stream itself is still not designed or built" }
+verified = { hash = "b3:0c9e3188a184e432", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: ADR-0032 live/history bullets and this PR's meter-frame/audio.reset_loudness bullet both present, no overlap; nothing new is built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
