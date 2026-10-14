@@ -59,8 +59,9 @@ pub(crate) fn channel_mask(layout: ChannelLayout) -> u32 {
 /// stereo by WASAPI: the proposed default in the `jstream-platform` README.
 ///
 /// A 6-channel mix is opened as is only when its speakers are `jstream-media`'s 5.1
-/// (surround pair at the back). Any other 5.1 (surround pair at the side, `0x60F`) is
-/// converted, so WASAPI maps its channels into that order.
+/// (surround pair at the back, `0x3F`) or unspecified (no mask, or a zero one). Any other
+/// 5.1 (surround pair at the side, `0x60F`) is converted, so WASAPI maps its channels
+/// into that order.
 ///
 /// # Errors
 /// [`PlatformError::Unsupported`] for a mix format without a rate or channels.
@@ -76,8 +77,10 @@ pub(crate) fn plan(mix: MixFormat) -> Result<Plan, PlatformError> {
     let native = layout_for(mix.channels);
     let layout = native.unwrap_or(ChannelLayout::Stereo);
     let format = AudioFormat::new(mix.rate, layout, SampleFormat::F32Interleaved)?;
-    let speakers_match =
-        layout != ChannelLayout::Surround51 || mix.mask.is_none_or(|m| m == channel_mask(layout));
+    // No mask, or a zero one (speaker positions unspecified, which some drivers report),
+    // means the default positions for the channel count.
+    let speakers_match = layout != ChannelLayout::Surround51
+        || mix.mask.is_none_or(|m| m == 0 || m == channel_mask(layout));
     Ok(Plan {
         format,
         convert: !mix.float32 || native.is_none() || !speakers_match,
@@ -197,6 +200,8 @@ mod tests {
         let back = plan(with(0x3F)).expect("plannable");
         assert!(!back.convert);
         // Side surround (KSAUDIO_SPEAKER_5POINT1_SURROUND): WASAPI remaps it.
+        // Unspecified positions take the defaults, which are already that order.
+        assert!(!plan(with(0)).expect("plannable").convert);
         let side = plan(with(0x60F)).expect("plannable");
         assert!(side.convert);
         assert_eq!(side.format.layout(), ChannelLayout::Surround51);

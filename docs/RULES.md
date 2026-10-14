@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:fc047ba77911ffb3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only gained the S3 result paragraph; R-RT-001..006 still consistent with the unchanged thread table and snapshot/collector model" }
+verified = { hash = "b3:5936eb2c27fec878", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only renamed 'one per device' to 'one per stream'; R-RT-001..006 do not depend on the count and still hold" }
 -->
 
 <a id="R-RT-001"></a>

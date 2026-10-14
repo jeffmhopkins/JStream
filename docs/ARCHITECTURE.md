@@ -212,7 +212,7 @@ Collection (JSON on disk, schema_version, rev: u64)
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:689a4ff54de4c01d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added spike S3 result (20-min run, ES-9 mic+loopback: no glitches, -59.2/-59.3 ppm vs QPC, resampler within 0.06 ms, no reanchor) from s3.json; it confirms ADR-0014 as written; clock text and thread table unchanged; open items stated (shared crystal, run shorter than ROADMAP's hour)" }
+verified = { hash = "b3:d5982cd49a11dfac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Thread table: audio threads are one per stream, not per device (an output and its loopback are two streams on one endpoint; #56 review N3). Clock text, S3 result and the rest of the table unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -225,7 +225,7 @@ every mix runs at the base rate divided by an integer.
 | Thread | Runs | Rules |
 |---|---|---|
 | Control (tokio) | Commands, server, MCP, YouTube API, network outputs | May allocate and await. Talks to RT threads only through lock-free channels. |
-| Audio (one per device) | Device I/O, resampling into the engine's ring | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio". |
+| Audio (one per stream) | Device I/O, resampling into the engine's ring | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio". |
 | Mixer | Sends, buses, filters, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |

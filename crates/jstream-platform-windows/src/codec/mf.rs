@@ -5,9 +5,11 @@ use std::mem::ManuallyDrop;
 
 use jstream_platform::PlatformError;
 use windows::Win32::Media::MediaFoundation::{
-    IMFActivate, IMFSample, IMFTransform, MF_E_TRANSFORM_NEED_MORE_INPUT, MF_VERSION,
-    MFCreateMemoryBuffer, MFCreateSample, MFSTARTUP_NOSOCKET, MFShutdown, MFStartup, MFT_ENUM_FLAG,
-    MFT_FRIENDLY_NAME_Attribute, MFT_OUTPUT_DATA_BUFFER, MFT_OUTPUT_STREAM_PROVIDES_SAMPLES,
+    IMFActivate, IMFSample, IMFTransform, MF_E_TRANSFORM_NEED_MORE_INPUT,
+    MF_E_TRANSFORM_STREAM_CHANGE, MF_VERSION, MFCreateMemoryBuffer, MFCreateSample,
+    MFSTARTUP_NOSOCKET, MFShutdown, MFStartup, MFT_ENUM_FLAG, MFT_FRIENDLY_NAME_Attribute,
+    MFT_MESSAGE_NOTIFY_END_STREAMING, MFT_OUTPUT_DATA_BUFFER,
+    MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES, MFT_OUTPUT_STREAM_PROVIDES_SAMPLES,
     MFT_REGISTER_TYPE_INFO, MFTEnumEx,
 };
 use windows::Win32::System::Com::{
@@ -61,9 +63,34 @@ pub(crate) struct Found {
 
 impl Found {
     /// Creates the transform.
-    pub(crate) fn activate(&self) -> Result<IMFTransform, PlatformError> {
+    pub(crate) fn activate(&self) -> Result<Mft, PlatformError> {
         // SAFETY: plain COM call on a live activation object.
-        unsafe { self.activate.ActivateObject() }.os("IMFActivate::ActivateObject")
+        let transform: IMFTransform =
+            unsafe { self.activate.ActivateObject() }.os("IMFActivate::ActivateObject")?;
+        Ok(Mft {
+            transform,
+            activate: self.activate.clone(),
+        })
+    }
+}
+
+/// A transform and the activation object that created it. Dropping it ends streaming and
+/// shuts the object down, as Microsoft asks for objects made by `ActivateObject`.
+pub(crate) struct Mft {
+    pub(crate) transform: IMFTransform,
+    activate: IMFActivate,
+}
+
+impl Drop for Mft {
+    fn drop(&mut self) {
+        // SAFETY: plain COM calls on live objects; errors at teardown change nothing. A
+        // transform that never started streaming ignores END_STREAMING.
+        unsafe {
+            let _ = self
+                .transform
+                .ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0);
+            let _ = self.activate.ShutdownObject();
+        }
     }
 }
 
@@ -160,45 +187,100 @@ pub(crate) fn sample_from(
     }
 }
 
+/// One output sample's bytes.
+pub(crate) struct OutSample {
+    pub(crate) data: Vec<u8>,
+}
+
 /// How a transform's output stream wants its samples.
 pub(crate) struct Output {
     /// Whether the MFT allocates its own output samples.
     provides_samples: bool,
     /// The buffer size to allocate otherwise.
     buffer_size: u32,
+    /// The output sample handed to the MFT when it doesn't allocate its own: created
+    /// once and reused, so a pull that finds no output allocates nothing.
+    reusable: Option<IMFSample>,
 }
 
 impl Output {
     /// Reads output stream 0's requirements. Call after the media types are set.
-    pub(crate) fn new(transform: &IMFTransform) -> Result<Self, PlatformError> {
+    /// `min_size` bounds the buffer size from below, for MFTs that report 0 or too
+    /// little before streaming starts.
+    pub(crate) fn new(transform: &IMFTransform, min_size: u32) -> Result<Self, PlatformError> {
         // SAFETY: plain COM call on a configured transform.
         let info =
             unsafe { transform.GetOutputStreamInfo(0) }.os("IMFTransform::GetOutputStreamInfo")?;
+        let provides =
+            (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES.0 | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES.0) as u32;
         Ok(Self {
-            provides_samples: info.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES.0 as u32 != 0,
-            // Some MFTs report 0 until streaming starts; one AAC or small H.264 access
-            // unit fits in 64 KiB, and a larger one fails visibly rather than truncating.
-            buffer_size: if info.cbSize == 0 {
-                65_536
-            } else {
-                info.cbSize
-            },
+            provides_samples: info.dwFlags & provides != 0,
+            buffer_size: info.cbSize.max(min_size),
+            reusable: None,
         })
     }
 
-    /// One `ProcessOutput` call: the bytes of the next output sample, or `None` when the
-    /// MFT needs more input.
-    pub(crate) fn pull(&self, transform: &IMFTransform) -> Result<Option<Vec<u8>>, PlatformError> {
+    /// Takes the next output sample, or `None` when the MFT needs more input. A format
+    /// change on the output (`MF_E_TRANSFORM_STREAM_CHANGE`) is accepted and the call
+    /// retried, and an empty output sample is skipped.
+    pub(crate) fn pull(
+        &mut self,
+        transform: &IMFTransform,
+    ) -> Result<Option<OutSample>, PlatformError> {
+        for _ in 0..4 {
+            match self.pull_once(transform)? {
+                Pulled::Sample(s) if s.data.is_empty() => {}
+                Pulled::Sample(s) => return Ok(Some(s)),
+                Pulled::NeedInput => return Ok(None),
+                Pulled::StreamChange => {
+                    // SAFETY: plain COM calls on a live transform.
+                    unsafe {
+                        let t = transform
+                            .GetOutputAvailableType(0, 0)
+                            .os("IMFTransform::GetOutputAvailableType")?;
+                        transform
+                            .SetOutputType(0, &t, 0)
+                            .os("IMFTransform::SetOutputType (stream change)")?;
+                    }
+                }
+            }
+        }
+        Err(PlatformError::Os {
+            call: "IMFTransform::ProcessOutput",
+            code: None,
+            message: "the output format kept changing, or only empty samples came out".into(),
+        })
+    }
+
+    fn pull_once(&mut self, transform: &IMFTransform) -> Result<Pulled, PlatformError> {
         let sample = if self.provides_samples {
             None
         } else {
-            // SAFETY: plain constructor and method calls on live objects.
-            Some(unsafe {
-                let s = MFCreateSample().os("MFCreateSample")?;
-                s.AddBuffer(&MFCreateMemoryBuffer(self.buffer_size).os("MFCreateMemoryBuffer")?)
-                    .os("IMFSample::AddBuffer")?;
-                s
-            })
+            let sample = match &self.reusable {
+                Some(s) => s.clone(),
+                None => {
+                    // SAFETY: plain constructor and method calls on live objects.
+                    let s = unsafe {
+                        let s = MFCreateSample().os("MFCreateSample")?;
+                        s.AddBuffer(
+                            &MFCreateMemoryBuffer(self.buffer_size).os("MFCreateMemoryBuffer")?,
+                        )
+                        .os("IMFSample::AddBuffer")?;
+                        s
+                    };
+                    self.reusable = Some(s.clone());
+                    s
+                }
+            };
+            // SAFETY: plain COM calls on the sample's own buffer; emptying it lets the MFT
+            // write from the start.
+            unsafe {
+                sample
+                    .GetBufferByIndex(0)
+                    .and_then(|b| b.SetCurrentLength(0))
+                    .os("IMFMediaBuffer::SetCurrentLength")?;
+            }
+            Some(sample)
         };
         let mut buffers = [MFT_OUTPUT_DATA_BUFFER {
             dwStreamID: 0,
@@ -219,7 +301,8 @@ impl Output {
         };
         match result {
             Ok(()) => {}
-            Err(e) if e.code() == MF_E_TRANSFORM_NEED_MORE_INPUT => return Ok(None),
+            Err(e) if e.code() == MF_E_TRANSFORM_NEED_MORE_INPUT => return Ok(Pulled::NeedInput),
+            Err(e) if e.code() == MF_E_TRANSFORM_STREAM_CHANGE => return Ok(Pulled::StreamChange),
             Err(e) => return Err(crate::com::os_error("IMFTransform::ProcessOutput", &e)),
         }
         let sample = sample.ok_or_else(|| PlatformError::Os {
@@ -240,7 +323,14 @@ impl Output {
                 .os("IMFMediaBuffer::Lock")?;
             let data = std::slice::from_raw_parts(ptr, len as usize).to_vec();
             buffer.Unlock().os("IMFMediaBuffer::Unlock")?;
-            Ok(Some(data))
+            Ok(Pulled::Sample(OutSample { data }))
         }
     }
+}
+
+/// What one `ProcessOutput` call gave.
+enum Pulled {
+    Sample(OutSample),
+    NeedInput,
+    StreamChange,
 }
