@@ -11,13 +11,19 @@
 //!   `Host`, where an origin without a port means port 80 too) or a configured extra.
 //!   Browsers always send it on WebSocket upgrades, so a
 //!   foreign web page can't connect; native clients send the server's own.
-//! - **`Authorization: Bearer <token>`** must carry the control token, compared in
-//!   constant time.
+//! - **`Authorization: Bearer <token>`** must carry the control token. Both sides are
+//!   hashed to a fixed length and the digests compared in constant time, so the time
+//!   taken depends only on the presented value's length, never on the token or on where
+//!   they differ.
+//!
+//! Configured extra hosts must name their port: `check_extra_hosts` refuses one that
+//! doesn't before the server binds, since it could never match.
 //!
 //! A refused `Host` or `Origin` is HTTP 403, a missing or wrong token 401. Each header
 //! must appear exactly once.
 
 use crate::config::{ServerConfig, Token};
+use crate::error::ServerError;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use std::net::SocketAddr;
@@ -144,6 +150,33 @@ fn single<'h>(headers: &'h HeaderMap, name: &HeaderName) -> Option<&'h str> {
     HeaderValue::to_str(value).ok()
 }
 
+/// Checks that every configured extra host is `name:port` with a decimal port from 1 to
+/// 65535. The gate compares hosts with their port, so an entry without one, or with a
+/// port the server can't listen on, would never match: it is refused here instead of
+/// being ignored (#44).
+pub(crate) fn check_extra_hosts(extra_hosts: &[String]) -> Result<(), ServerError> {
+    for host in extra_hosts {
+        let invalid = |reason| ServerError::InvalidHost {
+            host: host.clone(),
+            reason,
+        };
+        if !has_port(host) {
+            return Err(invalid("it has no port; write it as `name:port`"));
+        }
+        let (name, port) = host.rsplit_once(':').unwrap_or((host, ""));
+        if name.is_empty() {
+            return Err(invalid("it has no name before the port"));
+        }
+        let port_ok = !port.is_empty()
+            && port.bytes().all(|b| b.is_ascii_digit())
+            && port.parse::<u16>().is_ok_and(|p| p != 0);
+        if !port_ok {
+            return Err(invalid("its port must be a number from 1 to 65535"));
+        }
+    }
+    Ok(())
+}
+
 /// Whether a `host[:port]` authority names a port. An IPv6 literal (`[::1]`) has colons
 /// of its own, so only one after its closing bracket counts.
 fn has_port(authority: &str) -> bool {
@@ -163,8 +196,9 @@ fn bearer(authorization: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Gate, Refusal};
+    use super::{Gate, Refusal, check_extra_hosts};
     use crate::config::{ServerConfig, Token};
+    use crate::error::ServerError;
     use axum::http::{HeaderMap, HeaderName, HeaderValue, header};
     use std::net::SocketAddr;
 
@@ -345,6 +379,49 @@ mod tests {
         assert_eq!(
             gate.check(&request("localhost:4455", "http://localhost")),
             Err(Refusal::Origin)
+        );
+    }
+
+    /// #44: an extra host without a port (or with a bad one) could never match, so it is
+    /// refused when the server is configured instead of being silently ignored.
+    #[test]
+    fn extra_hosts_must_name_a_port() {
+        let check = |hosts: &[&str]| {
+            let hosts: Vec<String> = hosts.iter().map(|h| (*h).to_owned()).collect();
+            check_extra_hosts(&hosts)
+        };
+        for good in [
+            "studio.lan:4455",
+            "STUDIO.lan:80",
+            "[::1]:4455",
+            "[fe80::1]:65535",
+            "10.0.0.2:1",
+        ] {
+            assert!(check(&[good]).is_ok(), "{good}");
+        }
+        assert!(check(&[]).is_ok());
+        for bad in [
+            "studio.lan",
+            "[::1]",
+            "[fe80::1]",
+            "studio.lan:",
+            ":4455",
+            "studio.lan:0",
+            "studio.lan:65536",
+            "studio.lan:+80",
+            "studio.lan:http",
+        ] {
+            match check(&["localhost:4455", bad]) {
+                Err(ServerError::InvalidHost { host, .. }) => assert_eq!(host, bad),
+                other => panic!("{bad}: {other:?}"),
+            }
+        }
+        let Err(error) = check(&["studio.lan"]) else {
+            panic!("a host without a port is refused");
+        };
+        assert_eq!(
+            error.to_string(),
+            "invalid extra host `studio.lan`: it has no port; write it as `name:port`"
         );
     }
 

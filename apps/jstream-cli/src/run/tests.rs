@@ -819,6 +819,65 @@ impl Control for Lost {
     }
 }
 
+/// Input that yields one request line, then fails.
+struct BrokenInput<'a>(&'a [u8]);
+
+impl std::io::Read for BrokenInput<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = std::io::Read::read(&mut self.0, buf)?;
+        if n == 0 {
+            return Err(std::io::Error::other("stdin broke"));
+        }
+        Ok(n)
+    }
+}
+
+impl std::io::BufRead for BrokenInput<'_> {
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        if self.0.is_empty() {
+            return Err(std::io::Error::other("stdin broke"));
+        }
+        Ok(self.0)
+    }
+
+    fn consume(&mut self, amount: usize) {
+        self.0 = &self.0[amount..];
+    }
+}
+
+/// #48: a failed stdin read is reported as a read failure, not as unwritable output.
+#[test]
+fn mcp_reports_a_failed_read_as_such() {
+    let engine = MockEngine::new();
+    let connector =
+        |_: &Connection| -> Result<Box<dyn Control>, CliError> { Ok(Box::new(engine.connect())) };
+    let line = format!("{}\n", mcp_initialize(1));
+    for (json, expected) in [
+        (false, "error: could not read the input: stdin broke\n"),
+        (
+            true,
+            "{\"error\":{\"code\":\"io\",\"message\":\"could not read the input: stdin \
+             broke\"}}\n",
+        ),
+    ] {
+        let args: &[&str] = if json { &["--json", "mcp"] } else { &["mcp"] };
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let code = run(
+            &strings(args),
+            &connector,
+            &mut BrokenInput(line.as_bytes()),
+            &mut out,
+            &mut err,
+        );
+        assert_eq!(code, exit::IO);
+        assert_eq!(String::from_utf8_lossy(&err), expected);
+        // The request before the failure was still answered.
+        let replies = mcp_replies(&String::from_utf8_lossy(&out));
+        assert_eq!(replies.len(), 1);
+        assert_eq!(replies[0]["id"], 1);
+    }
+}
+
 #[test]
 fn mcp_keeps_serving_after_the_engine_is_lost() {
     let connector = |_: &Connection| -> Result<Box<dyn Control>, CliError> { Ok(Box::new(Lost)) };
