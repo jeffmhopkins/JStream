@@ -26,7 +26,7 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "b3:4c8cb01614e418f6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against DOCS#verification after docs-for went live (commands list no longer marks it planned): check/verify workflow, Docs-line duty and no hand-typed hashes all still match" }
+verified = { hash = "b3:c26fe51ad2e8157d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the edited DOCS#verification (metadata blocks no longer hashed, row deps, one-time docs rehash): check/verify workflow unchanged; the hash bullet now names rehash as the only other writer, which refuses stale sections" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one
@@ -36,7 +36,8 @@ verified = { hash = "b3:4c8cb01614e418f6", by = "agent:claude@session_01QBbMRwRu
   `@generated` blocks.
 - New external URL → register it in `docs/external.toml`. Repeated value → `docs/facts.toml`.
 - New crate root → add its `//! Docs:` line.
-- Never type a `hash` by hand. Only `docs verify` writes it.
+- Never type a `hash` by hand. Only `docs verify` writes it (apart from the one-time
+  `docs rehash` migration of ADR-0039, which never restamps a stale section).
 
 <a id="pr-loop"></a>
 ## The PR loop (you are a builder)

@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d67df04358b6063f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed by the crate-map mcp/server rows (MCP HTTP to be served by the server, not built); the daemon's Purpose and main's #98 logging unchanged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
+verified = { hash = "b3:0db0d1f7dfa5ea41", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed by the crate-map mcp/server rows (MCP HTTP to be served by the server, not built); the daemon's Purpose and main's #98 logging unchanged" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a

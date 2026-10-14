@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d115c744cb49ce46", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: only the ServerConfig::extra_hosts rustdoc changed; contents list (Server, Configuration, Gate) unchanged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
+verified = { hash = "b3:387f2fd593f08781", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: only the ServerConfig::extra_hosts rustdoc changed; contents list (Server, Configuration, Gate) unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote

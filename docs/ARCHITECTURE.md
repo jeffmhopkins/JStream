@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:75cc7cbc7f54bee4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by main's #98 daemon logging text and their re-verified lines in this PR; layer diagram and app roles unchanged" }
+verified = { hash = "b3:83d44b55e17d503e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by main's #98 daemon logging text and their re-verified lines in this PR; layer diagram and app roles unchanged" }
 -->
 
 ```
@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5ccc3b55ace553fd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: covered crates changed only in the extra_hosts rustdoc (server) and the MCP tool_call span parent; envelope, admission and Origin/Host text unaffected" }
+verified = { hash = "b3:330dfc37e4d6196c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: covered crates changed only in the extra_hosts rustdoc (server) and the MCP tool_call span parent; envelope, admission and Origin/Host text unaffected" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -533,7 +533,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:c36541996c417b46", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: the jstream-mcp change is only which span tool_call nests under; the section's tools, audit and transport text say nothing about spans and still hold" }
+verified = { hash = "b3:54f83998110d3519", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: the jstream-mcp change is only which span tool_call nests under; the section's tools, audit and transport text say nothing about spans and still hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

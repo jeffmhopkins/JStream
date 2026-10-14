@@ -195,6 +195,107 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
     Ok(())
 }
 
+/// What `docs rehash` did.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct Rehash {
+    /// Sections whose hash was rewritten, as `DOC#anchor`.
+    restamped: Vec<String>,
+    /// Sections already fresh under the current rule.
+    fresh: usize,
+    /// Sections left stale, as `DOC#anchor`: fresh under neither rule.
+    stale: Vec<String>,
+}
+
+/// `docs rehash`: the one-time migration to ADR-0039's hashing rule. A section's stored
+/// hash is replaced by its current-rule hash only when it is what the old rule computes for
+/// this tree (metadata hashed, row references widened to their section), or what the
+/// current rule computes with row references widened (a section verified against a whole
+/// table, then narrowed to its row). Only the `hash` value changes; `by` and `note` stay.
+/// Every decision is made against the unmodified tree before anything is written, so
+/// sections cannot affect each other. A stale section is never written.
+fn rehash(root: &Path) -> Result<Rehash> {
+    let l = load(root)?;
+    let by_path: BTreeMap<&str, &parse::Doc> =
+        l.docs.iter().map(|d| (d.path.as_str(), d)).collect();
+    let files = hash::Files::new(root, &l.files);
+    let untracked = git_ls(root, &["--others", "--exclude-standard"])?;
+    let untracked = hash::Files::new(root, &untracked);
+    let legacy = hash::Mode {
+        strip_metadata: false,
+        widen_rows: true,
+    };
+    let narrowed = hash::Mode {
+        strip_metadata: true,
+        widen_rows: true,
+    };
+    let mut report = Rehash::default();
+    // Per doc: (line index, stored hash, new hash).
+    let mut edits: BTreeMap<&str, Vec<(usize, String, String)>> = BTreeMap::new();
+    for doc in &l.docs {
+        for s in &doc.sections {
+            let (Some(meta), Some((start, end))) = (&s.meta, s.block) else {
+                continue;
+            };
+            let strings = |k: &str| -> Vec<String> {
+                meta.get(k)
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str().map(str::to_owned))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let Some(stored) = meta
+                .get("verified")
+                .and_then(|v| v.get("hash"))
+                .and_then(|h| h.as_str())
+            else {
+                continue;
+            };
+            let (covers, deps) = (strings("covers"), strings("depends_on"));
+            let name = format!("{}#{}", doc.meta_str("id").unwrap_or(&doc.path), s.anchor);
+            let hash_by = |mode| {
+                hash::section_hash_by(mode, doc, &s.anchor, &covers, &deps, &files, &by_path)
+            };
+            let now = hash_by(hash::Mode::CURRENT)?;
+            if stored == now {
+                report.fresh += 1;
+                continue;
+            }
+            let was_fresh = stored == hash_by(legacy)? || stored == hash_by(narrowed)?;
+            // As in `verify`: CI hashes only the committed tree (review B1 on #10).
+            let line = (start + 1..end).find(|&k| {
+                let l = doc.text.lines().nth(k).unwrap_or_default();
+                l.trim_start().starts_with("verified") && l.matches(stored).count() == 1
+            });
+            match line {
+                Some(k) if was_fresh && untracked.matching(&covers)?.is_empty() => {
+                    edits
+                        .entry(doc.path.as_str())
+                        .or_default()
+                        .push((k, stored.to_owned(), now));
+                    report.restamped.push(name);
+                }
+                _ => report.stale.push(name),
+            }
+        }
+    }
+    for (path, list) in edits {
+        let doc = by_path[path];
+        let mut lines: Vec<String> = doc.text.lines().map(str::to_owned).collect();
+        for (k, old, new) in list {
+            lines[k] = lines[k].replacen(&old, &new, 1);
+        }
+        let mut out = lines.join("\n");
+        if doc.text.ends_with('\n') {
+            out.push('\n');
+        }
+        std::fs::write(root.join(path), out).with_context(|| format!("writing {path}"))?;
+    }
+    Ok(report)
+}
+
 /// `arg` as a repo-relative path with `/` separators. Absolute paths must be inside `root`.
 /// They are compared after canonicalizing both sides, so Windows verbatim paths and
 /// symlinks work; the argument may not exist yet, so its deepest existing ancestor is
@@ -274,6 +375,25 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             verify(root, target, by, note)?;
             Ok(true)
         }
+        Some("rehash") => {
+            let [_] = args else {
+                bail!("usage: cargo xtask docs rehash");
+            };
+            let r = rehash(root)?;
+            for s in &r.restamped {
+                eprintln!("restamped {s}");
+            }
+            for s in &r.stale {
+                eprintln!("stale, left for a re-read: {s}");
+            }
+            eprintln!(
+                "docs rehash: {} restamped, {} already fresh, {} stale",
+                r.restamped.len(),
+                r.fresh,
+                r.stale.len()
+            );
+            Ok(true)
+        }
         Some("for") => {
             let [_, arg] = args else {
                 bail!("usage: cargo xtask docs for <path>");
@@ -294,7 +414,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             Ok(true)
         }
         _ => bail!(
-            "usage: cargo xtask docs check | verify <DOC#anchor> --by <who> --note <text> | for <path>"
+            "usage: cargo xtask docs check | verify <DOC#anchor> --by <who> --note <text> | for <path> | rehash"
         ),
     }
 }
@@ -395,6 +515,166 @@ mod tests {
         verify(&f.0, "T#a", "agent:test", note).expect("all covered files tracked");
         let written = std::fs::read_to_string(f.0.join("T.md")).expect("invariant: just written");
         assert!(written.contains("hash = \"b3:"), "{written}");
+    }
+
+    const NOTE: &str = "checked the section text against its inputs in this test";
+
+    /// ADR-0039: re-verifying section A, in a file that section B covers, leaves B fresh;
+    /// a content edit to that file still stales B.
+    #[test]
+    fn reverify_does_not_cascade_but_content_edits_do() {
+        let mut files = REGISTRIES.to_vec();
+        let x = doc("X", "active", "a", "src/**");
+        let y = "<!-- @doc\nid = \"Y\"\n-->\n<a id=\"b\"></a>\n## B\n<!-- @section\ncovers = [\"X.md\"]\nverified = { hash = \"b3:0\", by = \"agent:t\", note = \"n\" }\n-->\nAbout X.\n";
+        files.extend([("X.md", x.as_str()), ("Y.md", y), ("src/a.rs", "a")]);
+        let f = Fixture::new("cascade", &files);
+        verify(&f.0, "X#a", "agent:test", NOTE).expect("X#a verifies");
+        verify(&f.0, "Y#b", "agent:test", NOTE).expect("Y#b verifies");
+        assert_eq!(f.diags("is stale"), Vec::<String>::new());
+        // Re-verify A after a change to its covered code: its `verified` line changes.
+        f.write("src/a.rs", "a2");
+        verify(&f.0, "X#a", "agent:other", &format!("{NOTE}, again")).expect("X#a verifies");
+        assert_eq!(f.diags("is stale"), Vec::<String>::new());
+        // A prose edit to X.md stales B.
+        let text = std::fs::read_to_string(f.0.join("X.md")).expect("invariant: written");
+        f.write("X.md", &text.replace("Text.", "Changed text."));
+        let stale = f.diags("is stale");
+        assert_eq!(stale.len(), 2, "{stale:?}");
+        assert!(stale[1].contains("section `b`"), "{stale:?}");
+    }
+
+    const MAP: &str = "<!-- @doc\nid = \"M\"\n-->\n<a id=\"map\"></a>\n## Map\n<!-- @section\n-->\n| L | Crate |\n|---|---|\n| 0 | `a` |\n| 1 | `b` |\n";
+
+    /// ADR-0039: a row-level dependency stales only when its own row changes, and must
+    /// name exactly one row.
+    #[test]
+    fn row_dependency_stales_only_on_its_row() {
+        let mut files = REGISTRIES.to_vec();
+        let p = |dep: &str| {
+            format!(
+                "<!-- @doc\nid = \"P\"\n-->\n<a id=\"p\"></a>\n## P\n<!-- @section\ndepends_on = [\"{dep}\"]\nverified = {{ hash = \"b3:0\", by = \"agent:t\", note = \"n\" }}\n-->\nPurpose.\n"
+            )
+        };
+        let (pa, pz) = (p("M.md#map/a"), p("M.md#map/z"));
+        files.extend([("M.md", MAP), ("P.md", pa.as_str()), ("Z.md", "")]);
+        let f = Fixture::new("rows", &files);
+        f.write(
+            "Z.md",
+            &pz.replace("id = \"P\"", "id = \"Z\"")
+                .replace("id=\"p\"", "id=\"z\""),
+        );
+        f.git(&["add", "-A"]);
+        assert_eq!(
+            f.diags("`depends_on` row"),
+            vec!["Z.md:5: `depends_on` row `M.md#map/z`: no table row has a cell `` `z` ``"]
+        );
+        verify(&f.0, "P#p", "agent:test", NOTE).expect("P#p verifies");
+        assert!(f.diags("section `p` is stale").is_empty());
+        f.write("M.md", &MAP.replace("| 1 | `b` |", "| 2 | `b` |"));
+        assert!(f.diags("section `p` is stale").is_empty());
+        f.write("M.md", &MAP.replace("| 0 | `a` |", "| 0 | `a` | new |"));
+        assert_eq!(f.diags("section `p` is stale").len(), 1);
+        f.write("M.md", &format!("{MAP}| 3 | `a` |\n"));
+        assert_eq!(
+            f.diags("`depends_on` row `M.md#map/a`"),
+            vec!["P.md:5: `depends_on` row `M.md#map/a`: several table rows have a cell `` `a` ``"]
+        );
+    }
+
+    /// ADR-0039 migration: `docs rehash` restamps only sections fresh under the old rule
+    /// (or fresh before being narrowed to a row), keeps `by` and `note`, and never writes a
+    /// stale section.
+    #[test]
+    fn rehash_restamps_fresh_sections_only() {
+        let sec = |id: &str, anchor: &str, meta: &str, text: &str| {
+            format!(
+                "<!-- @doc\nid = \"{id}\"\n-->\n<a id=\"{anchor}\"></a>\n## S\n<!-- @section\n{meta}\nverified = {{ hash = \"H-{anchor}\", by = \"agent:orig-{anchor}\", note = \"note {anchor}\" }}\n-->\n{text}\n"
+            )
+        };
+        let mut files = REGISTRIES.to_vec();
+        let a = sec("A", "a", "covers = [\"src/**\"]", "About src.");
+        let b = sec("B", "b", "covers = [\"A.md\"]", "About A.");
+        let s = sec("S", "s", "covers = [\"src/**\"]", "Stale.");
+        let r = sec("R", "r", "depends_on = [\"M.md#map/a\"]", "Row.");
+        files.extend([
+            ("src/x.rs", "x"),
+            ("M.md", MAP),
+            ("A.md", a.as_str()),
+            ("B.md", b.as_str()),
+            ("S.md", s.as_str()),
+            ("R.md", r.as_str()),
+        ]);
+        let f = Fixture::new("rehash", &files);
+        // Stamp each section with its old-rule hash, in dependency order (B covers A.md).
+        let legacy = hash::Mode {
+            strip_metadata: false,
+            widen_rows: true,
+        };
+        for (path, anchor) in [("A.md", "a"), ("B.md", "b"), ("S.md", "s"), ("R.md", "r")] {
+            let l = load(&f.0).expect("invariant: the fixture is readable");
+            let by_path: BTreeMap<&str, &parse::Doc> =
+                l.docs.iter().map(|d| (d.path.as_str(), d)).collect();
+            let d = by_path[path];
+            let meta = d.sections[0]
+                .meta
+                .as_ref()
+                .expect("invariant: has metadata");
+            let get = |k: &str| -> Vec<String> {
+                meta.get(k)
+                    .and_then(|v| v.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|x| x.as_str().map(str::to_owned))
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let files = hash::Files::new(&f.0, &l.files);
+            let h = hash::section_hash_by(
+                legacy,
+                d,
+                anchor,
+                &get("covers"),
+                &get("depends_on"),
+                &files,
+                &by_path,
+            )
+            .expect("invariant: hashable");
+            f.write(path, &d.text.replace(&format!("H-{anchor}"), &h));
+        }
+        // S goes stale under the old rule: its covered code changes after the stamp.
+        f.write("src/x.rs", "x2");
+        let before = std::fs::read_to_string(f.0.join("S.md")).expect("invariant: written");
+        let (a_before, b_before) = (
+            std::fs::read_to_string(f.0.join("A.md")).expect("invariant: written"),
+            std::fs::read_to_string(f.0.join("B.md")).expect("invariant: written"),
+        );
+        let got = rehash(&f.0).expect("rehash runs");
+        assert_eq!(got.restamped, vec!["B#b", "R#r"], "{got:?}");
+        assert_eq!(got.stale, vec!["A#a", "S#s"], "{got:?}");
+        // Stale sections are untouched; restamped ones keep `by` and `note`.
+        assert_eq!(
+            std::fs::read_to_string(f.0.join("S.md")).expect("invariant: written"),
+            before
+        );
+        assert_eq!(
+            std::fs::read_to_string(f.0.join("A.md")).expect("invariant: written"),
+            a_before
+        );
+        let b_after = std::fs::read_to_string(f.0.join("B.md")).expect("invariant: written");
+        assert_ne!(b_after, b_before);
+        assert!(b_after.contains("by = \"agent:orig-b\", note = \"note b\""));
+        let stale: Vec<String> = f.diags("is stale");
+        assert_eq!(stale.len(), 2, "{stale:?}");
+        assert!(
+            stale
+                .iter()
+                .all(|d| d.starts_with("A.md") || d.starts_with("S.md"))
+        );
+        // A second run changes nothing: B and R are now fresh, A and S still refused.
+        let again = rehash(&f.0).expect("rehash runs");
+        assert_eq!((again.restamped.len(), again.fresh), (0, 2), "{again:?}");
+        assert_eq!(again.stale, vec!["A#a", "S#s"]);
     }
 
     /// R-DOC-012: unmatched `covers` fail in active docs, warn in drafts, and are skipped

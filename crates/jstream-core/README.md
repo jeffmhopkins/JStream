@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d95c349770fdfcac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed by the crate-map rows for encode, mcp and server and main's #98 tracing; core's row and Purpose unchanged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
+verified = { hash = "b3:020d5e26f5e6af7d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed by the crate-map rows for encode, mcp and server and main's #98 tracing; core's row and Purpose unchanged" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the

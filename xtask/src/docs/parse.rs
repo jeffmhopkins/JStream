@@ -34,6 +34,8 @@ pub(crate) struct Rule {
     pub(crate) id: String,
     pub(crate) line: usize,
     pub(crate) meta: Option<toml::Table>,
+    /// 0-based line indices of the `<!-- @rule` and closing `-->` lines.
+    pub(crate) block: Option<(usize, usize)>,
 }
 
 /// A Markdown link destination, outside code.
@@ -66,6 +68,8 @@ pub(crate) struct Doc {
     pub(crate) text: String,
     /// 0-based line index where content starts (just after the `@doc` block).
     pub(crate) content_start: usize,
+    /// 0-based line indices of the `<!-- @doc` and closing `-->` lines.
+    pub(crate) doc_block: Option<(usize, usize)>,
 }
 
 impl Doc {
@@ -83,6 +87,33 @@ impl Doc {
     pub(crate) fn has_anchor(&self, anchor: &str) -> bool {
         self.anchors.iter().any(|(a, _)| a == anchor)
     }
+
+    /// One flag per line of `text`: whether the line is part of a well-formed metadata
+    /// block (ADR-0039). That is a block the parser recognised as `@doc`, `@section` or
+    /// `@rule` metadata, whose opening line is exactly the marker (nothing after it) and
+    /// whose body parsed as TOML. Anything else, look-alikes included, is content.
+    pub(crate) fn metadata_lines(&self) -> Vec<bool> {
+        let lines: Vec<&str> = self.text.lines().collect();
+        let mut mask = vec![false; lines.len()];
+        let doc = (self.doc_block, self.meta.is_some(), "<!-- @doc");
+        let sections = self
+            .sections
+            .iter()
+            .map(|s| (s.block, s.meta.is_some(), "<!-- @section"));
+        let rules = self
+            .rules
+            .iter()
+            .map(|r| (r.block, r.meta.is_some(), "<!-- @rule"));
+        for (block, parsed, marker) in std::iter::once(doc).chain(sections).chain(rules) {
+            let Some((start, end)) = block else { continue };
+            if parsed && lines.get(start).is_some_and(|l| l.trim_end() == marker) {
+                for m in &mut mask[start..=end.min(lines.len() - 1)] {
+                    *m = true;
+                }
+            }
+        }
+        mask
+    }
 }
 
 /// Parses `text` (the contents of `path`). Problems found while parsing go to `diags`.
@@ -98,6 +129,7 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
         bare_urls: Vec::new(),
         text: text.to_owned(),
         content_start: 0,
+        doc_block: None,
     };
     let mut err = |line: usize, msg: String| {
         diags.push(Diag {
@@ -116,6 +148,7 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
         match read_block(&lines, 0) {
             Some((body, end)) => {
                 d.meta = parse_toml(&body, 1, &mut err);
+                d.doc_block = Some((0, end));
                 i = end + 1;
                 d.content_start = i;
             }
@@ -206,6 +239,7 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
                 );
             }
             let mut meta = None;
+            let mut block = None;
             if lines
                 .get(i + 1)
                 .is_some_and(|l| l.starts_with("<!-- @rule"))
@@ -213,6 +247,7 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
                 match read_block(&lines, i + 1) {
                     Some((body, end)) => {
                         meta = parse_toml(&body, n + 1, &mut err);
+                        block = Some((i + 1, end));
                         i = end;
                     }
                     None => err(n + 1, "unterminated `<!-- @rule` block".into()),
@@ -223,7 +258,12 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
                     format!("rule `{id}` must be followed by a `<!-- @rule` block"),
                 );
             }
-            d.rules.push(Rule { id, line: n, meta });
+            d.rules.push(Rule {
+                id,
+                line: n,
+                meta,
+                block,
+            });
         }
         i += 1;
     }

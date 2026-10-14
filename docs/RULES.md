@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:f315a837358f5623", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's live-value handover (one atomic store per RT thread, nothing waits), consistent with R-RT-001/002" }
+verified = { hash = "b3:cf5b8b9fa1c6b9cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's live-value handover (one atomic store per RT thread, nothing waits), consistent with R-RT-001/002" }
 -->
 
 <a id="R-RT-001"></a>
@@ -320,7 +320,7 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:3880b2102b8ccc98", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and R-DEP-002's link moved to ADR-0031; R-DEP-002 gains ADR-0031's sentence that pure-Rust image and font crates are not banned codec libraries; deny.toml bans and lint-deps allowlist enforcement unchanged" }
+verified = { hash = "b3:58068a9c133cbde8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and R-DEP-002's link moved to ADR-0031; R-DEP-002 gains ADR-0031's sentence that pure-Rust image and font crates are not banned codec libraries; deny.toml bans and lint-deps allowlist enforcement unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:854c497e0324367d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0037's transition-preset settings, plugin kinds and opaque state type, and #94's override and hotkey rules, are additive or behavioural refinements of unbuilt features; R-API-001..004 hold" }
+verified = { hash = "b3:70368e789abdd873", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0037's transition-preset settings, plugin kinds and opaque state type, and #94's override and hotkey rules, are additive or behavioural refinements of unbuilt features; R-API-001..004 hold" }
 -->
 
 <a id="R-API-001"></a>
@@ -640,7 +640,7 @@ dependency or performance claim (`.github/pull_request_template.md`).
 ## Documentation
 <!-- @section
 depends_on = ["docs/DOCS.md#gate"]
-verified = { hash = "b3:3c4c265c0f82b211", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against the edited DOCS#gate: the applies_to typo report is now keyed by crate directory (apps/ vs crates/ per the crate-map apps/* row); R-DOC-012's 'neither exists nor appears in the crate map' still holds, others unaffected" }
+verified = { hash = "b3:7e3c516b0824daca", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against the edited DOCS#gate: the applies_to typo report is now keyed by crate directory (apps/ vs crates/ per the crate-map apps/* row); R-DOC-012's 'neither exists nor appears in the crate map' still holds, others unaffected" }
 -->
 
 <a id="R-DOC-001"></a>
@@ -776,7 +776,7 @@ rules.
 ## Governance
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:35b9b27ed7b49afd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-GOV-001..005 against ADR-0019: owner-only verdicts live in REVIEW/gate, labels+justification, tiers and proxy decisions unchanged" }
+verified = { hash = "b3:6a3bee027e59ef38", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-GOV-001..005 against ADR-0019: owner-only verdicts live in REVIEW/gate, labels+justification, tiers and proxy decisions unchanged" }
 -->
 
 <a id="R-GOV-001"></a>

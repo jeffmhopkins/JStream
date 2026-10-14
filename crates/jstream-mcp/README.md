@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:53c2cad582ca104f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: only the tool_call span parent changed in server.rs; Server/Tools/Events contents and layering unchanged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
+verified = { hash = "b3:19a62ef0d7e5a78c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: only the tool_call span parent changed in server.rs; Server/Tools/Events contents and layering unchanged" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
