@@ -5,6 +5,8 @@
 //! timestamps, acknowledgement windows, protocol control) and the NetConnection and
 //! NetStream commands needed to publish, then carries caller-built FLV tag bodies as
 //! RTMP audio, video and data messages. It never builds media payloads itself.
+//! [`ReconnectingPublisher`] keeps a session going across dropped connections, with
+//! exponential backoff, re-sent sequence headers and a resume at the next keyframe.
 //!
 //! ```no_run
 //! use jstream_outputs::rtmp::{RtmpPublisher, RtmpUrl, StreamKey, connect};
@@ -28,6 +30,7 @@ mod chunk;
 mod error;
 mod handshake;
 mod publisher;
+mod reconnect;
 #[cfg(test)]
 mod test_util;
 mod transport;
@@ -35,5 +38,9 @@ mod url;
 
 pub use error::RtmpError;
 pub use publisher::{PublishOptions, RtmpPublisher, timestamp_ms};
+pub use reconnect::{
+    Clock, Connector, LinkState, ReconnectPolicy, ReconnectStats, ReconnectingPublisher,
+    SessionTimeouts, connect_publisher, rtmp_connector,
+};
 pub use transport::{Transport, connect};
 pub use url::{RtmpUrl, Scheme, StreamKey};
