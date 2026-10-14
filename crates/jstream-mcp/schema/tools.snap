@@ -1306,7 +1306,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "state"
     },
     {
-      "description": "Runs one `video` operation: set `op.type` to one of `video.snapshot` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `video` operation: set `op.type` to one of `video.snapshot` (query). A query only reads. A `video.snapshot` result leads with the PNG as an image content block; its JSON `png` field only names that block. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {

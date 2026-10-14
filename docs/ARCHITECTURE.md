@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:096d472b2af03e3a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against this PR: only the daemon's end-to-end test changed since the last verify; the daemon is still the headless layer-6 host serving the WebSocket API, so the host table and diagram hold" }
+verified = { hash = "b3:54d45885bf880e6b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: only daemon doc comments changed (crash.rs, logs.rs); the daemon is still the headless layer-6 host serving the WebSocket API, so the host table and diagram hold" }
 -->
 
 ```
@@ -565,7 +565,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:81881727ea640a2e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events bullet: stats.tick kept apart, newest one returned on each read as stats so drop counts stay visible and ticks can't evict state/output events; Snapshots bullet unchanged" }
+verified = { hash = "b3:898752585c07eb75", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the video tool description change: the Snapshots bullet (image block is the only copy, png a placeholder) and Events bullet (stats outside the buffer) still hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
