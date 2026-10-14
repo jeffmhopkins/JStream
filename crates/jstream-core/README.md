@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4ad9e227a94e5195", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the control and server design edits (Origin handling only): core's in-process Control, idempotency and events text is unaffected" }
+verified = { hash = "b3:da0bcd4c5399b4f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: control#design changed only in its Auth bullet's Origin wording and wrap; core's in-process Control, idempotency and events text is unaffected" }
 -->
 
 ### Engine and sessions

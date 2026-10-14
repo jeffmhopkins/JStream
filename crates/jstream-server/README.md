@@ -49,7 +49,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f60a16c5e0507262", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: admission table says Origin absent or allowed, Host and Authorization exactly once and Origin at most once, null refused, no Origin goes to the token check; open question 4 settled and built; matches gate.rs and the two tests" }
+verified = { hash = "b3:b124e49ba5da2b2f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after control#design's Auth rewrap: admission table (Origin absent or allowed, at most once, null refused) and settled open question 4 still match gate.rs" }
 -->
 
 ### Listening and admission

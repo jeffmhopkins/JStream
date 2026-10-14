@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:65921ed3a3f6a07b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Transport: a missing Origin is now allowed (built), a present one must be on the allow list; Slow clients and Events text from #108 unchanged" }
+verified = { hash = "b3:39a9aacf8e6eb259", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after control#design's Auth rewrap: Transport (missing Origin allowed, present one on the allow list) and Slow clients still hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
