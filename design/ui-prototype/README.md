@@ -87,10 +87,10 @@ from the Mixer.
   nested under the object; scenes that would create a loop are not offered.
 - Audio: gain, compressor (with ducking input), limiter, noise gate, noise suppression,
   invert polarity, EQ, audio delay, and mastering filters (loudness target, true-peak
-  limiter, ducking). The prototype also shows a **CLAP plugin** filter: that is *not
-  settled*, because hosting CLAP plugins means loading native dynamic libraries, which
-  [ADR-0005](../../docs/adr/0005-plugins-wgsl-and-wasm.md) rules out for v1. It needs an
-  ADR superseding ADR-0005 first (see [Follow-ups](#follow-ups)).
+  limiter, ducking). The prototype also shows a **CLAP plugin** filter.
+  [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md) allows CLAP audio effect
+  plugins, hosted out of process, from M3. Until then the protocol has no CLAP filter
+  kind, and the UI hides this filter.
 - Filters panel: a reorderable list; filters with three settings or fewer expand in place,
   busier ones open a settings dialog (double-click always does). Adding is a dialog.
 - **Program output** has a master chain for everything leaving JStream, and each output
@@ -132,6 +132,6 @@ prototype implies), with options, a recommendation, a tier and an urgency for ea
   and per-output chains (with latency compensation), transition presets and overrides.
 - An ADR for the source type list (product scope: maintainer tier).
 - An ADR for the Move transition and per-item transition settings.
-- If CLAP plugin hosting is wanted: an ADR superseding
-  [ADR-0005](../../docs/adr/0005-plugins-wgsl-and-wasm.md) (maintainer tier), since it
-  loads native dynamic libraries. Until then the CLAP filter stays out of scope.
+- CLAP plugin hosting is decided by
+  [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md): out of process, from
+  M3. Until then the CLAP filter stays hidden.
