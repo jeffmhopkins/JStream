@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:3c2a565825f6e57a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps READMEs changed only by verified lines in this PR (crate-map re-check for ADR-0035); shape diagram and host table unchanged and still hold, jstream-plugin-host being planned for M3 and not a host of the engine" }
+verified = { hash = "b3:b17ac8fcee8ca1cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #71: covered apps/ changed only by this PR's daemon README Serving-bullet order and test harness; the daemon and CLI rows and the diagram match main and still hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:072bad84499e1f8c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per accepted ADR-0035: planned M3 rows jstream-plugin-proto (L0, shared-memory contract) and jstream-plugin-clap (L2, unsafe, linked only by the host), and jstream-plugin-host on the apps row; R-UNSAFE-001 and the lint-deps allowlist gain the crate only when it is created, so existing rows and edges are unchanged" }
+verified = { hash = "b3:b3e8d07c9f7c0919", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #74: new crates/jstream-encode/Cargo.toml at layer 3 (dep jstream-platform L1) beside main's jstream-audio (L2), core, daemon and outputs rows; all edges point strictly down (lint-deps ok)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -165,16 +165,18 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md"]
-verified = { hash = "b3:a3951ed0fff748f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0023 (now a dependency): SceneItem gains opacity, blend and reserved-empty effects[]; Source gains duplicated_from; reference/clone terms, no owner, item.set_source keeps the item; cycle check on every nesting edit; transform kept until ADR-0022 lands; Built so far lists the unbuilt ADR-0023 fields under Not yet, matching jstream-graph model/" }
+verified = { hash = "b3:3b95c26bd0517a59", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's ADR-0023 tree and bullets with ADR-0029's: SceneItem keeps opacity, blend and reserved effects[] and gains transition, Scene gains transition_in/out, studio drops transition for the transitions collection; Built-so-far now also lists the transition fields as not yet" }
 -->
 
 ```
 Collection (JSON on disk, schema_version, rev: u64)
 ├── sources        Source { id, kind, settings, filters[], duplicated_from? }   video and/or audio; independent of scenes
-├── scenes         Scene { id, name, items[] }
+├── scenes         Scene { id, name, items[], transition_in?, transition_out? }
 │                  SceneItem { id, source_id, transform: Transform3D, crop, visible, opacity, blend,
-│                              effects[] (reserved, empty in v1) }
-├── studio         { program_scene, preview_scene, transition }   (studio-mode state)
+│                              effects[] (reserved, empty in v1), transition }
+├── studio         { program_scene, preview_scene }   (studio-mode state)
+├── transitions    { presets: [TransitionPreset], default }
+│                  TransitionPreset { id, name, kind: Cut | Fade | Move, duration_ms, easing, unmatched, stagger_ms }
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
 ├── audio          sends: (source_id, bus_id) → gain_db
 │                  Bus { id, name, filters[], monitor_device? }
@@ -204,6 +206,16 @@ Collection (JSON on disk, schema_version, rev: u64)
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.
+- **Transitions** ([ADR-0029](adr/0029-transitions.md)): exactly one preset is the
+  default, and it can't be deleted. Deleting a preset clears the overrides that use it in
+  the same edit. The engine picks a switch's preset: the one the switch action names, else
+  the destination scene's `transition_in`, else the current scene's `transition_out`, else
+  the default. `SceneItem.transition { delay_ms, easing, glide, appear, disappear }`
+  belongs to the placement, keyed by item ID. **Move** pairs outgoing and incoming items
+  that place the same source (the k-th placement with the k-th, in stacking order) and
+  interpolates each pair; **Fade** pairs nothing; **Cut** switches on the next tick.
+  Unpaired items appear or disappear with their effect. The fields are reserved with
+  neutral defaults while M1b builds the model; the behaviour comes before or during M2.
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
   encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
@@ -217,8 +229,8 @@ Collection (JSON on disk, schema_version, rev: u64)
   order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
   they never copy them. Deleting a source an item still places, or a scene a source
   still shows, is rejected. Not yet: settings, filters, `opacity`, `blend`, the reserved
-  `effects[]`, `duplicated_from`, `item.set_source`, the 3D transform, and everything
-  outside `sources` and `scenes`. Nothing is persisted yet.
+  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the 3D
+  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -293,7 +305,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:809687bff08ecd3a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): covered changes are main's jstream-server test and README verified lines plus this PR's verified-line refreshes; no wire change, body unchanged and still matches the code" }
+verified = { hash = "b3:883e8fef96b575d0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73: server test and README verified lines, no wire change) with ADR-0029's planned Transitions bullet; covered READMEs changed only by verified lines; body matches the code" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -309,6 +321,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
+- **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update
+  and delete presets, set the default, and set a scene's `transition_in` and
+  `transition_out` and an item's transition settings. The scene-switch action takes an
+  optional preset.
 - **Live values** (`live.set`, `live.cancel`; events `live.changed`, `live.ended`):
   actions that override live-adjustable parameters during a drag or a live dialog, with
   no `rev` bump or undo step; one batch commits the gesture
@@ -369,7 +385,7 @@ verified = { hash = "b3:1eaf80cd00e97d1b", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:890531688bbbe6e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered code: gpu/mod.rs only re-exports adapter_drives_monitor for WGC capture's own device; steps 1-6 unchanged, and the new CPU capture path is step 6's fallback, on the display's adapter as the hybrid-GPU note asks" }
+verified = { hash = "b3:a2d3a8425cd5572d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0029: added the not-built transition node (synthetic item list, control-thread pairing plan, render-thread interpolation and retargeting, shortest-way rotation, shared easing, compositor clamping); S1 steps and results unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -394,6 +410,17 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 6. **Fallbacks:** CPU readback/upload, counted in stats with a stated budget. On
    hybrid-GPU laptops, capture and render must use the same adapter, or the engine falls
    back and reports it.
+
+**Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
+texture blend: during it, the program mix is a synthetic item list whose transforms and
+opacity come from the transition state, drawn by a transition node that reads both
+scenes' source textures. The control thread pairs the items when the switch starts and
+sends the render thread a plan; the render thread only interpolates, and owns the live
+interpolated state, so a switch mid-transition starts from what is on screen. Rotation,
+tilt and turn take the shortest way round. The easing curves are one shared function
+with golden tests. After easing, the compositor clamps values with a hard range: opacity
+to `[0, 1]`, crop to `[0, source size]`, size to `≥ 0` and perspective to `> 0`; the
+spring may overshoot everything else.
 
 **S1 result**, on a Ryzen 9 8945HS with Radeon 780M (driver 32.0.22029.9039), a
 3840x2160 display at 29 Hz and the async `AMDh264Encoder` MFT. The pipeline holds 60
