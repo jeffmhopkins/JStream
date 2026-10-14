@@ -26,9 +26,10 @@ allow_attributes_without_reason = "deny"  # R-RS-009
 undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
 [features]
-# Platform tests against real audio devices (docs/RULES.md#testing): additive, off by
-# default, and the tests are also `#[ignore]`d. Run them on a Windows machine with a
-# microphone and speakers:
+# Platform tests against real hardware (docs/RULES.md#testing): audio devices, the OS
+# encoders and the GPU. Additive, off by default, and the tests are also `#[ignore]`d.
+# Run them on a Windows machine with a microphone, speakers and a DX12 GPU with a
+# hardware H.264 encoder:
 # `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 hw-tests = []
 
@@ -40,6 +41,12 @@ windows = { workspace = true, features = [
     "std",
     "Win32_Devices_FunctionDiscovery",
     "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_Gdi",
     "Win32_Media_Audio",
     "Win32_Media_KernelStreaming",
     "Win32_Media_MediaFoundation",
@@ -54,3 +61,6 @@ windows = { workspace = true, features = [
     "Win32_UI_Shell_PropertiesSystem",
 ] }
 windows-core = { workspace = true, features = ["std"] }
+# The DX12 backend, for the GPU interop's wgpu-hal import (ADR-0004). The version is the
+# workspace's exact pin, the one jstream-platform re-exports.
+wgpu = { workspace = true, features = ["dx12"] }

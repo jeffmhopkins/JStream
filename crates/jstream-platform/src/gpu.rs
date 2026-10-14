@@ -126,7 +126,8 @@ pub trait GpuInterop: Send + Sync {
     ) -> Result<GpuFrame, PlatformError>;
 }
 
-/// The platform's hold on the synchronisation for one use of a shared texture.
+/// The platform's hold on a shared texture's synchronisation. Each
+/// [`stage`](FrameSync::stage) is one use.
 ///
 /// The rules for implementations (README › GPU frames):
 /// - [`stage`](FrameSync::stage) stages a wait for the value that makes the texture ready
@@ -137,11 +138,20 @@ pub trait GpuInterop: Send + Sync {
 ///   dropped after them, so the driver can't be unloaded first.
 pub trait FrameSync: Send + Sync + fmt::Debug {
     /// Stages this frame's wait and signal around the next submit on `queue`. Called by
-    /// the engine for every frame that submit reads or writes, before submitting.
+    /// the engine for every frame that submit reads or writes, before submitting. Each
+    /// call is one use: an encode target written every tick is staged every tick.
+    ///
+    /// Stage right before a submit that will happen. The staged wait and signal attach to
+    /// the queue's next submit, whichever it is, so a submit that is skipped or fails
+    /// validation moves them to the one after.
+    ///
+    /// That submit must end by transitioning the texture to `wgpu::TextureUses::PRESENT`
+    /// (`CommandEncoder::transition_resources`): on D3D12 that is the `COMMON` state the
+    /// platform's other APIs expect a shared texture in.
     ///
     /// # Errors
-    /// [`PlatformError::InvalidState`] for a queue of another device or a hold that was
-    /// already staged, and [`PlatformError::Os`] when the driver refuses.
+    /// [`PlatformError::InvalidState`] for a queue of another device or backend, and
+    /// [`PlatformError::Os`] when the driver refuses.
     fn stage(&self, queue: &wgpu::Queue) -> Result<(), PlatformError>;
 }
 

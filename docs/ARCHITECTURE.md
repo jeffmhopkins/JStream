@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ed6cf2d4550d0b8a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main: jstream-platform (L1) now depends on wgpu, matching its row (GpuInterop uses wgpu types); jstream-platform-windows unchanged by this PR; no new internal edges; lint-deps ok; table text unchanged" }
+verified = { hash = "b3:11b187bb687ac5e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only a comment in jstream-platform-windows/Cargo.toml changed (hw-tests feature, N4); rows and edges unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -328,7 +328,7 @@ verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:b517b475e75ab86b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#52 N2: S1 result now says 60 pipeline ticks/s on a 29 Hz display with ~30 new WGC frames/s (latest frame repeated), not a 60 Hz capture result; rest unchanged" }
+verified = { hash = "b3:0577bcfebb1a2d36", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered code: Shared keeps the raw command queue (dropped with the raw objects before the Device clone) and stage compares it; step 2 text unchanged and holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
