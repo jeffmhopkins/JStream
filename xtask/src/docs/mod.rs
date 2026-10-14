@@ -546,6 +546,32 @@ mod tests {
 
     const NOTE: &str = "checked the section text against its inputs in this test";
 
+    /// #100: a `depends_on` naming a rule anchor hashes that rule's text, so editing the
+    /// rule stales its dependents; editing another rule or the rule's metadata does not.
+    #[test]
+    fn rule_text_edits_stale_dependents() {
+        let rules = "<!-- @doc\nid = \"RULES\"\n-->\n<a id=\"code\"></a>\n## Code\n<!-- @section\n-->\n<a id=\"R-X-001\"></a>\n### R-X-001: One\n<!-- @rule\nstatus = \"active\"\n-->\nFirst rule.\n\n<a id=\"R-X-002\"></a>\n### R-X-002: Two\n<!-- @rule\nstatus = \"active\"\n-->\nSecond rule.\n";
+        let dep = "<!-- @doc\nid = \"D\"\n-->\n<a id=\"d\"></a>\n## D\n<!-- @section\ndepends_on = [\"docs/RULES.md#R-X-001\"]\n-->\nFollows R-X-001.\n";
+        let mut files = REGISTRIES.to_vec();
+        files.retain(|(p, _)| *p != "docs/RULES.md");
+        files.extend([("docs/RULES.md", rules), ("D.md", dep)]);
+        let f = Fixture::new("rule-deps", &files);
+        verify(&f.0, "D#d", "agent:test", NOTE).expect("D#d verifies");
+        assert_eq!(f.diags("is stale"), Vec::<String>::new());
+        for unrelated in [
+            rules.replace("Second rule.", "Second rule, edited."),
+            rules.replacen("status = \"active\"", "status = \"retired\"", 1),
+        ] {
+            f.write("docs/RULES.md", &unrelated);
+            assert_eq!(f.diags("is stale"), Vec::<String>::new(), "{unrelated}");
+        }
+        f.write(
+            "docs/RULES.md",
+            &rules.replace("First rule.", "First rule, edited."),
+        );
+        assert_eq!(f.diags("is stale").len(), 1);
+    }
+
     /// ADR-0039: re-verifying section A, in a file that section B covers, leaves B fresh;
     /// a content edit to that file still stales B.
     #[test]

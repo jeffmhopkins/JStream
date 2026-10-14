@@ -92,7 +92,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:61ba4dd4917cd61c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Threads' handover asks each RT thread for one atomic store of the adopted generation, which fits this crate's allocation- and lock-free rt code; nothing in the crate changed" }
+verified = { hash = "b3:43434459da3385a2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-RT-001 (no alloc, lock, block or log in steady state; assert_no_alloc test still listed as not yet enforced) and R-RT-003 (rings and atomics only; collector hand-off deferred to live input changes)" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

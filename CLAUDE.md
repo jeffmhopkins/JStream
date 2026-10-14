@@ -26,7 +26,7 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "b3:e0991bc6292d9996", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against DOCS#verification with both ADR-0039 (metadata blocks unhashed, row deps, rehash) and ADR-0038 (whole-ADR deps skip the adr-status banner): the @generated bullet names cargo xtask docs generate, the hash bullet names rehash; workflow unchanged" }
+verified = { hash = "b3:0a9109322d1188c6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against DOCS#verification's new line that a rule-anchor dependency hashes the rule's text: the check/verify workflow and both hash bullets still hold" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one

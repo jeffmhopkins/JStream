@@ -65,7 +65,7 @@ verified = { hash = "b3:542b376128cb5437", by = "agent:claude@session_01QBbMRwRu
 ## Step 2: Review
 <!-- @section
 depends_on = ["docs/RULES.md#R-DOC-004", "docs/RULES.md#R-GOV-001"]
-verified = { hash = "b3:6f189d92e2b9c8a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: items 1-8 (incl. tier/decision checks and ADR-0018 pin-only pre-approval) still match RULES#R-DOC-004 and R-GOV-001; docs CI job now backs item 4" }
+verified = { hash = "b3:e08c9626b6980e7c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read items 3-5 against R-DOC-004 (fix docs in the same PR, verify only what was re-read) and R-GOV-001 (label plus justification section); both still match" }
 -->
 
 Work through these in order. For each, cite the rule ID or doc anchor that a finding rests on.

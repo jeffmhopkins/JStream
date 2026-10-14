@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:464b34f2a91e8126", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR rewrites the jstream-encode row to ADR-0027's sharing rule (#86 N4), and the jstream-mcp and jstream-server rows for MCP streamable HTTP served by the server; covered manifests changed by main's #98 tracing and the jstream-mcp summary edit here; layers and edges unchanged" }
+verified = { hash = "b3:0d8bf3304c50007e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-ARCH-002 (strictly lower layers, stated above the table) and R-ARCH-003 (clients never depend on jstream-core; mcp and server rows say dyn Control only)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -533,7 +533,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:54f83998110d3519", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: the jstream-mcp change is only which span tool_call nests under; the section's tools, audit and transport text say nothing about spans and still hold" }
+verified = { hash = "b3:d41661e807a29ea4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read the Names bullet against R-API-002 (tool names match the pattern, one tool per noun, ops are noun.verb); it holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -638,7 +638,7 @@ the output gets a black frame. None of this is built yet.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:0e05e58970c4134c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025 dependency now links ADR-0032 for live hints (review N2); data-model Settings bullet and persistence Asset files bullet unaffected" }
+verified = { hash = "b3:fe28871dd73ab140", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-API-003 (schema_version and forward migrations in jstream-graph) and R-SEC-001 (secrets only in the OS credential store); both bullets hold" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

@@ -60,7 +60,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:19632864ebfb059e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the Undo subsection: undo/redo requests and undo_conflict now point to ADR-0032 and still come with the engine's history; no message, schema or snapshot change, so the first cut's description (three call kinds, events, errors) still holds" }
+verified = { hash = "b3:6baec949c22c4de5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-API-001 (semver, can_serve), R-API-002 (noun.verb snake_case tags), R-API-004 (expected_rev, idempotency_key) and R-ARCH-006 (edit vs action classes); all match" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
