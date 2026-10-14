@@ -512,6 +512,10 @@ fn a_server_shutdown_disconnects_calls_and_ends_events() {
     assert_eq!(next_event(&harness, &mut events), None, "the stream ends");
     let reason = expect_disconnected(harness.run(control.call(create_scene("other"))));
     assert!(reason.contains("shutting down"), "{reason}");
+    // The session never reopens: a second `hello` fails too, rather than getting a new
+    // `client_id` (jstream-mcp relies on this).
+    let reason = expect_disconnected(harness.run(control.hello(hello())));
+    assert!(reason.contains("shutting down"), "{reason}");
     // A subscription opened after the close ends at once.
     let mut late = control.events();
     assert_eq!(next_event(&harness, &mut late), None);

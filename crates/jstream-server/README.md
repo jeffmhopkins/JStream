@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:c821449cc9dc66db", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #44 N1/N2: config.rs (Token::matches now length-independent, extra_hosts doc) and gate.rs (portless Host on port 80) change behaviour inside existing modules only; contents list (lib, config, gate, session, error), layer 4 and deferred items still hold" }
+verified = { hash = "b3:4c760c6c37dd2e78", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only tests.rs changed (shutdown test also asserts a second hello fails with Disconnected); contents list, layer 4 and deferred items unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3733aa8769829f50", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only open question 5 edited: the server still takes port and token from its caller; jstream-daemon now exists and creates/reuses the token file at a given path and binds a free port by default via ServerConfig::new with the port changed; server code unchanged" }
+verified = { hash = "b3:a154357e93222506", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only tests.rs changed: after serve_with_shutdown a re-hello on the same WsControl fails with Disconnected, consistent with 'pending and later calls fail with Disconnected'; admission, sessions, request-id remap and close codes unchanged" }
 -->
 
 ### Listening and admission
