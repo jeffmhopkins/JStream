@@ -11,13 +11,14 @@
 //!   `Host`, where an origin without a port means port 80 too) or a configured extra.
 //!   Browsers always send it on WebSocket upgrades, so a
 //!   foreign web page can't connect; native clients send the server's own.
-//! - **`Authorization: Bearer <token>`** must carry the control token. Both sides are
-//!   hashed to a fixed length and the digests compared in constant time, so the time
-//!   taken depends only on the presented value's length, never on the token or on where
-//!   they differ.
+//! - **`Authorization: Bearer <token>`** must carry the control token. The server keeps
+//!   only the token's BLAKE3 digest; the presented value is hashed too and the two
+//!   digests are compared in constant time, so the compare reveals nothing about the
+//!   token (see `Token::matches`).
 //!
-//! Configured extra hosts must name their port: `check_extra_hosts` refuses one that
-//! doesn't before the server binds, since it could never match.
+//! Configured extra hosts must be `name:port`, with an IPv6 address in brackets
+//! (`[::1]:port`) and exactly one port: `check_extra_hosts` refuses any other form
+//! before the server binds, since it could never match.
 //!
 //! A refused `Host` or `Origin` is HTTP 403, a missing or wrong token 401. Each header
 //! must appear exactly once.
@@ -26,7 +27,7 @@ use crate::config::{ServerConfig, Token};
 use crate::error::ServerError;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use std::net::SocketAddr;
+use std::net::{Ipv6Addr, SocketAddr};
 
 /// The default port of the `http` and `ws` schemes: a `Host` or `Origin` without a port
 /// names it (RFC 9110 §7.2, RFC 6455 §3).
@@ -151,22 +152,18 @@ fn single<'h>(headers: &'h HeaderMap, name: &HeaderName) -> Option<&'h str> {
 }
 
 /// Checks that every configured extra host is `name:port` with a decimal port from 1 to
-/// 65535. The gate compares hosts with their port, so an entry without one, or with a
-/// port the server can't listen on, would never match: it is refused here instead of
-/// being ignored (#44).
+/// 65535, where an IPv6 name is a bracketed literal (`[::1]:4455`). The gate compares
+/// hosts with their port, and a request's `Host` always brackets an IPv6 address, so an
+/// entry without a port, with more than one, with an unbracketed IPv6 address or with a
+/// port the server can't listen on would never match: it is refused here instead of
+/// being ignored (#44, #72).
 pub(crate) fn check_extra_hosts(extra_hosts: &[String]) -> Result<(), ServerError> {
     for host in extra_hosts {
         let invalid = |reason| ServerError::InvalidHost {
             host: host.clone(),
             reason,
         };
-        if !has_port(host) {
-            return Err(invalid("it has no port; write it as `name:port`"));
-        }
-        let (name, port) = host.rsplit_once(':').unwrap_or((host, ""));
-        if name.is_empty() {
-            return Err(invalid("it has no name before the port"));
-        }
+        let port = extra_host_port(host).map_err(invalid)?;
         let port_ok = !port.is_empty()
             && port.bytes().all(|b| b.is_ascii_digit())
             && port.parse::<u16>().is_ok_and(|p| p != 0);
@@ -175,6 +172,46 @@ pub(crate) fn check_extra_hosts(extra_hosts: &[String]) -> Result<(), ServerErro
         }
     }
     Ok(())
+}
+
+/// The port of an extra host written `name:port` or `[ipv6]:port`, or why the entry
+/// can't be split that way.
+fn extra_host_port(host: &str) -> Result<&str, &'static str> {
+    const NO_PORT: &str = "it has no port; write it as `name:port`";
+    const NO_NAME: &str = "it has no name before the port";
+    if let Some(bracketed) = host.strip_prefix('[') {
+        let Some((address, after)) = bracketed.split_once(']') else {
+            return Err("its `[` has no matching `]`");
+        };
+        if address.is_empty() {
+            return Err(NO_NAME);
+        }
+        if address.parse::<Ipv6Addr>().is_err() {
+            return Err("only an IPv6 address goes in brackets, as `[addr]:port`");
+        }
+        return match after.strip_prefix(':') {
+            Some(port) => Ok(port),
+            None if after.is_empty() => Err(NO_PORT),
+            None => Err("only `:port` may follow the `]`"),
+        };
+    }
+    let Some((name, port)) = host.split_once(':') else {
+        return Err(NO_PORT);
+    };
+    if port.contains(':') {
+        return Err(if host.parse::<Ipv6Addr>().is_ok() {
+            "an IPv6 address must be in brackets, as `[addr]:port`"
+        } else {
+            "it has more than one port"
+        });
+    }
+    if name.contains(['[', ']']) {
+        return Err("only an IPv6 address goes in brackets, as `[addr]:port`");
+    }
+    if name.is_empty() {
+        return Err(NO_NAME);
+    }
+    Ok(port)
 }
 
 /// Whether a `host[:port]` authority names a port. An IPv6 literal (`[::1]`) has colons
@@ -410,6 +447,17 @@ mod tests {
             "studio.lan:65536",
             "studio.lan:+80",
             "studio.lan:http",
+            // #72 N1: an unbracketed IPv6 address, or a second port, used to pass as
+            // `name:port` and then never match.
+            "fe80::1",
+            "::1:4455",
+            "studio.lan:80:80",
+            "[::1]:80:80",
+            "[::1",
+            "[]:4455",
+            "[studio.lan]:4455",
+            "[::1]x:4455",
+            "studio[1]:4455",
         ] {
             match check(&["localhost:4455", bad]) {
                 Err(ServerError::InvalidHost { host, .. }) => assert_eq!(host, bad),
@@ -422,6 +470,19 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "invalid extra host `studio.lan`: it has no port; write it as `name:port`"
+        );
+        let reason = |host: &str| match check(&[host]) {
+            Err(ServerError::InvalidHost { reason, .. }) => reason,
+            other => panic!("{host}: {other:?}"),
+        };
+        assert_eq!(
+            reason("fe80::1"),
+            "an IPv6 address must be in brackets, as `[addr]:port`"
+        );
+        assert_eq!(reason("studio.lan:80:80"), "it has more than one port");
+        assert_eq!(
+            reason("[::1]:80:80"),
+            "its port must be a number from 1 to 65535"
         );
     }
 

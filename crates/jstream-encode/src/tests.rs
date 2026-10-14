@@ -616,6 +616,90 @@ fn dropped_audio_blocks_become_silence_so_later_blocks_keep_their_time() {
     assert_eq!(stats.encoded, 3);
 }
 
+/// Like [`RecordingAudio`], but refuses as busy the `encode` calls whose 1-based numbers
+/// are in `busy` (they report that they started, and record nothing).
+struct BusyAudio {
+    recording: RecordingAudio,
+    calls: u64,
+    busy: &'static [u64],
+}
+
+impl AudioEncoder for BusyAudio {
+    fn info(&self) -> &CodecInfo {
+        self.recording.info()
+    }
+
+    fn encode(&mut self, buffer: &AudioBuffer) -> Result<(), PlatformError> {
+        self.calls += 1;
+        if self.busy.contains(&self.calls) {
+            let _ = self.recording.started.send(());
+            return Err(PlatformError::Busy { what: "test AAC" });
+        }
+        self.recording.encode(buffer)
+    }
+
+    fn poll(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
+        self.recording.poll(out)
+    }
+
+    fn finish(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
+        self.recording.finish(out)
+    }
+}
+
+/// #74 N1: after a dropped block, the silence that fills the gap can itself be refused
+/// as busy. The block after that must still follow a gap, so silence covers both holes
+/// and later blocks keep their time.
+#[test]
+fn a_busy_gap_fill_still_leaves_a_gap_to_fill() {
+    let log = Arc::new(Mutex::new(Vec::new()));
+    let (started_tx, started) = std::sync::mpsc::channel();
+    let (release, release_rx) = std::sync::mpsc::channel();
+    let encoder = Box::new(BusyAudio {
+        recording: RecordingAudio {
+            info: CodecInfo {
+                name: "Busy AAC".into(),
+                codec: Codec::Aac,
+                role: CodecRole::AudioEncoder,
+                hardware: false,
+            },
+            log: Arc::clone(&log),
+            started: started_tx,
+            release: Some(release_rx),
+        },
+        calls: 0,
+        // Call 3 is the silence over the dropped block 960, before block 1440.
+        busy: &[3],
+    });
+    let session = AudioSession::start(encoder, audio_config(), options(1)).unwrap();
+    let input = session.input();
+
+    input.push(block(0, 480, 1.0)).unwrap();
+    started.recv_timeout(WAIT).unwrap(); // call 1: the encoder holds block 0
+    input.push(block(480, 480, 1.0)).unwrap(); // queued
+    assert_eq!(input.push(block(960, 480, 1.0)), Err(PushError::Full));
+    release.send(()).unwrap();
+    started.recv_timeout(WAIT).unwrap(); // call 2: block 480 taken; the queue is empty
+    input.push(block(1440, 480, 1.0)).unwrap();
+    started.recv_timeout(WAIT).unwrap(); // call 3: its silence is busy; the queue is empty
+    input.push(block(1920, 480, 1.0)).unwrap();
+    let stats = session.finish().unwrap();
+
+    assert_eq!(
+        *log.lock().unwrap(),
+        [
+            (0, 480, false),
+            (480, 480, false),
+            (960, 960, true),
+            (1920, 480, false)
+        ]
+    );
+    assert_eq!(stats.dropped_queue_full, 1);
+    assert_eq!(stats.dropped_encoder_busy, 1);
+    assert_eq!(stats.silence_frames, 960);
+    assert_eq!(stats.encoded, 3);
+}
+
 #[test]
 fn audio_gaps_without_a_drop_or_beyond_the_limit_are_not_filled() {
     let log = Arc::new(Mutex::new(Vec::new()));
