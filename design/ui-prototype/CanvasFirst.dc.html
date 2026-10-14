@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Canvas First</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;background:#0F1115}
+a{color:#8AB4FF}a:hover{color:#B5CEFF}
+button{font:inherit;cursor:pointer}
+input{font:inherit}
+</style>
+</helmet>
+<div style="min-height: 900px; display: flex; flex-direction: column; background: #0F1115; color: #E6E8EB; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 14px; background: #16191E; border-bottom: 1px solid #262A31">
+<div style="display: flex; align-items: center; gap: 10px">
+<div style="width: 22px; height: 22px; border-radius: 6px; background: {{accent}}"></div>
+<strong style="font-size: 15px; font-weight: 600">JStream</strong>
+</div>
+<div role="tablist" aria-label="Scenes" style="display: flex; flex-wrap: wrap; gap: 4px; margin-left: 12px">
+<button role="tab" aria-selected="false" style="background: none; border: 0; color: #9AA1AC; padding: 7px 12px; border-radius: 6px">Starting Soon</button>
+<button role="tab" aria-selected="true" style="background: #22324A; border: 0; color: #E6E8EB; padding: 7px 12px; border-radius: 6px">Desktop + Cam</button>
+<button role="tab" aria-selected="false" style="background: none; border: 0; color: #9AA1AC; padding: 7px 12px; border-radius: 6px">Just Chatting</button>
+<button role="tab" aria-selected="false" style="background: none; border: 0; color: #9AA1AC; padding: 7px 12px; border-radius: 6px">BRB</button>
+<button aria-label="Add scene" style="background: none; border: 1px dashed #3A3F48; color: #9AA1AC; width: 30px; height: 30px; border-radius: 6px">+</button>
+</div>
+<div style="flex: 1 1 auto"></div>
+<div style="display: flex; gap: 4px; background: #1F232A; border: 1px solid #2E333B; border-radius: 6px; padding: 3px">
+<button style="background: none; border: 0; color: #9AA1AC; padding: 5px 10px">Edit</button>
+<button style="background: #2B313A; border: 0; color: #E6E8EB; padding: 5px 10px; border-radius: 4px">Preview</button>
+</div>
+<button style="background: #1F232A; color: #E6E8EB; border: 1px solid #2E333B; border-radius: 6px; padding: 8px 14px">Record</button>
+<button style="background: #C62F36; color: #FFFFFF; border: 0; border-radius: 6px; padding: 8px 18px; font-weight: 600">Go Live</button>
+</header>
+
+<div style="flex: 1 1 auto; display: flex; flex-wrap: wrap; min-height: 0">
+
+<aside aria-label="Layers" style="flex: 1 1 260px; max-width: 300px; display: flex; flex-direction: column; background: #16191E; border-right: 1px solid #262A31">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px 8px">
+<h2 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #9AA1AC">Layers · Desktop + Cam</h2>
+<button aria-label="Add source" style="background: none; border: 0; color: #9AA1AC; width: 28px; height: 28px">+</button>
+</div>
+<ul style="list-style: none; margin: 0; padding: 4px 8px; display: flex; flex-direction: column; gap: 2px">
+<li style="display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 5px"><span style="width: 8px; height: 8px; border-radius: 2px; background: #E8A33D"></span><span style="flex: 1 1 auto">Alerts</span><span style="color: #7D8590; font-size: 11px">browser</span></li>
+<li style="display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 5px"><span style="width: 8px; height: 8px; border-radius: 2px; background: #9AA1AC"></span><span style="flex: 1 1 auto">Lower third</span><span style="color: #7D8590; font-size: 11px">text</span></li>
+<li style="display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 5px; background: #22324A; outline: 1px solid {{accent}}"><span style="width: 8px; height: 8px; border-radius: 2px; background: #B07CFF"></span><span style="flex: 1 1 auto">Webcam · Brio</span><span style="color: #B5CEFF; font-size: 11px">shared ×3</span></li>
+<li style="display: flex; flex-direction: column; gap: 2px; padding: 7px 8px; border-radius: 5px">
+<div style="display: flex; align-items: center; gap: 8px"><span style="color: #7D8590">▾</span><span style="flex: 1 1 auto">Intro overlay</span><span style="color: #7D8590; font-size: 11px">scene</span></div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 5px 0 0 22px; color: #9AA1AC"><span style="flex: 1 1 auto">Logo</span><span style="font-size: 11px">image</span></div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 5px 0 0 22px; color: #9AA1AC"><span style="flex: 1 1 auto">Ticker</span><span style="font-size: 11px">text</span></div>
+</li>
+<li style="display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 5px"><span style="width: 8px; height: 8px; border-radius: 2px; background: #4C8DFF"></span><span style="flex: 1 1 auto">Display 1</span><span style="color: #7D8590; font-size: 11px">capture</span></li>
+</ul>
+<div style="margin-top: auto; padding: 12px 14px; border-top: 1px solid #262A31; display: flex; flex-direction: column; gap: 6px; color: #9AA1AC">
+<div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px">Add to scene</div>
+<div style="display: flex; gap: 6px; flex-wrap: wrap">
+<button style="background: #1F232A; border: 1px solid #2E333B; color: #E6E8EB; padding: 6px 10px; border-radius: 5px">New source</button>
+<button style="background: #1F232A; border: 1px solid #2E333B; color: #E6E8EB; padding: 6px 10px; border-radius: 5px">Existing (shared)</button>
+<button style="background: #1F232A; border: 1px solid #2E333B; color: #E6E8EB; padding: 6px 10px; border-radius: 5px">Duplicate</button>
+</div>
+</div>
+</aside>
+
+<section aria-label="Canvas" style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; background: #0A0B0E">
+<div style="flex: 1 1 auto; display: flex; align-items: center; justify-content: center; padding: 40px 32px">
+<div style="position: relative; width: 100%; max-width: 780px; aspect-ratio: 16 / 9; background: #1B2633; outline: 1px solid #2E333B">
+<div style="position: absolute; left: 4%; top: 6%; width: 66%; height: 70%; background: #243447; border: 1px solid #34506E; display: flex; align-items: flex-end; padding: 10px; box-sizing: border-box; color: #A9C1DB; font-size: 12px">Display 1</div>
+<div style="position: absolute; left: 4%; bottom: 8%; width: 46%; padding: 8px 12px; background: #0F1115; color: #E6E8EB">jeff · building a stream app in Rust</div>
+<div style="position: absolute; left: 49.5%; top: 0; bottom: 0; width: 0; border-left: 1px dashed #E8A33D"></div>
+<div style="position: absolute; right: 5%; top: 42%; width: 28%; height: 46%; border: 1px dashed #E8A33D; box-sizing: border-box"></div>
+<div style="position: absolute; right: 7%; top: 46%; width: 24%; height: 38%; background: #3A2F45; outline: 2px solid {{accent}}; display: flex; align-items: center; justify-content: center; color: #CDB9E3">Webcam</div>
+<div style="position: absolute; right: calc(7% - 5px); top: calc(46% - 5px); width: 10px; height: 10px; background: #FFFFFF; border: 1px solid {{accent}}"></div>
+<div style="position: absolute; right: calc(31% - 5px); top: calc(46% - 5px); width: 10px; height: 10px; background: #FFFFFF; border: 1px solid {{accent}}"></div>
+<div style="position: absolute; right: calc(7% - 5px); top: calc(84% - 5px); width: 10px; height: 10px; background: #FFFFFF; border: 1px solid {{accent}}"></div>
+<div style="position: absolute; right: calc(31% - 5px); top: calc(84% - 5px); width: 10px; height: 10px; background: #FFFFFF; border: 1px solid {{accent}}"></div>
+<div style="position: absolute; right: 7%; top: calc(84% + 10px); padding: 3px 7px; background: {{accent}}; color: #0F1115; font-family: 'IBM Plex Mono', monospace; font-size: 11px">460 × 410 · crop 24 px</div>
+</div>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 8px 14px; border-top: 1px solid #262A31; background: #16191E; color: #9AA1AC">
+<span style="font-family: 'IBM Plex Mono', monospace">1920 × 1080 · 60 fps</span>
+<span>Snap: edges, center</span>
+<div style="flex: 1 1 auto"></div>
+<span>Mic −3 dB</span>
+<div style="width: 90px; height: 6px; background: #22262D; border-radius: 3px; overflow: hidden"><div style="width: 62%; height: 100%; background: #3FB27F"></div></div>
+<span>Desktop −8.5 dB</span>
+<div style="width: 90px; height: 6px; background: #22262D; border-radius: 3px; overflow: hidden"><div style="width: 41%; height: 100%; background: #3FB27F"></div></div>
+<button style="background: none; border: 1px solid #2E333B; color: #E6E8EB; border-radius: 5px; padding: 5px 10px">Mixer</button>
+</div>
+</section>
+
+<aside aria-label="Inspector" style="flex: 1 1 280px; max-width: 320px; display: flex; flex-direction: column; gap: 0; background: #16191E; border-left: 1px solid #262A31">
+<div style="padding: 12px 14px; border-bottom: 1px solid #262A31">
+<div style="font-size: 15px; font-weight: 600">Webcam · Brio</div>
+<div style="color: #9AA1AC; margin-top: 2px">Shared source, used in 3 scenes</div>
+</div>
+<div style="padding: 12px 14px; border-bottom: 1px solid #262A31; display: flex; flex-direction: column; gap: 10px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #9AA1AC">Transform · this placement</h3>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<label style="display: flex; flex-direction: column; gap: 4px; color: #9AA1AC">X<input value="1384" style="background: #0F1115; border: 1px solid #2E333B; color: #E6E8EB; padding: 6px 8px; border-radius: 4px"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #9AA1AC">Y<input value="497" style="background: #0F1115; border: 1px solid #2E333B; color: #E6E8EB; padding: 6px 8px; border-radius: 4px"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #9AA1AC">W<input value="460" style="background: #0F1115; border: 1px solid #2E333B; color: #E6E8EB; padding: 6px 8px; border-radius: 4px"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #9AA1AC">H<input value="410" style="background: #0F1115; border: 1px solid #2E333B; color: #E6E8EB; padding: 6px 8px; border-radius: 4px"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #9AA1AC">Rotation<input value="0°" style="background: #0F1115; border: 1px solid #2E333B; color: #E6E8EB; padding: 6px 8px; border-radius: 4px"></label>
+<label style="display: flex; flex-direction: column; gap: 4px; color: #9AA1AC">Crop L / R<input value="24 / 24" style="background: #0F1115; border: 1px solid #2E333B; color: #E6E8EB; padding: 6px 8px; border-radius: 4px"></label>
+</div>
+</div>
+<div style="padding: 12px 14px; border-bottom: 1px solid #262A31; display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #9AA1AC">Item effects · this placement</h3>
+<div style="display: flex; justify-content: space-between; padding: 7px 9px; background: #1F232A; border-radius: 5px"><span>Rounded mask</span><span style="color: #9AA1AC">12 px</span></div>
+<div style="display: flex; justify-content: space-between; padding: 7px 9px; background: #1F232A; border-radius: 5px"><span>Drop shadow</span><span style="color: #9AA1AC">on</span></div>
+<button style="align-self: flex-start; background: none; border: 0; color: #8AB4FF; padding: 4px 0">+ Add effect</button>
+</div>
+<div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+<h3 style="margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #9AA1AC">Source filters · everywhere</h3>
+<div style="display: flex; justify-content: space-between; padding: 7px 9px; background: #1F232A; border-radius: 5px"><span>Color correction</span><span style="color: #9AA1AC">warm +6</span></div>
+<div style="display: flex; justify-content: space-between; padding: 7px 9px; background: #1F232A; border-radius: 5px"><span>Background removal</span><span style="color: #9AA1AC">off</span></div>
+<button style="align-self: flex-start; background: none; border: 0; color: #8AB4FF; padding: 4px 0">+ Add filter</button>
+</div>
+</aside>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#4C8DFF","options":["#4C8DFF","#3FB27F","#E8A33D","#B07CFF"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+renderVals() {
+return { accent: this.props.accent ?? '#4C8DFF' };
+}
+}
+</script>
+</body>
+</html>
