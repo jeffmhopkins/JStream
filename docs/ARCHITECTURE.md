@@ -473,7 +473,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:c3376ec23f97b641", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the protocol change: DropCounts is now #[serde(default)], which changes no wire output and no event list; the Events bullet (stats.tick{seq, drops}, 0.6), the video.snapshot query bullet (PNG in the JSON result) and the slow-client and transport bullets still hold; control and server code unchanged" }
+verified = { hash = "b3:a8fecc8b48db2141", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only via protocol source: the render_ticks doc comment changed, no wire shape; this section names no drop counter semantics, so it holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

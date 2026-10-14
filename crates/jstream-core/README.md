@@ -75,7 +75,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bda93e7f344964c9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after merging main (#124): its protocol Design edits (DropCounts serde default, snapshot size bound) don't change this section's Calls, Snapshots (own thread, RGBA8 PNG), Drop counts or Outputs text, which still match this branch's pipeline and snapshot code" }
+verified = { hash = "b3:fff4ece39b4cd13e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via jstream-protocol › Design, now describing render_ticks as catch-up skips; core Design's drop table and late-tick paragraph already say the same, so it holds" }
 -->
 
 ### Engine and sessions
