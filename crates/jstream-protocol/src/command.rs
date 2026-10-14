@@ -340,11 +340,16 @@ impl Vec2 {
     }
 }
 
-/// Where a scene item sits in its scene.
+/// A protocol 0.3 placement: where a scene item sits until it is stored as
+/// [`ItemGeometry`](crate::ItemGeometry).
 ///
-/// A deliberately small first cut: position, scale and rotation about the item's
-/// top-left corner. The full 3D transform and crop (ARCH data model) replace it in a
-/// later minor version, as added fields with defaults.
+/// `position` is the top-left corner in canvas pixels, `scale` is relative to the
+/// source's current size, and `rotation_deg` turns clockwise about that corner.
+/// ADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct
+/// with 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,
+/// rotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this
+/// meaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],
+/// applied before the transform.
 ///
 /// Every number is a [`Finite32`], so a non-finite or out-of-range number is rejected at
 /// deserialization as `malformed`.
