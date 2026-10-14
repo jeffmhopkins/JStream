@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:90bc1ee5f80ff509", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0025: data-model depends on both; main's placement bullet (opacity, blend, reserved effects) kept and the Settings bullet follows it unchanged; other sections changed only by verified lines or the merged data-model" }
+verified = { hash = "b3:a2d3362490054810", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:b3e8d07c9f7c0919", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #74: new crates/jstream-encode/Cargo.toml at layer 3 (dep jstream-platform L1) beside main's jstream-audio (L2), core, daemon and outputs rows; all edges point strictly down (lint-deps ok)" }
+verified = { hash = "b3:777ebdb5f1bfe7f3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -131,6 +131,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 |---|---|---|---|
 | 0 | `jstream-types` | IDs, math (Vec/Mat/Transform3D), color, rational time, units | no |
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
+| 0 | `jstream-plugin-proto` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): the versioned `repr(C)` shared-memory contract (audio rings, parameter-event ring, status block) between the mixer and the CLAP plugin host | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL (`repr(C)` types and constants only) | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `AudioIo`, `VideoEncoder`, `AudioEncoder`, `VideoDecoder`, `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types). The **single owner** of the encoder and decoder traits. | no |
@@ -143,6 +144,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
+| 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
 | 3 | `jstream-encode` | Shared encoder sessions keyed by (mix, settings); rate control; fan-out of packet streams | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports | no |
@@ -152,7 +154,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -239,7 +241,7 @@ Collection (JSON on disk, schema_version, rev: u64)
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:1882506d5cf34ee5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: the parameter-channel sentence now says continuous parameters are live values on the wire, committed by one batch (ADR-0032); clock, thread table, S3 result and arc-swap snapshot text unchanged and still match" }
+verified = { hash = "b3:ea8a6633ba07af4e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0035: added the planned, unbuilt CLAP host paragraph (per-instance process, MMCSS thread on the shared media clock, non-waiting rings with depth d, bypass and stats.tick count, latency, restart); clock, thread table, S3 result and snapshot text unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -258,6 +260,17 @@ every mix runs at the base rate divided by an integer.
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003) |
+
+**CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
+instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
+with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
+processes read from the same OS counter. Audio crosses through shared-memory rings, and
+the mixer never waits on the host: it writes block *n* and reads the processed block
+*n − d* (by default *d* is two engine blocks), with no syscall or lock for the plugin
+([R-RT-001](RULES.md#R-RT-001)). A late block is bypassed with a short crossfade and
+counted in `stats.tick`. The filter's latency is *d* plus the plugin's own, and latency
+compensation keeps audio and video in sync. A host that dies is restarted by the control
+thread with backoff while the mixer bypasses it.
 
 **S3 result**, a 20-minute run (ROADMAP M0 asks for an hour) on the S1 machine, with an
 Expert Sleepers ES-9 for both the mic ("Line") and the output ("Speakers"). Both WASAPI
@@ -296,7 +309,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:a267c2d5813a5a13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into ADR-0025: data-model keeps the Settings bullet next to the Transitions bullet and the transition fields in the tree; other sections changed only by main's text and verified lines" }
+verified = { hash = "b3:8fdc6e0f1b48a4de", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -345,7 +358,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:dca7fe7e8b8a425b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "R-API-002 prose now describes noun-grouped tools with ops, matching the 'Tools are grouped by noun' and Names bullets; jstream-mcp code change only rewords disconnected errors and README adds events options, so tools, schema size, access and undo bullets hold" }
+verified = { hash = "b3:1eaf80cd00e97d1b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): jstream-mcp's not-sent error wording and README additions per main's own verification, plus this PR's verified-line refresh; tools, schema-size, names (R-API-002 grouped by noun), access and undo bullets hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -458,13 +471,15 @@ verified = { hash = "b3:0e05e58970c4134c", by = "agent:claude@session_01QBbMRwRu
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:fe39d2ee37bb88d9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = 'Recorded spike S2 answer per ADR-0020: HKCU fails at IMFVirtualCamera::Start 0x80070003, HKLM works (LOCAL SERVICE svchost, 2463 frames); listed what the elevated step wrote and the Session\<id> naming; matches s2-hkcu.json/s2-hklm.json and spikes/s2-vcam reg.rs/sys.rs' }
+verified = { hash = "b3:a4757b3070f69873", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0035: the zip gains jstream-plugin-host.exe from M3; portable layout, state location and S2 vcam registration findings unchanged" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
 `jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
-runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder. Release builds
+runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder.
+From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin host
+([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). Release builds
 link the C runtime statically and need only OS components (WebView2, Media Foundation,
 Direct3D 12).
 

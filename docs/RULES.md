@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:a356d168d6f85bf5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; R-RT-001..006 still hold, and R-RT-003's parameter channels are exactly what live values use" }
+verified = { hash = "b3:6915cfa07bd1bbf9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading gained ADR-0035's planned CLAP host paragraph, which keeps the mixer free of syscalls and locks for plugins; R-RT-001..006 text unchanged and still hold (R-RT-001's applies_to update for the host is deferred as a governance change)" }
 -->
 
 <a id="R-RT-001"></a>
@@ -544,14 +544,16 @@ validates the `Origin` and `Host` headers. Listeners bind to `127.0.0.1` by defa
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>
-### R-SEC-003: Plugins are sandboxed by default
+### R-SEC-003: WASM plugins are sandboxed by default
 <!-- @rule
 status = "active"
 enforced_by = ["test:jstream_plugin_wasm::no_ambient_capabilities"]
 applies_to = ["crates/jstream-plugin-wasm/**"]
 -->
 WASM plugins get no filesystem or network access unless the manifest declares it and the
-user grants it.
+user grants it. CLAP plugins are not sandboxed: they are native code the user chose to
+install, run in their own process, which isolates crashes, not capabilities
+([ADR-0035](adr/0035-clap-plugins-out-of-process.md)).
 
 <a id="R-SEC-004"></a>
 ### R-SEC-004: No telemetry; crash dumps stay local

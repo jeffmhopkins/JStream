@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:4c760c6c37dd2e78", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only tests.rs changed (shutdown test also asserts a second hello fails with Disconnected); contents list, layer 4 and deferred items unchanged" }
+verified = { hash = "b3:5fd206ada5d83eb5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): only tests.rs changed there; dependency ARCH#crate-map only gained ADR-0035's planned plugin rows, layer 4 and contents unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
