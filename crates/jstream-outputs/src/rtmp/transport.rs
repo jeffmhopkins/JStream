@@ -1,0 +1,216 @@
+//! Opening the byte stream a session runs over: TCP for `rtmp://`, TLS over TCP for
+//! `rtmps://` (rustls with the `ring` provider, docs/RULES.md#R-DEP-006).
+//!
+//! Docs: crates/jstream-outputs/README.md#purpose
+
+use std::io::{self, Read, Write};
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
+use std::sync::Arc;
+use std::time::Duration;
+
+use rustls::pki_types::ServerName;
+use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
+
+use super::{RtmpError, RtmpUrl, Scheme};
+
+/// The connected transport [`connect`] returns: plain TCP for `rtmp://`, or TLS over TCP
+/// for `rtmps://`. It is the `S` of an [`RtmpPublisher`](super::RtmpPublisher).
+///
+/// Timeouts are set on the TCP socket underneath ([`set_read_timeout`](Self::set_read_timeout),
+/// [`set_write_timeout`](Self::set_write_timeout)) and apply through TLS as well: a TLS
+/// read that times out keeps any partly received record and resumes it on the next
+/// read, so [`RtmpPublisher::poll_incoming`](super::RtmpPublisher::poll_incoming) works
+/// the same over both.
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum Transport {
+    /// `rtmp://`: the TCP stream itself.
+    Tcp(TcpStream),
+    /// `rtmps://`: a rustls client session over the TCP stream, handshake complete.
+    Tls(Box<StreamOwned<ClientConnection, TcpStream>>),
+}
+
+impl Transport {
+    /// The TCP socket underneath, for example to read its peer address.
+    pub fn tcp(&self) -> &TcpStream {
+        match self {
+            Self::Tcp(s) => s,
+            Self::Tls(s) => &s.sock,
+        }
+    }
+
+    /// Whether this is a TLS (`rtmps://`) transport.
+    pub fn is_tls(&self) -> bool {
+        matches!(self, Self::Tls(_))
+    }
+
+    /// Sets the socket's read timeout. With a short one, a read that finds nothing
+    /// pending fails with `WouldBlock` or `TimedOut`, which `poll_incoming` treats as
+    /// "nothing to do".
+    ///
+    /// # Errors
+    /// When the operating system refuses the value (for example a zero duration).
+    pub fn set_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+        self.tcp().set_read_timeout(timeout)
+    }
+
+    /// Sets the socket's write timeout, so a stalled server surfaces as an error.
+    ///
+    /// # Errors
+    /// When the operating system refuses the value (for example a zero duration).
+    pub fn set_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
+        self.tcp().set_write_timeout(timeout)
+    }
+
+    /// Closes the connection cleanly: for TLS, sends `close_notify` first so the server
+    /// sees an orderly end rather than a truncated session; then shuts the socket down
+    /// in both directions.
+    ///
+    /// A socket the peer has already disconnected counts as shut down.
+    ///
+    /// # Errors
+    /// Transport errors while sending `close_notify` or shutting the socket down.
+    pub fn shutdown(&mut self) -> io::Result<()> {
+        if let Self::Tls(s) = self {
+            s.conn.send_close_notify();
+            s.flush()?;
+        }
+        match self.tcp().shutdown(Shutdown::Both) {
+            Err(e) if e.kind() == io::ErrorKind::NotConnected => Ok(()),
+            result => result,
+        }
+    }
+}
+
+impl Read for Transport {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Tcp(s) => s.read(buf),
+            Self::Tls(s) => s.read(buf),
+        }
+    }
+}
+
+impl Write for Transport {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Tcp(s) => s.write(buf),
+            Self::Tls(s) => s.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Tcp(s) => s.flush(),
+            Self::Tls(s) => s.flush(),
+        }
+    }
+}
+
+/// Connects to `url`'s host and port: plain TCP for `rtmp://`, TLS for `rtmps://`.
+/// Nagle's algorithm is off either way.
+///
+/// For TLS, the server name sent (SNI) and checked against the certificate is the URL's
+/// host, and the certificate must chain to a root in the operating system's trust
+/// store (loaded on each call). The TLS handshake completes before this returns, so a
+/// certificate problem is reported here and not on the first RTMP message.
+///
+/// `timeout` bounds each TCP connection attempt (one per resolved address) and, for
+/// TLS, each read and write of the handshake. The returned transport has no read or
+/// write timeout; set them with [`Transport::set_read_timeout`] and
+/// [`Transport::set_write_timeout`] if the session must not block indefinitely on a
+/// stalled server.
+///
+/// # Errors
+/// [`RtmpError::Io`] when name resolution or every connection attempt fails, or the
+/// handshake times out; [`RtmpError::NoRootCertificates`] when the operating system's
+/// trust store yields no usable root; [`RtmpError::InvalidUrl`] when the host is not a
+/// valid TLS server name; [`RtmpError::Tls`] when the TLS handshake fails, for example
+/// because the certificate does not match the host or chains to no trusted root.
+pub fn connect(url: &RtmpUrl, timeout: Option<Duration>) -> Result<Transport, RtmpError> {
+    match url.scheme() {
+        Scheme::Rtmp => connect_tcp(url, timeout).map(Transport::Tcp),
+        Scheme::Rtmps => connect_tls(url, timeout, client_config(native_roots()?)?),
+    }
+}
+
+/// A rustls client configuration on the `ring` provider, with its default (safe)
+/// protocol versions, TLS 1.3 and 1.2, and no client certificate.
+pub(crate) fn client_config(roots: RootCertStore) -> Result<Arc<ClientConfig>, RtmpError> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(RtmpError::Tls)?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    Ok(Arc::new(config))
+}
+
+/// The roots in the operating system's trust store. Certificates that fail to parse are
+/// skipped, as are files the store couldn't read, as long as at least one root remains.
+fn native_roots() -> Result<RootCertStore, RtmpError> {
+    let loaded = rustls_native_certs::load_native_certs();
+    let mut roots = RootCertStore::empty();
+    roots.add_parsable_certificates(loaded.certs);
+    if roots.is_empty() {
+        return Err(RtmpError::NoRootCertificates);
+    }
+    Ok(roots)
+}
+
+/// Opens TCP to `url`, then runs the TLS handshake with `config`, naming `url`'s host.
+pub(crate) fn connect_tls(
+    url: &RtmpUrl,
+    timeout: Option<Duration>,
+    config: Arc<ClientConfig>,
+) -> Result<Transport, RtmpError> {
+    let name = ServerName::try_from(url.host().to_owned()).map_err(|_| RtmpError::InvalidUrl {
+        reason: "host is not a valid TLS server name",
+    })?;
+    let mut tcp = connect_tcp(url, timeout)?;
+    let io = |e| RtmpError::io("starting TLS", e);
+    tcp.set_read_timeout(timeout).map_err(io)?;
+    tcp.set_write_timeout(timeout).map_err(io)?;
+    let mut conn = ClientConnection::new(config, name).map_err(RtmpError::Tls)?;
+    while conn.is_handshaking() {
+        conn.complete_io(&mut tcp).map_err(tls_error)?;
+    }
+    tcp.set_read_timeout(None).map_err(io)?;
+    tcp.set_write_timeout(None).map_err(io)?;
+    Ok(Transport::Tls(Box::new(StreamOwned::new(conn, tcp))))
+}
+
+/// A handshake I/O error: the rustls error inside it when there is one (a certificate
+/// or protocol failure), otherwise the transport error.
+fn tls_error(e: io::Error) -> RtmpError {
+    match e
+        .get_ref()
+        .and_then(|inner| inner.downcast_ref::<rustls::Error>())
+    {
+        Some(tls) => RtmpError::Tls(tls.clone()),
+        None => RtmpError::io("TLS handshake", e),
+    }
+}
+
+/// Opens a TCP connection to `url`'s host and port, with Nagle's algorithm off.
+fn connect_tcp(url: &RtmpUrl, timeout: Option<Duration>) -> Result<TcpStream, RtmpError> {
+    let io = |e| RtmpError::io("connecting", e);
+    let mut last = io::Error::new(io::ErrorKind::NotFound, "host resolved to no address");
+    for addr in (url.host(), url.port()).to_socket_addrs().map_err(io)? {
+        let attempt = match timeout {
+            Some(t) => TcpStream::connect_timeout(&addr, t),
+            None => TcpStream::connect(addr),
+        };
+        match attempt {
+            Ok(stream) => {
+                stream.set_nodelay(true).map_err(io)?;
+                return Ok(stream);
+            }
+            Err(e) => last = e,
+        }
+    }
+    Err(io(last))
+}
+
+#[cfg(test)]
+mod tests;

@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:11b187bb687ac5e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only a comment in jstream-platform-windows/Cargo.toml changed (hw-tests feature, N4); rows and edges unchanged" }
+verified = { hash = "b3:fe4a198a4f821b67", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only jstream-outputs/Cargo.toml changed: third-party rustls, rustls-native-certs and dev-only rcgen, no new member edges; its L4 row (RTMP(S) client) and all other rows and layers still hold" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
