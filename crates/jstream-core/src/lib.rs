@@ -7,12 +7,15 @@
 //! Without platform backends, outputs are a placeholder state machine.
 //! [`Engine::with_backends`](engine::Engine::with_backends) and
 //! [`Engine::with_publish`](engine::Engine::with_publish) run the media pipeline on
-//! `output.start` instead. There is no undo, audit log or persistence yet.
+//! `output.start` instead. That pipeline registers the drop sources a `stats.tick`
+//! sums and emits one about once a second while it runs. There is no undo, audit log
+//! or persistence yet.
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md
 
 #![forbid(unsafe_code)]
 
+mod drops;
 mod engine;
 mod events;
 mod outputs;
@@ -22,6 +25,11 @@ mod snapshot;
 #[cfg(test)]
 mod tests;
 
+pub use drops::{
+    AudioBusDrops, AudioEncodeDrops, AudioInputDrops, DropSnapshot, DropSource, DropSourceId,
+    FnDropSource, VideoEncodeDrops, audio_bus_drops, audio_encode_drops, audio_input_drops,
+    capture_drops, output_packet_drops, render_tick_drops, video_encode_drops,
+};
 pub use engine::Engine;
 pub use runtime::{
     LivePublish, OutputStats, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,

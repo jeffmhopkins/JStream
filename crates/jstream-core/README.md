@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:e0cdf4de3323d973", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs and tests bullets against engine.rs. The pipeline still emits starting then active or failed, stop during starting still cancels, and a publish failure still settles failed. Pipeline threads still take neither lock. The weak watcher is described under Design." }
+verified = { hash = "b3:a71990089486b37f", by = "agent:grok@stats-tick", note = "Re-read the engine, runtime and drop-count bullets against engine.rs and drops.rs. The ledger is a third mutex. output.start registers the capture cell, both encode sessions, both mixer inputs, the mix bus and muxer rejects, and jstream-stats emits about once a second. scenarios.rs still reports overload drops." }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -33,8 +33,9 @@ placeholder state machine. Contents:
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads the running pipeline. It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys and the
-  subscribers behind one lock, and the snapshot compositor behind another, and
-  executes batches, actions and queries. The pipeline threads take neither lock.
+  subscribers behind one lock, the snapshot compositor behind another, and the
+  drop ledger behind a third, and executes batches, actions and queries. The
+  pipeline threads take neither the collection lock nor the compositor lock.
 - **Snapshot** (`snapshot.rs`): `video.snapshot`, the program mix read back as a PNG.
 - **Runtime** (`runtime/`): the `output.start` pipeline. The render thread reads the
   platform capture mailbox, composites one scene and reads the frame back. The mixer
@@ -48,11 +49,15 @@ placeholder state machine. Contents:
   or `failed`. Stop emits `stopping` then `stopped`. A stop during `starting` cancels
   that start and settles `stopped` only after its threads are gone. A publish failure
   after `active` settles `failed`.
-- **Tests** (`tests.rs`, `tests/mcp.rs`): the protocol rules through
+- **Drop counts** (`drops.rs`): the sources a `stats.tick` sums. `output.start`
+  registers the capture cell, both encode sessions, both mixer inputs and the mix
+  bus, and a sampler thread emits a tick about once a second until the pipeline stops.
+- **Tests** (`tests.rs`, `tests/mcp.rs`, `tests/scenarios.rs`): the protocol rules through
   `InProcessControl`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on the software adapter, the pipeline against the platform fakes,
-  and an MCP agent (`jstream-mcp`, a dev-dependency) driving the engine in-process.
+  overload drops from a fake encoder and the mixer reported in `stats.tick`, and an
+  MCP agent (`jstream-mcp`, a dev-dependency) driving the engine in-process.
 
 Not here yet: per-client undo, the audit log, persistence, settings, arc-swap
 snapshots, a GPU encode target, and the platform's Windows devices. See
@@ -67,13 +72,14 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c38676cf6bff86b6", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Outputs and Locking against watch_publish. The watcher holds weak pointers until a publish failure, so dropping the last engine joins the pipeline. A later start waits, without the collection lock, until that join finishes." }
+verified = { hash = "b3:21e481d87f05dc65", by = "agent:grok@stats-tick", note = "Re-read Locking and Drop counts against emit_sampled and arm_stats. The ledger is released before the collection lock. The sampler is jstream-stats and is not real-time. render_ticks stays 0. Muxer rejects join output_packets. The watcher still holds weak pointers." }
 -->
 
 ### Engine and sessions
 
 `Engine` is a handle around one `Arc` of shared state: the collection mutex, and a
-separate mutex for the snapshot compositor. Cloning it shares the engine, so a
+separate mutex for the snapshot compositor. The drop ledger is a third mutex,
+outside that `Arc`. Cloning it shares the engine, so a
 host can give one clone to the server's connector and another to an MCP session.
 `Engine::connect()` opens an `InProcessControl`, which holds a clone too: the engine
 lives as long as any handle or session does.
@@ -98,8 +104,9 @@ WebSocket API does, minus serialization:
 `jstream-protocol` (the messages), `jstream-control` (the `Control` trait),
 `jstream-graph` (the collection and every edit rule), `jstream-media` (frames, the
 canvas `FrameSize` and the media clock's time base), `jstream-render` (the snapshot
-and the pipeline compositor), `jstream-platform` (backend traits the host injects),
-`jstream-audio` (the mixer), `jstream-encode` (the H.264 and AAC sessions),
+and the pipeline compositor), `jstream-platform` (backend traits the host injects, and
+the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its drop
+counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV), `jstream-outputs` (the RTMP publisher), `png` (encodes the
 snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
@@ -107,8 +114,9 @@ snapshot readback; default features off, deflate stays pure Rust, allowed by
 `tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
 the pipeline is up or has failed. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
-tests), `jstream-platform`'s `fake` feature (the pipeline test), `jstream-mcp` and
-`serde_json` (`tests/mcp.rs`). All of them are in lower layers
+tests), `jstream-platform`'s `fake` feature (the pipeline test and
+`tests/scenarios.rs`), `jstream-mcp` and `serde_json` (`tests/mcp.rs`). All of them
+are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
 
@@ -203,6 +211,44 @@ woken after the engine's lock is released. A stream ends, after what it buffered
 its session is dropped or when the engine goes away (its last handle and session);
 an ended stream stays ended.
 
+### Drop counts (`stats.tick`)
+
+[R-RT-004](../../docs/RULES.md#R-RT-004) says overload drops are counted and reported in
+`stats.tick`. The stages already count. The engine does not count a second time.
+`output.start` registers one [`DropSource`](src/drops.rs) per stage of that run and
+starts a sampler thread, `jstream-stats`, that calls
+[`Engine::emit_stats_tick`](src/engine.rs) about once a second. The sampler is not a
+real-time thread. Stopping the pipeline joins it and removes the sources, which
+latches their last totals so the next tick does not shrink. `seq` starts at 1.
+Registering two sources for the same drop adds it twice.
+
+A source reports running totals. The tick is the sum, so a client subtracts the previous
+tick.
+
+What each stage contributes:
+
+| Stage | Read from | Fields |
+|---|---|---|
+| Capture mailbox | [`CaptureStats::frames_skipped`](../jstream-platform/src/capture.rs), published by the render thread | `capture_frames` |
+| Mixer input | overrun and late frames, both inputs | `audio_frames` |
+| Mix bus | frames skipped when the mixer falls behind the clock | `audio_frames` |
+| Video encode session | input drops (`dropped_queue_full` + `dropped_encoder_busy`) | `encode_frames` |
+| Audio encode session | the same input drops | `encode_blocks` |
+| Encode subscriber queue | `subscriber_drops` | `output_packets` |
+| Muxer | a packet the FLV tagger rejects | `output_packets` |
+
+The render loop draws a late tick instead of skipping it, so `render_ticks` stays 0.
+There is no separate output queue in front of the network. Underruns, device gaps and
+encoder gap-fill silence are not drops: the mixer plays silence for them, and the late
+or overwritten frames are already in `audio_frames`. A late plugin block is the same
+kind of audio drop ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md));
+the mixer does not count it yet, and when it does that total belongs in `audio_frames`.
+The capture cell is a [`DropSnapshot`](src/drops.rs) (atomics only,
+[R-RT-003](../../docs/RULES.md#R-RT-003)). Encode sessions and mixer handles are shared,
+and their sources load the counters those handles expose. `drops` runs on the sampler
+thread and must not call back into the engine. The fake capture generates a frame when
+it is read, so it does not simulate mailbox skips.
+
 ### Outputs
 
 Outputs are runtime state, not collection state: they never change `rev`. Until the
@@ -259,7 +305,10 @@ from the unit tests.
 
 `std::sync::Mutex` locks, always taken in one order: a session's identity lock (held
 by `hello` while it registers the client), then the engine's collection lock, then
-the pipeline gate, then a subscription queue's. The snapshot compositor's lock is
+the pipeline gate, then a subscription queue's. The drop ledger is its own mutex.
+The sampler and `output.start` take it only to read or register sources, and they
+release it before taking the collection lock. A source must not call back into the
+engine while that mutex is held. The snapshot compositor's lock is
 separate and is taken only when the collection lock is not held. A stream's poll
 takes only its queue's lock. No lock is held across an `await` (there are none).
 The GPU wait of `video.snapshot` holds only the compositor lock. `output.start`
@@ -306,5 +355,6 @@ revisions and error codes are logged, never a call's arguments
   target. `output.start` is the first cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): one scene, a CPU readback
   into the encoder, and the platform fakes in the test. `video.snapshot` still
-  composites from frames the host injects with `set_source_frame`.
+  composites from frames the host injects with `set_source_frame`. The render loop
+  does not skip a late tick, so `render_ticks` stays 0.
 - `R-SEC-001`'s `secrets_are_redacted` test: the engine holds no secret yet.

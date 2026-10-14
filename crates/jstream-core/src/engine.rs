@@ -7,6 +7,7 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
 use crate::outputs::Outputs;
@@ -18,16 +19,17 @@ use crate::snapshot::{self, Frame, SourceFrameError};
 use jstream_graph::Graph;
 use jstream_platform::Backends;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, Event, IdempotencyKey, OutputId, OutputState,
-    ProtocolError, Query, QueryResult, RequestId, Rev, SourceId,
+    Action, Batch, Call, CallResult, ClientId, DropCounts, Event, IdempotencyKey, OutputId,
+    OutputState, ProtocolError, Query, QueryResult, RequestId, Rev, SourceId,
 };
 use jstream_render::Compositor;
 use std::collections::BTreeMap;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::task::Waker;
-use std::thread;
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 /// The JStream engine. Every client talks to it through a session it opens with
 /// [`connect`](Engine::connect).
@@ -39,16 +41,20 @@ use std::thread;
 ///
 /// So far it holds the control plane and `video.snapshot`: the scene graph
 /// (`jstream-graph`), the outputs' runtime state, the latest CPU frame of each source,
-/// per-client idempotency keys and event fan-out. Without
-/// [`with_backends`](Self::with_backends), an output action only steps the placeholder
-/// state machine and the call completes before its future is first polled. With
-/// backends and a publish target, `output.start` blocks the call until the pipeline
-/// is up or has failed, still without an async runtime. The snapshot compositor is
-/// opened on the first `video.snapshot`.
+/// per-client idempotency keys, event fan-out, and the drop counters a `stats.tick`
+/// reports. Without [`with_backends`](Self::with_backends), an output action only
+/// steps the placeholder state machine and the call completes before its future is
+/// first polled. With backends and a publish target, `output.start` blocks the call
+/// until the pipeline is up or has failed, still without an async runtime. That
+/// pipeline registers its drop sources and emits a tick about once a second. The
+/// snapshot compositor is opened on the first `video.snapshot`.
 #[derive(Clone)]
 pub struct Engine {
     shared: Arc<Shared>,
     media: Option<Arc<MediaHost>>,
+    /// Drop sources, on their own lock so a sample never runs under the collection
+    /// lock and a source cannot deadlock by calling back into a command.
+    drops: Arc<Mutex<DropLedger>>,
 }
 
 /// The collection lock and the compositor lock. They are never held together: a
@@ -67,6 +73,7 @@ impl Default for Engine {
                 compositor: Mutex::new(None),
             }),
             media: None,
+            drops: Arc::new(Mutex::new(DropLedger::default())),
         }
     }
 }
@@ -140,6 +147,57 @@ impl Engine {
     pub fn output_stats(&self) -> Option<OutputStats> {
         let host = self.media.as_ref()?;
         lock(&host.gate).running.as_ref().map(Running::stats)
+    }
+
+    /// Registers `source` as a contributor to `stats.tick`.
+    ///
+    /// The returned id removes it. Removing latches the source's last total, so a
+    /// finished stage does not make the running total fall. `source`'s
+    /// [`drops`](DropSource::drops) runs on the control thread and must not call back
+    /// into this engine.
+    pub fn add_drop_source(&self, source: impl DropSource + 'static) -> DropSourceId {
+        drops::lock_ledger(&self.drops).add(source)
+    }
+
+    /// Stops reading `id`, keeping the total it last reported. An unknown id does nothing.
+    pub fn remove_drop_source(&self, id: DropSourceId) {
+        drops::lock_ledger(&self.drops).remove(id);
+    }
+
+    /// Sums every drop source and emits one `stats.tick` to every subscriber.
+    ///
+    /// Totals are running sums since the engine started. `seq` starts at 1. The
+    /// running pipeline calls this about once a second from its own sampler thread,
+    /// which only takes the drop ledger and then the collection lock. A test or a
+    /// host can call it too. An idle engine emits nothing on its own. Safe to call
+    /// with no sources: the tick then carries zeros.
+    pub fn emit_stats_tick(&self) {
+        emit_sampled(&self.shared, &self.drops);
+    }
+
+    /// The ledger the pipeline's [`DropGuard`](crate::drops::DropGuard) removes from.
+    pub(crate) fn drop_ledger(&self) -> Arc<Mutex<DropLedger>> {
+        Arc::clone(&self.drops)
+    }
+
+    /// A thread that emits `stats.tick` about once a second until `stop` is set.
+    ///
+    /// It holds the shared collection and the drop ledger, not the [`MediaHost`], so
+    /// dropping the last engine can still stop the pipeline and then join this thread.
+    pub(crate) fn spawn_stats_ticker(&self, stop: Arc<AtomicBool>) -> Option<JoinHandle<()>> {
+        let shared = Arc::clone(&self.shared);
+        let ledger = Arc::clone(&self.drops);
+        match thread::Builder::new()
+            .name("jstream-stats".into())
+            .spawn(move || {
+                stats_ticker(shared, ledger, stop);
+            }) {
+            Ok(handle) => Some(handle),
+            Err(err) => {
+                tracing::error!(error = %err, "stats ticker did not start");
+                None
+            }
+        }
     }
 
     /// Opens a new client session. It must send `hello` before any call.
@@ -324,7 +382,11 @@ impl Engine {
             armed: true,
         };
         let (fail_tx, fail_rx) = mpsc::channel();
-        let launched = launch(parts, publish, output_id.clone(), generation, fail_tx);
+        let launched =
+            launch(parts, publish, output_id.clone(), generation, fail_tx).map(|mut running| {
+                running.arm_stats(self);
+                running
+            });
         let outcome = {
             let mut state = lock(&self.shared.state);
             let mut gate = lock(&host.gate);
@@ -628,6 +690,32 @@ fn emit_output(state: &mut State, output_id: &OutputId, step: OutputState, wake:
     );
 }
 
+fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
+    let sampled = drops::lock_ledger(ledger).sample();
+    let mut wake = Vec::new();
+    lock(&shared.state).emit_stats(sampled, &mut wake);
+    for waker in wake {
+        waker.wake();
+    }
+}
+
+/// Wakes every 100 ms so a stop joins promptly, and emits once those waits add up to a second.
+fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<AtomicBool>) {
+    let mut waited_ms = 0u32;
+    while !stop.load(Ordering::Relaxed) {
+        thread::sleep(Duration::from_millis(100));
+        if stop.load(Ordering::Relaxed) {
+            break;
+        }
+        waited_ms += 100;
+        if waited_ms < 1_000 {
+            continue;
+        }
+        waited_ms = 0;
+        emit_sampled(&shared, &ledger);
+    }
+}
+
 fn wake_all(wake: Vec<Waker>) {
     for waker in wake {
         waker.wake();
@@ -660,6 +748,8 @@ struct State {
     /// The latest CPU frame of each source, keyed by id. Runtime state: not part of
     /// `rev`. A snapshot draws an item from this when the source is not itself a scene.
     frames: BTreeMap<SourceId, Frame>,
+    /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
+    stats_seq: u64,
 }
 
 impl State {
@@ -751,6 +841,17 @@ impl State {
             },
         };
         Ok(CallResult::Query { result })
+    }
+
+    fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {
+        self.stats_seq = self.stats_seq.saturating_add(1);
+        self.subscribers.emit(
+            &Event::StatsTick {
+                seq: self.stats_seq,
+                drops,
+            },
+            wake,
+        );
     }
 }
 

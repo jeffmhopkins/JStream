@@ -422,6 +422,19 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
         Event::EventsDropped { count } => {
             writeln!(out, "events.dropped {count}")?;
         }
+        Event::StatsTick { seq, drops } => {
+            writeln!(
+                out,
+                "stats.tick seq {seq} capture_frames {} audio_frames {} render_ticks {} \
+                 encode_frames {} encode_blocks {} output_packets {}",
+                drops.capture_frames,
+                drops.audio_frames,
+                drops.render_ticks,
+                drops.encode_frames,
+                drops.encode_blocks,
+                drops.output_packets,
+            )?;
+        }
         other => line(out, other)?,
     }
     Ok(true)

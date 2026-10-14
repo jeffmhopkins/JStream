@@ -3,17 +3,17 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
-use crate::{Engine, InProcessControl};
+use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, Edit, EntityKind, Event, Hello, IdempotencyKey,
-    ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query,
-    QueryResult, RequestId, Rev, SceneId, SourceId, SourceKind, parity,
+    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, Hello,
+    IdempotencyKey, ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError,
+    ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SourceId, SourceKind, parity,
 };
 use std::future::Future;
 use std::pin::pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::task::{Context, Poll, Wake, Waker};
 
 /// Runs a future to completion. The engine's futures are always ready.
@@ -1315,4 +1315,74 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
     let (_, width, rgba) = image(&shot);
     assert_eq!(at(&rgba, width, 100, 100), [0, 255, 0, 255]);
     assert_eq!(at(&rgba, width, 1100, 600), [0, 255, 0, 255]);
+}
+
+#[test]
+fn a_removed_drop_source_keeps_its_total() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let mut events = control.events();
+    let frames = Arc::new(AtomicU64::new(3));
+    let id = engine.add_drop_source(FnDropSource::new({
+        let frames = Arc::clone(&frames);
+        move || DropCounts {
+            capture_frames: frames.load(Ordering::Relaxed),
+            ..DropCounts::default()
+        }
+    }));
+    let cell = DropSnapshot::new();
+    cell.publish(DropCounts {
+        render_ticks: 2,
+        ..DropCounts::default()
+    });
+    engine.add_drop_source(cell.clone());
+
+    engine.emit_stats_tick();
+    assert_eq!(
+        drain(&mut events),
+        vec![Event::StatsTick {
+            seq: 1,
+            drops: DropCounts {
+                capture_frames: 3,
+                render_ticks: 2,
+                ..DropCounts::default()
+            },
+        }]
+    );
+
+    frames.store(5, Ordering::Relaxed);
+    engine.remove_drop_source(id);
+    frames.store(9, Ordering::Relaxed);
+    cell.publish(DropCounts {
+        render_ticks: 4,
+        ..DropCounts::default()
+    });
+    engine.emit_stats_tick();
+    assert_eq!(
+        drain(&mut events),
+        vec![Event::StatsTick {
+            seq: 2,
+            drops: DropCounts {
+                capture_frames: 5,
+                render_ticks: 4,
+                ..DropCounts::default()
+            },
+        }],
+        "the removed source stays at the total it had when it was removed"
+    );
+
+    engine.remove_drop_source(id);
+    engine.emit_stats_tick();
+    assert_eq!(
+        drain(&mut events),
+        vec![Event::StatsTick {
+            seq: 3,
+            drops: DropCounts {
+                capture_frames: 5,
+                render_ticks: 4,
+                ..DropCounts::default()
+            },
+        }],
+        "removing an unknown source changes nothing"
+    );
 }

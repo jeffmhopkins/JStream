@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:b4313766e004105f", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "args.rs parses video snapshot as one more query. The contents list still says the parser maps commands onto protocol calls, and the binary still does not link the engine." }
+verified = { hash = "b3:96d3d789bd0aefe7", by = "agent:grok@stats-tick", note = "Re-read the contents list against args.rs and run.rs. The parser still maps commands onto protocol calls, and the binary still does not link the engine. stats.tick is printed from the existing event stream." }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:b38612a7625cdf9f", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Added the video snapshot row and the human line that prints size and base64 length without the payload. --json still prints the protocol response. Exit 19 remains internal." }
+verified = { hash = "b3:c7b258fd09e04188", by = "agent:grok@stats-tick", note = "Re-read the events bullet against run.rs. A stats.tick prints seq and the six drop totals. version and hello print PROTOCOL_VERSION, now 0.6. --json still prints the protocol event. video snapshot still omits the payload." }
 -->
 
 ```sh
@@ -119,7 +119,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Events** are printed and flushed one by one until `--count` is reached or the
   stream ends. A stream that ends means the engine went away, so it exits with code 3.
   When the server dropped events because the CLI read too slowly, it prints
-  `events.dropped <count>`.
+  `events.dropped <count>`. A pipeline drop sample prints
+  `stats.tick seq <n> capture_frames <n> audio_frames <n> render_ticks <n> encode_frames <n> encode_blocks <n> output_packets <n>`.
 
 **MCP.** `jstream-cli mcp` is the stdio MCP proxy for an agent's MCP client to launch,
 for example:
@@ -175,7 +176,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:dc3f47821ece2d06", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against control design: the mock now answers video.snapshot with internal, and the CLI still sends that query through the same connector. Hand-rolled parsing, block_on and exit code 3 are unchanged." }
+verified = { hash = "b3:49f50f57490e9f45", by = "agent:grok@stats-tick", note = "Re-read against the control design. The mock still answers video.snapshot with internal, and MockEngine::emit can inject a stats.tick. The CLI still sends queries through the same connector. Parsing, block_on and exit code 3 are unchanged." }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
