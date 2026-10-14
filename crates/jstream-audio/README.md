@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:412ab3e36e0dd3c1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading carries this PR's mixer row (activity gains, keyed filters, latency compensation) and Audio timestamps paragraph beside main's ADR-0035 CLAP host paragraph, none built; Purpose maps the first cut (input gain/mute, one stereo bus as master) onto ADR-0028 and its Not yet lists the rest; still matches src" }
+verified = { hash = "b3:fb1a9556f1add33a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-audio row and this Purpose are unchanged and still match the crate" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends

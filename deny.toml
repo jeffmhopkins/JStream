@@ -28,7 +28,7 @@ multiple-versions = "warn"   # switches to "deny" in M1 (R-DEP-005)
 wildcards = "deny"
 allow-wildcard-paths = true  # workspace path deps; all members are publish = false
 deny = [
-    # R-DEP-002 / ADR-0003: no FFmpeg, GStreamer or bundled C codec libraries.
+    # R-DEP-002 / ADR-0031: no FFmpeg, GStreamer or bundled C codec libraries.
     # Name lists are incomplete by nature; xtask lint-deps also checks `links =` crates.
     { crate = "ffmpeg-next", reason = "R-DEP-002" },
     { crate = "ffmpeg-sys-next", reason = "R-DEP-002" },

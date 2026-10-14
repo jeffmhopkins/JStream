@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b88009c4d3bb7cc0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed only by the daemon README's re-verified Design line (ADR-0025 persistence dependency); the layer diagram and app roles are unchanged" }
+verified = { hash = "b3:e706591283751343", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by their re-verified Purpose lines (crate-map's jstream-sources row moved to ADR-0031); layer diagram and app roles unchanged" }
 -->
 
 ```
@@ -61,8 +61,8 @@ verified = { hash = "b3:b88009c4d3bb7cc0", by = "agent:claude@session_01QBbMRwRu
 <a id="principles"></a>
 ## Core principles
 <!-- @section
-depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:4c21fdca01d95b25", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: all 8 principles hold against ADR-0001/0003/0013 and the linked rules (R-ARCH-001/003, R-RT-001/002, R-UNSAFE-001, R-SEC-002 all exist)" }
+depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0013-command-model.md"]
+verified = { hash = "b3:67a80aa8d2b1bb42", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on moved from superseded ADR-0003 to ADR-0031; the 8 principles cite no codec specifics and still hold" }
 -->
 
 1. **One API.** Every capability is part of `jstream-protocol` ([R-ARCH-001](RULES.md#R-ARCH-001)).
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:de750db3576e872a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:477a5e1a4581d82a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR rewrites the jstream-sources row for ADR-0031 (kinds by milestone, images and fonts via pure-Rust crates) beside main's ADR-0035 plugin rows; other rows match main; checked against each crate's [package.metadata.jstream]" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -150,7 +150,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; serves UI assets; mounts MCP over HTTP; token and Origin checks | no |
-| 4 | `jstream-sources` | `Source` trait plus built-ins (display, window, webcam, image, color, text, browser, media file, scene). Uses platform traits; backends are injected. | no |
+| 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
@@ -384,7 +384,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5eab8da6b4065f76", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's binary-streams bullet (meter fields, subscribed-only loudness, audio.reset_loudness) sits beside main's ADR-0022/0024/0025 planned additions; covered control/core/server READMEs changed only by their re-verified lines; bullets match protocol 0.3 as built" }
+verified = { hash = "b3:8cbe42013fc01956", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered control/core/server/protocol READMEs changed only by re-verified Purpose lines after the ADR-0031 crate-map row; no protocol text changes in this PR; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -439,7 +439,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:1db3236cc57f9619", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:e0616afe224f0007", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp and CLI READMEs changed only by re-verified Purpose lines after the ADR-0031 crate-map row; MCP grouping, schema size and naming bullets unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

@@ -57,16 +57,20 @@ must have a written result before the browser source is built.
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
-depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:219eb11af9244359", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b keeps this PR's mixer bullet (master bus, faders and mute, when_shown, peak/true-peak/loudness meters) beside main's ADR-0023 filters/effects and ADR-0024 groups-as-scenes bullets; M1a/c/d unchanged" }
+depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
+verified = { hash = "b3:3c78f71437377d43", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b source-kinds bullet now lists ADR-0031's kinds (display, window, video capture device with MJPEG and audio, image formats, color, text, audio input, desktop and application audio, browser) beside main's ADR-0023/0024/0028 bullets; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
   MF AAC (WASAPI mic + desktop loopback) → FLV → RTMPS to YouTube with a stream key. Minimal
   `jstream-core`, `jstream-server`, `jstream-mcp`, `jstream-cli`, `video.snapshot`.
 - **M1b Scenes and mixing:**
-  - Scene graph and sources: window, webcam (incl. MJPEG decode), image, color, text, and
-    **browser** ([ADR-0021](docs/adr/0021-browser-source.md); after spike S4).
+  - Scene graph and source kinds
+    ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)): display, window,
+    video capture device (webcam or capture card, incl. MJPEG decode, with its audio),
+    image (PNG, JPEG, WebP, animated GIF), color, text, audio input, desktop audio,
+    application audio, and **browser** ([ADR-0021](docs/adr/0021-browser-source.md);
+    after spike S4).
   - **Scenes as sources**: a scene placed inside another scene, with cycles rejected.
   - **Groups as scenes** ([ADR-0024](docs/adr/0024-scene-structure.md)): a scene `role`
     (`scene` or `group`), `item.move` between scenes keeping the item's id, and the
@@ -97,7 +101,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:8c8ae3cb749cbac4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M2 keeps ADR-0029's spelled-out studio/transitions bullet followed by ADR-0024's bullet (keyframe scenes, folders, organisation metadata, hotkeys built with the UI that uses them); other M2 bullets unchanged" }
+verified = { hash = "b3:eed1c82a752d1079", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M2 gains ADR-0031's media file, audio waveform and audio spectrum bullet between main's ADR-0029 transitions and ADR-0024 UI-built bullets; other M2 bullets unchanged" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
@@ -112,6 +116,9 @@ verified = { hash = "b3:8c8ae3cb749cbac4", by = "agent:claude@session_01QBbMRwRu
   ([ADR-0029](docs/adr/0029-transitions.md)): transition presets (Cut, Fade, Move) with a
   default, per-scene "into" and "out of" overrides, Move pairing items by source, and
   per-item delay, easing, glide and appear and disappear effects.
+- Source kinds ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)): **media
+  file** (video or audio, looping; OS demux and decode, A/V sync on the media clock),
+  **audio waveform** and **audio spectrum**.
 - Built with the UI that uses them ([ADR-0024](docs/adr/0024-scene-structure.md)):
   keyframe scenes (variants with per-item overrides), scene folders, organisation
   metadata (labels, favourites, scene icons and colours, show in multiview, scene
@@ -131,6 +138,7 @@ verified = { hash = "b3:8c8ae3cb749cbac4", by = "agent:claude@session_01QBbMRwRu
 - CLAP audio effect filters, hosted out of process
   ([ADR-0035](docs/adr/0035-clap-plugins-out-of-process.md)).
 - macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).
+  A Syphon receiver, the macOS follow-up to Spout2, is considered with it.
 - Linux: codec-path ADR first, then the platform crate (virtual camera via v4l2loopback,
   which needs root, so it gets its own ADR too).
 
@@ -139,5 +147,5 @@ verified = { hash = "b3:8c8ae3cb749cbac4", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 -->
 
-- Media-file source, replay buffer.
+- Spout2 receiver source (Windows), when wanted; replay buffer.
 - Virtual microphone (needs a kernel-driver ADR), SRT/WHIP outputs, OBS scene-collection import.
