@@ -8,6 +8,10 @@ superseded_by = "docs/adr/0019-review-gate-v2.md"
 
 # ADR-0015: Agent review gate and governance with a single GitHub account
 
+<!-- @generated begin adr-status -->
+> **Superseded** by [ADR-0019: Agent review gate v2: owner-only, round-aware verdicts](0019-review-gate-v2.md). This decision no longer applies.
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 JStream is built entirely by AI agents. All commits and PRs come from the maintainer's one

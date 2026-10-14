@@ -8,6 +8,10 @@ tier = "agent"
 
 # ADR-0032: Live parameter edits and undo on the wire
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 A UI edits by continuous gestures: dragging an item on the canvas, scrubbing a numeric

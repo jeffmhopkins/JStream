@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0017: Decision tiers: which ADRs need the maintainer
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Builder agents write ADRs when work forces a significant decision. Under

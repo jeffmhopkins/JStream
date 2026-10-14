@@ -15,6 +15,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
+use crate::docs::generate::strip_status;
 use crate::docs::is_tracked;
 use crate::docs::parse::{Doc, parse};
 
@@ -275,9 +276,15 @@ fn delimiters(container: &str) -> (Option<&str>, Option<&str>) {
 
 /// Classifies an edit to an accepted ADR (R-DOC-009). `status` edits are reported by
 /// `key_edits`; everything else is reported here.
+///
+/// A change confined to the generated `adr-status` banner is not reported: the `docs` check
+/// pins the banner to the generator's output, a function of metadata whose own edits are
+/// reported (ADR-0038). Only banners of the generator's shape are set aside, so text hidden
+/// in a block of any other shape still counts as content.
 fn adr_edits(p: &str, base: &str, head: &str, out: &mut Vec<Change>) {
     let (bc, bb) = split_container(base);
     let (hc, hb) = split_container(head);
+    let (bb, hb) = (strip_status(bb), strip_status(hb));
     let before = out.len();
     if bb != hb {
         push(
@@ -309,7 +316,8 @@ fn adr_edits(p: &str, base: &str, head: &str, out: &mut Vec<Change>) {
             status_only = b.get("status") != h.get("status");
         }
     }
-    if out.len() == before && !status_only {
+    // Text outside both the content and the banner changed: formatting in the block.
+    if out.len() == before && !status_only && bc != hc {
         push(
             out,
             p,
@@ -1008,6 +1016,52 @@ mod tests {
                 "docs/adr/0001-one.md: edits an accepted ADR's `title`",
             ]
         );
+    }
+
+    /// ADR-0038: a change confined to the generated `adr-status` banner (adding it, or
+    /// regenerating it on a status change) is not an edit to the ADR's content; a block of
+    /// another shape, or content next to it, still is.
+    #[test]
+    fn accepted_adr_status_banner_is_not_content() {
+        let f = Fixture::new("banner", &[("docs/adr/0001-one.md", ADR)]);
+        let banner = |line: &str| {
+            ADR.replace(
+                "# ADR-0001: One\n",
+                &format!(
+                    "# ADR-0001: One\n\n<!-- @generated begin adr-status -->\n{line}\n<!-- @generated end adr-status -->\n"
+                ),
+            )
+        };
+        let accepted = banner("> **Status:** accepted");
+        let (changes, _) = f.change(&[("docs/adr/0001-one.md", &accepted)]);
+        assert_eq!(whats(&changes), Vec::<String>::new());
+        // Superseding regenerates the banner; only the metadata edits are reported.
+        let superseded = banner(
+            "> **Superseded** by [ADR-0002: Two](0002-two.md). This decision no longer applies.",
+        )
+        .replace(
+            "\"accepted\"",
+            "\"superseded\"\nsuperseded_by = \"docs/adr/0002-two.md\"",
+        );
+        let (changes, _) = f.change(&[("docs/adr/0001-one.md", &superseded)]);
+        assert_eq!(
+            whats(&changes),
+            vec![
+                "docs/adr/0001-one.md: `@doc` `status`: \"accepted\" → \"superseded\"",
+                "docs/adr/0001-one.md: edits an accepted ADR's `superseded_by`",
+            ]
+        );
+        let content = "docs/adr/0001-one.md: edits an accepted ADR's content (R-DOC-009 allows only `status` and `superseded_by`)";
+        for edited in [
+            // Extra text inside the block.
+            banner("> **Status:** accepted\nWe also do Y."),
+            // A banner plus a content edit.
+            banner("> **Status:** accepted").replace("X.", "Y."),
+        ] {
+            f.git(&["checkout", "-q", "-B", "other", "base"]);
+            let (changes, _) = f.change(&[("docs/adr/0001-one.md", &edited)]);
+            assert_eq!(whats(&changes), vec![content]);
+        }
     }
 
     /// R-DOC-009's container exception: a delimiter change with byte-identical content is

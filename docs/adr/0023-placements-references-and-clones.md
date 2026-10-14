@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0023: Placements, references and clones
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 M1b builds shared sources, duplicates, and "filters and effects"

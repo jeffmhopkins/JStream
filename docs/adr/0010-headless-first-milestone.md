@@ -7,6 +7,10 @@ status = "accepted"
 
 # ADR-0010: Build the headless engine and MCP before the GUI
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 The GUI is the layer that changes most. Agents can exercise the engine through MCP from day

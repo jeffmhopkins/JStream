@@ -8,6 +8,10 @@ tier = "agent"
 
 # ADR-0037: Kind descriptors for transitions and CLAP plugins
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 [ADR-0025](0025-typed-settings-kind-descriptors.md) describes the settings of sources and

@@ -640,7 +640,7 @@ dependency or performance claim (`.github/pull_request_template.md`).
 ## Documentation
 <!-- @section
 depends_on = ["docs/DOCS.md#gate"]
-verified = { hash = "b3:7e3c516b0824daca", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against the edited DOCS#gate: the applies_to typo report is now keyed by crate directory (apps/ vs crates/ per the crate-map apps/* row); R-DOC-012's 'neither exists nor appears in the crate map' still holds, others unaffected" }
+verified = { hash = "b3:fdb0c87dff90c573", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against DOCS#gate after the rebase: R-DOC-009 names the adr-status exception citing ADR-0038 (renumbered from 0036); R-DOC-006 already covers generated blocks; DOCS#gate's ADR-0039 row-key wording leaves R-DOC-012 as is" }
 -->
 
 <a id="R-DOC-001"></a>
@@ -731,11 +731,16 @@ enforced_by = ["ci:docs"]
 applies_to = ["docs/adr/**"]
 -->
 After acceptance, only `status` and `superseded_by` may change. A changed decision is
-recorded in a new ADR. **One exception:** the delimiter syntax of the `@doc` metadata
-block is a container, not content. It may change in every doc, accepted ADRs included,
-but only through a repo-wide format ADR, as a declared governance change, with each ADR's
-Context, Decision and Consequences left byte-identical
-([ADR-0016](adr/0016-docs-as-checked-graph-v2.md)).
+recorded in a new ADR. **Two exceptions:**
+- The delimiter syntax of the `@doc` metadata block is a container, not content. It may
+  change in every doc, accepted ADRs included, but only through a repo-wide format ADR, as
+  a declared governance change, with each ADR's Context, Decision and Consequences left
+  byte-identical ([ADR-0016](adr/0016-docs-as-checked-graph-v2.md)).
+- The generated `adr-status` banner under the title is not content either. It may change
+  in an accepted ADR, but only through `cargo xtask docs generate`, with everything else
+  in the ADR left byte-identical
+  ([ADR-0038](adr/0038-adr-status-banner-and-index.md),
+  [DOCS › Generated content](DOCS.md#generated)).
 
 <a id="R-DOC-010"></a>
 ### R-DOC-010: IDs are permanent

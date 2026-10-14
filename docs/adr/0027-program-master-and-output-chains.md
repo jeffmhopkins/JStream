@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0027: Program master, per-output chains and the privacy screen
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 The chosen UI prototype (`design/ui-prototype/`, direction D) gives the program output

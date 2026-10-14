@@ -26,14 +26,14 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "b3:c26fe51ad2e8157d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the edited DOCS#verification (metadata blocks no longer hashed, row deps, one-time docs rehash): check/verify workflow unchanged; the hash bullet now names rehash as the only other writer, which refuses stale sections" }
+verified = { hash = "b3:e0991bc6292d9996", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against DOCS#verification with both ADR-0039 (metadata blocks unhashed, row deps, rehash) and ADR-0038 (whole-ADR deps skip the adr-status banner): the @generated bullet names cargo xtask docs generate, the hash bullet names rehash; workflow unchanged" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one
   against your diff. If it's wrong, **edit it**. Either way, once it holds, record it:
   `cargo xtask docs verify <ID#anchor> --by agent:<name> --note "<what you checked>"`.
 - Never type dates, revisions or history into docs; git provides them. Never edit
-  `@generated` blocks.
+  `@generated` blocks; run `cargo xtask docs generate` (e.g. after changing an ADR's status).
 - New external URL → register it in `docs/external.toml`. Repeated value → `docs/facts.toml`.
 - New crate root → add its `//! Docs:` line.
 - Never type a `hash` by hand. Only `docs verify` writes it (apart from the one-time
@@ -91,5 +91,6 @@ verified = { hash = "b3:a74acf3f822f102f", by = "agent:claude@session_01QBbMRwRu
 
 Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo deny check`,
 `cargo xtask docs check`, `cargo xtask docs verify`, `cargo xtask docs for`,
+`cargo xtask docs generate` (rewrites `@generated` blocks, e.g. ADR status banners),
 `cargo xtask lint-deps` and `cargo xtask governance --base origin/main` (lists your
 governance changes). Coming during M0: `cargo xtask docs log|review`.

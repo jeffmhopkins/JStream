@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0024: Scene structure: groups, keyframe scenes, folders and organisation
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 M1b builds scenes, scenes as sources, and placing items

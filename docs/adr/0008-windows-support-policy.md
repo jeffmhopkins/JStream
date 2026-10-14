@@ -7,6 +7,10 @@ status = "accepted"
 
 # ADR-0008: Windows support policy
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Windows 10 Home/Pro reached end of support on 2025-10-14

@@ -482,7 +482,9 @@ fn check_link(
             format!("link `{dest}`: no anchor `{frag}` in {target_path}"),
         ));
     }
-    if !doc.is_adr() && target.is_adr() && target.meta_str("status") == Some("superseded") {
+    // ADRs may cite history, and generated docs (the ADR index) list every ADR (ADR-0038).
+    let may_cite_history = doc.is_adr() || doc.meta_str("kind") == Some("generated");
+    if !may_cite_history && target.is_adr() && target.meta_str("status") == Some("superseded") {
         out.push(diag(
             &doc.path,
             line,

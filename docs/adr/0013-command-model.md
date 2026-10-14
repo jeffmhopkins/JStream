@@ -7,6 +7,10 @@ status = "accepted"
 
 # ADR-0013: Command model: edits, actions, revisions, per-client undo
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Humans and agents edit the same setup at the same time. An "atomic batch" can't contain

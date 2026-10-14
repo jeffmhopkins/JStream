@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0019: Agent review gate v2: owner-only, round-aware verdicts
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 Supersedes [ADR-0015](0015-review-and-governance.md).
 
 <a id="context"></a>

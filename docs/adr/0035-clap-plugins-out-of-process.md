@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0035: CLAP audio plugins, out of process
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 Supersedes [ADR-0005](0005-plugins-wgsl-and-wasm.md). It restates all of ADR-0005's
 decision, which stands, and makes one exception to "no native dynamic plugins": CLAP audio
 effect plugins, hosted in a separate process.

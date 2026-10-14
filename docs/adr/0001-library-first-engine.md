@@ -7,6 +7,10 @@ status = "accepted"
 
 # ADR-0001: Library-first engine with thin hosts
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 JStream must run as a desktop app and headless, and be controlled by a web UI, a CLI and

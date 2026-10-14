@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0029: Transitions
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 [ROADMAP › M2](../../ROADMAP.md#m2) lists "Studio mode (Preview/Program) and

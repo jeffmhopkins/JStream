@@ -1,9 +1,10 @@
 //! `cargo xtask docs`: checks and maintains the documentation graph (docs/DOCS.md).
 //!
-//! Docs: docs/DOCS.md#bootstrap, docs/DOCS.md#gate, docs/DOCS.md#verification, docs/DOCS.md#back-references
+//! Docs: docs/DOCS.md#bootstrap, docs/DOCS.md#gate, docs/DOCS.md#verification, docs/DOCS.md#back-references, docs/DOCS.md#generated
 
 mod backrefs;
 mod check;
+pub(crate) mod generate;
 mod govern;
 mod hash;
 pub(crate) mod parse;
@@ -105,6 +106,7 @@ pub(crate) fn check_repo(root: &Path) -> Result<Vec<Diag>> {
     let mut diags = l.parse_diags;
     diags.extend(check::check(&repo));
     diags.extend(backrefs::check(&repo));
+    diags.extend(generate::check(&l.docs));
     diags.sort();
     diags.dedup();
     Ok(diags)
@@ -354,6 +356,31 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             }
             Ok(errors == 0)
         }
+        Some("generate") => {
+            let [_] = args else {
+                bail!("usage: cargo xtask docs generate");
+            };
+            let l = load(root)?;
+            let g = generate::generate(&l.docs);
+            for d in &g.problems {
+                eprintln!("{}:{}: {}", d.path, d.line, d.msg);
+            }
+            for (path, _, text) in &g.files {
+                std::fs::write(root.join(path), text).with_context(|| format!("writing {path}"))?;
+                eprintln!("generated {path}");
+            }
+            if g.files.iter().any(|(_, line, _)| line.is_none()) {
+                eprintln!(
+                    "note: new files must be added with `git add` before `docs check` sees them"
+                );
+            }
+            eprintln!(
+                "docs generate: {} file(s) written, {} problem(s)",
+                g.files.len(),
+                g.problems.len()
+            );
+            Ok(g.problems.is_empty())
+        }
         Some("verify") => {
             let mut target = None;
             let mut by = None;
@@ -414,7 +441,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             Ok(true)
         }
         _ => bail!(
-            "usage: cargo xtask docs check | verify <DOC#anchor> --by <who> --note <text> | for <path> | rehash"
+            "usage: cargo xtask docs check | generate | verify <DOC#anchor> --by <who> --note <text> | for <path> | rehash"
         ),
     }
 }

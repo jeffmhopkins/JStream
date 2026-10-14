@@ -8,6 +8,10 @@ tier = "agent"
 
 # ADR-0025: Typed settings through kind descriptors
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Sources need settings: a URL and a frame-rate cap for a browser source
