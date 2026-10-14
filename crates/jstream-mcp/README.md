@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:dfe97a6035d59185", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: events.rs still pumps one subscription into a bounded numbered buffer; the newest stats.tick now rides on each page as stats, which the Events bullet's description still covers" }
+verified = { hash = "b3:d1c5b482acd8eb67", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: tools.rs only adds a video.snapshot sentence to the video tool description; the Tools and Events bullets and the snapshot image-block note still hold" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:218f3b2d2dc33daf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events (#124 review B1): stats.tick is kept out of the buffer but the newest tick is returned on every read as stats (running totals), so drop counts stay reachable per ADR-0006 and ticks evict nothing per ADR-0036; matches events.rs Buffer::push/read and the updated test" }
+verified = { hash = "b3:045b7b705f600fa9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#124 N1/N2 follow-up: Events field table gains the stats row (newest stats.tick outside the buffer, absent until the first tick), matching events.rs Page.stats; Snapshots now notes the video tool description names the placeholder, matching tools.rs group_tool and tools.snap" }
 -->
 
 ### Tools
@@ -122,7 +122,8 @@ and `structuredContent` both reach the model as text, so the PNG is sent once, i
 image block. In the text block and `structuredContent`, the result keeps its shape
 (`type`, `rev`, `width`, `height`, `png`) but `png` holds a placeholder string,
 `"<in the image content block: N bytes of base64>"`, with `N` the length of the base64
-in the image block. It is not base64: decode the image block's `data` instead.
+in the image block. It is not base64: decode the image block's `data` instead. The
+`video` tool's description says so too, next to the schema that calls `png` base64.
 
 MCP asks for errors the model can correct (bad input, refused operations) to come back
 as tool results with `isError`, and for problems with the request itself as JSON-RPC
@@ -184,6 +185,7 @@ then returns at most `PAGE_SIZE` events after `after`:
 | `dropped` | events after `after` that the full buffer dropped before this read; not 0 means re-read the state |
 | `more` | further events are buffered after `next` |
 | `ended` | the subscription has ended with the session; no more events will come |
+| `stats` | the newest `stats.tick`, kept outside the buffer; absent until the first tick |
 
 An `events.dropped` event among `events` is a different gap: over the WebSocket API,
 `jstream-server` dropped events this session's connection had not read yet

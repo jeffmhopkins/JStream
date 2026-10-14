@@ -130,7 +130,6 @@ fn payload_text(payload: &(dyn std::any::Any + Send)) -> String {
     }
 }
 
-/// The report's text, before redaction.
 /// The report with every registered secret redacted. The message is redacted before
 /// [`report`] cuts it to [`MAX_MESSAGE_BYTES`], so a secret straddling the cut can't
 /// leave its prefix behind (#126 review N2); the whole report is redacted again for the
@@ -147,6 +146,7 @@ fn redacted_report(
     redact(&report(now, thread, location, &message, backtrace), secrets)
 }
 
+/// The report's text, before redaction.
 fn report(
     now: SystemTime,
     thread: &str,

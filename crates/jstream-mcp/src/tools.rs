@@ -405,6 +405,13 @@ fn group_tool(defs: &Map<String, Value>, noun: &str, ops: &[(Op, Value)]) -> Too
     if has(OpClass::Query) {
         description.push_str(" A query only reads.");
     }
+    if ops.iter().any(|(op, _)| op.name == "video.snapshot") {
+        // The schema says `png` is base64; over MCP it is moved out (#124 review N1).
+        description.push_str(
+            " A `video.snapshot` result leads with the PNG as an image content block; its \
+             JSON `png` field only names that block.",
+        );
+    }
     description.push_str(" Failures come back as a tool error whose `error.code` is stable.");
     let schema = json!({
         "type": "object",

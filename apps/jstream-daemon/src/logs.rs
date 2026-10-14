@@ -76,8 +76,10 @@ pub fn create_new(path: &Path) -> io::Result<File> {
 
 /// Deletes the oldest files in `dir` whose names start with `prefix` and end with
 /// `suffix`, so at most `keep` of them remain, never touching `except`. The names
-/// start with a UTC time, so name order is age order. Best effort: a file that can't
-/// be deleted (another process has it open on Windows) is left for a later prune.
+/// start with a UTC time, so name order is age order to the second (files from one
+/// second order by process ID). Best effort: a file that can't be deleted is left for
+/// a later prune. On Windows `std` opens files with `FILE_SHARE_DELETE`, so deleting
+/// another daemon's open log is expected to succeed there too (untested on Windows).
 pub fn prune(dir: &Path, prefix: &str, suffix: &str, keep: usize, except: Option<&Path>) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
