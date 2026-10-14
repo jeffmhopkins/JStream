@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f12bcb6579374843", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gained ADR-0024's item.move/scene_id and ADR-0029's transition edits, none built; Engine still applies only the built graph edits and OutputStart/OutputStop, answering other calls not_implemented, so the design holds" }
+verified = { hash = "b3:aa2979a3af7c15cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains ADR-0028's audio.reset_loudness and meter fields, none built; Engine still applies only built graph edits and OutputStart/OutputStop, so the design holds" }
 -->
 
 ### Engine and sessions

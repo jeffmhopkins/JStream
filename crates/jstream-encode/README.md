@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:668eb5582615dc51", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025 settings and ADR-0022/0024 changes don't touch outputs or encoder profiles; encoder sharing by (mix, profile) as stated still matches ARCH" }
+verified = { hash = "b3:fa4f168cd07b98aa", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0028 adds a master bus that new outputs use; a session still takes one bus's sample blocks, and sharing by (mix, profile) as stated still matches ARCH" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

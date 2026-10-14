@@ -165,7 +165,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:9aa77b9f57411e59", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Main's ADR-0022 canvas/geometry and ADR-0024 scene structure now sit beside this PR's Settings bullet (descriptor-described settings, typed scene/source/asset references in cycle checks and delete rejection); depends_on lists 0022-0025; settings are still in the not-yet list" }
+verified = { hash = "b3:e45efcf5eba44a05", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined ADR-0028 (Source.audio and SourceAudio, master bus, bus fader/mute/monitor, Audio and Shown-on-program bullets; 'independent of scenes' dropped) with main's ADR-0022 canvas/geometry, ADR-0024 scene structure and ADR-0025 Settings; depends_on lists 0022-0025 and 0028, not the superseded 0007; not-yet list adds source audio settings" }
 -->
 
 ```
@@ -384,7 +384,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e5ccc408953aa746", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered protocol README marks open questions 11 and 12 settled by ADR-0025 (kind.list/kind.describe, settings map validated per kind, blocker list on delete rejection, delete.plan; not built); main adds ADR-0022/0024 planned edits; the bullets here still match protocol 0.3 as built" }
+verified = { hash = "b3:5eab8da6b4065f76", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's binary-streams bullet (meter fields, subscribed-only loudness, audio.reset_loudness) sits beside main's ADR-0022/0024/0025 planned additions; covered control/core/server READMEs changed only by their re-verified lines; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

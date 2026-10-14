@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:898ee1c8076e5e8a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model now carries ADR-0022 geometry, ADR-0024 scene structure and ADR-0025 settings, none built; Purpose lists only built behaviour (no settings, kind name only) and stays accurate" }
+verified = { hash = "b3:1add66f6c132d986", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model gains ADR-0028 source audio and master bus beside ADR-0022/0024/0025 fields, none built; Purpose lists only built behaviour and stays accurate" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
