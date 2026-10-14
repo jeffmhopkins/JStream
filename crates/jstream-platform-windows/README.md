@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:c5d355613cb678b4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main (with #58's AAC): upstream jstream-platform#purpose gained the GPU-frame types; this section's AAC text and Not-yet (GPU interop path, Backends constructor) still hold" }
+verified = { hash = "b3:46f99956b36bb41e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main (with #61's H.264 encoder): upstream jstream-platform#purpose gained the GPU-frame types; this section's CPU-path H.264, AAC and Not-yet (GPU interop path, Backends constructor) still hold" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -70,8 +70,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     handler is asked for samples.
 
 - **`MfCodecs`** (`Codecs`), Media Foundation codecs
-  ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md)). So far it has the **AAC
-  encoder**:
+  ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md)): the **AAC encoder** and
+  the **H.264 encoder from CPU frames**. AAC:
   - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
     Windows that is Microsoft's software AAC encoder. It takes 44.1 or 48 kHz; mono or
     stereo at 96, 128, 160 or 192 kbps, or 5.1 at six times those (576, 768, 960 or
@@ -86,15 +86,34 @@ The code is ported from spikes S1 to S3. This first cut has:
     initialising COM. Sessions are opened from a thread that isn't an STA.
   - **Teardown:** dropping a session ends streaming and calls `ShutdownObject` on the
     activation object, as Microsoft asks. One output sample is reused for every pull.
-  - **Not yet:** video encoders and decoders, which report `Unsupported` until then.
+  - **H.264 encoder (CPU path):** this takes NV12 `VideoSurface::Cpu` frames and copies
+    them into Media Foundation memory buffers. It is ARCH's fallback path; the zero-copy
+    D3D11 path arrives with the GPU frame type
+    ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 6).
+    - **Choosing an encoder:** hardware encoder MFTs come first, then the OS software
+      encoder, following `HardwarePreference`. The first one that accepts the media
+      types wins, and `CodecInfo::hardware` says which kind it was.
+    - **Configuration:** CBR or peak-constrained VBR, the keyframe interval as the GOP
+      size, no B-frames (so packets come out in presentation order and `dts == pts`),
+      low latency, the High profile, and BT.709 limited range. `ICodecAPI` settings are
+      best effort; the media type always carries the bit rate.
+    - **Timing:** each packet gets back its frame's exact `pts`, even when the frame's
+      time base doesn't round evenly to the encoder's 100 ns. Keyframes come from
+      `MFSampleExtension_CleanPoint`.
+    - **Asynchronous MFTs** (most hardware encoders) ask for input and announce output
+      through events. `encode` and `poll` pump those events, so `can_accept` reflects the
+      last pump, and the encode thread polls every tick. `finish` waits up to 5 s for the
+      drain to complete.
+  - **Not yet:** video decoders, which report `Unsupported` until then.
 
-**Not yet:** Windows.Graphics.Capture, Media Foundation video encoders and decoders, the
-GPU interop path ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)), the
+**Not yet:** Windows.Graphics.Capture, Media Foundation video decoders, the GPU interop
+path ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)), the
 virtual-camera sink, and a `Backends` constructor, which needs all of them.
 
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
-packet flags, positions across a device move) and the AAC helpers (configuration check,
-PCM conversion, packet timing and padding) run on every platform, and the QPC clock test
+packet flags, positions across a device move), the AAC helpers (configuration check,
+PCM conversion, packet timing and padding) and the H.264 helpers (configuration check,
+NV12 packing, `pts` mapping) run on every platform, and the QPC clock test
 runs on Windows. Tests against real devices and the OS encoder are platform tests: behind
 the `hw-tests` feature and `#[ignore]`d, because CI machines may have no audio devices
 or Media Foundation ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). Run them on a Windows
@@ -109,6 +128,12 @@ machine with a microphone and speakers:
 - **Render times.** `AudioRenderBuffer::time` (when the first frame will play) is always
   `None` for now. `IAudioClock` can give it once the engine needs output sync, for
   example for monitoring with delay compensation.
+- **Hardware encoders and CPU frames.** A hardware MFT that takes NV12 when its media
+  types are set might still refuse system-memory samples at `ProcessInput`. If it does,
+  `HardwarePreference::Prefer` fails instead of falling back. The fallback only happens
+  when the media types are refused, which is enough for software-only machines. The
+  `hw-tests` hardware test will show whether this happens. The GPU path, which feeds
+  hardware encoders D3D11 textures as S1 did, makes the question moot for them.
 - **Moving to a default device with another format.** For now the stream ends with
   `DeviceLost` and the engine reopens it. Instead the backend could ask WASAPI to convert
   to the old format, which would keep the stream running but would resample if the

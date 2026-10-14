@@ -7,8 +7,8 @@ use jstream_platform::PlatformError;
 use windows::Win32::Media::MediaFoundation::{
     IMFActivate, IMFSample, IMFTransform, MF_E_TRANSFORM_NEED_MORE_INPUT,
     MF_E_TRANSFORM_STREAM_CHANGE, MF_VERSION, MFCreateMemoryBuffer, MFCreateSample,
-    MFSTARTUP_NOSOCKET, MFShutdown, MFStartup, MFT_ENUM_FLAG, MFT_FRIENDLY_NAME_Attribute,
-    MFT_MESSAGE_NOTIFY_END_STREAMING, MFT_OUTPUT_DATA_BUFFER,
+    MFSTARTUP_NOSOCKET, MFSampleExtension_CleanPoint, MFShutdown, MFStartup, MFT_ENUM_FLAG,
+    MFT_FRIENDLY_NAME_Attribute, MFT_MESSAGE_NOTIFY_END_STREAMING, MFT_OUTPUT_DATA_BUFFER,
     MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES, MFT_OUTPUT_STREAM_PROVIDES_SAMPLES,
     MFT_REGISTER_TYPE_INFO, MFTEnumEx,
 };
@@ -187,9 +187,13 @@ pub(crate) fn sample_from(
     }
 }
 
-/// One output sample's bytes.
+/// One output sample's bytes and what the MFT said about it.
 pub(crate) struct OutSample {
     pub(crate) data: Vec<u8>,
+    /// The sample time in 100 ns units, if the MFT set one.
+    pub(crate) time: Option<i64>,
+    /// Whether the sample is a clean point (`MFSampleExtension_CleanPoint`): a keyframe.
+    pub(crate) keyframe: bool,
 }
 
 /// How a transform's output stream wants its samples.
@@ -198,6 +202,8 @@ pub(crate) struct Output {
     provides_samples: bool,
     /// The buffer size to allocate otherwise.
     buffer_size: u32,
+    /// The lower bound `buffer_size` was created with, kept for a stream change.
+    min_size: u32,
     /// The output sample handed to the MFT when it doesn't allocate its own: created
     /// once and reused, so a pull that finds no output allocates nothing.
     reusable: Option<IMFSample>,
@@ -216,23 +222,48 @@ impl Output {
         Ok(Self {
             provides_samples: info.dwFlags & provides != 0,
             buffer_size: info.cbSize.max(min_size),
+            min_size,
             reusable: None,
         })
     }
 
-    /// Takes the next output sample, or `None` when the MFT needs more input. A format
-    /// change on the output (`MF_E_TRANSFORM_STREAM_CHANGE`) is accepted and the call
-    /// retried, and an empty output sample is skipped.
+    /// Takes the next output sample, or `None` when the MFT needs more input.
+    ///
+    /// A format change on the output (`MF_E_TRANSFORM_STREAM_CHANGE`) is accepted: the
+    /// first offered type is set, the stream's requirements are read again (a new type
+    /// can need a larger buffer, so the reused sample is replaced), and the call retried.
+    /// Empty output samples are skipped. Each has its own bound, so a misbehaving MFT
+    /// can't loop forever.
     pub(crate) fn pull(
         &mut self,
         transform: &IMFTransform,
     ) -> Result<Option<OutSample>, PlatformError> {
-        for _ in 0..4 {
+        const MAX_CHANGES: u32 = 2;
+        const MAX_EMPTY: u32 = 64;
+        let (mut changes, mut empty) = (0, 0);
+        loop {
             match self.pull_once(transform)? {
-                Pulled::Sample(s) if s.data.is_empty() => {}
+                Pulled::Sample(s) if s.data.is_empty() => {
+                    empty += 1;
+                    if empty > MAX_EMPTY {
+                        return Err(PlatformError::Os {
+                            call: "IMFTransform::ProcessOutput",
+                            code: None,
+                            message: format!("{MAX_EMPTY} empty samples in a row"),
+                        });
+                    }
+                }
                 Pulled::Sample(s) => return Ok(Some(s)),
                 Pulled::NeedInput => return Ok(None),
                 Pulled::StreamChange => {
+                    changes += 1;
+                    if changes > MAX_CHANGES {
+                        return Err(PlatformError::Os {
+                            call: "IMFTransform::ProcessOutput",
+                            code: None,
+                            message: "the output format kept changing".into(),
+                        });
+                    }
                     // SAFETY: plain COM calls on a live transform.
                     unsafe {
                         let t = transform
@@ -242,14 +273,10 @@ impl Output {
                             .SetOutputType(0, &t, 0)
                             .os("IMFTransform::SetOutputType (stream change)")?;
                     }
+                    *self = Self::new(transform, self.min_size)?;
                 }
             }
         }
-        Err(PlatformError::Os {
-            call: "IMFTransform::ProcessOutput",
-            code: None,
-            message: "the output format kept changing, or only empty samples came out".into(),
-        })
     }
 
     fn pull_once(&mut self, transform: &IMFTransform) -> Result<Pulled, PlatformError> {
@@ -323,7 +350,11 @@ impl Output {
                 .os("IMFMediaBuffer::Lock")?;
             let data = std::slice::from_raw_parts(ptr, len as usize).to_vec();
             buffer.Unlock().os("IMFMediaBuffer::Unlock")?;
-            Ok(Pulled::Sample(OutSample { data }))
+            Ok(Pulled::Sample(OutSample {
+                data,
+                time: sample.GetSampleTime().ok(),
+                keyframe: sample.GetUINT32(&MFSampleExtension_CleanPoint).unwrap_or(0) != 0,
+            }))
         }
     }
 }
