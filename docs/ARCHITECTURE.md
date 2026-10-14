@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:4e648699b830644c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crates/jstream-core/Cargo.toml: layer 5, summary equals the L5 row, unsafe no; deps control/graph/protocol and dev-dep jstream-mcp (L3) are all lower layers; no client reaches core (lint-deps ok); jstream-control Cargo.toml only had a comment reworded" }
+verified = { hash = "b3:44bc690f6ca4d0a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-platform-windows/Cargo.toml gained windows API features for WGC/WinRT/Dwm/WindowsAndMessaging plus a description and hw-tests comment; no dependency, layer or unsafe change, so rows and edges hold" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -329,7 +329,7 @@ verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:0577bcfebb1a2d36", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered code: Shared keeps the raw command queue (dropped with the raw objects before the Device clone) and stage compares it; step 2 text unchanged and holds" }
+verified = { hash = "b3:890531688bbbe6e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered code: gpu/mod.rs only re-exports adapter_drives_monitor for WGC capture's own device; steps 1-6 unchanged, and the new CPU capture path is step 6's fallback, on the display's adapter as the hybrid-GPU note asks" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

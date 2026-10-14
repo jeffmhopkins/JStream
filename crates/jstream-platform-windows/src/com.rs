@@ -8,7 +8,8 @@ use windows::Win32::Foundation::{
     CloseHandle, HANDLE, RPC_E_CHANGED_MODE, WAIT_OBJECT_0, WAIT_TIMEOUT,
 };
 use windows::Win32::System::Com::{
-    COINIT_MULTITHREADED, CoInitializeEx, CoTaskMemFree, CoUninitialize,
+    CO_MTA_USAGE_COOKIE, COINIT_MULTITHREADED, CoDecrementMTAUsage, CoIncrementMTAUsage,
+    CoInitializeEx, CoTaskMemFree, CoUninitialize,
 };
 use windows::Win32::System::Threading::{
     AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, CreateEventW, SetEvent,
@@ -72,6 +73,34 @@ impl Drop for Com {
             // SAFETY: balances this guard's successful CoInitializeEx, on the same thread.
             unsafe { CoUninitialize() };
         }
+    }
+}
+
+/// The process's multithreaded apartment kept alive for as long as the guard lives.
+///
+/// While the MTA exists, a thread that never initialised COM is an implicit MTA member,
+/// so it may use free-threaded COM and WinRT objects. A WinRT capture is started, used
+/// and dropped from such threads.
+pub(crate) struct MtaUsage(CO_MTA_USAGE_COOKIE);
+
+impl MtaUsage {
+    pub(crate) fn new() -> Result<Self, PlatformError> {
+        // SAFETY: plain call; balanced by CoDecrementMTAUsage in Drop.
+        let cookie = unsafe { CoIncrementMTAUsage() }.os("CoIncrementMTAUsage")?;
+        Ok(Self(cookie))
+    }
+}
+
+// SAFETY: the cookie is an opaque token, and CoDecrementMTAUsage may be called from any
+// thread.
+unsafe impl Send for MtaUsage {}
+// SAFETY: `&MtaUsage` exposes nothing.
+unsafe impl Sync for MtaUsage {}
+
+impl Drop for MtaUsage {
+    fn drop(&mut self) {
+        // SAFETY: balances the successful CoIncrementMTAUsage in `new`, exactly once.
+        let _ = unsafe { CoDecrementMTAUsage(self.0) };
     }
 }
 
