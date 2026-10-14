@@ -70,10 +70,13 @@ verified = { hash = "b3:c19f99a50de1a941", by = "agent:claude@session_01QBbMRwRu
   - **Scenes as sources**: a scene placed inside another scene, with cycles rejected.
   - **Shared sources:** adding an existing source places the *same* instance (one capture,
     one set of source filters) in another scene. **Duplicate** makes an independent copy.
+    An item converts between reference and clone and keeps its id
+    ([ADR-0023](docs/adr/0023-placements-references-and-clones.md)).
   - Place, move, resize, rotate and **crop** scene items (2D transform + crop), with golden
     tests.
-  - **Filters and effects:** source filters apply everywhere the source appears, and item
-    effects apply to one placement.
+  - **Filters and effects:** source filters apply everywhere the source appears. Each
+    placement has its own opacity and blend; per-placement effects are not in v1, and the
+    model reserves a slot for them.
   - Bus-matrix mixer ([ADR-0028](docs/adr/0028-audio-model-v2.md)): a master bus,
     per-source and per-bus faders and mute, audio that follows the program
     (`when_shown`), filters, and peak, true-peak and loudness meters.

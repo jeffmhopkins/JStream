@@ -162,16 +162,17 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0028-audio-model-v2.md"]
+depends_on = ["docs/adr/0028-audio-model-v2.md", "docs/adr/0023-placements-references-and-clones.md"]
 verified = { hash = "b3:81d6f4dc6d28a5f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for ADR-0028: depends_on moved from ADR-0007; sources gain SourceAudio (enabled, follow, gain_db, muted, filters) and lose 'independent of scenes'; audio gains master bus, bus fader/mute, keys, monitor {device, tap}; bullets for signal order, graph rules and the D29 shown/on-program definition match the ADR; Built so far lists source audio as not yet" }
 -->
 
 ```
 Collection (JSON on disk, schema_version, rev: u64)
-├── sources        Source { id, kind, settings, filters[], audio? }   video and/or audio
+├── sources        Source { id, kind, settings, filters[], duplicated_from?, audio? }   video and/or audio
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted, filters[] }
 ├── scenes         Scene { id, name, items[] }
-│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, blend, effects[] }
+│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, opacity, blend,
+│                              effects[] (reserved, empty in v1) }
 ├── studio         { program_scene, preview_scene, transition }   (studio-mode state)
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
 ├── audio          master_bus: bus_id   (created with the collection, never deleted)
@@ -188,14 +189,23 @@ Collection (JSON on disk, schema_version, rev: u64)
   `program_scene`, including any transition in progress. A `VideoMix` with input
   `Program` follows it.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
-  Adding an *existing* source to a scene adds a `SceneItem` that references it. Changing
-  the source or its `filters[]` changes it everywhere. **Duplicate** creates a new
-  `Source` with its own id.
+  Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
+  shares everything with the other placements of that source except its own placement,
+  opacity and blend. Changing the source or its `filters[]` changes it everywhere.
+  **Duplicate** creates a new `Source` with its own id and `duplicated_from` set to the
+  original; an item placing it is a **clone** and changes independently. Sources have no
+  owner: every placement of a shared source is equal, and a client shows how often a
+  source is placed rather than marking one placement as the original.
+  `item.set_source` switches an item between reference and clone and keeps its id,
+  placement and stacking position ([ADR-0023](adr/0023-placements-references-and-clones.md)).
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
-  scenes nest. A scene never contains itself at any depth, so the graph rejects the edit
-  that would close a cycle.
+  scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
+  that would close a cycle (`item.add`, and `item.set_source`).
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
-  is used. `SceneItem.effects[]` and `crop` belong to that one placement.
+  is used. A placement owns its transform, `crop`, `visible`, `opacity` (an alpha
+  multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
+  compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
+  stays empty in v1, so adding them later needs no collection migration.
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
   matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
@@ -227,8 +237,9 @@ Collection (JSON on disk, schema_version, rev: u64)
   scene; no settings or filters yet), scenes in display order, and items in stacking
   order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
   they never copy them. Deleting a source an item still places, or a scene a source
-  still shows, is rejected. Not yet: settings, filters, source audio settings, effects,
-  blend, the 3D transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
+  still shows, is rejected. Not yet: settings, filters, source audio settings, `opacity`,
+  `blend`, the reserved `effects[]`, `duplicated_from`, `item.set_source`, the 3D
+  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -349,7 +360,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stdio proxy renamed jstream-cli mcp after the maintainer kept the binary name jstream-cli; tools, schema-size, names, access and undo bullets unchanged" }
+verified = { hash = "b3:dca7fe7e8b8a425b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "R-API-002 prose now describes noun-grouped tools with ops, matching the 'Tools are grouped by noun' and Names bullets; jstream-mcp code change only rewords disconnected errors and README adds events options, so tools, schema size, access and undo bullets hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

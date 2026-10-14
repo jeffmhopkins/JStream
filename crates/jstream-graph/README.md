@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:5881382958447014", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model gained ADR-0028 source audio settings, master bus, keys, monitor and the 'shown' definition, all marked not yet built there; graph's model (sources, scenes, items, no audio) and cycle/reference rules unchanged and hold" }
+verified = { hash = "b3:851ca74202b647ca", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model changed to ADR-0023 target state; Purpose describes only what is built (Item: transform, crop, visible; source.duplicate copies under a new ID) and still matches src; ADR-0023 fields are not built" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
