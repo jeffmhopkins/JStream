@@ -71,7 +71,10 @@ fn placement_error(err: GeometryError) -> RenderError {
 
 #[cfg(test)]
 mod tests {
-    use super::quad;
+    use jstream_protocol::GeometryError;
+
+    use super::{placement_error, quad};
+    use crate::error::RenderError;
     use crate::scene::{Crop, Placement};
 
     fn near(got: [f32; 2], expected: [f32; 2]) {
@@ -195,5 +198,27 @@ mod tests {
             ..Placement::IDENTITY
         };
         assert!(quad(4, 2, placement, Crop::NONE).is_err());
+    }
+
+    #[test]
+    fn a_geometry_error_other_than_not_finite_keeps_its_own_message() {
+        let RenderError::Invalid { what, detail } = placement_error(GeometryError::NonPositiveSize)
+        else {
+            panic!("a geometry error maps to Invalid");
+        };
+        assert_eq!(what, "placement");
+        assert_eq!(detail, GeometryError::NonPositiveSize.to_string());
+        assert_ne!(detail, "a component is not finite");
+    }
+
+    #[test]
+    fn not_finite_keeps_the_non_finite_message() {
+        assert_eq!(
+            placement_error(GeometryError::NotFinite),
+            RenderError::Invalid {
+                what: "placement",
+                detail: "a component is not finite".into(),
+            }
+        );
     }
 }

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:b203ed26b378d3bf", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Server bullet now says a video.snapshot result leads with an image block. tools.rs, events.rs, jsonrpc.rs, stdio.rs and error.rs are unchanged." }
+verified = { hash = "b3:dfe97a6035d59185", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: events.rs still pumps one subscription into a bounded numbered buffer; the newest stats.tick now rides on each page as stats, which the Events bullet's description still covers" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -26,7 +26,8 @@ async runtime.
 Contents (a first cut; [Design](#design) explains the choices):
 - **Server** (`server.rs`): `Server`, which answers one JSON-RPC message at a time
   (`Server::handle`), with `MODERN_VERSION` and `LEGACY_VERSIONS`, the MCP revisions it
-  serves. A `video.snapshot` result leads with an image content block.
+  serves. A `video.snapshot` result leads with an image content block, the only place
+  its PNG appears.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
   and the decoding of tool arguments into protocol calls.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
@@ -44,7 +45,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:e6dfc87e04cc4cef", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "The noun table includes video. A successful video.snapshot leads content with an image/png block and still repeats the protocol Response as text and structuredContent, matching server.rs." }
+verified = { hash = "b3:218f3b2d2dc33daf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events (#124 review B1): stats.tick is kept out of the buffer but the newest tick is returned on every read as stats (running totals), so drop counts stay reachable per ADR-0006 and ticks evict nothing per ADR-0036; matches events.rs Buffer::push/read and the updated test" }
 -->
 
 ### Tools
@@ -107,13 +108,21 @@ batches (MCP removed them in 2025-06-18).
 
 | What happened | MCP answer |
 |---|---|
-| The engine answered | a result: `structuredContent` is the protocol `Response` (`{"id", "result"}`), repeated as JSON in a text block. A successful `video.snapshot` also leads `content` with an image block (`type` `image`, `mimeType` `image/png`, `data` the result's base64 PNG) |
+| The engine answered | a result: `structuredContent` is the protocol `Response` (`{"id", "result"}`), repeated as JSON in a text block. A successful `video.snapshot` also leads `content` with an image block (`type` `image`, `mimeType` `image/png`, `data` the result's base64 PNG); see [Snapshots](#design) |
 | The engine refused (`ControlError::Protocol`) | a result with `isError: true` and `{"error": <WireError>}`: the stable `code`, its details and the message |
 | The arguments don't fit the tool, or an `events` cursor is past the newest event | the same, with the protocol's `malformed` code and the reason |
 | The connection to the engine was lost during the call | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again ([Session and identity](#design)). |
 | `hello` failed with a lost connection | the same `disconnected` code, saying the call was not sent and that the MCP server must be restarted for a new session, with its own undo history |
 | Unknown tool, or a `tools/call` without `name` or with non-object `arguments` | JSON-RPC `-32602` |
 | Unparseable JSON / not a valid request / unknown method | `-32700` / `-32600` / `-32601` |
+
+**Snapshots.** A `video.snapshot` PNG can be megabytes of base64
+([jstream-protocol › Design](../jstream-protocol/README.md#design)), and the text block
+and `structuredContent` both reach the model as text, so the PNG is sent once, in the
+image block. In the text block and `structuredContent`, the result keeps its shape
+(`type`, `rev`, `width`, `height`, `png`) but `png` holds a placeholder string,
+`"<in the image content block: N bytes of base64>"`, with `N` the length of the base64
+in the image block. It is not base64: decode the image block's `data` instead.
 
 MCP asks for errors the model can correct (bad input, refused operations) to come back
 as tool results with `isError`, and for problems with the request itself as JSON-RPC
@@ -158,7 +167,13 @@ The `events` tool exposes the engine's events
 `hello`, the server subscribes once to `Control::events()`. A thread drains that
 subscription into a buffer of the newest `BUFFER_CAPACITY` events (in `events.rs`),
 numbering them from 1 (`seq`), and parks until the subscription wakes it, so neither
-the buffer nor the `Control`'s own stream grows while the agent is idle. A read drains
+the buffer nor the `Control`'s own stream grows while the agent is idle. It keeps
+`stats.tick` out of the buffer: about one a second per running pipeline would push
+`state.changed` and `output.state_changed` out within minutes (ADR-0036,
+Consequences). A tick carries running totals, so the feed keeps only the newest one,
+outside the buffer, and every read returns it as `stats`; an agent still sees the drop
+counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
+counted in `dropped`. A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 

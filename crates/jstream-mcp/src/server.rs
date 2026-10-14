@@ -422,7 +422,8 @@ impl Server {
              chosen by you. `events` returns what changed since your last read, from \
              every client. `describe_api` returns the full protocol schema. \
              `video` with `op.type` `video.snapshot` returns the current program mix as \
-             a PNG image.",
+             a PNG image content block; the JSON result's `png` field only names that \
+             block and its size.",
             groups.join(", ")
         )
     }
@@ -454,12 +455,15 @@ fn unsupported_version(requested: &Value) -> RpcError {
 }
 
 /// A `CallToolResult`: `structured` as `structuredContent`, and serialized in a text
-/// block for clients that only read `content`. A `video.snapshot` result also leads
-/// with an image block, so an agent can see the program mix.
-fn tool_result(structured: Value, is_error: bool) -> Value {
-    let png = snapshot_png(&structured).map(str::to_owned);
+/// block for clients that only read `content`.
+///
+/// A successful `video.snapshot` result also leads with an image block, so an agent can
+/// see the program mix. The base64 PNG goes only there: in the text block and in
+/// `structuredContent` its `png` field is replaced by [`png_placeholder`], so the frame
+/// (up to about 5 MB of base64) isn't repeated into the agent's text context.
+fn tool_result(mut structured: Value, is_error: bool) -> Value {
     let mut content = Vec::new();
-    if let Some(png) = png {
+    if let Some(png) = take_snapshot_png(&mut structured) {
         content.push(json!({"type": "image", "data": png, "mimeType": "image/png"}));
     }
     content.push(json!({"type": "text", "text": structured.to_string()}));
@@ -470,13 +474,25 @@ fn tool_result(structured: Value, is_error: bool) -> Value {
     })
 }
 
-/// The base64 PNG of a successful `video.snapshot` response, if this value is one.
-fn snapshot_png(structured: &Value) -> Option<&str> {
-    let result = structured.pointer("/result/result")?;
+/// If `structured` is a successful `video.snapshot` response, moves its base64 PNG out
+/// and leaves [`png_placeholder`] in its place.
+fn take_snapshot_png(structured: &mut Value) -> Option<String> {
+    let result = structured.pointer_mut("/result/result")?;
     if result.get("type")?.as_str()? != "video.snapshot" {
         return None;
     }
-    result.get("png")?.as_str()
+    let png = result.get_mut("png")?;
+    let len = png.as_str()?.len();
+    match std::mem::replace(png, Value::String(png_placeholder(len))) {
+        Value::String(data) => Some(data),
+        _ => None,
+    }
+}
+
+/// What a `video.snapshot` result's `png` field holds over MCP: where the image went and
+/// how long its base64 is (crates/jstream-mcp/README.md#design).
+fn png_placeholder(base64_len: usize) -> String {
+    format!("<in the image content block: {base64_len} bytes of base64>")
 }
 
 /// A tool error with the MCP-layer code `disconnected`: the engine session's connection

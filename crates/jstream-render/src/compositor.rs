@@ -8,12 +8,12 @@ use jstream_platform::FrameSync;
 use crate::color::{self, premultiplied_linear};
 use crate::error::RenderError;
 use crate::gpu::{Gpu, OpenOptions};
-use crate::image::{self, Image};
+use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::place::{self, Quad};
 use crate::scene::{Output, Scene, Snapshot};
 
-/// Bytes from one vertex to the next. Five floats of data plus one pad, so the stride is
-/// a multiple of 8: the `vec2` positions have to stay 8-byte aligned.
+/// Bytes from one vertex to the next: six `f32`s (position, UV, opacity, alpha mode),
+/// tightly packed. wgpu only needs the stride and attribute offsets to be multiples of 4.
 const VERTEX_STRIDE: u64 = 24;
 const VERTICES_PER_ITEM: u32 = 6;
 
@@ -36,9 +36,11 @@ struct Targets {
 ///
 /// Build it with [`Self::open`] when the platform has no GPU interop, or with
 /// [`Self::on_context`] on the device `jstream-platform` opened. Images uploaded or
-/// imported here are the only ones [`Self::render`] samples.
+/// imported here are the only ones [`Self::render`] samples; an image from another
+/// compositor is [`RenderError::Invalid`].
 pub struct Compositor {
     gpu: Gpu,
+    owner: Owner,
     sampler: wgpu::Sampler,
     image_layout: wgpu::BindGroupLayout,
     composite: wgpu::RenderPipeline,
@@ -69,24 +71,25 @@ impl Compositor {
 
     /// Uploads tightly packed straight-alpha sRGB RGBA8.
     ///
+    /// The bytes are premultiplied in linear light on the CPU and stored as
+    /// `Rgba16Float`, so the linear filter cannot darken transparent edges.
+    ///
     /// # Errors
     /// [`RenderError::Invalid`] for a zero dimension, [`RenderError::ImageBytes`] when
     /// `rgba` is not `width * height * 4` bytes, and [`RenderError::TooLarge`] when a
     /// side exceeds the adapter limit.
     pub fn upload_rgba8(&self, width: u32, height: u32, rgba: &[u8]) -> Result<Image, RenderError> {
-        image::upload(
-            &self.gpu,
-            &self.image_layout,
-            &self.sampler,
-            width,
-            height,
-            rgba,
-        )
+        image::upload(&self.maker(), width, height, rgba)
     }
 
     /// Samples `texture`, which must already be on this device: 2D, one sample,
     /// `Rgba8UnormSrgb` or `Bgra8UnormSrgb`, with `TEXTURE_BINDING`. `sync` is staged
     /// on each frame that draws the image.
+    ///
+    /// The texture is read as straight alpha and premultiplied after filtering. That is
+    /// exact for an opaque texture, such as a captured frame. Where alpha is between 0
+    /// and 1 a scaled, rotated or off-pixel edge picks up a dark fringe; upload such
+    /// sources with [`Self::upload_rgba8`] instead.
     ///
     /// # Errors
     /// [`RenderError::UnsupportedFormat`], [`RenderError::UnsupportedTexture`] or
@@ -96,7 +99,7 @@ impl Compositor {
         texture: wgpu::Texture,
         sync: Option<Arc<dyn FrameSync>>,
     ) -> Result<Image, RenderError> {
-        image::import(&self.gpu, &self.image_layout, &self.sampler, texture, sync)
+        image::import(&self.maker(), texture, sync)
     }
 
     /// [`Self::import`] of a [`jstream_platform::GpuFrame`], keeping its [`FrameSync`] hold.
@@ -104,7 +107,7 @@ impl Compositor {
     /// # Errors
     /// As for [`Self::import`].
     pub fn import_frame(&self, frame: &jstream_platform::GpuFrame) -> Result<Image, RenderError> {
-        image::import_frame(&self.gpu, &self.image_layout, &self.sampler, frame)
+        image::import_frame(&self.maker(), frame)
     }
 
     /// Composites `scene`. When `readback` is set, the output carries a CPU copy.
@@ -115,7 +118,8 @@ impl Compositor {
     /// only when the scene outgrows them.
     ///
     /// # Errors
-    /// [`RenderError::Invalid`] for a bad colour, opacity or placement,
+    /// [`RenderError::Invalid`] for a bad colour, opacity or placement, or an image
+    /// another compositor made,
     /// [`RenderError::TooLarge`] for the canvas, [`RenderError::Sync`] when staging a
     /// source frame fails, [`RenderError::TooManyItems`] or [`RenderError::Readback`].
     /// A failed `stage` may already have armed the queue's next submit: the platform
@@ -206,6 +210,28 @@ impl Compositor {
         self.gpu.description()
     }
 
+    /// A second compositor on this one's device and queue, as two `on_context` calls on
+    /// one `GpuContext` would make. Tests use it to check that images do not cross over.
+    #[cfg(test)]
+    pub(crate) fn sibling(&self) -> Self {
+        Self::new(Gpu {
+            device: self.gpu.device.clone(),
+            queue: self.gpu.queue.clone(),
+            adapter: self.gpu.adapter.clone(),
+            max_texture_dimension_2d: self.gpu.max_texture_dimension_2d,
+            max_buffer_size: self.gpu.max_buffer_size,
+        })
+    }
+
+    fn maker(&self) -> Maker<'_> {
+        Maker {
+            gpu: &self.gpu,
+            layout: &self.image_layout,
+            sampler: &self.sampler,
+            owner: &self.owner,
+        }
+    }
+
     fn new(gpu: Gpu) -> Self {
         let sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("jstream-render-linear"),
@@ -239,6 +265,7 @@ impl Compositor {
         });
         Self {
             gpu,
+            owner: Owner::default(),
             sampler,
             image_layout,
             composite,
@@ -258,6 +285,14 @@ impl Compositor {
         let canvas_w = scene.canvas.width() as f32;
         let canvas_h = scene.canvas.height() as f32;
         for (index, item) in scene.items.iter().enumerate() {
+            // Checked for hidden items too, so a scene is valid or not regardless of
+            // visibility. Another compositor's bind group would reach a wgpu panic.
+            if !item.image.owner().is(&self.owner) {
+                return Err(RenderError::Invalid {
+                    what: "image",
+                    detail: format!("item {index} was made by another compositor"),
+                });
+            }
             if !item.opacity.is_finite() || !(0.0..=1.0).contains(&item.opacity) {
                 return Err(RenderError::Invalid {
                     what: "opacity",
@@ -280,7 +315,14 @@ impl Compositor {
                 .ok_or(RenderError::TooManyItems {
                     count: scene.items.len(),
                 })?;
-            push_quad(&mut self.vertices, &quad, canvas_w, canvas_h, item.opacity);
+            push_quad(
+                &mut self.vertices,
+                &quad,
+                canvas_w,
+                canvas_h,
+                item.opacity,
+                item.image.alpha(),
+            );
             self.draws.push(Draw {
                 index,
                 first_vertex,
@@ -465,7 +507,18 @@ impl std::fmt::Debug for Compositor {
     }
 }
 
-fn push_quad(buf: &mut Vec<u8>, quad: &Quad, canvas_w: f32, canvas_h: f32, opacity: f32) {
+fn push_quad(
+    buf: &mut Vec<u8>,
+    quad: &Quad,
+    canvas_w: f32,
+    canvas_h: f32,
+    opacity: f32,
+    alpha: Alpha,
+) {
+    let straight = match alpha {
+        Alpha::Premultiplied => 0.0,
+        Alpha::Straight => 1.0,
+    };
     let corner = |i: usize| {
         let [x, y] = quad.corners[i];
         let [u, v] = quad.uvs[i];
@@ -479,7 +532,7 @@ fn push_quad(buf: &mut Vec<u8>, quad: &Quad, canvas_w: f32, canvas_h: f32, opaci
         push_f32(buf, u);
         push_f32(buf, v);
         push_f32(buf, opacity);
-        push_f32(buf, 0.0);
+        push_f32(buf, straight);
     }
 }
 
@@ -583,7 +636,12 @@ fn composite_pipeline(
     layout: &wgpu::BindGroupLayout,
     shader: &wgpu::ShaderModule,
 ) -> wgpu::RenderPipeline {
-    let attributes = wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Float32];
+    let attributes = wgpu::vertex_attr_array![
+        0 => Float32x2,
+        1 => Float32x2,
+        2 => Float32,
+        3 => Float32,
+    ];
     let buffers = [Some(wgpu::VertexBufferLayout {
         array_stride: VERTEX_STRIDE,
         step_mode: wgpu::VertexStepMode::Vertex,

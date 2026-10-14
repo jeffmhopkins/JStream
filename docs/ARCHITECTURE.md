@@ -473,7 +473,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e040f9d7ff236dca", by = "agent:grok@stats-tick", note = "Re-read the events bullet against event.rs. stats.tick is protocol 0.6 and carries running drop totals; the fields live in the protocol design. video.snapshot remains the PNG query. The server still forwards every event." }
+verified = { hash = "b3:c3376ec23f97b641", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the protocol change: DropCounts is now #[serde(default)], which changes no wire output and no event list; the Events bullet (stats.tick{seq, drops}, 0.6), the video.snapshot query bullet (PNG in the JSON result) and the slow-client and transport bullets still hold; control and server code unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -565,7 +565,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:25e99f8ec6765b2f", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the noun list and snapshots bullet against tools.snap. Nouns include video. video.snapshot leads with an image block. ItemTransform descriptions name ItemGeometry. Tools stay grouped by noun." }
+verified = { hash = "b3:81881727ea640a2e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events bullet: stats.tick kept apart, newest one returned on each read as stats so drop counts stay visible and ticks can't evict state/output events; Snapshots bullet unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -574,7 +574,9 @@ verified = { hash = "b3:25e99f8ec6765b2f", by = "agent:grok@bc-49a8266d-f517-52b
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
-  ([ADR-0036](adr/0036-mcp-events-polling-tool.md)).
+  ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
+  apart: each read returns the newest tick as `stats` (running totals), so it can't
+  evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
   The first cut does not do this yet: each tool carries its ops' full schemas (about 50 KB
@@ -586,8 +588,9 @@ verified = { hash = "b3:25e99f8ec6765b2f", by = "agent:grok@bc-49a8266d-f517-52b
 - **Names** follow the tool-name pattern in [R-API-002](RULES.md#R-API-002).
 - **Snapshots** are returned as images, capped in size (default longest side 1280 px), with
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an
-  image content block (`image/png`, the same base64 as the protocol result) and still
-  carries the full protocol `Response` as text and as `structuredContent`.
+  image content block (`image/png`, the protocol result's base64), the only copy of the
+  PNG: the protocol `Response` it also carries as text and as `structuredContent` has a
+  short placeholder in `png`, so the image doesn't flood the agent's context.
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
   streamable-HTTP transport (not built) is served by `jstream-server` on the control port,
@@ -605,7 +608,7 @@ verified = { hash = "b3:25e99f8ec6765b2f", by = "agent:grok@bc-49a8266d-f517-52b
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:fc7f04c2f78b2546", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against place.rs. Placement is still legacy_quad. The NotFinite match is not a pipeline step. Steps 1-2 and 4-6, fit modes, 3D and the ADR-0027 output path are unchanged." }
+verified = { hash = "b3:40d6041b79574568", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the one-scene paragraph against the premultiply-on-upload change: the composite still writes premultiplied linear into Rgba16Float and resolves to Rgba8UnormSrgb, blend still premultiplied src-over; source alpha handling is detailed in the crate README, not here. Steps 1-6 unchanged." }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
