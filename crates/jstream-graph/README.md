@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:abfe33ed792416ff", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:abfe33ed792416ff", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model now carries ADR-0024 scene structure plus ADR-0023/0029 fields, none built; Purpose lists only built behaviour (items with transform, crop, visible; nesting cycle check on item.add) and stays accurate" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

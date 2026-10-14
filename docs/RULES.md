@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:22b6d10f5c1d78d6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0024 acceptance: data-model tree joins Scene role/variant/organisation fields with transition_in/out and SceneItem.transition, studio drops transition, not-yet list names both; ROADMAP M2 keeps ADR-0029's studio bullet then ADR-0024's UI-built bullet; other sections changed only by main's text and verified lines" }
+verified = { hash = "b3:22b6d10f5c1d78d6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0024's item.move edit, optional scene_id on placement edits, item.clear_override and new Scene fields, and ADR-0029's transition edits and fields, are all additive with defaults, minor-release changes under R-API-001; names follow R-API-002 noun.verb" }
 -->
 
 <a id="R-API-001"></a>

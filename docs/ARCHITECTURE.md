@@ -165,7 +165,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md"]
-verified = { hash = "b3:20e8f1ac3e22eae0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0024 acceptance: data-model tree joins Scene role/variant/organisation fields with transition_in/out and SceneItem.transition, studio drops transition, not-yet list names both; ROADMAP M2 keeps ADR-0029's studio bullet then ADR-0024's UI-built bullet; other sections changed only by main's text and verified lines" }
+verified = { hash = "b3:20e8f1ac3e22eae0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Tree joins ADR-0024 (Scene role, variant_of, overrides, folder, background, icon, color, favourite, show_in_multiview; folders, labels, hotkeys; Source labels/favourite) with ADR-0023 (opacity, blend, reserved effects, duplicated_from) and ADR-0029 (transition_in/out, SceneItem.transition, transitions); variant overrides include opacity; not-yet list names all three ADRs' unbuilt fields" }
 -->
 
 ```
@@ -338,7 +338,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:a9252de8ff24530f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:647c5c73a67e9f36", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds the Edits-bullet sentence on ADR-0024's item.move and optional scene_id addressing (not built); main added ADR-0029's planned transition edits; covered READMEs changed only by re-verified lines; other bullets unchanged and match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

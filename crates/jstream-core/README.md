@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f12bcb6579374843", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0024 acceptance: data-model tree joins Scene role/variant/organisation fields with transition_in/out and SceneItem.transition, studio drops transition, not-yet list names both; ROADMAP M2 keeps ADR-0029's studio bullet then ADR-0024's UI-built bullet; other sections changed only by main's text and verified lines" }
+verified = { hash = "b3:f12bcb6579374843", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gained ADR-0024's item.move/scene_id and ADR-0029's transition edits, none built; Engine still applies only the built graph edits and OutputStart/OutputStop, answering other calls not_implemented, so the design holds" }
 -->
 
 ### Engine and sessions
