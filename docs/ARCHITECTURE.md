@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:aeec6a9d37c9813b", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read the new jstream-render Cargo.toml against its crate-map row: layer 2, unsafe_allowed false, and the summary matches the row's responsibility text. Other rows are unchanged." }
+verified = { hash = "b3:f6b958bbb055dd47", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the jstream-render row against its Cargo.toml. Layer stays 2, unsafe_allowed stays false, and the summary still matches the row. The new dependency is jstream-protocol, layer 1." }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -573,7 +573,7 @@ verified = { hash = "b3:e9fa1c035e9dd062", by = "agent:grok@bc-154a1201-b120-575
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c6151c969fa53885", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against the render README edit. Placement in this crate is still the legacy 0.3 evaluation in place.rs; fit modes and 3D are still not drawn here. Steps 1-2 and 4-6, transitions and the ADR-0027 output path are unchanged." }
+verified = { hash = "b3:e76aa23b52774c3e", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against place.rs calling legacy_quad. Crop, scale, top-left and clockwise rotation are unchanged. Steps 1-2 and 4-6, the FP16 composite, fit modes, 3D and the ADR-0027 output path are unchanged." }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -601,9 +601,10 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement is
-the legacy 0.3 evaluation (crop in source pixels, scale against the current source size,
-top-left at `position`, clockwise rotation about that corner). Opacity is a straight
-multiplier in `[0, 1]` and the blend is premultiplied src-over. The composite pass writes
+that 0.3 evaluation from `jstream-protocol`'s `legacy_quad` (crop in source pixels, scale
+against the current source size, top-left at `position`, clockwise rotation about that
+corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+src-over. The composite pass writes
 premultiplied linear light into `Rgba16Float`; a resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a software adapter

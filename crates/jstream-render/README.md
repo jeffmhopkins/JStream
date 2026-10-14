@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:d238d8c2646f50d7", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Edited the API bullet and the not-in-this-cut paragraph: the shared formula is in jstream-protocol, and place.rs still evaluates the legacy 0.3 placement itself. Re-read the rest against compositor.rs and place.rs: canvas, opacity, src-over, open versus on_context, and RGBA8 readback are unchanged. ADR-0022 decision 5 and the GPU pipeline one-scene paragraph still match." }
+verified = { hash = "b3:9f28e68d96e18635", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the API bullet against place.rs: public types stay Placement and Crop, and place maps them onto ItemTransform and calls legacy_quad. Canvas, opacity, src-over, open versus on_context, and RGBA8 readback are unchanged. Fit modes and 3D are still not drawn." }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -66,12 +66,11 @@ and calls this crate.
   `GpuFrame` keeps its `FrameSync`; `render` calls `stage` once per distinct hold
   before the submit that samples it. Staging stays the safe method on
   `jstream-platform`. This crate never calls wgpu-hal.
-- The graph's `ItemTransform` and `Crop` are not named here. `Placement` and `Crop`
-  are the same fields (top-left `position`, `scale`, clockwise `rotation_deg`; crop
-  insets in source pixels), so the engine's mapping is field by field. The shared
-  formula now lives in `jstream-protocol` (`ItemGeometry`, `legacy_quad`). This crate
-  still evaluates the legacy placement in `place.rs` and does not call that function
-  yet.
+- The public scene types stay `Placement` and `Crop`: the same fields as the
+  protocol's `ItemTransform` and `Crop` (top-left `position`, `scale`, clockwise
+  `rotation_deg`; crop insets in source pixels), so the engine's mapping is field by
+  field. `place` maps them onto those protocol types and calls `legacy_quad` for the
+  corners and UVs. Fit modes and 3D are still not drawn here.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. It is the snapshot path (`video.snapshot` later encodes it). It
   is not the encoder's NV12 texture.
@@ -79,7 +78,7 @@ and calls this crate.
 **Not in this cut.** The render thread (`frame_loop.rs`), arc-swap snapshots, NV12 or
 P010 conversion, encode-target export and the D3D12 `PRESENT` transition, WGSL effect
 packs, fit modes, 3D tilt/turn/depth/perspective, transitions, the master chain and
-the privacy stage. The protocol formula for fit modes and 3D now exists; this crate
+the privacy stage. The protocol formula for fit modes and 3D exists; this crate
 still does not draw them. 3D fields stay neutral until M3. The GPU pipeline's encode
 steps stay in
 [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline).
@@ -89,7 +88,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:4e97d543c7bc7065", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read the pass and resource layout against compositor.rs, the WGSL and place.rs. R-RT-002 still holds: no control-plane wait, no file or network I/O, bind groups live on Image, readback is opt-in. ADR-0004's single wgpu pin is unchanged." }
+verified = { hash = "b3:7287c9dd8c035cab", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the placement subsection against legacy_quad and the pass list against compositor.rs. Clip space stays in this crate. R-RT-002 still holds: no control-plane wait, no file or network I/O. Negative scale still draws because there is no cull." }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -145,17 +144,22 @@ are a separate owned copy.
 
 ### Placement math
 
-Canvas coordinates: x right, y down, origin at the top left. For a source of size
-`(sw, sh)` and crop `(left, top, right, bottom)`:
+Canvas coordinates: x right, y down, origin at the top left. `place` asks
+[`legacy_quad`](../jstream-protocol/src/geometry.rs) for the quad. For a source of size
+`(sw, sh)` and crop `(left, top, right, bottom)` that function:
 
-- `cw = sw - left - right`, `ch = sh - top - bottom`. If either is `<= 0`, skip.
-- Destination size is `(cw * scale.x, ch * scale.y)`. If either component is 0, skip.
-- UVs cover the cropped texels: `u0 = left/sw`, `u1 = (sw-right)/sw`, and the same for
-  `v` with y down in the texture.
-- The four corners start at the destination rectangle with that top-left at
-  `position`, then rotate clockwise about that top-left by `rotation_deg`. In y-down
-  coordinates that is `x' = px + dx·cos θ − dy·sin θ`, `y' = py + dx·sin θ + dy·cos θ`.
-- Clip space is `x_ndc = x/canvas_w·2 − 1`, `y_ndc = 1 − y/canvas_h·2`.
+- takes `cw = sw - left - right`, `ch = sh - top - bottom`, and skips when either is
+  `<= 0` or the source size is zero;
+- sets the destination size to `(cw * scale.x, ch * scale.y)`, and skips when either
+  component is 0 (a negative component reflects that axis);
+- covers the cropped texels with UVs `u0 = left/sw`, `u1 = (sw-right)/sw`, and the
+  same for `v` with y down in the texture;
+- puts the destination rectangle's top-left at `position`, then rotates clockwise
+  about that corner by `rotation_deg`. In y-down coordinates that is
+  `x' = px + dx·cos θ − dy·sin θ`, `y' = py + dx·sin θ + dy·cos θ`.
+
+This crate then maps those canvas pixels into clip space:
+`x_ndc = x/canvas_w·2 − 1`, `y_ndc = 1 − y/canvas_h·2`.
 
 Opacity outside `[0, 1]` and any non-finite placement, colour or opacity is
 `RenderError::Invalid`, not a clamped draw.
@@ -234,12 +238,9 @@ render, and it does not weaken a check.
 <!-- @section
 -->
 
-- **Geometry and fit modes.** The shared formula is `ItemGeometry` in
-  `jstream-protocol`: `project` (the box, rotation about its centre), `content`
-  (`stretch`, `fit`, `fill`) and `legacy_quad` (the 0.3 placement this crate still
-  computes in `place.rs`). The snapshot should carry that projected quad, or the
-  geometry plus the source size, instead of the second copy. `fill` still needs a clip
-  to the box, which this pipeline does not have.
+- **Geometry and fit modes.** `place.rs` calls `legacy_quad` for the 0.3 placement.
+  The snapshot still carries `Placement` and `Crop`, not `ItemGeometry`. `fill` still
+  needs a clip to the box, which this pipeline does not have, and 3D is not drawn.
 - **3D.** `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` are fields on
   `ItemGeometry` and default to neutral. `is_neutral_3d` is the check an engine uses
   to reject a non-neutral value until M3 draws it. No 3D uniforms here.
