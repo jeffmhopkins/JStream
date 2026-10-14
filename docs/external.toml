@@ -163,3 +163,19 @@ relied_on = "The live UI prototype (claude.ai Design canvas artifact) whose sour
 review_every = "180d"
 status = "unverified"
 checked_note = "Private artifact (sign-in required), so the sweep can't fetch it; the link is visible in this public repo but only the maintainer can open it"
+
+[[external]]
+id = "gh-maintainer"
+url = "https://github.com/jeffmhopkins"
+relied_on = "The maintainer's GitHub profile, which shows a contact for code-of-conduct reports"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox (proxy refuses github.com pages)"
+
+[[external]]
+id = "gh-private-vuln-report"
+url = "https://github.com/jeffmhopkins/JStream/security/advisories/new"
+relied_on = "GitHub private vulnerability reporting is enabled for the repository, so this opens a private draft advisory"
+review_every = "180d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox; needs the repository setting 'Private vulnerability reporting' enabled"
