@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:01db8276b95e40f9", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the scene, API and not-in-this-cut bullets against the test-only lock. place.rs still evaluates the legacy 0.3 placement. Canvas, opacity, src-over, open versus on_context, and RGBA8 readback are unchanged." }
+verified = { hash = "b3:63afe37e31862640", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the scene, API and not-in-this-cut bullets against the Opened test lock. place.rs still evaluates the legacy 0.3 placement. Canvas, opacity, src-over, open versus on_context, and RGBA8 readback are unchanged." }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -89,7 +89,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:a7152e228a215dc2", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the passes, resources and placement math against compositor.rs and place.rs. The test lock is not a pass. R-RT-002 still holds: no control-plane wait, no file or network I/O, readback stays opt-in." }
+verified = { hash = "b3:cbd764bc36550a8e", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the passes, resources and placement math against compositor.rs and place.rs. Opened is test-only. R-RT-002 still holds: no control-plane wait, no file or network I/O, readback stays opt-in." }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -185,7 +185,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:39df62cfdf345fbf", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read tests.rs against the new device-lock paragraph. Each pixel test still opens its own compositor and checks the same pixels; the lock only stops WARP from creating several Dx12 devices at once. Skip-outside-CI, panic-in-CI, lavapipe and WARP, and no hand-edited goldens still match R-TEST-003 and R-TEST-004." }
+verified = { hash = "b3:adf421079f97b0b5", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the device-lock paragraph against Opened in tests.rs. The lock and the compositor are one value, the device field is declared first, and each pixel test still opens its own compositor. Skip-outside-CI, panic-in-CI, lavapipe and WARP, and no hand-edited goldens still match R-TEST-003 and R-TEST-004." }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -212,10 +212,11 @@ opaque background (the linear blend, then the sRGB encode); a fully cropped item
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
 staged once per submit and not staged when the item is hidden.
 
-**One device at a time.** Each pixel test opens its own compositor and holds a process
-lock until that compositor is dropped. WARP (Microsoft Basic Render Driver)
-access-violates when several Dx12 devices are created and destroyed together. The
-tests still all run; they do not share one device.
+**One device at a time.** Each pixel test opens its own compositor and keeps the
+process lock in that same value until the value is dropped. The device field is
+declared first, so it drops while the lock is held. WARP (Microsoft Basic Render
+Driver) access-violates when several Dx12 devices are created and destroyed together.
+The tests still all run; they do not share one device.
 
 **Skipping.** `Compositor::open` returns `NoAdapter` when nothing can be created. The
 test helper writes one line to stderr and returns, so a laptop without lavapipe or

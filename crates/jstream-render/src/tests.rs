@@ -10,11 +10,20 @@ use jstream_platform::{FrameSync, GpuFrame, PlatformError};
 
 use crate::{Color, Compositor, Crop, Item, OpenOptions, Placement, RenderError, Scene, Snapshot};
 
+/// A compositor whose device drops before the WARP lock.
+///
+/// Fields drop in declaration order, so the device is destroyed while the lock is held
+/// for as long as this value is kept whole. Splitting the fields apart drops them as
+/// separate locals and can release the lock first.
+struct Opened {
+    compositor: Compositor,
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
+
 /// WARP (Microsoft Basic Render Driver) access-violates, `0xc0000005`, when several
-/// tests create and drop Dx12 devices at once. The guard is the first element so the
-/// device drops while the lock is still held.
-fn open() -> Option<(std::sync::MutexGuard<'static, ()>, Compositor)> {
-    let guard = gpu_lock();
+/// tests create and drop Dx12 devices at once.
+fn open() -> Option<Opened> {
+    let _lock = gpu_lock();
     match Compositor::open(OpenOptions::headless()) {
         Ok(compositor) => {
             let _ = writeln!(
@@ -22,7 +31,7 @@ fn open() -> Option<(std::sync::MutexGuard<'static, ()>, Compositor)> {
                 "jstream-render test adapter: {}",
                 compositor.adapter_description()
             );
-            Some((guard, compositor))
+            Some(Opened { compositor, _lock })
         }
         Err(err) if err.is_no_adapter() => {
             if std::env::var_os("CI").is_some() {
@@ -96,10 +105,10 @@ fn item<'a>(image: &'a crate::Image, placement: Placement, crop: Crop, opacity: 
 
 #[test]
 fn background_only_fills_the_canvas() {
-    let Some((_gpu, mut compositor)) = open() else {
+    let Some(mut opened) = open() else {
         return;
     };
-    let snapshot = draw(&mut compositor, 4, 3, Color::rgb(1.0, 0.0, 0.0), &[]);
+    let snapshot = draw(&mut opened.compositor, 4, 3, Color::rgb(1.0, 0.0, 0.0), &[]);
     assert_eq!(
         (snapshot.width(), snapshot.height(), snapshot.rgba().len()),
         (4, 3, 48)
@@ -110,11 +119,11 @@ fn background_only_fills_the_canvas() {
 
 #[test]
 fn opaque_rect_stacks_over_the_background() {
-    let Some((_gpu, mut compositor)) = open() else {
+    let Some(mut opened) = open() else {
         return;
     };
-    let red = solid(&compositor, 8, 6, [255, 0, 0, 255]);
-    let blue = solid(&compositor, 4, 2, [0, 0, 255, 255]);
+    let red = solid(&opened.compositor, 8, 6, [255, 0, 0, 255]);
+    let blue = solid(&opened.compositor, 4, 2, [0, 0, 255, 255]);
     let items = [
         item(&red, Placement::IDENTITY, Crop::NONE, 1.0),
         item(
@@ -127,7 +136,7 @@ fn opaque_rect_stacks_over_the_background() {
             1.0,
         ),
     ];
-    let snapshot = draw(&mut compositor, 8, 6, Color::BLACK, &items);
+    let snapshot = draw(&mut opened.compositor, 8, 6, Color::BLACK, &items);
     near(&snapshot, 0, 0, [255, 0, 0, 255], 0);
     near(&snapshot, 3, 3, [0, 0, 255, 255], 0);
     near(&snapshot, 7, 5, [255, 0, 0, 255], 0);
@@ -135,7 +144,7 @@ fn opaque_rect_stacks_over_the_background() {
 
 #[test]
 fn crop_keeps_the_uncut_texels() {
-    let Some((_gpu, mut compositor)) = open() else {
+    let Some(mut opened) = open() else {
         return;
     };
     let mut pixels = Vec::new();
@@ -150,7 +159,7 @@ fn crop_keeps_the_uncut_texels() {
         }
     }
     // 4x2, both rows red-red-green-green. Cropping the left half leaves green.
-    let image = compositor.upload_rgba8(4, 2, &pixels).unwrap();
+    let image = opened.compositor.upload_rgba8(4, 2, &pixels).unwrap();
     let items = [item(
         &image,
         Placement::IDENTITY,
@@ -162,7 +171,7 @@ fn crop_keeps_the_uncut_texels() {
         },
         1.0,
     )];
-    let snapshot = draw(&mut compositor, 4, 2, Color::BLACK, &items);
+    let snapshot = draw(&mut opened.compositor, 4, 2, Color::BLACK, &items);
     near(&snapshot, 0, 0, [0, 255, 0, 255], 0);
     near(&snapshot, 1, 1, [0, 255, 0, 255], 0);
     near(&snapshot, 2, 0, [0, 0, 0, 255], 0);
@@ -170,10 +179,10 @@ fn crop_keeps_the_uncut_texels() {
 
 #[test]
 fn integer_scale_covers_the_destination() {
-    let Some((_gpu, mut compositor)) = open() else {
+    let Some(mut opened) = open() else {
         return;
     };
-    let red = solid(&compositor, 2, 2, [255, 0, 0, 255]);
+    let red = solid(&opened.compositor, 2, 2, [255, 0, 0, 255]);
     let items = [item(
         &red,
         Placement {
@@ -183,17 +192,17 @@ fn integer_scale_covers_the_destination() {
         Crop::NONE,
         1.0,
     )];
-    let snapshot = draw(&mut compositor, 4, 4, Color::BLACK, &items);
+    let snapshot = draw(&mut opened.compositor, 4, 4, Color::BLACK, &items);
     near(&snapshot, 0, 0, [255, 0, 0, 255], 1);
     near(&snapshot, 3, 3, [255, 0, 0, 255], 1);
 }
 
 #[test]
 fn rotation_about_the_top_left_is_clockwise() {
-    let Some((_gpu, mut compositor)) = open() else {
+    let Some(mut opened) = open() else {
         return;
     };
-    let red = solid(&compositor, 20, 10, [255, 0, 0, 255]);
+    let red = solid(&opened.compositor, 20, 10, [255, 0, 0, 255]);
     let items = [item(
         &red,
         Placement {
@@ -204,7 +213,7 @@ fn rotation_about_the_top_left_is_clockwise() {
         Crop::NONE,
         1.0,
     )];
-    let snapshot = draw(&mut compositor, 64, 64, Color::BLACK, &items);
+    let snapshot = draw(&mut opened.compositor, 64, 64, Color::BLACK, &items);
     // Interior of the rotated rectangle (x 20..30, y 30..50), and a pixel clearly outside it.
     near(&snapshot, 25, 40, [255, 0, 0, 255], 1);
     near(&snapshot, 40, 40, [0, 0, 0, 255], 0);
@@ -212,22 +221,22 @@ fn rotation_about_the_top_left_is_clockwise() {
 
 #[test]
 fn half_opacity_blends_in_linear_light() {
-    let Some((_gpu, mut compositor)) = open() else {
+    let Some(mut opened) = open() else {
         return;
     };
-    let black = solid(&compositor, 2, 2, [0, 0, 0, 255]);
+    let black = solid(&opened.compositor, 2, 2, [0, 0, 0, 255]);
     let items = [item(&black, Placement::IDENTITY, Crop::NONE, 0.5)];
-    let snapshot = draw(&mut compositor, 2, 2, Color::WHITE, &items);
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::WHITE, &items);
     let encoded = (linear_to_srgb(0.5) * 255.0).round() as u8;
     near(&snapshot, 1, 1, [encoded, encoded, encoded, 255], 2);
 }
 
 #[test]
 fn hidden_and_fully_cropped_items_draw_nothing() {
-    let Some((_gpu, mut compositor)) = open() else {
+    let Some(mut opened) = open() else {
         return;
     };
-    let green = solid(&compositor, 4, 4, [0, 255, 0, 255]);
+    let green = solid(&opened.compositor, 4, 4, [0, 255, 0, 255]);
     let hidden = Item {
         visible: false,
         ..item(&green, Placement::IDENTITY, Crop::NONE, 1.0)
@@ -244,7 +253,7 @@ fn hidden_and_fully_cropped_items_draw_nothing() {
         1.0,
     );
     let snapshot = draw(
-        &mut compositor,
+        &mut opened.compositor,
         4,
         4,
         Color::rgb(0.0, 0.0, 1.0),
@@ -255,38 +264,38 @@ fn hidden_and_fully_cropped_items_draw_nothing() {
 
 #[test]
 fn bad_opacity_and_short_images_are_refused() {
-    let Some((_gpu, mut compositor)) = open() else {
+    let Some(mut opened) = open() else {
         return;
     };
-    let image = solid(&compositor, 1, 1, [255, 0, 0, 255]);
+    let image = solid(&opened.compositor, 1, 1, [255, 0, 0, 255]);
     let scene = Scene {
         canvas: FrameSize::new(1, 1).unwrap(),
         background: Color::BLACK,
         items: &[item(&image, Placement::IDENTITY, Crop::NONE, 2.0)],
     };
     assert!(matches!(
-        compositor.render(&scene, false),
+        opened.compositor.render(&scene, false),
         Err(RenderError::Invalid {
             what: "opacity",
             ..
         })
     ));
     assert!(matches!(
-        compositor.upload_rgba8(2, 2, &[0, 0, 0, 255]),
+        opened.compositor.upload_rgba8(2, 2, &[0, 0, 0, 255]),
         Err(RenderError::ImageBytes { .. })
     ));
     assert!(matches!(
-        compositor.upload_rgba8(0, 1, &[]),
+        opened.compositor.upload_rgba8(0, 1, &[]),
         Err(RenderError::Invalid { what: "image", .. })
     ));
 }
 
 #[test]
 fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
-    let Some((_gpu, mut compositor)) = open() else {
+    let Some(mut opened) = open() else {
         return;
     };
-    let uploaded = solid(&compositor, 2, 2, [255, 0, 0, 255]);
+    let uploaded = solid(&opened.compositor, 2, 2, [255, 0, 0, 255]);
     let count = Arc::new(AtomicUsize::new(0));
     let info = VideoFrameInfo {
         size: FrameSize::new(2, 2).unwrap(),
@@ -302,7 +311,7 @@ fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
         info,
         Arc::new(CountSync(Arc::clone(&count))),
     );
-    let image = compositor.import_frame(&frame).unwrap();
+    let image = opened.compositor.import_frame(&frame).unwrap();
     let items = [
         item(&image, Placement::IDENTITY, Crop::NONE, 1.0),
         item(
@@ -315,7 +324,7 @@ fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
             1.0,
         ),
     ];
-    let snapshot = draw(&mut compositor, 4, 2, Color::BLACK, &items);
+    let snapshot = draw(&mut opened.compositor, 4, 2, Color::BLACK, &items);
     near(&snapshot, 0, 0, [255, 0, 0, 255], 1);
     assert_eq!(
         count.load(Ordering::SeqCst),
@@ -328,7 +337,7 @@ fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
         visible: false,
         ..item(&image, Placement::IDENTITY, Crop::NONE, 1.0)
     };
-    let _ = draw(&mut compositor, 4, 2, Color::BLACK, &[hidden]);
+    let _ = draw(&mut opened.compositor, 4, 2, Color::BLACK, &[hidden]);
     assert_eq!(
         count.load(Ordering::SeqCst),
         0,
