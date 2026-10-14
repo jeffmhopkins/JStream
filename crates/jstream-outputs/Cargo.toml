@@ -21,6 +21,8 @@ jstream-mux.workspace = true
 rustls.workspace = true
 rustls-native-certs.workspace = true
 thiserror.workspace = true
+# Logs what the OS trust store failed to yield (#67).
+tracing.workspace = true
 
 [dev-dependencies]
 rcgen.workspace = true

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:1e4dc65d71c975dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-core row is unchanged and this Purpose still matches it" }
+verified = { hash = "b3:dc254af0fc50b135", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds tracing to core's dependencies; Purpose (Engine, InProcessControl) unchanged by main's #95/#96" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:747b7013b64882cc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#protocol now also says planned preset edits carry a kind and settings (ADR-0037), not built; core executes no transition edits yet, and its Events paragraph (unbounded per-subscription queues) still holds" }
+verified = { hash = "b3:9b4d6f53ee052d10", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Logging subsection (session and command spans, outcomes logged after the lock, never arguments) matches engine.rs/control.rs; main's #96 MCP events don't touch core" }
 -->
 
 ### Engine and sessions
@@ -80,8 +80,8 @@ WebSocket API does, minus serialization:
 ### Dependencies
 
 `jstream-protocol` (the messages), `jstream-control` (the `Control` trait),
-`jstream-graph` (the collection and every edit rule) and `futures-core` (the `Stream`
-trait of event streams). No async runtime, and no `jstream-platform` until a backend is
+`jstream-graph` (the collection and every edit rule), `futures-core` (the `Stream`
+trait of event streams) and `tracing` (see *Logging*). No async runtime, and no `jstream-platform` until a backend is
 injected. Dev-dependencies: `jstream-control`'s `mock` feature and `jstream-protocol`'s
 `fixtures` feature (the differential and parity tests), `jstream-mcp` and `serde_json`
 (`tests/mcp.rs`). All of them are in lower layers
@@ -156,7 +156,22 @@ queue's. A stream's poll takes only its queue's lock. No lock is held across an
 `await` (there are none). A poisoned lock is recovered rather than propagated:
 `Graph::apply` changes a working copy and replaces the state only on success, and the
 engine's other changes are single inserts or assignments, so the data stays
-consistent.
+consistent. Nothing is logged while a lock is held.
+
+### Logging
+
+Spans and events go through `tracing` ([R-RS-005](../../docs/RULES.md#R-RS-005)); the
+crate installs no subscriber, the host app does. Each session has an `info` span
+`session`, which records `client_id` once `hello` succeeds; its `hello`, its calls and
+its drop are entered in it, and a session created inside another span (the server's
+`connection`) nests under that one. Each call runs in an `info` span `command` with the
+command's name (`batch`, or the action's or query's name), `client_id` and the session's
+`request_id`. The outcome is logged after the engine's lock is released: `info` for an
+output action (with `output_id`, and the error code when it fails), `debug` for
+everything else (the new `rev`, or the error code). A refused `hello`, with the client's
+name and protocol version, and a call before `hello` are `debug`. Only names, IDs,
+revisions and error codes are logged, never a call's arguments
+([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 ### Not yet
 
@@ -172,7 +187,4 @@ consistent.
 - Threads, the media clock and real-time hand-off
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)), and the subsystems:
   sources, render, audio, encode and real outputs.
-- `tracing` spans around commands, outputs and sessions
-  ([R-RS-005](../../docs/RULES.md#R-RS-005)): nothing here logs yet, and `tracing` is
-  not a workspace dependency; it comes with the first code that needs to log.
 - `R-SEC-001`'s `secrets_are_redacted` test: the engine holds no secret yet.

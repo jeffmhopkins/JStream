@@ -26,6 +26,8 @@ jstream-protocol.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "rt", "sync"] }
+# A span per connection; accepted and refused upgrades are logged (R-RS-005).
+tracing.workspace = true
 
 [dev-dependencies]
 # The end-to-end tests: a `MockEngine` behind the server, the WebSocket client in front.

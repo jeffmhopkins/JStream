@@ -6,13 +6,15 @@
 //! handshake-based revision it negotiated (2025-11-25 or 2025-06-18) for the rest of the
 //! connection.
 
+use crate::events::{BUFFER_CAPACITY, CursorAhead, Feed};
 use crate::jsonrpc::{self, Incoming, RpcError};
 use crate::tools::{Invocation, Tools};
 use jstream_control::{Control, ControlError};
 use jstream_protocol::{Hello, PROTOCOL_VERSION, ProtocolError, WireError, json_schema};
 use serde_json::{Map, Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use tracing::Instrument;
 
 /// The MCP revision served statelessly, with per-request metadata.
 pub const MODERN_VERSION: &str = "2026-07-28";
@@ -59,16 +61,25 @@ enum Era {
 /// It owns one [`Control`] session: every tool call acts as that session's client, so
 /// its edits form one undo history and carry one name in the audit log (ADR-0013). The
 /// session's `hello` is sent lazily, before the first tool call that needs the engine,
-/// with the MCP client's name.
+/// with the MCP client's name. Just before that first `hello`, the server subscribes to
+/// the session's events and buffers them for the `events` tool.
 ///
 /// [`handle`](Server::handle) answers one message. It needs no particular executor: the
 /// future only awaits the [`Control`] futures. [`serve_stdio`](crate::serve_stdio) runs it
 /// over a byte stream.
+///
+/// Logging (R-RS-005): each server has an `mcp_session` span, every request runs in an
+/// `mcp_request` span under it naming the method, and each tool call in a `tool_call`
+/// span naming the tool. Tool arguments and results are never logged (R-SEC-001), only
+/// names, codes and whether the call failed.
 pub struct Server {
     control: Arc<dyn Control>,
+    span: tracing::Span,
     tools: Tools,
     /// Whether `hello` succeeded on `control`.
     opened: AtomicBool,
+    /// The event subscription, opened before the first `hello`.
+    feed: OnceLock<Feed>,
     /// Set by `initialize`.
     legacy: Mutex<Option<LegacySession>>,
 }
@@ -79,8 +90,10 @@ impl Server {
     pub fn new(control: Arc<dyn Control>) -> Self {
         Server {
             control,
+            span: tracing::info_span!("mcp_session"),
             tools: Tools::generate(),
             opened: AtomicBool::new(false),
+            feed: OnceLock::new(),
             legacy: Mutex::new(None),
         }
     }
@@ -93,9 +106,18 @@ impl Server {
             Err(reply) => reply,
             Ok(Incoming::Notification | Incoming::Response) => return None,
             Ok(Incoming::Request { id, method, params }) => {
-                match self.request(&method, &params).await {
+                let span =
+                    tracing::debug_span!(parent: &self.span, "mcp_request", method = %method);
+                match self
+                    .request(&method, &params)
+                    .instrument(span.clone())
+                    .await
+                {
                     Ok(result) => jsonrpc::result_reply(&id, result),
-                    Err(error) => jsonrpc::error_reply(Some(&id), &error),
+                    Err(error) => {
+                        span.in_scope(|| tracing::debug!(code = error.code, "request failed"));
+                        jsonrpc::error_reply(Some(&id), &error)
+                    }
                 }
             }
         };
@@ -194,6 +216,11 @@ impl Server {
             .and_then(|info| info.get("name"))
             .and_then(Value::as_str)
             .map(str::to_owned);
+        tracing::info!(
+            client_name = client_name.as_deref().unwrap_or(""),
+            version,
+            "initialized"
+        );
         *lock(&self.legacy) = Some(LegacySession { client_name });
         Ok(json!({
             "protocolVersion": version,
@@ -228,10 +255,38 @@ impl Server {
         }))
     }
 
+    /// `tools/call`, in a `tool_call` span naming the tool. Logs the outcome: the error
+    /// code of a failed call, never its arguments or result.
+    async fn call(
+        &self,
+        params: &Map<String, Value>,
+        client_name: Option<String>,
+    ) -> Result<Value, RpcError> {
+        let tool = params.get("name").and_then(Value::as_str).unwrap_or("");
+        let span = tracing::info_span!("tool_call", tool = %tool);
+        let result = self
+            .call_tool(params, client_name)
+            .instrument(span.clone())
+            .await;
+        span.in_scope(|| match &result {
+            Ok(value) if value.get("isError") == Some(&Value::Bool(true)) => {
+                let code = value
+                    .pointer("/structuredContent/error/code")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                tracing::debug!(code, "tool call failed");
+            }
+            Ok(_) => tracing::debug!("tool call done"),
+            // A JSON-RPC error: `handle` logs it as a failed request.
+            Err(_) => {}
+        });
+        result
+    }
+
     /// `tools/call`. An unknown tool or a request that doesn't fit `CallToolRequest` is a
     /// JSON-RPC error. Everything else, including arguments that don't fit the tool and
     /// every engine error, is a result with `isError`, so the agent can correct itself.
-    async fn call(
+    async fn call_tool(
         &self,
         params: &Map<String, Value>,
         client_name: Option<String>,
@@ -247,13 +302,17 @@ impl Server {
         let Some(invocation) = self.tools.decode(name, arguments) else {
             return Err(RpcError::invalid_params(format!("Unknown tool: {name}")));
         };
-        let call = match invocation {
+        let invocation = match invocation {
             Err(error) => return Ok(protocol_error(error.into())),
             Ok(Invocation::Describe) => return Ok(tool_result(json_schema(), false)),
-            Ok(Invocation::Call(call)) => call,
+            Ok(Invocation::Events { after }) if self.feed.get().is_some() => {
+                return Ok(self.events(after));
+            }
+            Ok(invocation) => invocation,
         };
         let client_name = client_name.unwrap_or_else(|| DEFAULT_CLIENT_NAME.to_owned());
         if let Err(error) = self.open(client_name).await {
+            tracing::warn!(error = %error, "could not open the engine session");
             return Ok(match error {
                 // The call was never sent. Over `WsControl` this is permanent: a closed
                 // connection never reopens, so every later `hello` fails the same way.
@@ -266,6 +325,12 @@ impl Server {
                 other => control_error(other),
             });
         }
+        let call = match invocation {
+            Invocation::Call(call) => call,
+            // The first `events` call: the session is open now, and so is the feed.
+            Invocation::Events { after } => return Ok(self.events(after)),
+            Invocation::Describe => return Ok(tool_result(json_schema(), false)),
+        };
         Ok(match self.control.call(call).await {
             Ok(response) => match serde_json::to_value(&response) {
                 Ok(value) => tool_result(value, false),
@@ -279,6 +344,7 @@ impl Server {
             Err(ControlError::Disconnected { reason }) => {
                 // The session may be gone: say `hello` again before the next call.
                 self.opened.store(false, Ordering::Release);
+                tracing::warn!(reason = %reason, "engine connection lost during a tool call");
                 disconnected(format!(
                     "connection to the engine lost: {reason}; whether the call took effect \
                      is unknown, so re-read the state before retrying. The next call tries \
@@ -289,18 +355,56 @@ impl Server {
         })
     }
 
-    /// Sends `hello` once. Concurrent first calls may both send it; a second `hello`
-    /// returns the same identity, so that is harmless.
+    /// The `events` tool: the buffered events after `after`. It sends nothing to the
+    /// engine, so it still answers once the session is gone, with `ended` set.
+    fn events(&self, after: u64) -> Value {
+        let Some(feed) = self.feed.get() else {
+            return protocol_error(
+                ProtocolError::Internal {
+                    reason: "the event subscription is not open".into(),
+                }
+                .into(),
+            );
+        };
+        match feed.read(after) {
+            Ok(page) => match serde_json::to_value(&page) {
+                Ok(value) => tool_result(value, false),
+                Err(e) => protocol_error(
+                    ProtocolError::Internal {
+                        reason: format!("could not encode the events: {e}"),
+                    }
+                    .into(),
+                ),
+            },
+            Err(CursorAhead { after, newest }) => protocol_error(
+                ProtocolError::Malformed {
+                    reason: format!(
+                        "`after` is {after}, but the newest event is {newest}: the cursor \
+                         is from another MCP server session. Read again without `after`, \
+                         and re-read the state"
+                    ),
+                }
+                .into(),
+            ),
+        }
+    }
+
+    /// Sends `hello` once, subscribing to the session's events just before the first
+    /// one. Concurrent first calls may both send it; a second `hello` returns the same
+    /// identity, so that is harmless.
     async fn open(&self, client_name: String) -> Result<(), ControlError> {
         if self.opened.load(Ordering::Acquire) {
             return Ok(());
         }
+        self.feed
+            .get_or_init(|| Feed::start(self.control.events(), BUFFER_CAPACITY));
         let hello = Hello {
             protocol: PROTOCOL_VERSION,
             client_name,
         };
-        self.control.hello(hello).await?;
+        let welcome = self.control.hello(hello).await?;
         self.opened.store(true, Ordering::Release);
+        tracing::info!(client_id = %welcome.client_id, "engine session opened");
         Ok(())
     }
 
@@ -313,7 +417,8 @@ impl Server {
              `op.type`. `batch` applies several edits atomically. Edits are undoable per \
              client and each applied batch raises the state `rev` by one; pass \
              `expected_rev` to make a read-modify-write safe. IDs of new objects are \
-             chosen by you. `describe_api` returns the full protocol schema.",
+             chosen by you. `events` returns what changed since your last read, from \
+             every client. `describe_api` returns the full protocol schema.",
             groups.join(", ")
         )
     }

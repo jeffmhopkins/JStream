@@ -1,23 +1,29 @@
 //! Round trips through [`Server`] against the in-memory `MockEngine`: the handshake-based
-//! and stateless eras, the tool list snapshot, error mapping and malformed messages.
+//! and stateless eras, the tool list snapshot, error mapping, malformed messages and the
+//! `events` tool.
 
 use crate::server::Server;
 use crate::stdio::block_on;
 use crate::{LEGACY_VERSIONS, MODERN_VERSION, serve_stdio};
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
-use jstream_protocol::{Call, Hello, OutputId, Response, Welcome, json_schema};
+use jstream_protocol::{
+    Call, ClientId, Event, Hello, OutputId, Response, Rev, Welcome, json_schema,
+};
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// A mock session that records every `hello` and can be made to lose its connection:
 /// for calls only (`lost`), or for good, as `WsControl` does once its socket closes
-/// (`closed`: `hello` fails too).
+/// (`closed`: `hello` fails too). With `events_ended`, its event subscriptions have
+/// already ended, as they have once a socket closed.
 struct Recording {
     inner: MockControl,
+    engine: MockEngine,
     hellos: Mutex<Vec<Hello>>,
     lost: AtomicBool,
     closed: AtomicBool,
+    events_ended: AtomicBool,
 }
 
 fn socket_closed<T>() -> BoxFuture<'static, Result<T, ControlError>>
@@ -49,6 +55,11 @@ impl Control for Recording {
     }
 
     fn events(&self) -> EventStream {
+        if self.events_ended.load(Ordering::Relaxed) {
+            // A mock stream ends when its session is dropped.
+            let session = self.engine.connect();
+            return session.events();
+        }
         self.inner.events()
     }
 }
@@ -63,9 +74,11 @@ fn fixture() -> Fixture {
     let engine = MockEngine::new().with_output(OutputId::new("out_rec"));
     let control = Arc::new(Recording {
         inner: engine.connect(),
+        engine: engine.clone(),
         hellos: Mutex::new(Vec::new()),
         lost: AtomicBool::new(false),
         closed: AtomicBool::new(false),
+        events_ended: AtomicBool::new(false),
     });
     let server = Server::new(Arc::clone(&control) as Arc<dyn Control>);
     Fixture {
@@ -194,6 +207,7 @@ fn handshake_list_and_call_round_trip() {
         [
             "batch",
             "describe_api",
+            "events",
             "item",
             "output",
             "scene",
@@ -301,7 +315,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(7));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(8));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -504,6 +518,128 @@ fn a_session_that_cannot_reopen_says_the_call_was_not_sent() {
     // `hello` is tried again before each later call; none of them reached the engine.
     assert_eq!(f.hello_names(), ["agent-x", "agent-x", "agent-x"]);
     assert_eq!(f.engine.rev().0, 0);
+}
+
+/// Reads the `events` tool after `after`; returns its structured result.
+fn read_events(f: &Fixture, after: Option<u64>) -> Value {
+    let arguments = after.map_or_else(|| json!({}), |after| json!({ "after": after }));
+    ok(&f.call_tool("events", arguments)).clone()
+}
+
+#[test]
+fn events_report_every_change_with_a_cursor() {
+    let f = fixture();
+    f.initialize();
+    // The first read opens the session, so there is nothing before it.
+    let first = read_events(&f, None);
+    assert_eq!(
+        first,
+        json!({"events": [], "next": 0, "dropped": 0, "more": false, "ended": false})
+    );
+    assert_eq!(f.hello_names(), ["agent-x"]);
+    ok(&f.call_tool(
+        "scene",
+        json!({"op": {"type": "scene.create", "scene_id": "s", "name": "Main"}}),
+    ));
+    ok(&f.call_tool(
+        "output",
+        json!({"op": {"type": "output.start", "output_id": "out_rec"}}),
+    ));
+    // Another client's change shows up too.
+    f.engine.emit(Event::StateChanged {
+        rev: Rev(7),
+        client_id: ClientId::new("ui_1"),
+        request_id: None,
+    });
+    let read = read_events(&f, Some(first["next"].as_u64().expect("a cursor")));
+    assert_eq!(
+        read["events"],
+        json!([
+            {"seq": 1, "event": {"type": "state.changed", "rev": 1,
+                                 "client_id": "mock_1", "request_id": "req_1"}},
+            {"seq": 2, "event": {"type": "output.state_changed",
+                                 "output_id": "out_rec", "state": "starting"}},
+            {"seq": 3, "event": {"type": "output.state_changed",
+                                 "output_id": "out_rec", "state": "active"}},
+            {"seq": 4, "event": {"type": "state.changed", "rev": 7, "client_id": "ui_1"}}
+        ])
+    );
+    assert_eq!(
+        (read["next"].clone(), read["dropped"].clone()),
+        (json!(4), json!(0))
+    );
+    // Reading from a cursor returns only what came after it; reading never says `hello`.
+    let again = read_events(&f, Some(2));
+    assert_eq!(again["events"][0]["seq"], 3);
+    assert_eq!(read_events(&f, Some(4))["events"], json!([]));
+    assert_eq!(f.hello_names(), ["agent-x"]);
+}
+
+#[test]
+fn events_are_bounded_and_report_what_was_dropped() {
+    let f = fixture();
+    f.initialize();
+    read_events(&f, None);
+    let total = crate::events::BUFFER_CAPACITY as u64 + 5;
+    for rev in 1..=total {
+        f.engine.emit(Event::StateChanged {
+            rev: Rev(rev),
+            client_id: ClientId::new("ui_1"),
+            request_id: None,
+        });
+    }
+    let page = read_events(&f, None);
+    assert_eq!(page["dropped"], 5);
+    assert_eq!(page["events"][0]["seq"], 6);
+    assert_eq!(
+        page["events"].as_array().map(Vec::len),
+        Some(crate::events::PAGE_SIZE)
+    );
+    assert_eq!(page["more"], true);
+    // Paging on loses nothing more and ends at the newest event.
+    let mut next = page["next"].as_u64().expect("a cursor");
+    let mut seen = crate::events::PAGE_SIZE as u64;
+    loop {
+        let page = read_events(&f, Some(next));
+        assert_eq!(page["dropped"], 0);
+        seen += page["events"].as_array().map_or(0, |e| e.len() as u64);
+        next = page["next"].as_u64().expect("a cursor");
+        if page["more"] == false {
+            break;
+        }
+    }
+    assert_eq!((next, seen), (total, total - 5));
+}
+
+#[test]
+fn an_events_cursor_from_elsewhere_is_malformed() {
+    let f = fixture();
+    f.initialize();
+    let result = f.call_tool("events", json!({"after": 3}));
+    let error = tool_error(&result);
+    assert_eq!(error["code"], "malformed");
+    assert!(
+        error["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("newest event is 0")),
+        "{error}"
+    );
+}
+
+#[test]
+fn events_still_answer_once_the_session_is_gone() {
+    let f = fixture();
+    f.control.events_ended.store(true, Ordering::Relaxed);
+    f.initialize();
+    let read = read_events(&f, None);
+    assert_eq!(read["ended"], true, "{read}");
+    // With the connection closed for good, `events` still answers from the buffer and
+    // sends nothing, while an engine call fails.
+    f.control.closed.store(true, Ordering::Relaxed);
+    tool_error(&f.call_tool("scene", json!({"op": {"type": "scene.list"}})));
+    let read = read_events(&f, None);
+    assert_eq!(read["ended"], true, "{read}");
+    assert_eq!(f.hello_names(), ["agent-x"]);
 }
 
 #[test]

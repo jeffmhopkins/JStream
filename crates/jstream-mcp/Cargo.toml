@@ -21,6 +21,8 @@ jstream-protocol.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+# Spans around the session and each tool call (R-RS-005).
+tracing.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

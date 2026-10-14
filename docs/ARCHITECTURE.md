@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:81891e0573e8eaf7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps READMEs changed only by re-verified lines; the daemon row (serves the UI, WebSocket API and MCP over HTTP) and the cli row (stdio MCP proxy) already match #37 N1's decision that jstream-server serves streamable HTTP and stdio stays in the CLI" }
+verified = { hash = "b3:b23410e055c58ec9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed by this PR's daemon logging and RUST_LOG exit code and main's #96 CLI events bullet; layer diagram and app roles unchanged" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:9e78262382bf7595", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #86 N4 and #37 N1: jstream-encode row now states ADR-0027's sharing key as the Data model and encode Purpose do; jstream-mcp row and its Cargo.toml summary say stdio here and streamable HTTP served by jstream-server, not built; jstream-server row says it serves that transport behind the same checks; crate map is hand-maintained, not generated from summary" }
+verified = { hash = "b3:d15e8340677ed098", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered manifests changed by this PR's tracing dependency (core, mcp, server, outputs) and tracing-subscriber (daemon only); no new JStream edges, so every row's layer and dependencies still hold; table text unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:3fd239078788f2ea", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for ADR-0037: the planned transitions bullet says preset edits carry a kind and a settings map or patch; covered control and server READMEs changed only in re-verified lines; the Origin and slow-client decisions, live values, history and privacy unchanged" }
+verified = { hash = "b3:1a94bcde30467931", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered core/server/control READMEs changed by this PR's logging text and main's #95/#96 merges; no protocol behaviour changes; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -532,14 +532,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
 ## MCP
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:418d582d220a5142", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #37 N1: access bullet says the streamable-HTTP transport, not built, is served by jstream-server on the control port behind the same token and Origin checks; covered jstream-mcp README (Purpose, Async and transports, open question 4) and Cargo.toml summary now say the same; tool grouping and stdio proxy text unchanged" }
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
+verified = { hash = "b3:735f9b14c1e44756", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp README gains this PR's Logging subsection beside main's #96 Events subsection; ARCH's MCP bullets (incl. #96's Events bullet) unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
   (`item`, `output`, `scene`, `source` and `state` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
+- **Events** reach agents through the `events` tool, which returns the engine's events
+  after a cursor from a bounded buffer and reports any it dropped
+  ([ADR-0036](adr/0036-mcp-events-polling-tool.md)).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
   The first cut does not do this yet: each tool carries its ops' full schemas (about 50 KB

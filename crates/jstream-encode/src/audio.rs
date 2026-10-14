@@ -17,7 +17,8 @@ struct AudioDriver {
     next: Option<i64>,
     /// The longest gap filled with silence, in sample frames.
     max_gap: i64,
-    /// The encoder refused the last block as busy, so the next one follows a gap.
+    /// The encoder refused the last block, or the silence before it, as busy, so the
+    /// next block follows a gap.
     gap: bool,
 }
 
@@ -63,16 +64,21 @@ impl Driver for AudioDriver {
             .ticks();
         // Audio encoders time packets by counting samples from the first block, so a
         // dropped block would shift everything after it earlier. Fill the hole instead.
-        if after_drop || self.gap {
-            self.fill_gap(start, counters)?;
+        // A refusal as busy, of the silence or of the block itself, leaves a hole too,
+        // so the next block fills from `next` over both.
+        let result = if after_drop || self.gap {
+            self.fill_gap(start, counters)
+        } else {
+            Ok(())
         }
-        self.gap = false;
-        if let Err(e) = self.encoder.encode(&buffer) {
+        .and_then(|()| self.encoder.encode(&buffer));
+        if let Err(e) = result {
             if matches!(e, PlatformError::Busy { .. }) {
                 self.gap = true;
             }
             return Err(e);
         }
+        self.gap = false;
         let frames = i64::try_from(buffer.frames()).unwrap_or(i64::MAX);
         self.next = Some(start.saturating_add(frames));
         Ok(())

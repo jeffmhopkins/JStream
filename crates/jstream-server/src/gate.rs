@@ -11,22 +11,24 @@
 //!   `Host`, where an origin without a port means port 80 too) or a configured extra.
 //!   Browsers always send it on WebSocket upgrades, so a
 //!   foreign web page can't connect; native clients send the server's own.
-//! - **`Authorization: Bearer <token>`** must carry the control token. Both sides are
-//!   hashed to a fixed length and the digests compared in constant time, so the time
-//!   taken depends only on the presented value's length, never on the token or on where
-//!   they differ.
+//! - **`Authorization: Bearer <token>`** must carry the control token. The server keeps
+//!   only the token's BLAKE3 digest; the presented value is hashed too and the two
+//!   digests are compared in constant time, so the compare reveals nothing about the
+//!   token (see `Token::matches`).
 //!
-//! Configured extra hosts must name their port: `check_extra_hosts` refuses one that
-//! doesn't before the server binds, since it could never match.
+//! Configured extra hosts must be `name:port`, with an IPv6 address in brackets
+//! (`[::1]:port`) and exactly one port: `check_extra_hosts` refuses any other form
+//! before the server binds, since it could never match.
 //!
 //! A refused `Host` or `Origin` is HTTP 403, a missing or wrong token 401. Each header
-//! must appear exactly once.
+//! must appear exactly once. `Gate::admit` logs each refusal at `warn` with its reason
+//! and the peer address, and never a header's value, so never the token (R-SEC-001).
 
 use crate::config::{ServerConfig, Token};
 use crate::error::ServerError;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use std::net::SocketAddr;
+use std::net::{Ipv6Addr, SocketAddr};
 
 /// The default port of the `http` and `ws` schemes: a `Host` or `Origin` without a port
 /// names it (RFC 9110 §7.2, RFC 6455 §3).
@@ -41,6 +43,17 @@ pub(crate) enum Refusal {
     Origin,
     /// The control token is missing or wrong.
     Token,
+}
+
+impl Refusal {
+    /// The reason, as logged.
+    fn reason(self) -> &'static str {
+        match self {
+            Refusal::Host => "Host not allowed",
+            Refusal::Origin => "Origin not allowed",
+            Refusal::Token => "missing or wrong control token",
+        }
+    }
 }
 
 impl IntoResponse for Refusal {
@@ -100,6 +113,17 @@ impl Gate {
         }
     }
 
+    /// Checks an upgrade request's headers, as [`check`](Gate::check) does, and logs a
+    /// refusal with its reason and `peer`, the address it came from. Nothing from the
+    /// headers is logged: not the token, nor the `Host` or `Origin` values.
+    pub(crate) fn admit(&self, headers: &HeaderMap, peer: SocketAddr) -> Result<(), Refusal> {
+        let result = self.check(headers);
+        if let Err(refusal) = result {
+            tracing::warn!(peer = %peer, reason = refusal.reason(), "connection refused");
+        }
+        result
+    }
+
     /// Checks an upgrade request's headers.
     pub(crate) fn check(&self, headers: &HeaderMap) -> Result<(), Refusal> {
         let host = single(headers, &header::HOST)
@@ -151,22 +175,18 @@ fn single<'h>(headers: &'h HeaderMap, name: &HeaderName) -> Option<&'h str> {
 }
 
 /// Checks that every configured extra host is `name:port` with a decimal port from 1 to
-/// 65535. The gate compares hosts with their port, so an entry without one, or with a
-/// port the server can't listen on, would never match: it is refused here instead of
-/// being ignored (#44).
+/// 65535, where an IPv6 name is a bracketed literal (`[::1]:4455`). The gate compares
+/// hosts with their port, and a request's `Host` always brackets an IPv6 address, so an
+/// entry without a port, with more than one, with an unbracketed IPv6 address or with a
+/// port the server can't listen on would never match: it is refused here instead of
+/// being ignored (#44, #72).
 pub(crate) fn check_extra_hosts(extra_hosts: &[String]) -> Result<(), ServerError> {
     for host in extra_hosts {
         let invalid = |reason| ServerError::InvalidHost {
             host: host.clone(),
             reason,
         };
-        if !has_port(host) {
-            return Err(invalid("it has no port; write it as `name:port`"));
-        }
-        let (name, port) = host.rsplit_once(':').unwrap_or((host, ""));
-        if name.is_empty() {
-            return Err(invalid("it has no name before the port"));
-        }
+        let port = extra_host_port(host).map_err(invalid)?;
         let port_ok = !port.is_empty()
             && port.bytes().all(|b| b.is_ascii_digit())
             && port.parse::<u16>().is_ok_and(|p| p != 0);
@@ -175,6 +195,46 @@ pub(crate) fn check_extra_hosts(extra_hosts: &[String]) -> Result<(), ServerErro
         }
     }
     Ok(())
+}
+
+/// The port of an extra host written `name:port` or `[ipv6]:port`, or why the entry
+/// can't be split that way.
+fn extra_host_port(host: &str) -> Result<&str, &'static str> {
+    const NO_PORT: &str = "it has no port; write it as `name:port`";
+    const NO_NAME: &str = "it has no name before the port";
+    if let Some(bracketed) = host.strip_prefix('[') {
+        let Some((address, after)) = bracketed.split_once(']') else {
+            return Err("its `[` has no matching `]`");
+        };
+        if address.is_empty() {
+            return Err(NO_NAME);
+        }
+        if address.parse::<Ipv6Addr>().is_err() {
+            return Err("only an IPv6 address goes in brackets, as `[addr]:port`");
+        }
+        return match after.strip_prefix(':') {
+            Some(port) => Ok(port),
+            None if after.is_empty() => Err(NO_PORT),
+            None => Err("only `:port` may follow the `]`"),
+        };
+    }
+    let Some((name, port)) = host.split_once(':') else {
+        return Err(NO_PORT);
+    };
+    if port.contains(':') {
+        return Err(if host.parse::<Ipv6Addr>().is_ok() {
+            "an IPv6 address must be in brackets, as `[addr]:port`"
+        } else {
+            "it has more than one port"
+        });
+    }
+    if name.contains(['[', ']']) {
+        return Err("only an IPv6 address goes in brackets, as `[addr]:port`");
+    }
+    if name.is_empty() {
+        return Err(NO_NAME);
+    }
+    Ok(port)
 }
 
 /// Whether a `host[:port]` authority names a port. An IPv6 literal (`[::1]`) has colons
@@ -200,7 +260,12 @@ mod tests {
     use crate::config::{ServerConfig, Token};
     use crate::error::ServerError;
     use axum::http::{HeaderMap, HeaderName, HeaderValue, header};
+    use std::fmt;
     use std::net::SocketAddr;
+    use std::sync::{Arc, Mutex};
+    use tracing::field::{Field, Visit};
+    use tracing::span::{Attributes, Id, Record};
+    use tracing::{Metadata, Subscriber};
 
     fn gate(extra_hosts: &[&str], extra_origins: &[&str]) -> Gate {
         gate_on(4455, extra_hosts, extra_origins)
@@ -410,6 +475,17 @@ mod tests {
             "studio.lan:65536",
             "studio.lan:+80",
             "studio.lan:http",
+            // #72 N1: an unbracketed IPv6 address, or a second port, used to pass as
+            // `name:port` and then never match.
+            "fe80::1",
+            "::1:4455",
+            "studio.lan:80:80",
+            "[::1]:80:80",
+            "[::1",
+            "[]:4455",
+            "[studio.lan]:4455",
+            "[::1]x:4455",
+            "studio[1]:4455",
         ] {
             match check(&["localhost:4455", bad]) {
                 Err(ServerError::InvalidHost { host, .. }) => assert_eq!(host, bad),
@@ -423,6 +499,110 @@ mod tests {
             error.to_string(),
             "invalid extra host `studio.lan`: it has no port; write it as `name:port`"
         );
+        let reason = |host: &str| match check(&[host]) {
+            Err(ServerError::InvalidHost { reason, .. }) => reason,
+            other => panic!("{host}: {other:?}"),
+        };
+        assert_eq!(
+            reason("fe80::1"),
+            "an IPv6 address must be in brackets, as `[addr]:port`"
+        );
+        assert_eq!(reason("studio.lan:80:80"), "it has more than one port");
+        assert_eq!(
+            reason("[::1]:80:80"),
+            "its port must be a number from 1 to 65535"
+        );
+    }
+
+    /// A minimal subscriber that keeps every span's and event's fields as text, so a
+    /// test can check what would be logged.
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<String>>>);
+
+    impl Capture {
+        fn push(&self, text: String) {
+            self.0.lock().expect("not poisoned").push(text);
+        }
+
+        fn text(&self) -> String {
+            self.0.lock().expect("not poisoned").join("\n")
+        }
+    }
+
+    /// The fields of one span or event, as `name=value` pairs.
+    #[derive(Default)]
+    struct Fields(String);
+
+    impl Visit for Fields {
+        fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+            self.0.push_str(&format!("{}={value:?} ", field.name()));
+        }
+    }
+
+    impl Subscriber for Capture {
+        fn enabled(&self, _: &Metadata<'_>) -> bool {
+            true
+        }
+
+        fn new_span(&self, span: &Attributes<'_>) -> Id {
+            let mut fields = Fields::default();
+            span.record(&mut fields);
+            self.push(format!("span {} {}", span.metadata().name(), fields.0));
+            Id::from_u64(1)
+        }
+
+        fn record(&self, _: &Id, values: &Record<'_>) {
+            let mut fields = Fields::default();
+            values.record(&mut fields);
+            self.push(format!("record {}", fields.0));
+        }
+
+        fn record_follows_from(&self, _: &Id, _: &Id) {}
+
+        fn event(&self, event: &tracing::Event<'_>) {
+            let mut fields = Fields::default();
+            event.record(&mut fields);
+            self.push(format!("event {} {}", event.metadata().level(), fields.0));
+        }
+
+        fn enter(&self, _: &Id) {}
+
+        fn exit(&self, _: &Id) {}
+    }
+
+    /// R-SEC-001: a refused upgrade is logged with its reason and the peer, and neither
+    /// the presented token nor the real one appears in what is logged.
+    #[test]
+    fn refusals_are_logged_without_the_token() {
+        let gate = gate(&[], &[]);
+        let peer = SocketAddr::from(([127, 0, 0, 1], 50_000));
+        let capture = Capture::default();
+        tracing::subscriber::with_default(capture.clone(), || {
+            assert_eq!(
+                gate.admit(
+                    &with(header::AUTHORIZATION, Some("Bearer wr0ng-s3cret")),
+                    peer
+                ),
+                Err(Refusal::Token)
+            );
+            assert_eq!(
+                gate.admit(&with(header::ORIGIN, Some("http://evil.example")), peer),
+                Err(Refusal::Origin)
+            );
+            assert_eq!(gate.admit(&headers(&good()), peer), Ok(()));
+        });
+        let logged = capture.text();
+        assert!(
+            logged.contains("connection refused")
+                && logged.contains("missing or wrong control token")
+                && logged.contains("Origin not allowed")
+                && logged.contains("127.0.0.1:50000"),
+            "{logged}"
+        );
+        assert_eq!(logged.lines().count(), 2, "only the refusals: {logged}");
+        for secret in ["wr0ng-s3cret", "t0ken", "evil.example"] {
+            assert!(!logged.contains(secret), "{secret} logged: {logged}");
+        }
     }
 
     #[test]
