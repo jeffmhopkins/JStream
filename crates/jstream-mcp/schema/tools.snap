@@ -521,6 +521,21 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "describe_api"
     },
     {
+      "description": "Returns the engine's events after the cursor `after`, oldest first, without waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` say whose batch did it) and `output.state_changed`, from every client, yours included. Each comes with a `seq`, a sequence number of this MCP server, starting at 1 when your first call opened the session. Pass the returned `next` as `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At most 100 events come back at once; `more` says others are waiting. The server keeps the last 1000: `dropped` counts events after your cursor that were discarded before you read them, so re-read the state if it is not 0. `ended` means the session is gone and no more events will come.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "description": "The `next` of your previous read; 0 or omitted for the oldest kept event.",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "name": "events"
+    },
+    {
       "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.set_transform` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_crop` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {

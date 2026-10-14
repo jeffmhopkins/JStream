@@ -6,13 +6,14 @@
 //! handshake-based revision it negotiated (2025-11-25 or 2025-06-18) for the rest of the
 //! connection.
 
+use crate::events::{BUFFER_CAPACITY, CursorAhead, Feed};
 use crate::jsonrpc::{self, Incoming, RpcError};
 use crate::tools::{Invocation, Tools};
 use jstream_control::{Control, ControlError};
 use jstream_protocol::{Hello, PROTOCOL_VERSION, ProtocolError, WireError, json_schema};
 use serde_json::{Map, Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 /// The MCP revision served statelessly, with per-request metadata.
 pub const MODERN_VERSION: &str = "2026-07-28";
@@ -59,7 +60,8 @@ enum Era {
 /// It owns one [`Control`] session: every tool call acts as that session's client, so
 /// its edits form one undo history and carry one name in the audit log (ADR-0013). The
 /// session's `hello` is sent lazily, before the first tool call that needs the engine,
-/// with the MCP client's name.
+/// with the MCP client's name. Just before that first `hello`, the server subscribes to
+/// the session's events and buffers them for the `events` tool.
 ///
 /// [`handle`](Server::handle) answers one message. It needs no particular executor: the
 /// future only awaits the [`Control`] futures. [`serve_stdio`](crate::serve_stdio) runs it
@@ -69,6 +71,8 @@ pub struct Server {
     tools: Tools,
     /// Whether `hello` succeeded on `control`.
     opened: AtomicBool,
+    /// The event subscription, opened before the first `hello`.
+    feed: OnceLock<Feed>,
     /// Set by `initialize`.
     legacy: Mutex<Option<LegacySession>>,
 }
@@ -81,6 +85,7 @@ impl Server {
             control,
             tools: Tools::generate(),
             opened: AtomicBool::new(false),
+            feed: OnceLock::new(),
             legacy: Mutex::new(None),
         }
     }
@@ -247,10 +252,13 @@ impl Server {
         let Some(invocation) = self.tools.decode(name, arguments) else {
             return Err(RpcError::invalid_params(format!("Unknown tool: {name}")));
         };
-        let call = match invocation {
+        let invocation = match invocation {
             Err(error) => return Ok(protocol_error(error.into())),
             Ok(Invocation::Describe) => return Ok(tool_result(json_schema(), false)),
-            Ok(Invocation::Call(call)) => call,
+            Ok(Invocation::Events { after }) if self.feed.get().is_some() => {
+                return Ok(self.events(after));
+            }
+            Ok(invocation) => invocation,
         };
         let client_name = client_name.unwrap_or_else(|| DEFAULT_CLIENT_NAME.to_owned());
         if let Err(error) = self.open(client_name).await {
@@ -266,6 +274,12 @@ impl Server {
                 other => control_error(other),
             });
         }
+        let call = match invocation {
+            Invocation::Call(call) => call,
+            // The first `events` call: the session is open now, and so is the feed.
+            Invocation::Events { after } => return Ok(self.events(after)),
+            Invocation::Describe => return Ok(tool_result(json_schema(), false)),
+        };
         Ok(match self.control.call(call).await {
             Ok(response) => match serde_json::to_value(&response) {
                 Ok(value) => tool_result(value, false),
@@ -289,12 +303,49 @@ impl Server {
         })
     }
 
-    /// Sends `hello` once. Concurrent first calls may both send it; a second `hello`
-    /// returns the same identity, so that is harmless.
+    /// The `events` tool: the buffered events after `after`. It sends nothing to the
+    /// engine, so it still answers once the session is gone, with `ended` set.
+    fn events(&self, after: u64) -> Value {
+        let Some(feed) = self.feed.get() else {
+            return protocol_error(
+                ProtocolError::Internal {
+                    reason: "the event subscription is not open".into(),
+                }
+                .into(),
+            );
+        };
+        match feed.read(after) {
+            Ok(page) => match serde_json::to_value(&page) {
+                Ok(value) => tool_result(value, false),
+                Err(e) => protocol_error(
+                    ProtocolError::Internal {
+                        reason: format!("could not encode the events: {e}"),
+                    }
+                    .into(),
+                ),
+            },
+            Err(CursorAhead { after, newest }) => protocol_error(
+                ProtocolError::Malformed {
+                    reason: format!(
+                        "`after` is {after}, but the newest event is {newest}: the cursor \
+                         is from another MCP server session. Read again without `after`, \
+                         and re-read the state"
+                    ),
+                }
+                .into(),
+            ),
+        }
+    }
+
+    /// Sends `hello` once, subscribing to the session's events just before the first
+    /// one. Concurrent first calls may both send it; a second `hello` returns the same
+    /// identity, so that is harmless.
     async fn open(&self, client_name: String) -> Result<(), ControlError> {
         if self.opened.load(Ordering::Acquire) {
             return Ok(());
         }
+        self.feed
+            .get_or_init(|| Feed::start(self.control.events(), BUFFER_CAPACITY));
         let hello = Hello {
             protocol: PROTOCOL_VERSION,
             client_name,
@@ -313,7 +364,8 @@ impl Server {
              `op.type`. `batch` applies several edits atomically. Edits are undoable per \
              client and each applied batch raises the state `rev` by one; pass \
              `expected_rev` to make a read-modify-write safe. IDs of new objects are \
-             chosen by you. `describe_api` returns the full protocol schema.",
+             chosen by you. `events` returns what changed since your last read, from \
+             every client. `describe_api` returns the full protocol schema.",
             groups.join(", ")
         )
     }

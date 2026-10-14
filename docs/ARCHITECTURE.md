@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b88009c4d3bb7cc0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed only by the daemon README's re-verified Design line (ADR-0025 persistence dependency); the layer diagram and app roles are unchanged" }
+verified = { hash = "b3:85ce8ce38351bea7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "apps/ changes are the jstream-cli README mcp bullet and tests/mcp.rs (events tool and re-hello assertions); the cli row (stdio MCP proxy, no engine link), the diagram and host roles are unchanged" }
 -->
 
 ```
@@ -403,14 +403,17 @@ The wire format, versioning, error codes and compatibility policy are designed i
 ## MCP
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:1db3236cc57f9619", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/RULES.md#R-API-002"]
+verified = { hash = "b3:28acafa244298a83", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added an Events bullet for the events tool (cursor, bounded buffer, dropped count) citing ADR-0036, now a depends_on; grouped-by-noun tools, R-API-002 names (events matches the pattern and is unique, tool_names_are_valid passes), schema size, access and per-client undo bullets still hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
   (`item`, `output`, `scene`, `source` and `state` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
+- **Events** reach agents through the `events` tool, which returns the engine's events
+  after a cursor from a bounded buffer and reports any it dropped
+  ([ADR-0036](adr/0036-mcp-events-polling-tool.md)).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
   The first cut does not do this yet: each tool carries its ops' full schemas (about 50 KB
