@@ -12,7 +12,7 @@ use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
-    Gate, LivePublish, MediaHost, OutputStats, Pending, Running, launch, parts_from,
+    Gate, LivePublish, MediaHost, OutputStats, Pending, PipelineEvent, Running, launch, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
@@ -433,6 +433,16 @@ impl Engine {
                 running.arm_stats(self);
                 running
             });
+        // A link change the output thread reported before `active` is replayed once
+        // the start settles; the watcher takes every later one.
+        let mut link_down = false;
+        let first = loop {
+            match fail_rx.try_recv() {
+                Ok(PipelineEvent::LinkDown) => link_down = true,
+                Ok(PipelineEvent::LinkUp) => link_down = false,
+                other => break other,
+            }
+        };
         let outcome = {
             let mut state = lock(&self.shared.state);
             let mut gate = lock(&host.gate);
@@ -444,8 +454,8 @@ impl Engine {
                 StartOutcome::Cancelled(launched.ok())
             } else {
                 match launched {
-                    Ok(running) => match fail_rx.try_recv() {
-                        Ok(reason) => {
+                    Ok(running) => match first {
+                        Ok(PipelineEvent::Failed(reason)) => {
                             abandon_start(
                                 &mut state,
                                 &mut gate,
@@ -457,7 +467,8 @@ impl Engine {
                             gate.draining = true;
                             StartOutcome::Failed(Some(running), reason)
                         }
-                        Err(TryRecvError::Disconnected) => {
+                        Ok(PipelineEvent::LinkDown | PipelineEvent::LinkUp)
+                        | Err(TryRecvError::Disconnected) => {
                             abandon_start(
                                 &mut state,
                                 &mut gate,
@@ -499,6 +510,15 @@ impl Engine {
                                         OutputState::Active,
                                         &mut wake,
                                     );
+                                    if link_down {
+                                        state.outputs.settle(&output_id, OutputState::Reconnecting);
+                                        emit_output(
+                                            &mut state,
+                                            &output_id,
+                                            OutputState::Reconnecting,
+                                            &mut wake,
+                                        );
+                                    }
                                     StartOutcome::Active
                                 }
                                 Err(err) => {
@@ -709,36 +729,107 @@ fn abandon_start(
     emit_output(state, output_id, OutputState::Failed, wake);
 }
 
-/// Blocks until the publish target fails. A disconnected channel is a clean stop.
+/// Follows the pipeline until it fails: a lost publish link settles `reconnecting`,
+/// a regained one `active`, and a fatal error `failed`, which ends the watch. A
+/// disconnected channel is a clean stop.
 ///
 /// The pointers are weak, so this thread does not keep the engine alive. Dropping
 /// the last [`Engine`] drops [`MediaHost`], which joins the pipeline and then this
-/// thread. A real failure upgrades the pointers only long enough to settle.
+/// thread. Each event upgrades the pointers only long enough to settle.
 fn watch_publish(
     shared: Weak<Shared>,
     host: Weak<MediaHost>,
     output_id: OutputId,
     generation: u64,
-    fail_rx: Receiver<String>,
+    fail_rx: Receiver<PipelineEvent>,
 ) {
-    let Ok(reason) = fail_rx.recv() else {
-        return;
+    loop {
+        let Ok(event) = fail_rx.recv() else {
+            return;
+        };
+        let (Some(shared), Some(host)) = (shared.upgrade(), host.upgrade()) else {
+            return;
+        };
+        match event {
+            PipelineEvent::Failed(reason) => {
+                publish_failed(&shared, &host, &output_id, generation, &reason);
+                return;
+            }
+            PipelineEvent::LinkDown => link_changed(
+                &shared,
+                &host,
+                &output_id,
+                generation,
+                [OutputState::Active, OutputState::Reconnecting],
+            ),
+            PipelineEvent::LinkUp => link_changed(
+                &shared,
+                &host,
+                &output_id,
+                generation,
+                [OutputState::Reconnecting, OutputState::Active],
+            ),
+        }
+    }
+}
+
+/// Whether the running pipeline is the one `generation` started for `output_id`.
+fn is_ours(gate: &Gate, output_id: &OutputId, generation: u64) -> bool {
+    gate.running.as_ref().is_some_and(|running| {
+        running.output_id() == output_id && running.generation() == generation
+    })
+}
+
+/// Settles `to` if the output is still this pipeline's and in `from`. A stop that
+/// has taken the pipeline, or a state the output has already left, wins.
+fn link_changed(
+    shared: &Shared,
+    host: &MediaHost,
+    output_id: &OutputId,
+    generation: u64,
+    [from, to]: [OutputState; 2],
+) {
+    let mut wake = Vec::new();
+    let settled = {
+        let mut state = lock(&shared.state);
+        let gate = lock(&host.gate);
+        let settle = is_ours(&gate, output_id, generation)
+            && state.outputs.state(output_id).ok() == Some(from);
+        if settle {
+            state.outputs.settle(output_id, to);
+            emit_output(&mut state, output_id, to, &mut wake);
+        }
+        settle
     };
-    let (Some(shared), Some(host)) = (shared.upgrade(), host.upgrade()) else {
-        return;
-    };
+    if settled && to == OutputState::Reconnecting {
+        tracing::warn!(output_id = %output_id, "publish link lost; reconnecting");
+    } else if settled {
+        tracing::info!(output_id = %output_id, "publish link restored");
+    }
+    wake_all(wake);
+}
+
+/// Settles `failed` and joins the pipeline, outside the locks.
+fn publish_failed(
+    shared: &Shared,
+    host: &Arc<MediaHost>,
+    output_id: &OutputId,
+    generation: u64,
+    reason: &str,
+) {
     tracing::error!(output_id = %output_id, error = %reason, "publish failed");
     let mut wake = Vec::new();
     let running = {
         let mut state = lock(&shared.state);
         let mut gate = lock(&host.gate);
-        let ours = gate.running.as_ref().is_some_and(|running| {
-            running.output_id() == &output_id && running.generation() == generation
-        });
-        let active = matches!(state.outputs.state(&output_id), Ok(OutputState::Active));
-        if ours && active {
-            state.outputs.settle(&output_id, OutputState::Failed);
-            emit_output(&mut state, &output_id, OutputState::Failed, &mut wake);
+        let ours = is_ours(&gate, output_id, generation);
+        let live = matches!(
+            state.outputs.state(output_id),
+            Ok(OutputState::Active | OutputState::Reconnecting)
+        );
+        if ours && live {
+            state.outputs.settle(output_id, OutputState::Failed);
+            emit_output(&mut state, output_id, OutputState::Failed, &mut wake);
             // The join happens below, outside the locks. A new start waits until
             // `draining` clears so it does not open devices over this teardown.
             gate.draining = true;
@@ -753,7 +844,7 @@ fn watch_publish(
     // `pipeline` is bound after the guard. On the normal path it is dropped
     // first, and an unwind (`wake_all`, or the join itself) drops it first too,
     // so `draining` clears only after the join.
-    let _clear_drain = ClearDrain::arm(Arc::clone(&host), running.is_some());
+    let _clear_drain = ClearDrain::arm(Arc::clone(host), running.is_some());
     let pipeline = running;
     wake_all(wake);
     drop(pipeline);

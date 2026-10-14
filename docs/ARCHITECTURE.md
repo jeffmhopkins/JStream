@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:942262ff185377c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after pipeline.rs moved the compositor-open timeout into MediaHost/Parts: the output-pipeline paragraph does not name the bound and its thread, failure and render_ticks text still holds." }
+verified = { hash = "b3:450f02191810b907", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the output-pipeline paragraph against pipeline.rs: the failure channel now also carries link down/up (PipelineEvent) and output_loop samples link_state/dropped, but the text's fatal-error path (publish failure, encoder end, render/mixer panic -> watcher emits failed) still holds and claims nothing about reconnecting; the detail lives in core Design" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from

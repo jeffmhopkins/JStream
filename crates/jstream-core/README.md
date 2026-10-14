@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:864787da5351c890", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after the compositor-open bound became a MediaHost field: the Runtime and Tests bullets still hold (GPU pipeline tests, CPU-draw tests, slow fake RTMP server); the bound is a launch detail described in Design." }
+verified = { hash = "b3:39db8525fc3bb04d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against core reconnect: Outputs bullet now names active->reconnecting->active and give-up settling failed, Drop counts bullet adds the muxer and publish-link sources (link_drops in arm_stats), Tests bullet adds the FlakyLink CPU-pipeline tests and the hang-up loopback test for connect_rtmp; Engine/Runtime/Session bullets unchanged" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -47,18 +47,22 @@ placeholder state machine. Contents:
 - **Outputs** (`outputs.rs`): the outputs' runtime state. The placeholder path steps
   `starting` to `active` at once. The pipeline path emits `starting`, then `active`
   or `failed`. Stop emits `stopping` then `stopped`. A stop during `starting` cancels
-  that start and settles `stopped` only after its threads are gone. A publish,
-  encoder, render or mixer failure after `active` settles `failed`.
+  that start and settles `stopped` only after its threads are gone. A lost RTMP
+  connection moves `active` to `reconnecting`, and back once it is re-established. A
+  publish, encoder, render or mixer failure after `active`, or giving up
+  reconnecting, settles `failed`.
 - **Drop counts** (`drops.rs`): the sources a `stats.tick` sums. `output.start`
-  registers the capture cell, both encode sessions, both mixer inputs and the mix
-  bus, and a sampler thread emits a tick about once a second until the pipeline stops.
+  registers the capture cell, both encode sessions, both mixer inputs, the mix
+  bus, and the muxer's and the publish link's packet drops, and a sampler thread
+  emits a tick about once a second until the pipeline stops.
 - **Tests** (`tests.rs`, `tests/mcp.rs`, `tests/scenarios.rs`): the protocol rules through
   `InProcessControl`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on the software adapter, the pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
-  stage-failure, late-tick, teardown and final-tick tests run without one),
-  `connect_rtmp` against a slow fake RTMP server on loopback, overload drops from a
+  stage-failure, late-tick, teardown, final-tick and link-loss tests run without one),
+  `connect_rtmp` against a slow fake RTMP server on loopback and one that hangs up
+  and is reconnected to, overload drops from a
   fake encoder and the mixer reported in `stats.tick`, and an MCP agent
   (`jstream-mcp`, a dev-dependency) driving the engine in-process.
 
@@ -75,7 +79,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fff4ece39b4cd13e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via jstream-protocol › Design, now describing render_ticks as catch-up skips; core Design's drop table and late-tick paragraph already say the same, so it holds" }
+verified = { hash = "b3:1dbb29951dc6e275", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the whole Design against the reconnect wiring: Outputs/failed paragraphs (reconnecting from active and back, give-up fails from reconnecting), the new lost-connection paragraph matches output_loop report_link and watch_publish link_changed, drop table Publish link row matches link_drops in output_packets, connect_rtmp paragraph matches RtmpPublish/connect_rtmp_with (first session synchronous, rtmp_connector with the same timeouts), Locking paragraph matches the watcher's weak pointers between messages" }
 -->
 
 ### Engine and sessions
@@ -113,8 +117,8 @@ canvas `FrameSize` and the media clock's time base), `jstream-render` (the snaps
 and the pipeline compositor), `jstream-platform` (backend traits the host injects, and
 the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its drop
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
-`jstream-mux` (FLV), `jstream-outputs` (the RTMP publisher), `png` (encodes the
-snapshot readback; default features off, deflate stays pure Rust, allowed by
+`jstream-mux` (FLV), `jstream-outputs` (the reconnecting RTMP publisher), `png`
+(encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
 `tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
@@ -253,6 +257,7 @@ What each stage contributes:
 | Audio encode session | the same input drops | `encode_blocks` |
 | Encode subscriber queue | `subscriber_drops` | `output_packets` |
 | Muxer | a packet the FLV tagger rejects | `output_packets` |
+| Publish link | tags the publish target dropped while its link was down (`LivePublish::dropped`; for RTMP, `ReconnectStats::dropped`), published by the output thread | `output_packets` |
 
 A render tick that falls a whole period or more behind the clock is not drawn late:
 the loop skips to the current tick, stamps the frame with it and counts the skipped
@@ -309,11 +314,11 @@ pipeline was told to stop (the encoder failed, or its session closed), and the
 render and mixer failures below.
 A watcher the control thread started settles `failed`, emits `output.state_changed`,
 and drops the pipeline so the render and mixer threads stop. The watcher holds weak
-pointers until that failure arrives, so it does not keep the engine alive: dropping
+pointers between messages, so it does not keep the engine alive: dropping
 the last engine handle and its sessions joins the pipeline. `output_stats` is then
-empty. This cut does not reconnect. `failed` counts as idle, and a later start needs
-a new publish target. That start waits until the failed pipeline has finished
-joining, so the new devices do not overlap the old teardown. The same holds when a
+empty. `failed` counts as idle, and a later start needs a new publish target. That
+start waits until the failed pipeline has finished joining, so the new devices do
+not overlap the old teardown. The same holds when a
 start fails after `launch` returned threads (a failure reported before `active`, or
 the watcher not starting): `failed` is emitted, and the next start waits until that
 pipeline has joined. A stop's join also holds off a start of another output. The
@@ -322,6 +327,20 @@ join that already unwound. If the teardown panics during `output.stop`, the outp
 settles `failed` instead of staying `stopping`, and the panic reaches the caller. A
 `finish` error, or an encoder stream ending, while a stop is tearing the session
 down is not a second failure.
+
+A lost connection is not fatal. After each pass the output thread reads the publish
+target's `LivePublish::link_state` (`Active` unless the target can lose its link,
+which `RecordingPublish` cannot) and sends a message on the same channel when it
+changes: `Active` to `Reconnecting`, and back. The watcher settles and emits
+`reconnecting`, then `active`, only while the output is still its pipeline's and in
+the state the change starts from, so a stop that has already taken the pipeline wins.
+A change reported before the start settles is emitted right after `active`. While
+reconnecting, the pipeline keeps running and the output thread keeps sending: the
+target drops each tag and counts it (`LivePublish::dropped`, in `output_packets`)
+instead of waiting, and the attempt runs on a thread of its own. Giving up
+(`RtmpError::ReconnectGaveUp`) fails the next `send_tag` or `poll`, which settles
+`failed` from `reconnecting` as from `active`. `output.stop` while reconnecting
+emits `stopping` and `stopped` as from `active`.
 
 The render thread reads the platform capture mailbox, composites the primary target
 at 30 frames per second, repeats the last frame when capture is empty, and reads the
@@ -346,13 +365,20 @@ into the buffer `AudioInput::push` keeps. Not measured. The mixer thread
 polls microphone and desktop-loopback input into 48 kHz stereo blocks. Encode
 sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
 publish target. Drops on a full encoder queue are counted in `output_stats`. The
-test records tags in memory. `connect_rtmp` is the live publisher. It reads with a
-10 s timeout through the handshake and the publish exchange (the publisher retries
-only interrupted reads, so a shorter timeout fails on a slow server), then drops the
-read timeout to 1 ms so `poll` does not block the output thread. Writes keep a 10 s
-timeout: a stop drains the queued packets before `finish`, so a peer that has
-stopped reading can hold `output.stop` for up to 10 s per blocked write. There is
-no shorter drain bound on stop yet. Its unit test drives a fake server on loopback.
+test records tags in memory. `connect_rtmp` is the live publisher: `RtmpPublish`
+wraps `jstream-outputs`' `ReconnectingPublisher` with its default `ReconnectPolicy`
+(backoff from 1 s up to 30 s, giving up after a 5-minute outage). It opens the first
+session itself, on the caller's thread, so a refused first connect is still its
+error and is not retried; only a session lost after that reconnects. Every session,
+the first and each reconnect attempt (built with
+`rtmp_connector` on the same URL and key), reads with a 10 s timeout through the
+handshake and the publish exchange (the publisher retries only interrupted reads, so
+a shorter timeout fails on a slow server), then drops the read timeout to 1 ms so
+`poll` does not block the output thread. Writes keep a 10 s timeout: a stop drains
+the queued packets before `finish`, so a peer that has stopped reading can hold
+`output.stop` for up to 10 s per blocked write, and a stalled write takes that long
+to count as a lost link. There is no shorter drain bound on stop yet. Its unit tests
+drive fake servers on loopback, one of which hangs up mid-stream.
 
 ### Locking
 
@@ -369,8 +395,9 @@ is held across an `await`, and a snapshot's reply slot is not held across a wake
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
 across device open, that wait, or a join. `output.stop` waits for an in-flight
 start on the gate's condition variable without holding the collection lock. The
-publish watcher keeps weak pointers until a failure arrives, then takes the
-collection lock only to settle `failed` and joins the pipeline outside it. A later
+publish watcher keeps weak pointers between messages; it takes the collection lock
+only to settle `reconnecting`, `active` or `failed`, and joins a failed pipeline
+outside it. A later
 start waits on that same condition variable, still without the collection lock,
 until the join finishes. The render, mixer, encode and output threads do not take the
 collection lock; session counters the host reads

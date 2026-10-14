@@ -1629,7 +1629,7 @@ fn deleting_a_source_drops_its_frame() {
 mod cpu_pipeline {
     use super::{block_on, code, connected, drain, output_call, output_state, output_steps};
     use crate::runtime::{DrawFn, OpenDraw};
-    use crate::{Engine, LivePublish, PublishError, RecordingPublish};
+    use crate::{Engine, LinkState, LivePublish, PublishError, RecordingPublish};
     use jstream_control::{Control, EventStream};
     use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, Timebase};
     use jstream_mux::flv::{FlvTag, TagType};
@@ -1643,7 +1643,7 @@ mod cpu_pipeline {
     };
     use jstream_protocol::{Event, OutputId, OutputState};
     use std::panic::{self, AssertUnwindSafe};
-    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{Arc, Condvar, Mutex, mpsc};
     use std::thread;
     use std::time::{Duration, Instant};
@@ -2443,5 +2443,176 @@ mod cpu_pipeline {
             });
         let drops = last_tick.expect("no stats.tick between stopping and stopped");
         assert_eq!(drops.render_ticks, 10, "{drops:?}");
+    }
+
+    // --- Item: a lost publish link reports `reconnecting`, and its drops are counted.
+
+    /// The link a [`FlakyLink`] reports, set by the test.
+    #[derive(Default)]
+    struct Link {
+        down: AtomicBool,
+        gave_up: AtomicBool,
+        sent: AtomicU64,
+        dropped: AtomicU64,
+    }
+
+    /// A publish target whose link the test takes down and brings back, as
+    /// `RtmpPublish` reports its reconnecting publisher's: tags sent while the link is
+    /// down are dropped and counted, and once it has given up every send fails.
+    struct FlakyLink(Arc<Link>);
+
+    impl LivePublish for FlakyLink {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.0.gave_up.load(Ordering::Acquire) {
+                return Err(PublishError::new("gave up reconnecting"));
+            }
+            if self.0.down.load(Ordering::Acquire) {
+                self.0.dropped.fetch_add(1, Ordering::AcqRel);
+            } else {
+                self.0.sent.fetch_add(1, Ordering::AcqRel);
+            }
+            Ok(())
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn link_state(&self) -> LinkState {
+            if self.0.gave_up.load(Ordering::Acquire) {
+                LinkState::Failed
+            } else if self.0.down.load(Ordering::Acquire) {
+                LinkState::Reconnecting
+            } else {
+                LinkState::Active
+            }
+        }
+
+        fn dropped(&self) -> u64 {
+            self.0.dropped.load(Ordering::Acquire)
+        }
+    }
+
+    /// An engine publishing to a [`FlakyLink`], started and sending.
+    fn flaky_start(
+        fakes: &Fakes,
+        link: &Arc<Link>,
+    ) -> (Engine, crate::InProcessControl, EventStream) {
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(FlakyLink(Arc::clone(link))),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || link
+                .sent
+                .load(Ordering::Acquire)
+                >= 2),
+            "nothing was published"
+        );
+        (engine, control, events)
+    }
+
+    /// Pumps until the output is in `state`.
+    fn reaches(control: &dyn Control, fakes: &Fakes, state: OutputState) -> bool {
+        pump_until(&fakes.clock, &fakes.audio, || {
+            output_state(control, "yt") == state
+        })
+    }
+
+    /// A publish link that drops is not a failure: the output goes `reconnecting`
+    /// while it is down and `active` once it is back, one `output.state_changed`
+    /// each, and keeps running.
+    #[test]
+    fn a_lost_link_reports_reconnecting_then_active() {
+        let fakes = fakes();
+        let link = Arc::new(Link::default());
+        let (engine, control, mut events) = flaky_start(&fakes, &link);
+
+        link.down.store(true, Ordering::Release);
+        assert!(
+            reaches(&control, &fakes, OutputState::Reconnecting),
+            "a lost link left the output {:?}",
+            output_state(&control, "yt")
+        );
+        assert_eq!(output_steps(&mut events), vec![OutputState::Reconnecting]);
+
+        link.down.store(false, Ordering::Release);
+        assert!(
+            reaches(&control, &fakes, OutputState::Active),
+            "a restored link left the output {:?}",
+            output_state(&control, "yt")
+        );
+        assert_eq!(output_steps(&mut events), vec![OutputState::Active]);
+        assert!(engine.output_stats().is_some(), "the pipeline stopped");
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Stopping, OutputState::Stopped]
+        );
+    }
+
+    /// Giving up reconnecting fails the output from `reconnecting`, as a publish
+    /// error fails it from `active`.
+    #[test]
+    fn giving_up_while_reconnecting_fails_the_output() {
+        let fakes = fakes();
+        let link = Arc::new(Link::default());
+        let (engine, control, mut events) = flaky_start(&fakes, &link);
+
+        link.down.store(true, Ordering::Release);
+        assert!(reaches(&control, &fakes, OutputState::Reconnecting));
+        assert_eq!(output_steps(&mut events), vec![OutputState::Reconnecting]);
+
+        link.gave_up.store(true, Ordering::Release);
+        assert!(
+            fails(&engine, &control, &fakes),
+            "giving up left the output {:?}",
+            output_state(&control, "yt")
+        );
+        assert_eq!(output_steps(&mut events), vec![OutputState::Failed]);
+    }
+
+    /// Tags the publish target dropped while its link was down count in
+    /// `stats.tick`'s `output_packets`, up to the final tick when the output stops.
+    #[test]
+    fn drops_while_reconnecting_count_in_stats_tick() {
+        let fakes = fakes();
+        let link = Arc::new(Link::default());
+        let (_engine, control, mut events) = flaky_start(&fakes, &link);
+
+        link.down.store(true, Ordering::Release);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || link
+                .dropped
+                .load(Ordering::Acquire)
+                >= 20),
+            "too few tags were sent while the link was down"
+        );
+        link.down.store(false, Ordering::Release);
+        assert!(reaches(&control, &fakes, OutputState::Active));
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        let dropped = link.dropped.load(Ordering::Acquire);
+        let last_tick = drain(&mut events)
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::StatsTick { drops, .. } => Some(drops),
+                _ => None,
+            })
+            .next_back()
+            .expect("no stats.tick");
+        assert!(
+            last_tick.output_packets >= dropped,
+            "{dropped} tags dropped while reconnecting, but the last tick says {last_tick:?}"
+        );
     }
 }

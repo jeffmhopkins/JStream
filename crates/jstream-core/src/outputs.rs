@@ -4,7 +4,8 @@
 //! does no media work: [`Outputs::transition`] moves through the states the protocol
 //! reports (`starting` → `active`, `stopping` → `stopped`) at once, as
 //! `jstream-control`'s mock does. With backends, the engine uses [`Outputs::begin`] and
-//! [`Outputs::settle`] so `active` or `failed` is reported only once the pipeline is up.
+//! [`Outputs::settle`] so `active` or `failed` is reported only once the pipeline is up,
+//! and `reconnecting` while its publish link is being re-established.
 //!
 //! Outputs are runtime state, not collection state: nothing here changes `rev`.
 
@@ -96,7 +97,8 @@ impl Outputs {
         Ok(next)
     }
 
-    /// Records the state the pipeline actually reached (`active`, `failed` or `stopped`).
+    /// Records the state the pipeline actually reached (`active`, `reconnecting`,
+    /// `failed` or `stopped`).
     pub(crate) fn settle(&mut self, output_id: &OutputId, state: OutputState) {
         if let Some(slot) = self.states.get_mut(output_id) {
             *slot = state;
