@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md", "docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:304dc80c0d31b18c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:048c9f9a2f86e6d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: tracing added to the third-party dependencies; Transport bullet now says native_roots logs each rustls-native-certs load error and the unparsable-certificate count at warn, and fails with NoRootCertificates only when no root is left, as transport.rs does" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -23,7 +23,8 @@ generic RTMP/RTMPS output of [ADR-0009](../../docs/adr/0009-youtube-rtmps-and-ap
 `Output` trait, recording and the virtual-camera output come later. Its JStream
 dependencies are `jstream-media` (for `MediaTime`) and the layer-2 `jstream-mux`, whose
 public `amf0` codec and `flv::to_ms` conversion the client uses. Its third-party
-dependencies are `thiserror`, and for TLS `rustls` (with the `ring` provider, per
+dependencies are `thiserror`, `tracing` for logging
+([R-RS-005](../../docs/RULES.md#R-RS-005)), and for TLS `rustls` (with the `ring` provider, per
 [R-DEP-006](../../docs/RULES.md#R-DEP-006)) and `rustls-native-certs`. Tests also use
 `rcgen` to generate certificates.
 
@@ -62,7 +63,11 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   `Read + Write`. TLS is rustls on the `ring` provider, TLS 1.3 and 1.2, no client
   certificate. The server name (SNI) is the URL's host, and the certificate must match
   it and chain to a root in the operating system's trust store, which
-  `rustls-native-certs` loads on each `connect`. The handshake completes inside
+  `rustls-native-certs` loads on each `connect`. Store files it can't read and
+  certificates that don't parse are skipped, but logged at `warn` (each load error, and
+  the count of unparsable certificates), because an incomplete store otherwise shows up
+  only as an `UnknownIssuer` handshake failure; no usable root at all is
+  `RtmpError::NoRootCertificates`. The handshake completes inside
   `connect`, so certificate problems surface there as `RtmpError::Tls`; the `timeout`
   bounds each connection attempt and each handshake read and write. Timeouts on the
   returned transport are set on its TCP socket and apply through TLS: a read that times

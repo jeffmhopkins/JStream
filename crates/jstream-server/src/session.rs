@@ -7,6 +7,10 @@
 //! client closes, the session's event stream ends (the engine went away), or the server
 //! shuts down; dropping the session then ends its event streams.
 //!
+//! **Logging.** The task runs in its connection's `connection` span. It logs the
+//! handshake's outcome (the `client_id`, or the refusal's code) and why the connection
+//! ended; never message contents.
+//!
 //! **Request IDs.** The client chooses the wire ID of each request, while a `Control`
 //! session assigns its own. Answers carry the wire ID, and so do the `state.changed`
 //! events this connection's calls cause: the task maps the session's IDs back to the
@@ -81,6 +85,7 @@ pub(crate) async fn run(
                     }
                     Ok(ClientMessage::Hello(hello)) => match control.hello(hello).await {
                         Ok(welcome) => {
+                            tracing::info!(client_id = %welcome.client_id, "handshake done");
                             ids.client_id = Some(welcome.client_id.clone());
                             if events.is_none() {
                                 events = Some(control.events());
@@ -90,6 +95,7 @@ pub(crate) async fn run(
                             }
                         }
                         Err(ControlError::Protocol(error)) => {
+                            tracing::info!(code = error.error.code(), "handshake refused");
                             let refused = matches!(error.error, ProtocolError::UnsupportedVersion { .. });
                             let reply = ServerMessage::Error(ErrorResponse { id: None, error });
                             if send(&mut sink, &reply).await.is_err() {
@@ -144,6 +150,23 @@ pub(crate) async fn run(
             }
         }
     };
+    match &end {
+        Ok(Some(frame)) if frame.code == close_code::ERROR => {
+            tracing::warn!(
+                reason = frame.reason.as_str(),
+                "connection closed: engine failed"
+            );
+        }
+        Ok(Some(frame)) => {
+            tracing::info!(
+                code = frame.code,
+                reason = frame.reason.as_str(),
+                "connection closed"
+            );
+        }
+        Ok(None) => tracing::info!("connection closed"),
+        Err(Closed) => tracing::info!("connection closed: client gone or send failed"),
+    }
     if let Ok(frame) = end {
         // Best effort: the client may already be gone.
         let _ = sink.send(Message::Close(frame)).await;

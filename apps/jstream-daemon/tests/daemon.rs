@@ -43,6 +43,7 @@ impl Drop for Daemon {
 fn daemon() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_jstream-daemon"));
     command.env_remove("JSTREAM_TOKEN_FILE");
+    command.env_remove("RUST_LOG");
     command
 }
 
@@ -142,6 +143,9 @@ async fn timely<T>(future: impl Future<Output = T>) -> T {
     }
 }
 
+/// A token the daemon refuses; it must never show up in its log.
+const WRONG_TOKEN: &str = "n0t-the-t0ken";
+
 fn hello() -> Hello {
     Hello {
         protocol: PROTOCOL_VERSION,
@@ -175,7 +179,7 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     // A wrong token is refused.
     match timely(WsControl::connect(WsConfig::new(
         daemon.url.clone(),
-        "wrong",
+        WRONG_TOKEN,
     )))
     .await
     {
@@ -227,6 +231,20 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     }
 
     stop(&mut daemon);
+    // The log on stderr (default level `info`) shows the refusal and the accepted
+    // connection, and neither token (R-SEC-001).
+    let mut log = String::new();
+    if let Some(mut stderr) = daemon.child.stderr.take() {
+        stderr.read_to_string(&mut log).expect("stderr is readable");
+    }
+    assert!(log.contains("connection refused"), "{log}");
+    assert!(log.contains("missing or wrong control token"), "{log}");
+    assert!(log.contains("connection accepted"), "{log}");
+    assert!(!log.contains(token), "the token was logged: {log}");
+    assert!(
+        !log.contains(WRONG_TOKEN),
+        "the wrong token was logged: {log}"
+    );
     assert_eq!(timely(events.next()).await, None, "the event stream ends");
     match timely(control.call(Call::Query {
         query: Query::SceneList,
@@ -303,6 +321,16 @@ fn usage_errors_exit_2_and_start_nothing() {
         );
         assert!(output.stdout.is_empty());
     }
+    // A `RUST_LOG` that doesn't parse is a usage error too, reported before the token
+    // file is touched.
+    let output = daemon()
+        .args(["--token-file", token_arg])
+        .env("RUST_LOG", "jstream_server=loud")
+        .output()
+        .expect("the binary runs");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.starts_with("error: RUST_LOG: "), "{stderr}");
     assert!(
         !token_file.exists(),
         "no token file is created on a usage error"

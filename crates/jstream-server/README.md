@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:bb78b7c2a937e136", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:9c05db2cc44dae15", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "lib.rs now serves with connect info and gate.rs gained admit(); the module list (lib, config, gate, session, error) and the not-yet list are unchanged, so the purpose holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e1b849fcf169a47f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Main's #72 changed this section's body (extra hosts need name:port, token compared by BLAKE3 digest); dependency ARCH#protocol gains ADR-0024's item.move/scene_id, not built; the server forwards every Call unchanged, so the design holds" }
+verified = { hash = "b3:a608256822d3def8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: new Logging subsection matching lib.rs/gate.rs/session.rs (ConnectInfo peer for logging only, warn 'connection refused' with peer and reason and no header values, info connection{id,peer} span around the connector call and the task, handshake and close logged, warn on 1011); Dependencies add tracing; open question 6 is now refusal log volume" }
 -->
 
 ### Listening and admission
@@ -70,7 +70,7 @@ token). The `Host` check defeats DNS rebinding: a page on an attacker's domain t
 resolves to `127.0.0.1` still sends its own name. The `Origin` check stops foreign
 pages, since browsers always send `Origin` on a WebSocket upgrade; native clients send
 the server's own. A request without `Origin` is refused too, so every client must send
-one. The token is never logged, and `Token`'s `Debug` form hides it.
+one. The token is never logged (see *Logging*), and `Token`'s `Debug` form hides it.
 
 **`Host` without a port.** A `Host` (or `Origin`) without a port names the scheme's
 default port, 80 for `http` and `ws`, and browsers leave `:80` out. So when the server
@@ -121,13 +121,34 @@ task speaks the envelope
 open connection (close code 1001), so their clients' pending and later calls fail with
 `Disconnected` and their event streams end.
 
+### Logging
+
+The server logs through `tracing` ([R-RS-005](../../docs/RULES.md#R-RS-005)) and
+installs no subscriber; the host app does. The listener records each connection's peer
+address (axum's `ConnectInfo`), for logging only: admission depends on the headers
+alone.
+
+- **Refused upgrades** are logged at `warn` as `connection refused`, with the peer
+  address and the reason (`Host not allowed`, `Origin not allowed`, or `missing or wrong
+  control token`). No header value is logged: not the token, nor the refused `Host` or
+  `Origin` ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The test
+  `gate::tests::refusals_are_logged_without_the_token` checks this with a capturing
+  subscriber, and `jstream-daemon`'s end-to-end test checks its stderr.
+- **Accepted connections** get an `info` span `connection` with a number (counting from
+  1 per server) and the peer address, and log `connection accepted`. The session the
+  `Connector` opens is created inside that span, so the engine's own `session` and
+  `command` spans nest under it. The connection task logs the handshake's outcome
+  (`client_id`, or the refusal's code) and how the connection ended, at `info`, or
+  `warn` when the engine failed (close code 1011). Message contents are never logged.
+- A request that isn't a WebSocket upgrade is logged at `debug`.
+
 ### Dependencies
 
 axum (features `http1`, `tokio`, `ws`, no defaults) for HTTP and the upgrade, which
 brings hyper, tower and `tokio-tungstenite` without TLS; tokio for the listener and the
 connection tasks; `futures-util` to split the socket and run calls concurrently
 (`FuturesUnordered`); `blake3` (the workspace's `pure` build, already used by `xtask`)
-for the token digest. No TLS crate is in the tree, so no `ring` or `rustls`.
+for the token digest; `tracing` for the spans and events above. No TLS crate is in the tree, so no `ring` or `rustls`.
 
 ### Open questions
 
@@ -151,9 +172,9 @@ for the token digest. No TLS crate is in the tree, so no `ring` or `rustls`.
    token file at a path it is given and listens on a free port by default; a default
    port and file location are its open questions
    ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
-6. **Logging.** [R-RS-005](../../docs/RULES.md#R-RS-005) asks for `tracing` spans around
-   sessions. The first cut logs nothing; adding `tracing` is a new dependency for a
-   later PR.
+6. **Logging volume.** Every refused upgrade is logged at `warn` (see *Logging*). A
+   foreign page that keeps retrying can fill the log; whether refusals need rate
+   limiting or a summary line is open.
 7. **Backpressure.** Events and answers are written as they come; a client that stops
    reading makes the connection task wait on the socket, which holds that session's
    events in its unbounded buffer

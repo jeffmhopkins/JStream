@@ -20,8 +20,8 @@ pub use error::ServerError;
 pub use jstream_control::WS_PATH;
 
 use axum::Router;
-use axum::extract::State;
 use axum::extract::ws::{WebSocketUpgrade, rejection::WebSocketUpgradeRejection};
+use axum::extract::{ConnectInfo, State};
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -30,8 +30,10 @@ use jstream_control::Control;
 use std::future::Future;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::net::TcpListener;
 use tokio::sync::watch;
+use tracing::Instrument;
 
 /// Opens one `Control` session for each accepted connection. A connection's session is
 /// dropped when it closes.
@@ -53,6 +55,8 @@ struct App {
     connector: Connector,
     gate: Gate,
     shutdown: watch::Receiver<bool>,
+    /// Numbers the accepted connections, for their `connection` spans.
+    connections: AtomicU64,
 }
 
 impl Server {
@@ -73,6 +77,7 @@ impl Server {
             connector,
             gate: Gate::new(&config, local_addr),
             shutdown: stopping,
+            connections: AtomicU64::new(0),
         });
         Ok(Server {
             listener,
@@ -115,7 +120,9 @@ impl Server {
             signal.await;
             shutdown.send_replace(true);
         };
-        axum::serve(listener, router)
+        // The peer address is only logged, never trusted: the gate decides on the headers.
+        let service = router.into_make_service_with_connect_info::<SocketAddr>();
+        axum::serve(listener, service)
             .with_graceful_shutdown(signal)
             .await
             .map_err(ServerError::Serve)
@@ -123,23 +130,38 @@ impl Server {
 }
 
 /// `GET /api/v1/ws`: checks the request (R-SEC-002), then upgrades it and runs a session.
+///
+/// A refusal is logged with its reason and the peer address by [`Gate::admit`]. An
+/// accepted connection runs in a `connection` span carrying its number and peer address,
+/// which every log line of the session nests under. Request headers are never logged,
+/// so the token can't be (R-SEC-001).
 async fn upgrade(
     State(app): State<Arc<App>>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
 ) -> Response {
-    if let Err(refusal) = app.gate.check(&headers) {
+    if let Err(refusal) = app.gate.admit(&headers, peer) {
         return refusal.into_response();
     }
     let upgrade = match upgrade {
         Ok(upgrade) => upgrade,
-        Err(rejection) => return rejection.into_response(),
+        Err(rejection) => {
+            tracing::debug!(peer = %peer, rejection = %rejection, "not a WebSocket upgrade");
+            return rejection.into_response();
+        }
     };
-    let control = (app.connector)();
+    let number = app.connections.fetch_add(1, Ordering::Relaxed) + 1;
+    let span = tracing::info_span!("connection", id = number, peer = %peer);
+    // Opened inside the span, so a session span the connector creates nests under it.
+    let control = span.in_scope(|| {
+        tracing::info!("connection accepted");
+        (app.connector)()
+    });
     let shutdown = app.shutdown.clone();
     upgrade
         .max_message_size(MAX_MESSAGE_BYTES)
-        .on_upgrade(move |socket| session::run(socket, control, shutdown))
+        .on_upgrade(move |socket| session::run(socket, control, shutdown).instrument(span))
 }
 
 // The two tests below sit at the crate root because RULES.md names them by path

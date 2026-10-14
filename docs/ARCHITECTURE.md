@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b88009c4d3bb7cc0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed only by the daemon README's re-verified Design line (ADR-0025 persistence dependency); the layer diagram and app roles are unchanged" }
+verified = { hash = "b3:97fcfbf4f59d234d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "apps/ changes: the daemon logs to stderr through tracing-subscriber and its README gained logging text; the CLI is unchanged and installs no subscriber. The diagram and host roles are unchanged" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:de750db3576e872a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:46e52677f1e0ed90", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Manifest edits add only the external tracing (core, mcp, server, outputs) and tracing-subscriber (daemon); no member-to-member dependency, layer, summary or unsafe flag changed, so the table holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -353,7 +353,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e5ccc408953aa746", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered protocol README marks open questions 11 and 12 settled by ADR-0025 (kind.list/kind.describe, settings map validated per kind, blocker list on delete rejection, delete.plan; not built); main adds ADR-0022/0024 planned edits; the bullets here still match protocol 0.3 as built" }
+verified = { hash = "b3:cc2d1a603bd714d5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-server changes are logging only (connection spans, refusal log, ConnectInfo for the peer address); /api/v1/ws, the loopback default, the token and Origin/Host checks are unchanged, so the transport bullet holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -404,7 +404,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:1db3236cc57f9619", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:31a03635ad9c7ab6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-mcp changes add tracing spans around the session, requests and tool calls plus a README Logging subsection; grouping, schema size, names, access and audit bullets are unaffected" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

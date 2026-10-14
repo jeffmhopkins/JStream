@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:f5b275c889cf5ceb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:301d9c944703c936", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: Startup bullet now says main.rs installs the stderr log subscriber filtered by RUST_LOG; tests bullet still matches tests/daemon.rs, which now also checks stderr for the refusal and for no token" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -25,8 +25,9 @@ can drive it. Like every host it only wires the engine to its interfaces
 core and server ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)).
 
 Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
-- **Startup** (`main.rs`): parses the command line, loads or creates the token, runs
-  the tokio runtime, prints where it listens, and maps failures to exit codes.
+- **Startup** (`main.rs`): parses the command line, installs the log subscriber (stderr,
+  filtered by `RUST_LOG`), loads or creates the token, runs the tokio runtime, prints
+  where it listens, and maps failures to exit codes.
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
@@ -48,7 +49,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:1acb1fdd9f33d6c4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "token.rs: a create_new failure other than AlreadyExists now still goes to read_existing when something is at the path (Windows reports a directory as AccessDenied), so 'is not a regular file' refusal holds on Windows too, as the text already says; nothing else changed" }
+verified = { hash = "b3:4891af9e737b5f07", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: new Logs bullet (stderr only, RUST_LOG Targets directives, default info, an unparsable value is a usage error, exit 2, before the token file is touched) and the exit-code 2 row, matching init_logging in main.rs and the new usage test; token-file and stdout lines unchanged" }
 -->
 
 ```sh
@@ -77,6 +78,12 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   `… (existing token)`, then `listening on ws://127.0.0.1:<port>/api/v1/ws` once it
   serves (a script waits for this line), and `stopped` after a graceful stop. Errors go
   to stderr as `error: <message>`.
+- **Logs.** The libraries' log lines go to stderr, never stdout: connections accepted
+  and refused (with the reason, never the token), handshakes, output actions, and how
+  connections end. `RUST_LOG` filters them with `target=level` directives and an
+  optional bare default level, for example `RUST_LOG=jstream_core=debug,info`; unset or
+  empty means `info`. A value that doesn't parse is a usage error (exit 2), reported
+  before the token file is touched.
 - **Stopping.** Ctrl-C (SIGINT) or SIGTERM on Unix, Ctrl-C or Ctrl-Break on Windows:
   it stops accepting connections, closes the open ones (their clients see
   `Disconnected`, and event streams end) and exits 0. The engine's state is lost.
@@ -86,14 +93,14 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 |---|---|
 | 0 | Stopped by a signal, or printed the help or version |
 | 1 | Failed: the token file is unusable or can't be created, the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
-| 2 | Usage: the command line could not be parsed, or names no token file |
+| 2 | Usage: the command line could not be parsed, names no token file, or `RUST_LOG` doesn't parse |
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:9e92dc182252d892", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#persistence gains ADR-0025's asset-file and kind-version bullet, not built; the daemon still persists nothing but its token file, and main's #72 server changes (extra_hosts name:port, BLAKE3 token compare) don't change what the daemon passes" }
+verified = { hash = "b3:78807a5335b73b48", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: Logging bullet (fmt layer to stderr, Targets filter instead of env-filter to avoid regex, installed once the path is known so usage errors still start with error:); Dependencies add tracing-subscriber fmt+std (sharded-slab, thread_local); open question 4 now about log files in the data directory per ARCH persistence" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -124,12 +131,24 @@ verified = { hash = "b3:9e92dc182252d892", by = "agent:claude@session_01QBbMRwRu
   Failures are `anyhow` errors printed with their causes (apps may use `anyhow`,
   [R-RS-003](../../docs/RULES.md#R-RS-003)); only the exit code's kind matters, so no
   typed error is needed, unlike `jstream-cli`'s one code per protocol error.
+- **Logging.** The libraries log through `tracing`; as the host, the daemon installs
+  the one subscriber ([R-RS-005](../../docs/RULES.md#R-RS-005)): `tracing-subscriber`'s
+  `fmt` layer writing text lines to stderr, so stdout keeps only the lines scripts read,
+  and a `Targets` filter parsed from `RUST_LOG`. It is installed after the token file
+  path is known and before the token is loaded, and nothing is logged before it, so
+  usage errors still start with `error:`. `Targets` takes `target=level` directives,
+  not `env-filter`'s span and field filters, which need `regex`; that is enough to turn
+  one crate up. The spans and fields are each library's
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design),
+  [jstream-core › Design](../../crates/jstream-core/README.md#design)).
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): three options don't pay
   for a parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
   `jstream-protocol` (`OutputId`), `anyhow`, tokio (`rt-multi-thread` for the runtime,
-  `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), and `getrandom`
+  `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), `tracing-subscriber`
+  (features `fmt` and `std` only: no `ansi`, `env-filter` or `tracing-log`, so it adds
+  only `sharded-slab` and `thread_local`), and `getrandom`
   (OS randomness; already in the tree through tungstenite's `rand`). `std` has no
   portable source of cryptographic randomness, and the alternatives without a crate
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
@@ -152,5 +171,6 @@ verified = { hash = "b3:9e92dc182252d892", by = "agent:claude@session_01QBbMRwRu
    user-only under `%APPDATA%` but not everywhere, and an existing file's ACL is not
    checked. Restricting it explicitly needs the Windows security API, so it belongs in
    `jstream-platform-windows`, the crate allowed `unsafe`.
-4. **Logging.** Nothing is logged beyond the startup lines, as in `jstream-server`
-   (its open question 6): `tracing` comes with the first code that needs it.
+4. **Log files.** Logs go to stderr only. [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)
+   plans rotating logs in the data directory, which waits on the same settings code as
+   question 2.

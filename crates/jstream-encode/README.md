@@ -66,7 +66,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:cbab9c6628116bcf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section, checked against session.rs/fanout.rs/audio.rs/video.rs/registry.rs: can_accept-gated recv and park+poll every poll_interval, try_send drop-newest input queue, silence fill only after a marked drop up to max_audio_gap, busy and finish_timeout drops, per-subscriber try_send with keyframe resync and Joining skip uncounted, end recorded before queues drop, catch_unwind, abort-and-join on drop, defaults 8/512/4ms/2s/1s match SessionOptions::default" }
+verified = { hash = "b3:25bc6c1381b53dca", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited only the Not yet tracing bullet: tracing is a workspace dependency now but unused here; any spans go on the control side, not the per-frame encode loop (R-RT-002). Session, fan-out and drop text untouched" }
 -->
 
 ### Threads and pacing
@@ -182,8 +182,10 @@ counters read without stopping the thread; reporting them in `stats.tick`
   them.
 - **GPU frames**: sessions pass `VideoSurface`s through untouched, so they work once the
   encoders take GPU input; nothing here depends on the CPU path.
-- `tracing` spans ([R-RS-005](../../docs/RULES.md#R-RS-005)): `tracing` is not a
-  workspace dependency yet; the crate reports through its counters and `StreamEnd`.
+- `tracing` spans ([R-RS-005](../../docs/RULES.md#R-RS-005)): `tracing` is a workspace
+  dependency now, but this crate doesn't use it yet; it reports through its counters
+  and `StreamEnd`. Spans would go on the control side (session start and end), not in
+  the encode thread's per-frame loop ([R-RT-002](../../docs/RULES.md#R-RT-002)).
 - Performance: not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 
 <a id="open-questions"></a>
