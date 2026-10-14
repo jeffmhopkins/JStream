@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:3ee9ecb87b474ee8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the whole section against the new reconnect module: added the Reconnect bullet (ReconnectingPublisher, Connector/rtmp_connector/connect_publisher, 1 s doubling to 30 s with equal jitter, 5 min outage limit, 30 s stable_after, drop-and-count while down, headers re-sent and resume at keyframe, Clock injection), the per-attempt thread in the threading paragraph, the reconnect tests, and replaced the Not-yet reconnect item with the jstream-core adoption gap. Dependencies unchanged (no new crates); ARCH threading still puts network outputs on the control plane and core's output thread is unchanged." }
+verified = { hash = "b3:5198a25a76357a94", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#127 B1: the video resync now also arms when an AVC header is cached but no frame was sent yet; re-read the Reconnect bullet: 'after a reconnect, video and audio are dropped until the next keyframe, with onMetaData and the AVC header just before it' now holds for that case too; no API or dependency change" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

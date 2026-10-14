@@ -291,6 +291,62 @@ fn failed_send_drops_the_packet_and_audio_only_resumes_at_once() {
     );
 }
 
+/// A link lost and restored after the AVC sequence header but before the first video
+/// frame: the new session still gets `onMetaData` and the AVC header before the first keyframe
+/// (#127 review B1).
+#[test]
+fn a_loss_before_the_first_frame_still_resends_the_avc_header() {
+    let (log_tx, logs) = channel();
+    let connections = Arc::new(AtomicUsize::new(0));
+    let connector: Connector<Duplex> = Arc::new(move || {
+        let (client, server) = duplex();
+        let hang_up = (connections.fetch_add(1, Ordering::SeqCst) == 0).then_some(1);
+        let log_tx = log_tx.clone();
+        thread::spawn(move || {
+            let log = fake_server_until(server, Mode::Accept, url().tc_url(), hang_up);
+            let _ = log_tx.send(log);
+        });
+        let mut p = RtmpPublisher::publish(client, &url(), &key())?;
+        p.get_mut().nonblocking = true;
+        Ok(p)
+    });
+    let clock = FakeClock::new();
+    let mut p =
+        ReconnectingPublisher::new(connector().unwrap(), connector, policy(), clock.clock());
+    let mut states = States::new();
+
+    p.send_metadata(&on_metadata()).unwrap();
+    p.send_video(0, &AVC_HEADER).unwrap();
+    logs.recv().unwrap(); // the server has hung up before any frame
+    // Audio finds the loss; the link is back before any video frame was sent.
+    p.send_audio(23, &AAC_RAW).unwrap();
+    states.record(&p);
+    assert_eq!(p.state(), LinkState::Reconnecting);
+
+    clock.advance(Duration::from_secs(1));
+    poll_until(&mut p, &mut states, |p| p.state() == LinkState::Active).unwrap();
+    p.send_video(66, &keyframe()).unwrap();
+    drop(p.finish().unwrap());
+
+    let second = logs.recv().unwrap();
+    let media: Vec<_> = second
+        .iter()
+        .filter(|l| l.starts_with("audio") || l.starts_with("video") || l.starts_with("data"))
+        .map(|l| l.split(" len=").next().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(
+        media,
+        ["data @setDataFrame onMetaData", "video t=66", "video t=66"],
+        "{second:?}"
+    );
+    let video: Vec<_> = second.iter().filter(|l| l.starts_with("video")).collect();
+    assert!(
+        video[0].contains("len=9"),
+        "the AVC header first: {video:?}"
+    );
+    assert!(video[1].contains("len=25"), "then the keyframe: {video:?}");
+}
+
 /// Sessions over in-memory pipes whose server ends the test holds. The server has
 /// already answered the publish; [`hang_up`](Self::hang_up) drops every held end, so
 /// the client's next read sees the connection closed and its next write fails.

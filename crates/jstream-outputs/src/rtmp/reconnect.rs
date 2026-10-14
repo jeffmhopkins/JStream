@@ -733,7 +733,9 @@ impl<S: Read + Write + Send + 'static> ReconnectingPublisher<S> {
             publisher: Box::new(publisher),
             resync: Resync {
                 metadata: self.headers.metadata.is_some(),
-                video: self.seen_video,
+                // A cached AVC header with no frame yet still needs the resync, or the
+                // first keyframe would go out without it (#127 review B1).
+                video: self.seen_video || self.headers.avc.is_some(),
                 audio_header: self.headers.aac.is_some(),
             },
             reconnected: Some((now, outage)),
