@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:596578f54094cdea", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #69 B1: Tests paragraph names the new Windows-run start-race test (destroyed message-only window -> NotFound via not_found_if_gone) and the hw-test calling the real CreateForWindow on a destroyed window; Start bullet unchanged and still true; target_gone doc notes handle reuse keeps the OS error (N1)" }
+verified = { hash = "b3:741eaf959dc75a04", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#69): dependency ARCH#threading only gained the 'In the engine' paragraph (jstream-audio resamples each WASAPI stream onto the engine time line); WASAPI stream text (per-stream MMCSS thread, QPC packet times) still matches" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

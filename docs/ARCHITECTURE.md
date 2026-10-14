@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:4bd638cff811ed8a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#68, #70): rows for jstream-core, jstream-daemon and platform-windows' WGC features plus this PR's jstream-outputs rustls/rustls-native-certs/rcgen deps; no member edges change, all edges strictly down" }
+verified = { hash = "b3:89b8da3eb137ab44", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#66, #69, #70): new crates/jstream-audio/Cargo.toml at layer 2 (deps jstream-media, jstream-platform L1, no unsafe) matches the L2 audio row; other rows and edges as on main" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -212,7 +212,7 @@ Collection (JSON on disk, schema_version, rev: u64)
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:d5982cd49a11dfac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Thread table: audio threads are one per stream, not per device (an output and its loopback are two streams on one endpoint; #56 review N3). Clock text, S3 result and the rest of the table unchanged" }
+verified = { hash = "b3:df495b08c49b1355", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New covered code crates/jstream-audio/src/rt/**: audio threads resample into a per-input ring, mixer reads it on the engine clock, gains via lock-free atomics, clock/drift text matches; added an 'In the engine' paragraph saying the port uses S3's loop and tuning with its own sinc resampler and absolute error, simulated not measured" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -248,6 +248,14 @@ throughout:
 Still open: the mic and the output share the ES-9's crystal, so the relative drift was
 only −0.12 ppm. Drift between two independent devices, and events rarer than about once
 in 20 minutes, haven't been measured.
+
+**In the engine:** `jstream-audio` runs S3's drift fit and PI loop with S3's tuning on
+each input's audio thread, resampling into a per-input ring indexed by engine frame
+that the mixer reads on the engine clock
+([its real-time design](../crates/jstream-audio/README.md#realtime)). It differs from
+what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, and the
+timing error is absolute, so inputs line up with each other. That combination has been
+simulated (within 0.05 ms after settling), not yet measured on hardware.
 
 **State to RT threads:** each subsystem (render, audio, outputs) gets its own immutable
 snapshot through `arc-swap`, rebuilt only when that subsystem's state changes.

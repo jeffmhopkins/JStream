@@ -71,3 +71,9 @@ undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
 [profile.release]
 panic = "unwind"   # R-UNSAFE-005: catch_unwind at FFI boundaries needs unwinding
+
+# The audio DSP is optimised in debug builds too: unoptimised, its resampler is too slow
+# for a real-time audio thread in a debug app, and for jstream-audio's minutes-long
+# drift simulations in `cargo test`.
+[profile.dev.package.jstream-audio]
+opt-level = 3

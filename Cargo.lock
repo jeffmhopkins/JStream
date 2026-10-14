@@ -656,6 +656,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-audio"
+version = "0.0.0"
+dependencies = [
+ "jstream-media",
+ "jstream-platform",
+ "thiserror",
+]
+
+[[package]]
 name = "jstream-cli"
 version = "0.0.0"
 dependencies = [
