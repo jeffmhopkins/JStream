@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:0dccfac81334fdae", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Contents list gains mcp.rs (jstream-cli mcp: jstream-mcp's Server over the same connector session) and run.rs now also takes the BufRead input that mcp reads; not-here-yet drops the proxy, keeps default address/token file and no engine host; checked against main.rs, run.rs, mcp.rs" }
+verified = { hash = "b3:436c2dd6cdd03618", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Not-here-yet paragraph edited: jstream-daemon now serves a real engine (point --url at its printed URL and --token-file at its token file); --mock still needs the mock feature; contents list and CLI code unchanged" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -37,10 +37,11 @@ Contents (a first cut):
   ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): `jstream-mcp`'s server over the
   same session the other commands open.
 
-Not here yet: a default address and token file ([open question 5](#design)). No engine
-host serves the WebSocket API yet (`jstream-daemon` and `jstream-desktop` don't exist),
-so outside tests the CLI is still mostly used with `--mock`, which needs a build with
-the `mock` cargo feature (`cargo run -p jstream-cli --features mock -- --mock …`).
+Not here yet: a default address and token file ([open question 5](#design)). A real
+engine is served by [`jstream-daemon`](../jstream-daemon/README.md#usage): point
+`--url` at the URL it prints and the token file at the one it uses. Without one, the
+CLI runs against `--mock`, which needs a build with the `mock` cargo feature
+(`cargo run -p jstream-cli --features mock -- --mock …`).
 
 <a id="usage"></a>
 ## Usage
@@ -168,7 +169,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:cc61eacef79792fd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-control#design changed only its wss:// open question (ring now allowlisted); the CLI still connects over plain ws:// via WsControl, nothing here mentions TLS deps" }
+verified = { hash = "b3:914b532263a77847", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#70) into the RTMPS PR: main's open question 5 (daemon exists) kept; the dependency control#design changed only its wss:// open question (ring allowlisted); CLI still plain ws:// via WsControl" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -237,10 +238,14 @@ verified = { hash = "b3:cc61eacef79792fd", by = "agent:claude@session_01QBbMRwRu
 4. **Exit codes.** The numbering (2 usage, 3 disconnected, 10 and up for protocol
    codes) is provisional until the maintainer confirms it. A refused token exits 3
    with a reason naming HTTP 401; a code of its own may be clearer for scripts.
-5. **Defaults.** No default `--url` (the daemon's port is not chosen yet) and no
-   default token file (it will be in the platform config directory,
-   [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence), once the host apps
-   create it). Both are required until then.
+5. **Defaults.** No default `--url` (the daemon's port is not chosen yet; it listens
+   on a free port unless given `--port`) and no default token file (it will be in the
+   platform config directory,
+   [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence); the daemon creates
+   the file at the path it is given, read from the same `JSTREAM_TOKEN_FILE`). Both are
+   required until then
+   ([jstream-daemon › Design](../jstream-daemon/README.md#design), open questions 1
+   and 2).
 6. **Reconnecting `mcp`.** After the engine goes away, every tool call that needs it
    fails with `disconnected` until the MCP client restarts the proxy. The proxy could
    instead open a new session on the next call; that session gets a new `client_id`

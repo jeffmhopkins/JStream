@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ddad884a86807c9e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #66 B2: open question 1 (TLS) reworded: ring is already on the native-code allowlist for jstream-outputs RTMPS, so wss:// needs only a TLS feature and wiring; 'No TLS crate is in the tree' still true for the server's own tree (cargo tree -i ring: only jstream-outputs); grep finds no other doc calling the ring entry missing" }
+verified = { hash = "b3:47684cc34be77272", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#70 daemon) into the RTMPS PR: open question 1 says ring is already allowlisted for jstream-outputs RTMPS so wss:// needs only the TLS feature and wiring; main's open question 5 (the daemon hosts the server) kept; 'No TLS crate is in the tree' still true for the server's own tree" }
 -->
 
 ### Listening and admission
@@ -139,10 +139,12 @@ connection tasks; `futures-util` to split the socket and run calls concurrently
 4. **Requests without `Origin`.** Refused today. Non-browser tools (`websocat`, scripts)
    must send one; allowing a missing `Origin` together with a valid token is safe from
    browsers but loosens the check, so it is the maintainer's call.
-5. **Default port and token file.** The host apps (`jstream-daemon`, `jstream-desktop`)
-   will choose the port and create the user-only token file
-   ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)); neither exists yet,
-   so the server takes both from its caller.
+5. **Default port and token file.** The host apps choose the port and create the
+   user-only token file ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)),
+   so the server takes both from its caller. `jstream-daemon` creates or reuses the
+   token file at a path it is given and listens on a free port by default; a default
+   port and file location are its open questions
+   ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 6. **Logging.** [R-RS-005](../../docs/RULES.md#R-RS-005) asks for `tracing` spans around
    sessions. The first cut logs nothing; adding `tracing` is a new dependency for a
    later PR.

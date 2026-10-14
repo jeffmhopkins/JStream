@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:07079dd98f9a7504", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-cli#design was only re-verified (control's wss:// open question changed); the shape diagram and rows (cli, server, mcp, core) are unchanged by this PR" }
+verified = { hash = "b3:e8ae47c79a1a16c2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: covered apps/ READMEs only had verified lines refreshed (cli, daemon design) for the TLS open-question rewording; shape diagram and daemon/cli rows unchanged" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:07079dd98f9a7504", by = "agent:claude@session_01QBbMRwRu
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API only ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ae58c10e4f6c4606", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "After merging main (#65 added the jstream-core L5 row): jstream-outputs/Cargo.toml adds only third-party rustls, rustls-native-certs and dev-only rcgen; no member edges change, the L4 outputs row (RTMP(S)) and the new core row hold" }
+verified = { hash = "b3:4bd638cff811ed8a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#68, #70): rows for jstream-core, jstream-daemon and platform-windows' WGC features plus this PR's jstream-outputs rustls/rustls-native-certs/rcgen deps; no member edges change, all edges strictly down" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -260,7 +260,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5eea4fa4bbb90457", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-server README changed only its TLS open question wording (ring already allowlisted); Transport bullet ('Plain ws:// for now; TLS is an open question there') still holds" }
+verified = { hash = "b3:ead9d8ac84b9aaa2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged: covered server README now has both the RTMPS PR's TLS open-question wording and main's daemon open question 5; Transport bullet (plain ws://, TLS open question in the server README) still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -329,7 +329,7 @@ verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:0577bcfebb1a2d36", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered code: Shared keeps the raw command queue (dropped with the raw objects before the Device clone) and stage compares it; step 2 text unchanged and holds" }
+verified = { hash = "b3:890531688bbbe6e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered code: gpu/mod.rs only re-exports adapter_drives_monitor for WGC capture's own device; steps 1-6 unchanged, and the new CPU capture path is step 6's fallback, on the display's adapter as the hybrid-GPU note asks" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

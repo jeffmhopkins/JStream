@@ -15,9 +15,13 @@ axum = { version = "0.8", default-features = false, features = ["http1", "tokio"
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+# OS randomness (the daemon's control token). Already in the tree through tungstenite's
+# `rand`, so the version matches it.
+getrandom = { version = "0.3", default-features = false }
 globset = { version = "0.4", default-features = false }
 insta = { version = "1", default-features = false }
 jstream-control = { path = "crates/jstream-control" }
+jstream-core = { path = "crates/jstream-core" }
 jstream-graph = { path = "crates/jstream-graph" }
 jstream-mcp = { path = "crates/jstream-mcp" }
 jstream-media = { path = "crates/jstream-media" }

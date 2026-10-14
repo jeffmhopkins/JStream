@@ -1,7 +1,7 @@
 [package]
 name = "jstream-platform-windows"
 version = "0.0.0"
-description = "Windows platform backends: the QPC media clock and WASAPI audio I/O (WGC capture and Media Foundation codecs to follow)."
+description = "Windows platform backends: the QPC media clock, WASAPI audio I/O, WGC capture, Media Foundation codecs and GPU interop."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -27,9 +27,10 @@ undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
 [features]
 # Platform tests against real hardware (docs/RULES.md#testing): audio devices, the OS
-# encoders and the GPU. Additive, off by default, and the tests are also `#[ignore]`d.
-# Run them on a Windows machine with a microphone, speakers and a DX12 GPU with a
-# hardware H.264 encoder:
+# encoders, the GPU and a display to capture. Additive, off by default, and the tests
+# are also `#[ignore]`d.
+# Run them on a Windows machine with a microphone, speakers, a display and a DX12 GPU
+# with a hardware H.264 encoder:
 # `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 hw-tests = []
 
@@ -39,11 +40,17 @@ jstream-platform.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
     "std",
+    "Foundation",
+    "Graphics",
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
     "Win32_Devices_FunctionDiscovery",
     "Win32_Foundation",
     "Win32_Graphics_Direct3D",
     "Win32_Graphics_Direct3D11",
     "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
     "Win32_Graphics_Gdi",
@@ -58,7 +65,11 @@ windows = { workspace = true, features = [
     "Win32_System_Performance",
     "Win32_System_Threading",
     "Win32_System_Variant",
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
     "Win32_UI_Shell_PropertiesSystem",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 windows-core = { workspace = true, features = ["std"] }
 # The DX12 backend, for the GPU interop's wgpu-hal import (ADR-0004). The version is the
