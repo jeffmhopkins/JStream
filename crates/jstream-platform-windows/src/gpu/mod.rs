@@ -32,6 +32,7 @@ use windows::Win32::Graphics::Dxgi::{IDXGIAdapter, IDXGIAdapter1};
 use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTOPRIMARY, MonitorFromPoint};
 use windows::core::Interface;
 
+pub(crate) use self::d3d::adapter_drives_monitor;
 use self::d3d::{D3D11, SharedFence, SharedTexture};
 use crate::com::OsResult;
 
