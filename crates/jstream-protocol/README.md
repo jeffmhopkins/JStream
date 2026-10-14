@@ -60,7 +60,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:3a40f7f3e243c258", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against parity.rs and the fixtures feature: no message, tag, schema or compatibility change (protocol.snap and examples.snap untouched); fixture's reads agree with the Queries subsection (scene display order, sources by ID, items bottom first, not_found for a missing scene, rev on each read) and its rejections with Batches (rev_conflict before empty_batch, atomic rollback)" }
+verified = { hash = "b3:19632864ebfb059e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the Undo subsection: undo/redo requests and undo_conflict now point to ADR-0032 and still come with the engine's history; no message, schema or snapshot change, so the first cut's description (three call kinds, events, errors) still holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -221,9 +221,10 @@ source that items still place, or a scene that a `scene` source still shows, is
 rejected, so no edit removes more than the object it names. `jstream-graph`'s property
 test checks that applying a random batch and then its inverse restores the state
 exactly. A new edit that can't state its inverse in edits needs new edits first. Undo
-and redo requests, and the
-`undo_conflict` error for an undo whose inverse conflicts with later edits by another
-client, come with the engine's history ([Open questions](#open-questions)).
+and redo requests (`history.undo`, `history.redo`), and the `undo_conflict` error for an
+undo whose inverse conflicts with later edits by another client, are decided in
+[ADR-0032](../../docs/adr/0032-live-edits-and-undo.md), together with the live values
+that keep a drag to one batch and one undo step. They come with the engine's history.
 
 ### Events
 
@@ -313,10 +314,12 @@ described above.
    server-assigned IDs, with batches referring to created objects by local names. And
    should the ID types move to `jstream-types`, once it has IDs and an optional serde
    feature?
-4. **Undo and redo on the wire.** Proposed: `history.undo` and `history.redo` as a fourth
-   kind of call, `history`. They change state and bump `rev`, but are neither edits
-   (they aren't themselves undo steps) nor actions (no outside effects). R-ARCH-006
-   only knows edits and actions, so this needs a decision, maybe a rule change.
+4. **Undo and redo on the wire.** Settled by
+   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md), not built yet:
+   `history.undo` and `history.redo` are a fourth kind of call, `history`, which
+   carries no command (it applies a batch of edits the engine already holds), so
+   R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
+   (`live.set`, `live.cancel`, `live.changed`), committed by one batch.
 5. **Actions that change collection state.** `studio.transition` changes the program
    scene, which is saved in the collection. Is it an action that also bumps `rev`, or an
    edit plus a separate "run transition" action?

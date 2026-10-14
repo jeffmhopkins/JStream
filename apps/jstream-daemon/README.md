@@ -93,7 +93,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:49107540d17bacde", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#persistence only gained the asset-files and kind-version bullet; the daemon's token-file, listening and config-path bullets don't touch assets or settings, so the section still holds" }
+verified = { hash = "b3:062399e995dbb35d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #80: dependency ARCH#persistence gains this PR's Asset files bullet; the daemon still persists nothing but its token file, so its design holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

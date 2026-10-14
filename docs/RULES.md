@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e28452b7fb2e58b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only gained the 'In the engine' paragraph about jstream-audio's port of the S3 loop; R-RT-001..006 do not depend on it and still hold (no-alloc test for jstream-audio is still pending, as the rule's test: entry allows)" }
+verified = { hash = "b3:a356d168d6f85bf5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; R-RT-001..006 still hold, and R-RT-003's parameter channels are exactly what live values use" }
 -->
 
 <a id="R-RT-001"></a>
@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1f3c2c2dd3401bee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies ARCH#protocol (unchanged text, only covered OQ wording moved) and ARCH#persistence (new asset-path and kind-version bullet) changed; ADR-0025 keeps every protocol change additive and kind versions separate from the collection schema_version, so R-API-001..004 hold as written" }
+verified = { hash = "b3:1e2782d17e59b818", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #80: dependencies ARCH#protocol and #persistence changed only by ADR-0025 (additive settings, per-kind versions with migrations) and main's ADR-0032 bullets; R-API-001..004 hold" }
 -->
 
 <a id="R-API-001"></a>
