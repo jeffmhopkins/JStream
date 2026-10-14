@@ -74,9 +74,10 @@ retired_sections = { "old-id" = ["new-id-a", "new-id-b"] }   # tombstones, see L
 -->
 ```
 
-**Tracked:** everything under `docs/` and `crates/*/README.md`, plus `README.md`,
-`CLAUDE.md`, `REVIEW.md` and `ROADMAP.md`.
-**Not tracked:** `docs/adr/TEMPLATE.md` and `.github/**`.
+**Tracked:** every Markdown file in the repository: `docs/`, the root files (`README.md`,
+`CLAUDE.md`, `REVIEW.md`, `ROADMAP.md`), and the READMEs under `crates/`, `apps/`,
+`spikes/` and `design/`.
+**Not tracked:** `docs/adr/TEMPLATE.md`, `.github/**` and the `LICENSE*` files.
 
 **Why TOML in a comment:** one parser for everything in the repo (`@doc`, `@section` and
 `@rule` blocks are all TOML), explicit string types so globs and dates can't be mistyped,
