@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:16e254ac3c2d57e3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Open question 1 notes that the WebSocket client must pass on the server's planned events.dropped notice (#44); dependency ARCH#protocol gains the decided Origin, slow-client and MCP-HTTP text, none built" }
+verified = { hash = "b3:60a30e11697b68b0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited open question 1: server-side bounded buffer is now built and WsControl fans events.dropped out to subscribers like any event (ws.rs ServerMessage::Event arm, unchanged); mock list now says protocol 0.4 edits/queries, which match 0.3's since 0.4 only adds an event" }
 -->
 
 ### The trait
@@ -101,7 +101,7 @@ protocol's rules for them:
   retry with a known key answers first; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol 0.3 edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol 0.4 edit, with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
@@ -112,7 +112,7 @@ protocol's rules for them:
   - nesting cycles.
 
   Error messages may differ; clients match on codes and fields;
-- every protocol 0.3 query, answered from that state with the results
+- every protocol 0.4 query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID) and `item.list` (bottom first; `not_found` for a missing
   scene), each at the current `rev`, and `output.status`. So it keeps everything an
@@ -178,15 +178,16 @@ server on a loopback port and drives it with this client.
 
 ### Open questions
 
-1. **Backpressure.** Event buffers are unbounded. A slow subscriber of high-rate events
-   (`stats.tick`, meters) would grow without limit. Bounded buffers that drop the oldest
-   events (a gap in `rev` already shows a missed `state.changed`) are likely once such
-   events exist ([protocol open question 7](../jstream-protocol/README.md#open-questions)).
-   On the server side this is decided, not built: `jstream-server` gives each connection
-   a bounded buffer and, on overflow, drops the queued events and sends one
-   `events.dropped` notice ([ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol)).
-   When that lands, this client must pass the notice on to subscribers, which re-read
-   state with `state.get`.
+1. **Backpressure.** The client's own event buffers are unbounded. A slow subscriber of
+   high-rate events (`stats.tick`, meters) would grow without limit. Bounded buffers that
+   drop the oldest events (a gap in `rev` already shows a missed `state.changed`) are
+   likely once such events exist
+   ([protocol open question 7](../jstream-protocol/README.md#open-questions)). The
+   server side is built: `jstream-server` gives each connection a bounded buffer and, on
+   overflow, drops the queued events and sends one `events.dropped` notice
+   ([ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol)). `WsControl` passes
+   it on to every subscriber like any other event, and they re-read state with
+   `state.get`. The mock and the in-process engine never send it.
 2. **Request IDs.** The implementation assigns them. A caller that wants its own
    (correlating with an external log) would need `call` to take a `Request`.
    `jstream-server` works around it by mapping session IDs back to wire IDs

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:fff413e1972691bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-protocol row is unchanged and this Purpose still matches it" }
+verified = { hash = "b3:fe9338ddea0a74ee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events bullet to list events.dropped beside state.changed and output.state_changed, matching event.rs; PROTOCOL_VERSION bump to 0.4 is in version.rs as listed" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -37,7 +37,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list` and
   `output.status`, with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo`
   and `ItemInfo` shapes it reports.
-- **Events** (`event.rs`): `state.changed` and `output.state_changed`.
+- **Events** (`event.rs`): `state.changed`, `output.state_changed` and `events.dropped`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, and `WireError`, its wire form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs, `Rev`, and
@@ -60,7 +60,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:6baec949c22c4de5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-API-001 (semver, can_serve), R-API-002 (noun.verb snake_case tags), R-API-004 (expected_rev, idempotency_key) and R-ARCH-006 (edit vs action classes); all match" }
+verified = { hash = "b3:27abfc2990f7d24c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: handshake example bumped to 0.4 (R-API-001 minor for an added event) and Events gains events.dropped {count} (per-connection server drop, answers never dropped, re-read with state.get); protocol.snap diff is one added oneOf entry plus title 0.4, examples.snap adds the notice line and 0.4 versions" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -80,8 +80,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":3},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":3},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":4},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":4},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -236,6 +236,13 @@ After `welcome`, the server pushes every event to every client.
   to `rev`, a gap shows that an event was missed.
 - `output.state_changed {output_id, state}` reports runtime state, which is not part of
   the collection, so it carries no `rev`.
+- `events.dropped {count}` says that `count` of this connection's events were dropped
+  because the client read too slowly. A WebSocket server keeps a bounded event buffer
+  per connection; when it overflows, it drops the queued events and sends this one
+  notice instead, adding later drops to it until it is sent
+  ([jstream-server › Design](../jstream-server/README.md#design)). Answers are never
+  dropped. The client re-reads what it shows with `state.get`, which carries `rev`.
+  Added in 0.4.
 
 ### Errors
 

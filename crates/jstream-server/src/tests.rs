@@ -456,7 +456,7 @@ fn malformed_messages_get_malformed_errors() {
     }
     // The wire form from the protocol README: the response and the event carry the
     // client's own request ID.
-    let hello = r#"{"type":"hello","protocol":{"major":0,"minor":3},"client_name":"raw"}"#;
+    let hello = r#"{"type":"hello","protocol":{"major":0,"minor":4},"client_name":"raw"}"#;
     assert!(matches!(
         exchange(&harness, &mut socket, hello),
         ServerMessage::Welcome(_)
@@ -583,5 +583,172 @@ fn binding_refuses_an_extra_host_without_a_port() {
             "bound on {} with a portless extra host",
             server.local_addr()
         ),
+    }
+}
+
+/// An event numbered `n`, so a test can tell which ones arrived, about 1 KB long so a
+/// few thousand fill a socket's buffers.
+fn numbered(n: usize) -> Event {
+    Event::OutputStateChanged {
+        output_id: OutputId::new(format!("{n}-{}", "x".repeat(1000))),
+        state: OutputState::Active,
+    }
+}
+
+/// #44 "Slow clients": a client that stops reading gets its queued events dropped and
+/// one `events.dropped` notice counting them, while the engine and every other client
+/// carry on.
+#[test]
+fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
+    // About 10 MB: far more than the slow socket's kernel buffers hold, so its outbox
+    // must overflow.
+    const SENT: usize = 10_000;
+    let engine = MockEngine::new();
+    let harness = start(&engine);
+
+    // A raw client with a small receive buffer, so the server's sends block early.
+    let mut slow = harness.run(async {
+        let socket = match tokio::net::TcpSocket::new_v4() {
+            Ok(socket) => socket,
+            Err(error) => panic!("socket: {error}"),
+        };
+        if let Err(error) = socket.set_recv_buffer_size(4096) {
+            panic!("receive buffer: {error}");
+        }
+        let addr = match harness.authority.parse() {
+            Ok(addr) => addr,
+            Err(error) => panic!("address: {error}"),
+        };
+        let stream = match socket.connect(addr).await {
+            Ok(stream) => stream,
+            Err(error) => panic!("connect: {error}"),
+        };
+        let mut request = match harness.url.as_str().into_client_request() {
+            Ok(request) => request,
+            Err(error) => panic!("request: {error}"),
+        };
+        for (name, value) in [
+            (header::ORIGIN, harness.own_origin()),
+            (header::AUTHORIZATION, format!("Bearer {TOKEN}")),
+        ] {
+            match HeaderValue::from_str(&value) {
+                Ok(value) => request.headers_mut().insert(name, value),
+                Err(error) => panic!("header: {error}"),
+            };
+        }
+        match tokio_tungstenite::client_async(request, stream).await {
+            Ok((socket, _)) => socket,
+            Err(error) => panic!("upgrade: {error}"),
+        }
+    });
+    let hello =
+        match serde_json::to_string(&jstream_control::protocol::ClientMessage::Hello(hello())) {
+            Ok(text) => text,
+            Err(error) => panic!("hello: {error}"),
+        };
+    assert!(matches!(
+        harness.run(exchange_on(&mut slow, &hello)),
+        ServerMessage::Welcome(_)
+    ));
+
+    // The slow client now reads nothing while the engine emits.
+    let (control, _) = harness.session();
+    let mut events = control.events();
+    // The other client reads as they come and gets every event, in order. (It reads
+    // between rounds smaller than the buffer: a burst of the whole lot at once would
+    // overflow a client that reads, too, since the server queues faster than it reads.)
+    harness.run(async {
+        for round in 0..SENT / 500 {
+            for n in round * 500..(round + 1) * 500 {
+                engine.emit(numbered(n));
+            }
+            for n in round * 500..(round + 1) * 500 {
+                assert_eq!(events.next().await, Some(numbered(n)));
+            }
+        }
+    });
+    // And its calls are answered.
+    let response = ok(harness.run(control.call(create_scene("main"))));
+    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+    assert!(matches!(
+        next_event(&harness, &mut events),
+        Some(Event::StateChanged { rev: Rev(1), .. })
+    ));
+    // Time for the slow connection to drain the engine's queue into its outbox, which is
+    // what overflows; reading too early would only make the drop smaller, never hide it
+    // from the count below.
+    harness.run(async { tokio::time::sleep(Duration::from_millis(500)).await });
+
+    // Every event is either delivered, in order, or counted by a notice.
+    let (delivered, dropped, notices) = harness.run(async {
+        let (mut delivered, mut dropped, mut notices) = (0u64, 0u64, 0u64);
+        let mut last: Option<usize> = None;
+        while delivered + dropped < SENT as u64 + 1 {
+            let text = match slow.next().await {
+                Some(Ok(Message::Text(text))) => text,
+                Some(Ok(_)) => continue,
+                other => panic!("connection ended: {other:?}"),
+            };
+            match serde_json::from_str::<ServerMessage>(text.as_str()) {
+                Ok(ServerMessage::Event(message)) => match message.event {
+                    Event::EventsDropped { count } => {
+                        assert!(count > 0);
+                        dropped += count;
+                        notices += 1;
+                    }
+                    Event::OutputStateChanged { output_id, .. } => {
+                        let digits = output_id.as_str().split('-').next().unwrap_or_default();
+                        let n = match digits.parse::<usize>() {
+                            Ok(n) => n,
+                            Err(error) => panic!("event {output_id:?}: {error}"),
+                        };
+                        assert!(last.is_none_or(|last| n > last), "out of order");
+                        last = Some(n);
+                        delivered += 1;
+                    }
+                    Event::StateChanged { rev, .. } => {
+                        assert_eq!(rev, Rev(1));
+                        delivered += 1;
+                    }
+                    other => panic!("unexpected event {other:?}"),
+                },
+                other => panic!("unexpected message {other:?}"),
+            }
+        }
+        (delivered, dropped, notices)
+    });
+    assert!(dropped > 0, "the slow client's outbox never overflowed");
+    assert!(notices >= 1);
+    assert_eq!(delivered + dropped, SENT as u64 + 1);
+
+    // Once it reads again, the slow client is served like any other.
+    let query =
+        r#"{"type":"request","id":"q1","call":{"kind":"query","query":{"type":"scene.list"}}}"#;
+    match harness.run(exchange_on(&mut slow, query)) {
+        ServerMessage::Response(response) => assert_eq!(response.id, RequestId::new("q1")),
+        other => panic!("unexpected reply {other:?}"),
+    }
+}
+
+/// Sends a text frame and reads the next server message, on any WebSocket client.
+async fn exchange_on<S>(
+    socket: &mut tokio_tungstenite::WebSocketStream<S>,
+    text: &str,
+) -> ServerMessage
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    if let Err(error) = socket.send(Message::Text(text.into())).await {
+        panic!("send: {error}");
+    }
+    loop {
+        match socket.next().await {
+            Some(Ok(Message::Text(reply))) => match serde_json::from_str(reply.as_str()) {
+                Ok(message) => return message,
+                Err(error) => panic!("unreadable reply {reply}: {error}"),
+            },
+            Some(Ok(_)) => continue,
+            other => panic!("no reply: {other:?}"),
+        }
     }
 }

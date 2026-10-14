@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:70368e789abdd873", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0037's transition-preset settings, plugin kinds and opaque state type, and #94's override and hotkey rules, are additive or behavioural refinements of unbuilt features; R-API-001..004 hold" }
+verified = { hash = "b3:49a84db52f8c97a9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-API-001..004 against ARCH#protocol's Slow clients edit: events.dropped is an added event, so the protocol bumped minor 0.3 -> 0.4 per R-API-001; the name is noun.verb per R-API-002 (names_are_valid passes); no write path changed for R-API-004" }
 -->
 
 <a id="R-API-001"></a>

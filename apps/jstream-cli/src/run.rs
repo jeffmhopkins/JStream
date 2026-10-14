@@ -407,6 +407,9 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
         Event::OutputStateChanged { output_id, state } => {
             writeln!(out, "output.state_changed {output_id} {}", wire_name(state))?;
         }
+        Event::EventsDropped { count } => {
+            writeln!(out, "events.dropped {count}")?;
+        }
         other => line(out, other)?,
     }
     Ok(true)
