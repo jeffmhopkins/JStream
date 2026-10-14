@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:5dca687e3f60c542", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Adds wgpu (pinned, re-exported) to the dependency list, VideoSurface::Gpu, the GPU interop bullet (GpuInterop/GpuContext/AdapterId/GpuFrame/FrameSync), Backends.gpu, FakeGpuInterop; Not-yet now names only the platform implementation; checked against src/{gpu,surface,backends,fake,lib}.rs" }
+verified = { hash = "b3:a51cd29664cb9cf8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Not-yet now says the Windows GpuInterop opens the device and encode targets but no platform delivers or consumes GPU frames yet; rest unchanged and holds against src/" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -89,14 +89,16 @@ Contents:
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 
-**Not yet:** a platform implementation of `GpuInterop`, webcam capture (an MJPEG `Codec` variant and a
+**Not yet:** a platform that delivers or consumes GPU frames (the Windows
+`GpuInterop` opens the device and encode targets; its capture and encoders don't use them
+yet), webcam capture (an MJPEG `Codec` variant and a
 camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:e760f7f5bf5b32e0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1 on #60: the Equality bullet now matches GpuFrame::eq in gpu.rs (texture identity, hold by ptr::addr_eq, full VideoFrameInfo; FrameSync has no PartialEq, only Debug); rest of the section re-read against gpu.rs and unchanged" }
+verified = { hash = "b3:9e73d4ba4abf2f46", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "FrameSync::stage: each call is one use (encode targets restaged every tick) and the submit ends with a PRESENT (D3D12 COMMON) transition, as S1 did and the Windows impl relies on; trait docs dropped the 'already staged' error to match" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
@@ -143,7 +145,10 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
   submit reads (a capture frame) or writes (an encode target). The platform stages a wait
   for the value that makes the frame ready, and a signal for the value that releases it
   (S1's `stage_fences`). It is safe to call; the `unsafe` hal access is inside the
-  platform crate. A frame that is never staged is never waited on.
+  platform crate. A frame that is never staged is never waited on. Each call is one use,
+  so an encode target written every tick is staged every tick. The submit ends by
+  transitioning the texture to `wgpu::TextureUses::PRESENT`, the D3D12 `COMMON` state
+  the platform's other APIs expect, as S1 did.
 - **Encoders and the virtual camera** accept `VideoSurface::Gpu` from the same platform.
   They wait on the D3D11 side for the release value before reading (ARCH step 5). A
   `GpuFrame` from another platform, or from another `GpuContext`, is `Unsupported`.

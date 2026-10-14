@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:92b71bfcc31fde1f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main (with #62's one-ProcessOutput-per-event and stream-change retype): this PR's change is the H.264 bullet tying the D3D11 path to the Windows GpuInterop implementation (review B2); upstream jstream-platform#purpose gained the GPU-frame types; Not-yet still holds" }
+verified = { hash = "b3:d5dee049eefe09f0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Adds WindowsGpu: DX12 device on the display's adapter with NV12, D3D11 device and shared fence beside it, NV12 encode targets shared and imported via hal in PRESENT, fence values from one counter, raw objects before the Device clone; Not-yet names the D3D11 side; Tests paragraph names the GPU test; checked against gpu/{mod,d3d}.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -111,19 +111,40 @@ The code is ported from spikes S1 to S3. This first cut has:
       size is then read again.
   - **Not yet:** video decoders, which report `Unsupported` until then.
 
-**Not yet:** Windows.Graphics.Capture, Media Foundation video decoders, the GPU interop
-path ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)), the
+- **`WindowsGpu`** (`GpuInterop`, [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)
+  steps 1, 2 and 5, ported from spike S1):
+  - **`open_device`** opens the DX12 wgpu device on the media adapter. That is the
+    hardware adapter that drives the primary display, else the first hardware adapter
+    with NV12 textures. It also creates a multithread-protected D3D11 device on the same
+    adapter, and a fence shared between D3D11 and D3D12. The `AdapterId` carries the
+    adapter's LUID and PCI vendor ID.
+  - **`encode_target`** allocates an NV12 texture with a shared NT handle on the D3D11
+    side, opens it on D3D12, and wraps it as a `wgpu::Texture` through wgpu-hal (in the
+    `COMMON` state, which wgpu calls `PRESENT`).
+  - **Fence values:** each `FrameSync::stage` waits for the value that last released
+    the texture and signals the next value of one counter per device, so values only
+    increase.
+  - **Driver lifetime:** the raw D3D11 and D3D12 objects live in platform state that
+    also holds a `wgpu::Device` clone, declared last, so `d3d12.dll` stays loaded until
+    they are released.
+  - **Not yet:** the D3D11 side. Capture and the encoders don't take GPU frames yet; see
+    [Open questions](#open-questions).
+
+**Not yet:** Windows.Graphics.Capture, Media Foundation video decoders, the D3D11 side of
+the GPU path (capture into shared textures, encoders taking `VideoSurface::Gpu`), the
 virtual-camera sink, and a `Backends` constructor, which needs all of them.
 
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
 packet flags, positions across a device move), the AAC helpers (configuration check,
 PCM conversion, packet timing and padding) and the H.264 helpers (configuration check,
 NV12 packing, `pts` mapping) run on every platform, and the QPC clock test
-runs on Windows. Tests against real devices and the OS encoder are platform tests: behind
-the `hw-tests` feature and `#[ignore]`d, because CI machines may have no audio devices,
-no Media Foundation or no GPU encoder ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). Run
-them on a Windows machine with a microphone, speakers and a GPU with a hardware H.264
-encoder (the hardware encode test needs one):
+runs on Windows. Tests against real devices, the OS encoder and the GPU are platform
+tests: behind the `hw-tests` feature and `#[ignore]`d, because CI machines may have no
+audio devices, no Media Foundation and no GPU
+([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
+target, stages it and checks that the shared fence passes the staged value. Run them on
+a Windows machine with a microphone, speakers and a DX12 GPU with a hardware H.264
+encoder:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 
 <a id="open-questions"></a>
@@ -131,6 +152,13 @@ encoder (the hardware encode test needs one):
 <!-- @section
 -->
 
+- **How capture and the encoders reach the GPU context.** `Capture::start` and
+  `Codecs::video_encoder` take no `GpuContext`, but WGC capture into shared textures and
+  the encoders' D3D11 input both need the context's D3D11 device. One option is to keep
+  the trait shapes: the Windows backends share the context the engine opened, through
+  `WindowsGpu`. The other is to change them, so that `start` and `video_encoder` take
+  `Option<&GpuContext>` (or `VideoEncoderConfig` names it). This is a `jstream-platform`
+  API decision, so it is left for review before the D3D11 side is built.
 - **Render times.** `AudioRenderBuffer::time` (when the first frame will play) is always
   `None` for now. `IAudioClock` can give it once the engine needs output sync, for
   example for monitoring with delay compensation.

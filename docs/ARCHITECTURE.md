@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ed6cf2d4550d0b8a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main: jstream-platform (L1) now depends on wgpu, matching its row (GpuInterop uses wgpu types); jstream-platform-windows unchanged by this PR; no new internal edges; lint-deps ok; table text unchanged" }
+verified = { hash = "b3:af3c2b591b774a70", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main: jstream-platform-windows (L2, unsafe yes) gains the DX12 GpuInterop, matching its row's 'D3D11<->D3D12 interop'; it now also depends on wgpu (dx12 feature, the workspace pin) next to jstream-platform (L1); no new internal edges; table text unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -328,7 +328,7 @@ verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:b517b475e75ab86b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#52 N2: S1 result now says 60 pipeline ticks/s on a 29 Hz display with ~30 new WGC frames/s (latest frame repeated), not a 60 Hz capture result; rest unchanged" }
+verified = { hash = "b3:4c7481243b772eab", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Section now covers jstream-platform-windows/src/gpu: open_device on the adapter driving the display, shared NT-handle textures opened on D3D12 and imported via texture_from_raw/create_texture_from_hal (step 2), shared D3D11/D3D12 fence, raw objects released before the wgpu device; steps 1 (capture copy) and 5 (encoder D3D11 input) not yet built, which the section doesn't claim; text unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
