@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:38d201ed0d7e44f0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-media row and this Purpose are unchanged and still match the crate" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
+verified = { hash = "b3:86b370f74192d572", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Restored the ADR-0031 dependency a merge dropped; ADR-0031 restates ADR-0003's media stack, and this Purpose (layer-0 media value types, no I/O, GPU, platform code or unsafe) still matches it and the crate" }
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,
