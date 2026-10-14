@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:f7a2ee252e5cad9e", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Geometry bullet: types are not messages, PROTOCOL_VERSION is 0.5 from video.snapshot, and the geometry wire surface is a later minor. Queries still list video.snapshot. version.rs minor is 5. Numbers, events.dropped and the module list still match lib.rs and geometry.rs." }
+verified = { hash = "b3:3cdd20a50b304db5", by = "agent:grok@stats-tick", note = "Re-read the module list against lib.rs and version.rs. PROTOCOL_VERSION is 0.6 because stats.tick is that minor; video.snapshot stays the 0.5 addition. Events list stats.tick. Geometry types are still not messages." }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -38,7 +38,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `output.status` and `video.snapshot`, with `QueryResult` and the `SceneSummary`,
   `SceneInfo`, `SourceInfo` and `ItemInfo` shapes the collection reads report.
   `video.snapshot` returns the program mix as a PNG.
-- **Events** (`event.rs`): `state.changed`, `output.state_changed` and `events.dropped`.
+- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `events.dropped` and
+  `stats.tick`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, and `WireError`, its wire form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs, `Rev`, and
@@ -53,8 +54,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
   transform. A negative scale is not refused: `from_legacy` returns the drawn outline
   and flags the reflection, which geometry cannot store. These types are not
-  messages. `PROTOCOL_VERSION` is 0.5 because of `video.snapshot`; the geometry wire
-  surface ships as a later minor. `ItemTransform`'s schema description names
+  messages. `PROTOCOL_VERSION` is 0.6 because of `stats.tick`; `video.snapshot` is
+  the 0.5 addition, and the geometry wire surface ships as a later minor. `ItemTransform`'s schema description names
   `ItemGeometry` as the replacement (`protocol.snap` and the MCP `tools.snap`).
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
@@ -72,7 +73,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:ebbd30f3719c0ffb", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Item geometry subsection: PROTOCOL_VERSION is 0.5 because video.snapshot landed; the geometry wire surface is a later minor, and the ADR is not edited. Handshake example is minor 5. video.snapshot stays a base64 PNG in the JSON result. is_neutral_3d, project, content and from_legacy still match geometry.rs." }
+verified = { hash = "b3:4d80d2daa21b1ac9", by = "agent:grok@stats-tick", note = "Re-read the handshake example, the stats.tick paragraph and the geometry subsection against version.rs and event.rs. Hello and welcome are minor 6. The tick is a running total emitted by jstream-stats about once a second, added in 0.6, and render_ticks stays 0 in this cut. Schema snaps title the protocol 0.6. item.add still takes ItemTransform." }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -92,8 +93,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":5},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":5},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":6},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":6},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -261,6 +262,26 @@ After `welcome`, the server pushes every event to every client.
   ([jstream-server › Design](../jstream-server/README.md#design)). Answers are never
   dropped. The client re-reads what it shows with `state.get`, which carries `rev`.
   Added in 0.4.
+- `stats.tick {seq, drops}` is one sample of the pipeline's drop counters
+  ([R-RT-004](../../docs/RULES.md#R-RT-004)). `drops` is a running total since the
+  engine started, not a delta, so a client that misses a tick subtracts the last one
+  it did see. The fields are `capture_frames` (frames a capture mailbox replaced
+  before they were read), `audio_frames` (input-ring overruns, audio that arrived
+  after the mixer had passed it, and frames the mixer skipped because it fell behind
+  the clock), `render_ticks` (composites skipped because the previous one had not
+  finished), `encode_frames` and `encode_blocks` (video frames and audio blocks
+  dropped before an encoder accepted them) and `output_packets` (encoded packets
+  dropped handing a stream to an output). Silence inserted to cover a gap is not a
+  drop. `seq` starts at 1 and increases by one each sample. While an output is
+  running, the pipeline's `jstream-stats` thread emits a tick about once a second;
+  an idle engine emits none. This cut's render loop does not skip a late tick, so
+  `render_ticks` stays 0. Until [open question 7](#open-questions) every client
+  receives it. Added in 0.6. A late plugin block is an audio drop in
+  `audio_frames` once the mixer counts it
+  ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
+  built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
+  those meters exist, as later optional fields. Audience figures are `youtube.stats`
+  ([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)).
 
 ### Errors
 
@@ -342,10 +363,11 @@ function in this crate so the compositor and the UI share one implementation.
   reflected quad.
 
 These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.5 because
-`video.snapshot` is that minor. ADR-0022 names the geometry additions as 0.4, which
-already shipped with `events.dropped`; the geometry wire surface ships as a later
-minor, under [R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited
+`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.6 because
+`stats.tick` is that minor. `video.snapshot` remains the 0.5 addition. ADR-0022
+names the geometry additions as 0.4, which already shipped with `events.dropped`;
+the geometry wire surface ships as a later minor, under
+[R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited
 ([R-DOC-009](../../docs/RULES.md#R-DOC-009)). The geometry change in the schema
 snapshots ([R-TEST-002](../../docs/RULES.md#R-TEST-002)) is `ItemTransform`'s
 description, in `protocol.snap` and in the MCP tool list (`tools.snap`): it no longer
@@ -398,8 +420,10 @@ described above.
    edit plus a separate "run transition" action?
 6. **Idempotency.** How long the engine remembers keys (count or time), and whether a
    reused key with a different batch is an error (`idempotency_key_reused`).
-7. **Event subscriptions.** Every client gets every event in this cut. High-rate events
-   (`stats.tick`, meters) will need opt-in subscriptions.
+7. **Event subscriptions.** Every client gets every event in this cut, including
+   `stats.tick` (0.6). High-rate events (`stats.tick`, meters) will need opt-in
+   subscriptions. Until then every client receives a tick about once a second while
+   the pipeline runs.
 8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
    fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
    a new value as a major change?

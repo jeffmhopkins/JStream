@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:8c591e38b30c790c", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read R-RT-001 through R-RT-006 against the threading edit. The rules still bind the audio callback, render and encode threads. The cancel path and the publish watcher do not move file or network I/O onto those threads. Pipeline threads still do not catch_unwind." }
+verified = { hash = "b3:f3beda5e3400d79f", by = "agent:grok@stats-tick", note = "Re-read R-RT-001 through R-RT-006 against the threading edit. The rules still bind the audio, render and encode threads. jstream-stats is not one of those threads. R-RT-004 still names stats.tick and scenarios::overload_drops_and_counts. No rule text changed." }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:aaa5b9c7a7317fcd", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read R-API-001 through R-API-004 against the protocol section. video.snapshot is an additive query, a minor bump to 0.5. No rule text changed. Persistence is untouched." }
+verified = { hash = "b3:755a5ebd3c2cb244", by = "agent:grok@stats-tick", note = "Re-read R-API-001 through R-API-004 against the protocol section. stats.tick is an additive event, a minor bump to 0.6, named noun.verb. expected_rev is unchanged. No collection migration. No rule text changed." }
 -->
 
 <a id="R-API-001"></a>

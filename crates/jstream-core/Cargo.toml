@@ -36,10 +36,10 @@ tracing.workspace = true
 [dev-dependencies]
 # The mock engine, for a differential test: the same calls must get the same answers.
 jstream-control = { workspace = true, features = ["mock"] }
+# `tests/scenarios.rs` and the output pipeline test: overload drops and fakes.
+jstream-platform = { workspace = true, features = ["fake"] }
 # `tests/mcp.rs`: an MCP agent driving the real engine through `InProcessControl`.
 jstream-mcp.workspace = true
 # The shared parity fixture that `jstream-graph` and the mock are held to.
 jstream-protocol = { workspace = true, features = ["fixtures"] }
-# Deterministic capture, audio and codecs for the output pipeline test.
-jstream-platform = { workspace = true, features = ["fake"] }
 serde_json.workspace = true

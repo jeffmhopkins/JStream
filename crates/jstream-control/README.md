@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:de095e2b1338a556", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the event-stream bullet. Streams still end when the session or the engine is dropped, and a dropped stream is simply gone. Protocol checks, queries, emit and idempotency are unchanged." }
+verified = { hash = "b3:41bde4792835f4eb", by = "agent:grok@stats-tick", note = "Re-read the event bullets and open question 1 against mock.rs. MockEngine::emit still injects events the mock does not produce, including stats.tick. That event is protocol 0.6 and is emitted about once a second while a pipeline runs. Streams still end with the session." }
 -->
 
 ### The trait
@@ -180,10 +180,11 @@ server on a loopback port and drives it with this client.
 
 ### Open questions
 
-1. **Backpressure.** The client's own event buffers are unbounded. A slow subscriber of
-   high-rate events (`stats.tick`, meters) would grow without limit. Bounded buffers that
+1. **Backpressure.** The client's own event buffers are unbounded. `stats.tick` (protocol
+   0.6) is emitted about once a second while the pipeline runs, and a slow subscriber of
+   it, or of meters, would grow without limit. Bounded buffers that
    drop the oldest events (a gap in `rev` already shows a missed `state.changed`) are
-   likely once such events exist
+   the likely client-side answer
    ([protocol open question 7](../jstream-protocol/README.md#open-questions)). The
    server side is built: `jstream-server` gives each connection a bounded buffer and, on
    overflow, drops the queued events and sends one `events.dropped` notice

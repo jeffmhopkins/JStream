@@ -12,7 +12,7 @@ use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use jstream_audio::{Mixer, MixerConfig};
+use jstream_audio::{BusControl, InputControl, Mixer, MixerConfig};
 use jstream_encode::{
     AudioInput, AudioSession, PushError, SessionOptions, SessionStats, SubscriberStats,
     Subscription, VideoInput, VideoSession,
@@ -31,6 +31,11 @@ use jstream_platform::{
 use jstream_protocol::OutputId;
 use jstream_render::{Color, Compositor, Crop, Item, OpenOptions, Placement, RenderError, Scene};
 
+use crate::drops::{
+    AudioBusDrops, AudioEncodeDrops, AudioInputDrops, DropGuard, DropSnapshot, FnDropSource,
+    VideoEncodeDrops, capture_drops, output_packet_drops,
+};
+use crate::engine::Engine;
 use crate::lock;
 use crate::runtime::LivePublish;
 
@@ -154,11 +159,19 @@ pub(crate) struct Running {
     render: Option<JoinHandle<()>>,
     mixer: Option<JoinHandle<()>>,
     output: Option<JoinHandle<()>>,
-    video: VideoSession,
-    audio: AudioSession,
+    video: Arc<VideoSession>,
+    audio: Arc<AudioSession>,
     /// Kept alive so the platform keeps calling the mixer producers.
     _streams: Vec<Box<dyn AudioStream>>,
     stats: Arc<PipelineStats>,
+    capture_drops: DropSnapshot,
+    mic: InputControl,
+    desktop: InputControl,
+    bus: BusControl,
+    /// Packets the muxer rejected. Distinct from the encode subscriber queues.
+    mux_drops: Arc<AtomicU64>,
+    drop_guard: Option<DropGuard>,
+    ticker: Option<JoinHandle<()>>,
 }
 
 impl Running {
@@ -179,6 +192,27 @@ impl Running {
             readbacks: self.stats.readbacks.load(Ordering::Relaxed),
         }
     }
+
+    /// Registers this run's stages and starts the once-a-second sampler.
+    ///
+    /// Dropping the run removes the sources, which latches their totals, and joins
+    /// the sampler.
+    pub(crate) fn arm_stats(&mut self, engine: &Engine) {
+        let mux = Arc::clone(&self.mux_drops);
+        let ids = vec![
+            engine.add_drop_source(self.capture_drops.clone()),
+            engine.add_drop_source(VideoEncodeDrops::new(Arc::clone(&self.video))),
+            engine.add_drop_source(AudioEncodeDrops::new(Arc::clone(&self.audio))),
+            engine.add_drop_source(AudioInputDrops::new(self.mic.clone())),
+            engine.add_drop_source(AudioInputDrops::new(self.desktop.clone())),
+            engine.add_drop_source(AudioBusDrops::new(self.bus.clone())),
+            engine.add_drop_source(FnDropSource::new(move || {
+                output_packet_drops(mux.load(Ordering::Relaxed))
+            })),
+        ];
+        self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
+        self.ticker = engine.spawn_stats_ticker(Arc::clone(&self.stop));
+    }
 }
 
 impl Drop for Running {
@@ -195,6 +229,9 @@ impl Drop for Running {
             tracing::info!(error = %err, "audio session finish failed");
         }
         join("output", self.output.take());
+        join("stats", self.ticker.take());
+        // After the threads stop, so the latch sees their final counters.
+        self.drop_guard.take();
     }
 }
 
@@ -240,10 +277,18 @@ pub(crate) fn launch(
 ) -> Result<Running, String> {
     let (size, capture) = open_capture(&parts)?;
     let format = engine_format()?;
-    let (mixer, streams) = open_audio(&parts, format)?;
+    let OpenedAudio {
+        mixer,
+        streams,
+        mic,
+        desktop,
+    } = open_audio(&parts, format)?;
+    let bus = mixer.bus();
     let period = frame_period(parts.clock.timebase())?;
-    let video = open_video(&parts, size)?;
-    let audio = open_audio_encoder(&parts, format)?;
+    let video = Arc::new(open_video(&parts, size)?);
+    let audio = Arc::new(open_audio_encoder(&parts, format)?);
+    let capture_drops = DropSnapshot::new();
+    let mux_drops = Arc::new(AtomicU64::new(0));
     // The mixer timestamps its first block `latency` before the clock, so the FLV
     // origin sits that far back. Later blocks and frames stay at or after it.
     let origin = stream_origin(parts.clock.as_ref(), &mixer)?;
@@ -257,6 +302,7 @@ pub(crate) fn launch(
         let clock = Arc::clone(&parts.clock);
         let stop = Arc::clone(&stop);
         let readbacks = Arc::clone(&stats);
+        let capture_cell = capture_drops.clone();
         move || {
             render_loop(RenderJob {
                 capture,
@@ -267,6 +313,7 @@ pub(crate) fn launch(
                 stop,
                 ready: ready_tx,
                 stats: readbacks,
+                capture_drops: capture_cell,
             });
         }
     })?;
@@ -286,7 +333,8 @@ pub(crate) fn launch(
         let video_sub = video.subscribe();
         let audio_sub = audio.subscribe();
         let stats = Arc::clone(&stats);
-        move || output_loop(publish, tagger, video_sub, audio_sub, stats, fail_tx)
+        let mux = Arc::clone(&mux_drops);
+        move || output_loop(publish, tagger, video_sub, audio_sub, stats, mux, fail_tx)
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -306,6 +354,13 @@ pub(crate) fn launch(
         audio,
         _streams: streams,
         stats,
+        capture_drops,
+        mic,
+        desktop,
+        bus,
+        mux_drops,
+        drop_guard: None,
+        ticker: None,
     };
     match ready_rx.recv_timeout(OPEN_TIMEOUT) {
         Ok(Ok(())) => Ok(running),
@@ -370,15 +425,19 @@ fn open_capture(parts: &Parts) -> Result<(FrameSize, Box<dyn CaptureStream>), St
     Ok((size, stream))
 }
 
-fn open_audio(
-    parts: &Parts,
-    format: AudioFormat,
-) -> Result<(Mixer, Vec<Box<dyn AudioStream>>), String> {
+struct OpenedAudio {
+    mixer: Mixer,
+    streams: Vec<Box<dyn AudioStream>>,
+    mic: InputControl,
+    desktop: InputControl,
+}
+
+fn open_audio(parts: &Parts, format: AudioFormat) -> Result<OpenedAudio, String> {
     let mut mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
-    let (mic, _) = mixer
+    let (mic, mic_control) = mixer
         .add_input(format)
         .map_err(|err| format!("microphone input: {err}"))?;
-    let (desktop, _) = mixer
+    let (desktop, desktop_control) = mixer
         .add_input(format)
         .map_err(|err| format!("loopback input: {err}"))?;
     let mic = parts
@@ -397,7 +456,12 @@ fn open_audio(
             format
         ));
     }
-    Ok((mixer, vec![mic, desktop]))
+    Ok(OpenedAudio {
+        mixer,
+        streams: vec![mic, desktop],
+        mic: mic_control,
+        desktop: desktop_control,
+    })
 }
 
 fn open_video(parts: &Parts, size: FrameSize) -> Result<VideoSession, String> {
@@ -474,6 +538,7 @@ struct RenderJob {
     stop: Arc<AtomicBool>,
     ready: mpsc::Sender<Result<(), String>>,
     stats: Arc<PipelineStats>,
+    capture_drops: DropSnapshot,
 }
 
 fn render_loop(job: RenderJob) {
@@ -486,6 +551,7 @@ fn render_loop(job: RenderJob) {
         stop,
         ready,
         stats,
+        capture_drops: capture_cell,
     } = job;
     let mut compositor = match Compositor::open(OpenOptions::headless()) {
         Ok(compositor) => compositor,
@@ -522,6 +588,10 @@ fn render_loop(job: RenderJob) {
                 break;
             }
         }
+        // Mailbox skips are the capture stage's own counter. This loop does not
+        // skip a tick when it runs late: it draws the late one and keeps the
+        // period, so `render_ticks` stays 0.
+        capture_cell.publish(capture_drops(capture.stats()));
         let drawn = match last.as_deref() {
             Some(rgba) => draw_image(&mut compositor, size, rgba),
             None => draw_black(&mut compositor, size),
@@ -696,6 +766,7 @@ fn output_loop(
     video: Subscription,
     audio: Subscription,
     stats: Arc<PipelineStats>,
+    mux_drops: Arc<AtomicU64>,
     fail_tx: Sender<String>,
 ) {
     let started = match tagger.start() {
@@ -714,7 +785,7 @@ fn output_loop(
         if !video_done {
             match video.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
-                    if let Err(err) = forward(&mut publish, &mut tagger, &packet) {
+                    if let Err(err) = forward(&mut publish, &mut tagger, &packet, &mux_drops) {
                         tracing::error!(error = %err, "publish failed");
                         failed = Some(err);
                     }
@@ -729,7 +800,7 @@ fn output_loop(
         if failed.is_none() && !audio_done {
             match audio.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
-                    if let Err(err) = forward(&mut publish, &mut tagger, &packet) {
+                    if let Err(err) = forward(&mut publish, &mut tagger, &packet, &mux_drops) {
                         tracing::error!(error = %err, "publish failed");
                         failed = Some(err);
                     }
@@ -764,10 +835,12 @@ fn forward(
     publish: &mut Box<dyn LivePublish>,
     tagger: &mut FlvTagger,
     packet: &jstream_media::Packet,
+    mux_drops: &AtomicU64,
 ) -> Result<(), String> {
     match tagger.push(packet) {
         Ok(tags) => publish_tags(publish, &tags),
         Err(err) => {
+            mux_drops.fetch_add(1, Ordering::Relaxed);
             tracing::warn!(error = %err, "dropping a packet the muxer rejected");
             Ok(())
         }

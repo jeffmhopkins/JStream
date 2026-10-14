@@ -5,8 +5,8 @@ use crate::args::Connection;
 use crate::block::block_on;
 use crate::exit::{self, CliError};
 use jstream_control::protocol::{
-    Batch, Call, ClientId, Edit, Event, Hello, ItemId, OutputId, OutputState, PROTOCOL_VERSION,
-    Response, Rev, SceneId, SourceId, SourceKind, Welcome,
+    Batch, Call, ClientId, DropCounts, Edit, Event, Hello, ItemId, OutputId, OutputState,
+    PROTOCOL_VERSION, Response, Rev, SceneId, SourceId, SourceKind, Welcome,
 };
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
 use serde_json::{Value, json};
@@ -148,12 +148,12 @@ fn version_and_help_need_no_connection() {
     let version = env!("CARGO_PKG_VERSION");
     assert_eq!(
         run_with(&refuse, &["version"]),
-        ok(&format!("jstream-cli {version}, protocol 0.5\n"))
+        ok(&format!("jstream-cli {version}, protocol 0.6\n"))
     );
     assert_eq!(
         run_with(&refuse, &["--json", "version"]),
         ok(&format!(
-            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":0,\"minor\":5}}}}\n"
+            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":0,\"minor\":6}}}}\n"
         ))
     );
     let help = run_with(&refuse, &["help"]);
@@ -170,11 +170,11 @@ fn hello_prints_the_session() {
     let engine = populated();
     assert_eq!(
         run_on(&engine, &["--mock", "hello"]),
-        ok("connected: protocol 0.5, client mock_2, rev 1\n")
+        ok("connected: protocol 0.6, client mock_2, rev 1\n")
     );
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "hello"]),
-        ok("{\"protocol\":{\"major\":0,\"minor\":5},\"client_id\":\"mock_3\",\"rev\":1}\n")
+        ok("{\"protocol\":{\"major\":0,\"minor\":6},\"client_id\":\"mock_3\",\"rev\":1}\n")
     );
 }
 
@@ -530,6 +530,26 @@ fn events_golden_dropped_notice() {
     let mut out = Vec::new();
     stream_events(events, Some(1), false, &mut out).expect("one event");
     assert_eq!(String::from_utf8_lossy(&out), "events.dropped 1500\n");
+
+    let events = control.events();
+    engine.emit(Event::StatsTick {
+        seq: 2,
+        drops: DropCounts {
+            capture_frames: 1,
+            audio_frames: 0,
+            render_ticks: 0,
+            encode_frames: 4,
+            encode_blocks: 0,
+            output_packets: 3,
+        },
+    });
+    let mut out = Vec::new();
+    stream_events(events, Some(1), false, &mut out).expect("one event");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "stats.tick seq 2 capture_frames 1 audio_frames 0 render_ticks 0 \
+         encode_frames 4 encode_blocks 0 output_packets 3\n"
+    );
 
     let events = control.events();
     engine.emit(Event::EventsDropped { count: 3 });

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:c5a1c764932f5187", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the model and Graph::query against the merged protocol design. Item still stores transform, crop and visible. query returns None for output.status and video.snapshot. No geometry edit was added." }
+verified = { hash = "b3:24d46ada6be6de23", by = "agent:grok@stats-tick", note = "Re-read the model and Graph::query against the protocol design. Item still stores transform, crop and visible. query returns None for output.status and video.snapshot. stats.tick is an event, not a graph read. No geometry edit was added." }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

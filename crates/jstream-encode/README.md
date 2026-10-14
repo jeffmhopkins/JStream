@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:ca779efdb654f4fe", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against the threading edit. A session still owns one encoder on its encode thread. The core pipeline still pushes frames and blocks and subscribes once. Encoder sharing in M1b is unchanged." }
+verified = { hash = "b3:4f63cd6bb207902e", by = "agent:grok@stats-tick", note = "Re-read against the threading edit. A session still owns one encoder on its encode thread. The core pipeline still pushes frames and blocks and subscribes once. The sampler reads SessionStats; this crate still does not emit stats.tick." }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -68,7 +68,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:462c470579934664", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-RT-002 (encode thread never waits on the control plane, no per-frame allocation, no I/O) and R-RT-004 (drops counted in SessionStats, never stalling); wiring into stats.tick is the engine's" }
+verified = { hash = "b3:66fe049d4c1e167e", by = "agent:grok@stats-tick", note = "Edited the Stats paragraph: video input drops map to encode_frames, audio to encode_blocks, subscriber_drops to output_packets; silence_frames is gap-fill, not a drop. Encode sources unchanged. Re-read against R-RT-002 (encode thread never waits) and R-RT-004 (drops counted, never stalling)." }
 -->
 
 ### Threads and pacing
@@ -175,8 +175,11 @@ lives while an output holds its `Arc`; the output that lets go last should `fini
 `SessionStats`: inputs `received`, `dropped_queue_full`, `dropped_encoder_busy`,
 `encoded`, `packets`, `keyframes`, current `subscribers`, `subscriber_drops` and
 `silence_frames`. `SubscriberStats`: `delivered` and `dropped`. All are relaxed atomic
-counters read without stopping the thread; reporting them in `stats.tick`
-([R-RT-004](../../docs/RULES.md#R-RT-004)) is the engine's job once that event exists.
+counters read without stopping the thread. The engine maps a video session's input
+drops to `encode_frames` and an audio session's to `encode_blocks`, and both sessions'
+`subscriber_drops` to `output_packets`, in `stats.tick`
+([R-RT-004](../../docs/RULES.md#R-RT-004)). `silence_frames` is gap-fill, not a drop.
+The pipeline registers the session; this crate does not emit the event.
 
 ### Not yet
 
