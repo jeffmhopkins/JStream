@@ -2,9 +2,14 @@
 //!
 //! WGC delivers 8-bit BGRA. The H.264 encoder's CPU path takes NV12 in BT.709 limited
 //! range (`ColorInfo::default()`), so that is what this produces. The samples are treated
-//! as gamma-encoded R'G'B', as every capture and encode pipeline does. Each chroma sample
-//! is the average of its 2x2 block. NV12 needs even dimensions, so the caller crops an
-//! odd source to the even size below it ([`even_size`]).
+//! as gamma-encoded R'G'B', as every capture and encode pipeline does.
+//!
+//! Chroma is **left-sited**, the H.264 default (`chroma_sample_location_type` 0, which
+//! the encoder leaves unsignalled): each chroma sample sits on its block's left column,
+//! between the block's two rows. So it filters each of the two rows with a `[1 2 1]` tap
+//! centred on that column (the image's edge repeats its first column), and averages the
+//! rows. NV12 needs even dimensions, so the caller crops an odd source to the even size
+//! below it ([`even_size`]).
 //!
 //! Platform-independent, so it is tested on every platform.
 
@@ -86,19 +91,26 @@ pub(crate) fn bgra_to_nv12(
     for y in 0..h / 2 {
         let (top, bottom) = (src_row(2 * y), src_row(2 * y + 1));
         if let Some(dst) = frame.row_mut(1, y) {
-            for ((d, t), b) in dst
-                .chunks_exact_mut(2)
-                .zip(top.chunks_exact(8))
-                .zip(bottom.chunks_exact(8))
-            {
-                // The sums of the 2x2 block: four pixels, so the result is shifted by
-                // two more bits.
-                let sum = |i: usize| {
-                    i32::from(t[i]) + i32::from(t[i + 4]) + i32::from(b[i]) + i32::from(b[i + 4])
+            for (x, d) in dst.chunks_exact_mut(2).enumerate() {
+                // Byte offsets of the pixels left of, on and right of the sample's column
+                // (2x); the left one repeats column 0 at the image's edge. 2x + 1 < w
+                // because w is even.
+                let centre = 8 * x;
+                let left = centre.saturating_sub(4);
+                let right = centre + 4;
+                // The [1 2 1] sums of both rows: weights total 8, so the result is
+                // shifted by three more bits.
+                let sum = |c: usize| {
+                    let row = |r: &[u8]| {
+                        i32::from(r[left + c])
+                            + 2 * i32::from(r[centre + c])
+                            + i32::from(r[right + c])
+                    };
+                    row(top) + row(bottom)
                 };
                 let (sb, sg, sr) = (sum(0), sum(1), sum(2));
-                let u = 128 + ((U_R * sr + U_G * sg + U_B * sb + (1 << 17)) >> 18);
-                let v = 128 + ((V_R * sr + V_G * sg + V_B * sb + (1 << 17)) >> 18);
+                let u = 128 + ((U_R * sr + U_G * sg + U_B * sb + (1 << 18)) >> 19);
+                let v = 128 + ((V_R * sr + V_G * sg + V_B * sb + (1 << 18)) >> 19);
                 d[0] = u.clamp(16, 240) as u8;
                 d[1] = v.clamp(16, 240) as u8;
             }
@@ -165,23 +177,36 @@ mod tests {
     }
 
     #[test]
-    fn chroma_averages_each_2x2_block() {
-        // Left block: two white and two black pixels; right block: all red.
+    fn chroma_is_left_sited() {
+        // White, except column 1, which is red. Left-sited, each chroma sample filters
+        // columns 2x-1, 2x and 2x+1 with [1 2 1] (column -1 repeats column 0), so both
+        // samples see one quarter red: three-quarter white plus a quarter red. A 2x2 box
+        // average would give the left block half red and the right block none.
         let px = |r: u8, g: u8, b: u8| [b, g, r, 255];
-        let mut src = Vec::new();
-        for row in [
-            [px(255, 255, 255), px(0, 0, 0)],
-            [px(0, 0, 0), px(255, 255, 255)],
-        ] {
-            src.extend(row.concat());
-            src.extend([px(255, 0, 0), px(255, 0, 0)].concat());
-        }
+        let row = [
+            px(255, 255, 255),
+            px(255, 0, 0),
+            px(255, 255, 255),
+            px(255, 255, 255),
+        ]
+        .concat();
+        let src = [row.clone(), row].concat();
         let mut f = frame(4, 2);
         bgra_to_nv12(&src, 16, &mut f).expect("convert");
-        assert_eq!(f.row(0, 0).expect("row"), &[235, 16, 63, 63]);
-        assert_eq!(f.row(0, 1).expect("row"), &[16, 235, 63, 63]);
-        // Grey averages to neutral chroma; red keeps its own.
-        assert_eq!(f.row(1, 0).expect("row"), &[128, 128, 102, 240]);
+        assert_eq!(f.row(0, 0).expect("row"), &[235, 63, 235, 235]);
+        // (255, 191.25, 191.25) in BT.709 limited range, rounded as the converter does.
+        assert_eq!(f.row(1, 0).expect("row"), &[122, 156, 122, 156]);
+    }
+
+    #[test]
+    fn chroma_averages_the_two_rows() {
+        // Top row black, bottom row white: every chroma sample is the grey between them,
+        // so neutral.
+        let mut src = solid(4, 1, 0, (0, 0, 0));
+        src.extend(solid(4, 1, 0, (255, 255, 255)));
+        let mut f = frame(4, 2);
+        bgra_to_nv12(&src, 16, &mut f).expect("convert");
+        assert_eq!(f.row(1, 0).expect("row"), &[128, 128, 128, 128]);
     }
 
     #[test]

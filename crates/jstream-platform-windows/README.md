@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:64d8714779d19f29", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added the WgcCapture bullet (targets and DeviceId encoding, own D3D11 device on the display's adapter, BGRA->NV12 BT.709 limited CPU path, odd sizes cropped to even, pool Recreate on size change, lock-free one-pointer mailbox and frames_skipped, SystemRelativeTime used as QPC hns pts, best-effort border/cursor, Closed -> DeviceLost, caught panics, MTA kept alive), dropped WGC from Not yet, extended Tests; rest re-read against main and unchanged" }
+verified = { hash = "b3:596578f54094cdea", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #69 B1: Tests paragraph names the new Windows-run start-race test (destroyed message-only window -> NotFound via not_found_if_gone) and the hw-test calling the real CreateForWindow on a destroyed window; Start bullet unchanged and still true; target_gone doc notes handle reuse keeps the OS error (N1)" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -85,14 +85,17 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Frames:** a free-threaded frame pool of two BGRA buffers. On each `FrameArrived`,
     on a WinRT thread-pool thread, the frame is copied into a staging texture, read back
     and converted to NV12 in BT.709 limited range, which is what the H.264 encoder's CPU
-    path takes. Each chroma sample is the average of its 2x2 block. NV12 needs even
+    path takes. Chroma is left-sited, the H.264 default: each chroma sample filters the
+    two rows of its block with a `[1 2 1]` tap centred on the block's left column. NV12
+    needs even
     dimensions, so an odd width or height loses its last column or row. When the content
     size changes, the pool is recreated at the new size, and the frames after it have
     that size.
   - **Mailbox:** frames go to a single-slot mailbox, one atomic pointer that both sides
     swap, so `latest` never waits ([R-RT-002](../../docs/RULES.md#R-RT-002)). A frame
-    replaced before `latest` took it counts in `frames_skipped`, and its buffer is reused
-    for the next frame. Otherwise each frame is a new allocation, on the capture thread.
+    replaced before `latest` took it counts in `frames_skipped`, and its planes are reused
+    for the next frame of the same size. Otherwise each frame allocates its planes, on
+    the capture thread, and the mailbox boxes every frame it is given.
   - **Times:** `pts` is the frame's `SystemRelativeTime`, which WGC reports as QPC in
     100 ns units. That is `QpcClock`'s time line and unit, so it is used as is. The
     capture test checks that every `pts` is at most a second before `QpcClock::now`, and
@@ -106,7 +109,11 @@ The code is ported from spikes S1 to S3. This first cut has:
     panics too.
   - **Threads:** each capture keeps the process MTA alive (`CoIncrementMTAUsage`), so it
     can be started, read and dropped from threads that never initialised COM.
-  - **Not yet:** the GPU path, capture into shared textures (ARCH steps 1 and 2).
+  - **Start:** a target that goes between the lookup and the start of the capture is
+    `NotFound`, as for a target that was never there.
+  - **Not yet:** the GPU path, capture into shared textures (ARCH steps 1 and 2). The
+    CPU readback is not yet counted in stats or measured against a budget, as ARCH step
+    6 asks.
 
 - **`MfCodecs`** (`Codecs`), Media Foundation codecs
   ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md)): the **AAC encoder** and
@@ -178,13 +185,15 @@ packet flags, positions across a device move), the capture helpers (BGRA to NV12
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding) and the
 H.264 helpers (configuration check, NV12 packing, `pts` mapping) run on every platform,
-and the QPC clock test runs on Windows. Tests against real devices, the OS encoder, the
+and the QPC clock test and the start-race test (a destroyed message-only window maps to
+`NotFound`) run on Windows. Tests against real devices, the OS encoder, the
 GPU and a display are platform tests: behind the `hw-tests` feature and `#[ignore]`d,
 because CI machines may have no audio devices, no Media Foundation, no GPU and no display
 ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
 target, stages it and checks that the shared fence passes the staged value. The capture
-tests list the displays and capture the primary display for a second, checking the
-frames' format and `pts`. Run them on a Windows machine with a microphone, speakers, a
+tests list the displays, capture the primary display for a second, checking the
+frames' format and `pts`, and start a capture of a destroyed window, which must be
+`NotFound`. Run them on a Windows machine with a microphone, speakers, a
 display and a DX12 GPU with a hardware H.264 encoder:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 
