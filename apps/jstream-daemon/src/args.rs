@@ -18,6 +18,10 @@ Options:
   --port <port>        the port to listen on, on 127.0.0.1 (default: 0, any
                        free port; the URL is printed at startup)
   --output <id>        add a stopped placeholder output (repeatable)
+  --log-dir <dir>      where log files and crash reports go (default: `logs`
+                       in the platform data directory); created if missing
+  --log-level <spec>   the log filter, as `target=level` directives and an
+                       optional default level (default: RUST_LOG, else info)
   -V, --version        print the daemon and protocol versions
   -h, --help           print this help
 
@@ -36,6 +40,10 @@ pub struct Options {
     pub port: u16,
     /// `--output`: placeholder outputs, in the order given.
     pub outputs: Vec<OutputId>,
+    /// `--log-dir`. Without it `main` uses `logs` in the platform data directory.
+    pub log_dir: Option<String>,
+    /// `--log-level`, unparsed: `main` parses it, and reads `RUST_LOG` without it.
+    pub log_level: Option<String>,
 }
 
 /// A parsed command line.
@@ -75,6 +83,18 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                 }
             }
             "--output" => options.outputs.push(OutputId::new(value()?.as_str())),
+            "--log-dir" => {
+                let dir = value()?;
+                if options.log_dir.replace(dir.clone()).is_some() {
+                    return Err(format!("`{arg}` given twice"));
+                }
+            }
+            "--log-level" => {
+                let spec = value()?;
+                if options.log_level.replace(spec.clone()).is_some() {
+                    return Err(format!("`{arg}` given twice"));
+                }
+            }
             "--collection" => {
                 return Err(
                     "`--collection` is not supported yet: the engine has no persistence, \
@@ -121,13 +141,18 @@ mod tests {
 
     #[test]
     fn options_are_read_in_any_order() {
-        let options = serve("--output out_1 --port 4455 --token-file /tmp/t --output out_2");
+        let options = serve(
+            "--output out_1 --log-level debug --port 4455 --token-file /tmp/t \
+             --log-dir /tmp/logs --output out_2",
+        );
         assert_eq!(
             options,
             Options {
                 token_file: Some("/tmp/t".to_owned()),
                 port: 4455,
                 outputs: vec![OutputId::new("out_1"), OutputId::new("out_2")],
+                log_dir: Some("/tmp/logs".to_owned()),
+                log_level: Some("debug".to_owned()),
             }
         );
     }
@@ -145,6 +170,13 @@ mod tests {
         assert_eq!(error("--port"), "`--port` needs a value");
         assert_eq!(error("--token-file"), "`--token-file` needs a value");
         assert_eq!(error("--output"), "`--output` needs a value");
+        assert_eq!(error("--log-dir"), "`--log-dir` needs a value");
+        assert_eq!(error("--log-level"), "`--log-level` needs a value");
+        assert_eq!(error("--log-dir a --log-dir b"), "`--log-dir` given twice");
+        assert_eq!(
+            error("--log-level info --log-level warn"),
+            "`--log-level` given twice"
+        );
         assert_eq!(
             error("--port 65536"),
             "`--port` must be a number from 0 to 65535, not `65536`"

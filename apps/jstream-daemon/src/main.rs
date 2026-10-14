@@ -2,14 +2,17 @@
 //! serves it through `jstream-server`'s authenticated WebSocket API on `127.0.0.1`, one
 //! `InProcessControl` session per connection, so `jstream-cli --url …` and
 //! `jstream-cli mcp` can drive it (ADR-0001: the app only wires the engine to its
-//! interfaces). It creates or reuses the user-only control token file (ADR-0006) and
-//! stops gracefully on Ctrl-C. Not yet: the web UI, MCP over HTTP and `--collection`.
+//! interfaces). It creates or reuses the user-only control token file (ADR-0006), logs
+//! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
+//! and stops gracefully on Ctrl-C. Not yet: the web UI, MCP over HTTP and `--collection`.
 //!
 //! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-daemon/README.md#purpose, apps/jstream-daemon/README.md#usage, apps/jstream-daemon/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0006-mcp-full-access.md
 
 #![forbid(unsafe_code)]
 
 mod args;
+mod crash;
+mod logs;
 mod serve;
 mod token;
 
@@ -17,8 +20,9 @@ use anyhow::Context;
 use args::{Invocation, Options};
 use jstream_protocol::PROTOCOL_VERSION;
 use std::io::{Write, stderr, stdout};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::Arc;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -34,7 +38,7 @@ const USAGE: u8 = 2;
 /// the same one `jstream-cli` reads.
 const TOKEN_FILE_ENV: &str = "JSTREAM_TOKEN_FILE";
 
-/// The environment variable that filters the log on stderr.
+/// The environment variable that filters the log when `--log-level` is not given.
 const LOG_ENV: &str = "RUST_LOG";
 
 /// Why the daemon did not run.
@@ -100,23 +104,57 @@ fn print(text: &str) -> Result<(), Failure> {
     Ok(())
 }
 
-/// Installs the process's log subscriber: the libraries' `tracing` spans and events, as
-/// text lines on stderr (stdout carries only the banner lines). `RUST_LOG` filters them,
-/// as `target=level` directives and an optional bare default level, such as
-/// `jstream_server=debug,warn`; unset or empty means `info`. A value that doesn't parse
-/// is a usage error.
-fn init_logging() -> Result<(), Failure> {
-    let filter = match std::env::var(LOG_ENV) {
-        Ok(spec) if !spec.trim().is_empty() => spec
-            .parse::<Targets>()
-            .map_err(|error| Failure::Usage(format!("{LOG_ENV}: {error}")))?,
-        _ => Targets::new().with_default(LevelFilter::INFO),
+/// The log filter: `--log-level`, else `RUST_LOG`, as `target=level` directives and an
+/// optional bare default level, such as `jstream_server=debug,warn`; unset or empty means
+/// `info`. A value that doesn't parse is a usage error.
+fn log_filter(options: &Options) -> Result<Targets, Failure> {
+    let (source, spec) = match &options.log_level {
+        Some(spec) => ("--log-level", spec.clone()),
+        None => (LOG_ENV, std::env::var(LOG_ENV).unwrap_or_default()),
     };
+    if spec.trim().is_empty() {
+        return Ok(Targets::new().with_default(LevelFilter::INFO));
+    }
+    spec.parse::<Targets>()
+        .map_err(|error| Failure::Usage(format!("{source}: {error}")))
+}
+
+/// The log directory: `--log-dir`, else `logs` in the platform data directory.
+fn log_dir(options: &Options) -> Result<PathBuf, Failure> {
+    match &options.log_dir {
+        Some(dir) => Ok(PathBuf::from(dir)),
+        None => logs::default_dir().ok_or_else(|| {
+            Failure::Failed(anyhow::anyhow!(
+                "could not find the data directory for the log files (no usable \
+                 {}); pass `--log-dir <dir>`",
+                if cfg!(windows) { "APPDATA" } else { "HOME" }
+            ))
+        }),
+    }
+}
+
+/// Creates the log directory, installs the crash-report hook there, and installs the
+/// process's log subscriber: the libraries' `tracing` spans and events, filtered by
+/// `filter`, as text lines on stderr (stdout carries only the banner lines) and in the
+/// rotating log files in `dir`.
+fn init_logging(dir: &Path, filter: Targets) -> Result<(), Failure> {
+    logs::create_dir(dir)
+        .with_context(|| format!("could not create the log directory `{}`", dir.display()))?;
+    crash::install(dir.to_owned());
+    let files = logs::LogFiles::open(dir)
+        .with_context(|| format!("could not create a log file in `{}`", dir.display()))?;
+    let file_path = files.current_path();
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_writer(stderr))
+        .with(tracing_subscriber::fmt::layer().with_writer(Arc::new(files)))
         .with(filter)
         .try_init()
         .context("could not install the log subscriber")?;
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        log_file = %file_path.display(),
+        "jstream-daemon starting"
+    );
     Ok(())
 }
 
@@ -133,7 +171,8 @@ fn run(options: Options) -> Result<(), Failure> {
             }
         },
     };
-    init_logging()?;
+    let filter = log_filter(&options)?;
+    init_logging(&log_dir(&options)?, filter)?;
     let (token, provenance) = token::load_or_create(&path)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

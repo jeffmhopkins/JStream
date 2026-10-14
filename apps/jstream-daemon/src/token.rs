@@ -28,7 +28,8 @@ pub enum Provenance {
 /// An existing file must hold a valid token (visible ASCII, after trimming whitespace)
 /// and, on Unix, must give group and others no permission at all. A new file is
 /// created atomically (it never replaces a file created meanwhile), user-only on Unix
-/// (mode 0600); on Windows it gets its directory's ACL.
+/// (mode 0600); on Windows it gets its directory's ACL. The token is registered with
+/// the crash reports' redaction.
 pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
     // Drawn first, so a failing random source leaves no empty file behind.
     let token = new_token()?;
@@ -41,6 +42,7 @@ pub fn load_or_create(path: &Path) -> anyhow::Result<(Token, Provenance)> {
                     format!("could not write the token file `{}`", path.display())
                 });
             }
+            crate::crash::register_secret(&token);
             let token = Token::new(token).context("invariant: a hex token is valid")?;
             Ok((token, Provenance::Created))
         }
@@ -105,7 +107,10 @@ fn read_existing(path: &Path) -> anyhow::Result<Token> {
     if token.is_empty() {
         bail!("the token file `{shown}` is empty; delete it to get a new token");
     }
-    Token::new(token).with_context(|| format!("the token file `{shown}` holds no valid token"))
+    let valid = Token::new(token)
+        .with_context(|| format!("the token file `{shown}` holds no valid token"))?;
+    crate::crash::register_secret(token);
+    Ok(valid)
 }
 
 #[cfg(test)]
