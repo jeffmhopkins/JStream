@@ -93,7 +93,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:df29b2e4bf253fab", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added the master chain, per-output chains with cost shown and the privacy screen in the UI, per ADR-0027's consequences; other M2 items unchanged" }
+verified = { hash = "b3:3d448cefa69b8ec0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).

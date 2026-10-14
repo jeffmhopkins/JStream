@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:7b5adb35e904a207", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model gained ADR-0029's transition fields; the encoder-sharing bullet this section relies on is unchanged" }
+verified = { hash = "b3:4a83ed18552bbdfe", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

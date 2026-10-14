@@ -163,7 +163,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md"]
-verified = { hash = "b3:3b95c26bd0517a59", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's ADR-0023 tree and bullets with ADR-0029's: SceneItem keeps opacity, blend and reserved effects[] and gains transition, Scene gains transition_in/out, studio drops transition for the transitions collection; Built-so-far now also lists the transition fields as not yet" }
+verified = { hash = "b3:b3ad706d8574ad97", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
 -->
 
 ```
@@ -318,7 +318,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:883e8fef96b575d0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73: server test and README verified lines, no wire change) with ADR-0029's planned Transitions bullet; covered READMEs changed only by verified lines; body matches the code" }
+verified = { hash = "b3:db37e8eabedb31e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -413,7 +413,7 @@ verified = { hash = "b3:dca7fe7e8b8a425b", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:a2d3a8425cd5572d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0029: added the not-built transition node (synthetic item list, control-thread pairing plan, render-thread interpolation and retargeting, shortest-way rotation, shared easing, compositor clamping); S1 steps and results unchanged" }
+verified = { hash = "b3:7d384e016afe5a8e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
