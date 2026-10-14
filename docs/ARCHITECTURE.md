@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e872deb079228b47", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read queries, events and binary streams against the protocol design. video.snapshot is a JSON PNG. Binary frames stay preview and meters. Geometry types are still not commands. Slow clients, events.dropped and Origin-optional transport are unchanged." }
+verified = { hash = "b3:7f56601a3fdcb734", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read transport and slow clients. The server still drains engine events into a bounded buffer and still ends the subscription when it closes a connection. Queries, events and binary streams are unchanged. subscriber_count is a mock test probe, not a protocol message." }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

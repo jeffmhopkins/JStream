@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:5647848274b4e51e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-control row is unchanged and this Purpose still matches it" }
+verified = { hash = "b3:819bcd6aa4a3e9dd", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the mock bullet against subscriber_count. MockEngine and MockControl are still the in-memory stand-in. The method is a test probe, not a new client API, and the contents list still matches." }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:f9c8578138437f44", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Mock bullets now say every collection query, and video.snapshot is internal because the mock has no compositor. Edit checks, idempotency and output events are unchanged. ARCH protocol's snapshot sentence matches that split." }
+verified = { hash = "b3:de095e2b1338a556", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the event-stream bullet. Streams still end when the session or the engine is dropped, and a dropped stream is simply gone. Protocol checks, queries, emit and idempotency are unchanged." }
 -->
 
 ### The trait
