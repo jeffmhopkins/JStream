@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md", "docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:8f13886698887cd9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for RTMPS: new Transport bullet (connect over TCP or rustls/ring TLS, SNI and cert checked against URL host and OS roots, handshake inside connect, timeouts through TLS, close_notify on shutdown), third-party deps list, OS-trust-store rationale (webpki-roots is CDLA-Permissive-2.0), TLS removed from Not yet, TLS tests added to Tests; matches transport.rs, error.rs and the new tests" }
+verified = { hash = "b3:59bd9b94087055cd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #66 N1: Transport::shutdown now treats NotConnected, BrokenPipe, ConnectionReset and ConnectionAborted as already shut down at both the close_notify flush and the TCP shutdown; purpose text (connect, TLS via rustls+ring, OS roots, tests) unchanged and still accurate" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

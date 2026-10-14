@@ -1,5 +1,6 @@
-//! An in-memory [`Control`] implementation for developing and testing clients before the
-//! engine exists. Enabled by the `mock` feature.
+//! An in-memory [`Control`] implementation for developing and testing clients without
+//! the engine (`jstream-core`, which clients never depend on). Enabled by the `mock`
+//! feature.
 //!
 //! [`MockEngine`] holds a tiny collection (scenes, items and sources) plus a set of outputs,
 //! and follows the protocol's rules for it: the handshake, atomic batches that bump `rev`

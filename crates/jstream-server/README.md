@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3defba6a111e19e8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for #44 N1/N2: Host row and new 'Host without a port' paragraph match gate.rs (portless Host/Origin = :80, accepted only when bound to port 80, refused otherwise incl. ephemeral); Authorization row and new 'Token compare' paragraph match Token::matches (cycled token, length xor folded, time depends only on presented length); sessions, request-id remap, shutdown, dependencies (none added) and open questions 4, 6, 7 (N3) unchanged" }
+verified = { hash = "b3:2e5146cfcc0ff392", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-control#design changed only its wss:// open question; server is still plain ws:// with no rustls/ring in its own tree (cargo tree -i ring: only jstream-outputs), so its TLS open question holds" }
 -->
 
 ### Listening and admission

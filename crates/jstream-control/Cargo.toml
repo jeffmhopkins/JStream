@@ -17,7 +17,7 @@ workspace = true
 
 [features]
 # `MockEngine`/`MockControl`: an in-memory implementation for developing and testing
-# clients before the engine exists. Off by default; clients enable it in dev-dependencies.
+# clients without the engine. Off by default; clients enable it in dev-dependencies.
 mock = []
 # `WsControl`: the WebSocket client, on native targets for now. Off by default, so the
 # WASM/UI build carries no tokio. Plain `ws://` only: no TLS feature is enabled.

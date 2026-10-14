@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:cc37cf0d3b6b01f8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-cli row ('jstream-cli mcp runs a stdio MCP proxy to it', no engine link) now describes implemented code: mcp.rs serves jstream-mcp over the WsControl session; CLI README purpose/usage/design re-verified; tests/mcp.rs uses jstream-server only as a dev-dependency; diagram unchanged" }
+verified = { hash = "b3:07079dd98f9a7504", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-cli#design was only re-verified (control's wss:// open question changed); the shape diagram and rows (cli, server, mcp, core) are unchanged by this PR" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:fe4a198a4f821b67", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only jstream-outputs/Cargo.toml changed: third-party rustls, rustls-native-certs and dev-only rcgen, no new member edges; its L4 row (RTMP(S) client) and all other rows and layers still hold" }
+verified = { hash = "b3:ae58c10e4f6c4606", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "After merging main (#65 added the jstream-core L5 row): jstream-outputs/Cargo.toml adds only third-party rustls, rustls-native-certs and dev-only rcgen; no member edges change, the L4 outputs row (RTMP(S)) and the new core row hold" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -260,7 +260,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:ad39205686c679a3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #44 N1/N2 in jstream-server (length-independent token compare in config.rs, portless Host accepted only on port 80 in gate.rs): Transport bullet (token required, Origin/Host validated, 127.0.0.1 default, plain ws://) still holds; no wire, envelope or versioning change" }
+verified = { hash = "b3:92455d2d37de3920", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-control README changed only the wss:// open question (ring already allowlisted); Transport bullet ('Plain ws:// for now; TLS is an open question') still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -284,9 +284,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   meters. Not designed yet.
 - **Schema:** the JSON Schema is generated from the Rust types, and its snapshot is
   the API review ([R-TEST-002](RULES.md#R-TEST-002)).
-- **Transport:** the `Control` trait is implemented in-process by core and over WebSocket
-  by `jstream-control` (`WsControl`, feature `ws`). `jstream-server` serves the
-  WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
+- **Transport:** the `Control` trait is implemented in-process by core
+  (`InProcessControl`, [jstream-core › Design](../crates/jstream-core/README.md#design))
+  and over WebSocket by `jstream-control` (`WsControl`, feature `ws`). `jstream-server`
+  serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
   default, with the token required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
   for now; TLS is an open question there.

@@ -66,20 +66,35 @@ impl Transport {
     /// sees an orderly end rather than a truncated session; then shuts the socket down
     /// in both directions.
     ///
-    /// A socket the peer has already disconnected counts as shut down.
+    /// A socket the peer has already disconnected or reset counts as shut down, at
+    /// either step.
     ///
     /// # Errors
     /// Transport errors while sending `close_notify` or shutting the socket down.
     pub fn shutdown(&mut self) -> io::Result<()> {
         if let Self::Tls(s) = self {
             s.conn.send_close_notify();
-            s.flush()?;
+            match s.flush() {
+                Err(e) if peer_gone(&e) => return Ok(()),
+                result => result?,
+            }
         }
         match self.tcp().shutdown(Shutdown::Both) {
-            Err(e) if e.kind() == io::ErrorKind::NotConnected => Ok(()),
+            Err(e) if peer_gone(&e) => Ok(()),
             result => result,
         }
     }
+}
+
+/// Whether `e` says the peer already closed or reset the connection.
+fn peer_gone(e: &io::Error) -> bool {
+    matches!(
+        e.kind(),
+        io::ErrorKind::NotConnected
+            | io::ErrorKind::BrokenPipe
+            | io::ErrorKind::ConnectionReset
+            | io::ErrorKind::ConnectionAborted
+    )
 }
 
 impl Read for Transport {

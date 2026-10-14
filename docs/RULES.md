@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:9c631221cc3597db", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-API-001..004 against the edited ARCH#protocol Transport bullet: transport only, no message, schema or version change, so no protocol bump under R-API-001; names and write paths unchanged" }
+verified = { hash = "b3:d08de9e1b58a6a72", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol changed only its Transport bullet (names InProcessControl); no message, schema or version change, so R-API-001..004 are unaffected" }
 -->
 
 <a id="R-API-001"></a>

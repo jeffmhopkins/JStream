@@ -168,7 +168,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:63e8656d1e7da277", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New bullet on the MCP proxy (same connector, jstream_mcp::Server + serve_stdio, no feature like ws, server sends hello with the MCP client's name, disconnected tool errors and keep serving per jstream-mcp design, no reconnect), writers bullet adds the BufRead input, new Tests bullet (in-memory mcp tests, tests/mcp.rs against jstream-server, which with tokio is dev-only); open question 1 marked done, q2 notes --mock mcp keeps one mock per session, new q6 on reconnecting; Cargo.toml adds jstream-mcp dep and jstream-server/tokio dev-deps; upstream control#design unchanged" }
+verified = { hash = "b3:cc61eacef79792fd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-control#design changed only its wss:// open question (ring now allowlisted); the CLI still connects over plain ws:// via WsControl, nothing here mentions TLS deps" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
