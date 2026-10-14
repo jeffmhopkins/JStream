@@ -37,6 +37,9 @@ impl AudioDriver {
         let pts = MediaTime::new(next, self.format.timebase());
         let silence = AudioBuffer::silence(self.format, pts, frames)?;
         self.encoder.encode(&silence)?;
+        // The silence is sent even if the block after it is refused, so a later fill
+        // starts where it ended rather than encoding it again.
+        self.next = Some(start);
         counters
             .silence_frames
             .fetch_add(missing.unsigned_abs(), Ordering::Relaxed);

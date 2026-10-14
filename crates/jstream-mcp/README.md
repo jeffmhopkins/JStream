@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:69176dea08d1ef98", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Purpose says MCP streamable HTTP is served by jstream-server, not this crate (#37 N1), beside main's #96 events tool; matches the crate" }
+verified = { hash = "b3:19a62ef0d7e5a78c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: only the tool_call span parent changed in server.rs; Server/Tools/Events contents and layering unchanged" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -44,7 +44,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:5d13c0dbd0ec49eb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Async and transports now say streamable HTTP is served by jstream-server (not built); open question 3 stays settled by ADR-0036 (main's #96) and question 4 records #37's decision; main's #98 Logging subsection kept; depends_on keeps ADR-0036" }
+verified = { hash = "b3:41a61af4dfd918de", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Logging paragraph now says tool_call is a child of mcp_session, so it keeps its session when the debug mcp_request span is off; matches info_span!(parent: &self.span) in Server::call" }
 -->
 
 ### Tools
@@ -205,7 +205,8 @@ so nothing is logged there, and `tracing` never writes to the stdout that carrie
 Each `Server` has an `info` span `mcp_session`. Every request runs in a `debug` span
 `mcp_request` under it with the JSON-RPC method, and a request answered with a JSON-RPC
 error logs its code at `debug`. Each `tools/call` runs in an `info` span `tool_call`
-with the tool's name, and logs at `debug` whether it succeeded or, for a result with
+with the tool's name, directly under `mcp_session` so it keeps its session when the
+`debug` request span is off, and logs at `debug` whether it succeeded or, for a result with
 `isError`, its error code. `initialize` (client name and settled revision) and the
 engine session's `hello` (its `client_id`) log at `info`; a failed `hello` and a
 connection lost during a call log at `warn`. Tool arguments and results are never

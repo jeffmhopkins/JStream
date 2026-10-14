@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1cf9b8c5fe36d284", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds: a missing Origin allowed, a present one checked (#44, not built); MCP streamable HTTP served by jstream-server (#37); a Slow clients bullet (bounded buffer, events.dropped, re-read state; not built); presets carry kind and settings (ADR-0037); covered READMEs re-verified here; main's #96/#98 text unchanged" }
+verified = { hash = "b3:330dfc37e4d6196c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: covered crates changed only in the extra_hosts rustdoc (server) and the MCP tool_call span parent; envelope, admission and Origin/Host text unaffected" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -533,7 +533,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:07bdde0c5f13394d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's access bullet says MCP streamable HTTP (not built) is served by jstream-server behind the same token and Origin checks (#37 N1); covered mcp/CLI READMEs re-verified here; main's #96 Events bullet unchanged" }
+verified = { hash = "b3:54f83998110d3519", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: the jstream-mcp change is only which span tool_call nests under; the section's tools, audit and transport text say nothing about spans and still hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
