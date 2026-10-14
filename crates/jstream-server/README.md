@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:c821449cc9dc66db", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #44 N1/N2: config.rs (Token::matches now length-independent, extra_hosts doc) and gate.rs (portless Host on port 80) change behaviour inside existing modules only; contents list (lib, config, gate, session, error), layer 4 and deferred items still hold" }
+verified = { hash = "b3:fe9763ae77e6ad46", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only changed the jstream-sources row (ADR-0031 source kinds); server's L4 row and contents unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote

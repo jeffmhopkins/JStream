@@ -2,7 +2,8 @@
 id = "ADR-0003"
 title = "Rust media stack on OS codecs, no FFmpeg"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0031-source-types-and-decoding-scope.md"
 -->
 
 # ADR-0003: Rust media stack on OS codecs, no FFmpeg

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:ecc0e0713d34d826", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate: contents list matches engine.rs, session.rs, events.rs, outputs.rs, tests.rs and tests/mcp.rs; layer 5 per crate map; no runtime/ dir (ARCH#threading keeps that); not-yet list matches what is absent" }
+verified = { hash = "b3:be187dcb31ebf10c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only changed the jstream-sources row (ADR-0031 source kinds); core's not-yet list (sources not here yet) still holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the

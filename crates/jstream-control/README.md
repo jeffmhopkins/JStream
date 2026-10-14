@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:f7c54997bee67713", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Mock bullet now says clients use it without the engine and names jstream-core's InProcessControl as the real in-process implementation held to the mock's answers (core's differential test); rest of the contents list unchanged" }
+verified = { hash = "b3:ab169ca94ddf2932", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only changed the jstream-sources row (ADR-0031 source kinds); control's L2 row and contents unchanged" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine

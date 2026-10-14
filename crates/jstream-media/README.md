@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:615ac7dfeb1690a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream crate-map change only: this PR's jstream-sources (browser) and jstream-platform-windows (CEF backend) rows; this crate's row and purpose text are main's, unchanged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
+verified = { hash = "b3:ac7ca3a1a249c6d9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and the Codec link moved from ADR-0003 to ADR-0031, whose restated media decision keeps the same baseline codecs (H.264, AAC via OS APIs); crate-map change is only the sources row" }
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,
@@ -40,7 +40,7 @@ Contents:
 - **Audio:** `AudioFormat` (non-zero sample rate, `ChannelLayout`, `f32` interleaved or
   planar `SampleFormat`) and `AudioBuffer`, whose sample count is always whole frames.
 - **Packets:** `Packet` (codec, keyframe flag, pts, dts no later than pts, non-empty
-  shared payload). `Codec` covers the [ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md)
+  shared payload). `Codec` covers the [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)
   baseline: H.264 and AAC. Payload framing is a convention this crate doesn't check:
   H.264 payloads are Annex B (start codes, as OS encoders emit them) and AAC payloads are
   raw access units without ADTS. Muxers convert to the container's framing

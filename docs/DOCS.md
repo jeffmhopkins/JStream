@@ -470,7 +470,7 @@ disables the check, only review and the weekly audit stand behind it.
 <!-- @section
 covers = ["xtask/src/lint_deps.rs"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003", "docs/RULES.md#R-ARCH-005", "docs/RULES.md#R-UNSAFE-001", "docs/RULES.md#R-DEP-002", "docs/RULES.md#R-DEP-003"]
-verified = { hash = "b3:e44729766fa76216", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Native-code allowlist gained ring (links key plus cc build-dependency; R-DEP-006's rustls provider). The section describes the allowlist mechanism and heuristic, not its entries, so it holds" }
+verified = { hash = "b3:3ef30cac7a3da33d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Native-code bullet's link moved from ADR-0003 to ADR-0031, which restates the codec ban and lint-deps allowlist unchanged; lint behaviour described is unchanged" }
 -->
 
 `cargo xtask lint-deps` (CI check `lint-deps`) checks the rules whose `enforced_by` names
@@ -495,7 +495,7 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
   lines) among its leading inner attributes: only whitespace, comments and other inner
   attributes may come before it. One inside a comment or later in the file doesn't count.
 - **Native code** ([R-DEP-002](RULES.md#R-DEP-002),
-  [ADR-0003](adr/0003-media-stack-and-codecs.md)): every resolved package, members or
+  [ADR-0031](adr/0031-source-types-and-decoding-scope.md)): every resolved package, members or
   not, that has a `links =` key or whose build script compiles C must be on the
   native-code allowlist, with any feature that entry requires enabled. "Compiles C" is a
   heuristic: a build-dependency on `cc`, `cmake`, `autotools` or `nasm-rs`, or on a build

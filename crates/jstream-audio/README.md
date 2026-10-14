@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:ed88e1ccda6edf33", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the sentence that continuous parameters are live values on the wire (ADR-0032); the mixer's API, time line and per-input gain description is unaffected" }
+verified = { hash = "b3:f46bd645dd2e03e0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only changed the jstream-sources row (ADR-0031 source kinds); the jstream-audio row and this crate's mixer description unchanged" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends

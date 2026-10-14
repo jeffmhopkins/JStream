@@ -2,7 +2,7 @@
 id = "ADR-0031"
 title = "Source types for v1 and decoding scope"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 

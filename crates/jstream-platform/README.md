@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:08235abb8c816a16", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; platform traits, GPU interop and capture hand-off are unaffected" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
+verified = { hash = "b3:150a9b96de020958", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and the HardwarePreference link moved from ADR-0003 to ADR-0031, which keeps hardware first with OS software fallback; crate-map change is only the sources row" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -68,7 +68,7 @@ Contents:
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). Packets keep their frame's `pts` on the
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
   `HardwarePreference` defaults to hardware first with the software codec as fallback,
-  as [ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md) says.
+  as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) says.
 - **Virtual camera:** `VcamSink` (`Send`): `start` with a `VcamFormat`, `publish`
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
@@ -98,7 +98,7 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:7c2e5aeacf252627", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #63: intro now says the Windows GpuInterop exists and capture/encoder GPU input/render remain (N2); FrameSync bullet adds stage-right-before-a-submit since staged ops attach to the queue's next submit (N5); rest unchanged" }
+verified = { hash = "b3:d85a4b59654c1a61", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only changed the jstream-sources row (ADR-0031 source kinds); GPU frame and interop text unaffected" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

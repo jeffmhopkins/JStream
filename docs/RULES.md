@@ -319,8 +319,8 @@ running unless the error is fatal and reported.
 <a id="dependencies"></a>
 ## Dependencies
 <!-- @section
-depends_on = ["docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:f959f56035f4a804", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1 on #26: R-DEP-001 and R-DEP-002 now name the single CEF-runtime exception (LGPL-2.1 FFmpeg inside libcef, in-page decode only, no JStream crate calls its codecs) exactly as ADR-0021 scopes it; R-DEP-003..007 unchanged" }
+depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
+verified = { hash = "b3:3880b2102b8ccc98", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and R-DEP-002's link moved to ADR-0031; R-DEP-002 gains ADR-0031's sentence that pure-Rust image and font crates are not banned codec libraries; deny.toml bans and lint-deps allowlist enforcement unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -342,12 +342,13 @@ status = "active"
 enforced_by = ["deny:bans", "ci:lint-deps"]
 applies_to = ["Cargo.toml", "deny.toml"]
 -->
-Per [ADR-0003](adr/0003-media-stack-and-codecs.md). Known binding crates are banned in
+Per [ADR-0031](adr/0031-source-types-and-decoding-scope.md). Known binding crates are banned in
 `deny.toml`. lint-deps also checks every crate with a `links =` key or a build script
 that compiles C against an allowlist. Non-media C dependencies (e.g. `ring`) are
 allowed only through that allowlist. The one media exception is the prebuilt CEF runtime, whose
 internal media stack decodes in-page audio and video only; no JStream crate calls its
-codecs ([ADR-0021](adr/0021-browser-source.md)).
+codecs ([ADR-0021](adr/0021-browser-source.md)). Pure-Rust image and font crates are not
+banned codec libraries.
 
 <a id="R-DEP-003"></a>
 ### R-DEP-003: Workspace-managed versions

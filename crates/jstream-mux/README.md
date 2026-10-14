@@ -12,11 +12,11 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:1c2e7abfb6d402f8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: amf0 bullet now the one shared codec (adds date, MAX_DEPTH lowered to outputs' 32, truncation offset from input start, no count pre-allocation); timestamps bullet names public flv::to_ms as the one dts-to-ms conversion used by outputs' timestamp_ms; FlvWriter::new builds start tags before the header; MetadataStyle::File note cites the outputs test; dependency line (jstream-media, thiserror) still true" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
+verified = { hash = "b3:b1d042966aec3d25", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and the pure-Rust muxers link moved from ADR-0003 to ADR-0031, which restates that FLV/MP4/fMP4 muxers are written in Rust; crate-map change is only the sources row" }
 -->
 
-Layer-2 pure-Rust container muxers ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md):
+Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):
 muxers are written in Rust, no FFmpeg). This first cut writes **FLV** for H.264 and AAC,
 the container M1a's RTMP(S) output sends to YouTube
 ([ADR-0009](../../docs/adr/0009-youtube-rtmps-and-api.md)). It consumes

@@ -57,16 +57,20 @@ must have a written result before the browser source is built.
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
-depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:935465d03f8c01b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b expanded per maintainer: browser source (ADR-0021, after S4), scenes as sources with cycle rejection, shared vs duplicate sources, transform+crop, source filters vs item effects; M1a/c/d unchanged" }
+depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0020-portable-windows-distribution.md"]
+verified = { hash = "b3:3adddd348843494a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for ADR-0031: depends_on moved to it; M1b source kinds now display, window, video capture device (MJPEG, paired audio), image formats, color, text, audio input, desktop and application audio, browser, matching its table; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
   MF AAC (WASAPI mic + desktop loopback) → FLV → RTMPS to YouTube with a stream key. Minimal
   `jstream-core`, `jstream-server`, `jstream-mcp`, `jstream-cli`, `video.snapshot`.
 - **M1b Scenes and mixing:**
-  - Scene graph and sources: window, webcam (incl. MJPEG decode), image, color, text, and
-    **browser** ([ADR-0021](docs/adr/0021-browser-source.md); after spike S4).
+  - Scene graph and source kinds
+    ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)): display, window,
+    video capture device (webcam or capture card, incl. MJPEG decode, with its audio),
+    image (PNG, JPEG, WebP, animated GIF), color, text, audio input, desktop audio,
+    application audio, and **browser** ([ADR-0021](docs/adr/0021-browser-source.md);
+    after spike S4).
   - **Scenes as sources**: a scene placed inside another scene, with cycles rejected.
   - **Shared sources:** adding an existing source places the *same* instance (one capture,
     one set of source filters) in another scene. **Duplicate** makes an independent copy.
@@ -88,7 +92,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "UI bullet now names canvas editing: drag-to-place, resize/rotate, crop handles, snapping, add-existing vs duplicate; Leptos/preview/Tauri/studio items unchanged and still match ADR-0002" }
+verified = { hash = "b3:51d1c8c1e9a944d4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for ADR-0031: M2 gains media file (OS demux/decode, A/V sync), audio waveform and audio spectrum source kinds; Leptos, canvas editing, preview, desktop/daemon and studio items unchanged" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
@@ -100,6 +104,9 @@ verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRu
 - `jstream-desktop` (Tauri) and `jstream-daemon` serving the same UI. Token pairing for
   remote browsers.
 - Studio mode (Preview/Program) and transitions.
+- Source kinds ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)): **media
+  file** (video or audio, looping; OS demux and decode, A/V sync on the media clock),
+  **audio waveform** and **audio spectrum**.
 
 **Demo:** everything from M1, done by hand in the desktop app and in a browser.
 
@@ -113,6 +120,7 @@ verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRu
 - Direct NVENC/AMF encoders where measurements justify them; HEVC/AV1 via enhanced RTMP.
 - WASM automation plugins.
 - macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).
+  A Syphon receiver, the macOS follow-up to Spout2, is considered with it.
 - Linux: codec-path ADR first, then the platform crate (virtual camera via v4l2loopback,
   which needs root, so it gets its own ADR too).
 
@@ -121,5 +129,5 @@ verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 -->
 
-- Media-file source, replay buffer.
+- Spout2 receiver source (Windows), when wanted; replay buffer.
 - Virtual microphone (needs a kernel-driver ADR), SRT/WHIP outputs, OBS scene-collection import.
