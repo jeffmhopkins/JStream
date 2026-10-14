@@ -25,7 +25,7 @@ jstream-control.workspace = true
 jstream-protocol.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio = { workspace = true, features = ["macros", "net", "rt", "sync"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
 # A span per connection; accepted and refused upgrades are logged (R-RS-005).
 tracing.workspace = true
 

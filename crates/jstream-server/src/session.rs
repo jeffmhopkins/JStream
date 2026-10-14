@@ -42,6 +42,7 @@ use jstream_protocol::{
     Response, ServerMessage, WireError,
 };
 use std::collections::VecDeque;
+use std::time::Duration;
 use tokio::sync::watch;
 
 /// How many session-to-wire request ID pairs a connection remembers. A `state.changed`
@@ -51,6 +52,11 @@ const REMEMBERED_IDS: usize = 1024;
 /// How many events may be held back waiting for an answer before they are sent as they
 /// are (with the session's request ID).
 const MAX_HELD_EVENTS: usize = 1024;
+
+/// How long a closing connection waits for the client to take what is still queued and
+/// the close frame. A client that has stopped reading would otherwise hold the
+/// connection, and its `Control` session, open for good (#108 review N1).
+const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// How many events a connection's outbox holds before it drops them all and queues one
 /// `events.dropped` notice instead.
@@ -187,10 +193,16 @@ pub(crate) async fn run(
         Ok(None) => tracing::info!("connection closed"),
         Err(Closed) => tracing::info!("connection closed: client gone or send failed"),
     }
+    // Nothing reads the session's events from here on: end the subscription now, so the
+    // engine stops queueing for this connection while the last messages go out.
+    drop(events);
     if let Ok(frame) = end {
         // What is queued (a refused handshake's error, say) goes before the close frame.
-        // Best effort: the client may already be gone.
-        let _ = writer.finish(&mut outbox, frame).await;
+        // Best effort: the client may already be gone, or have stopped reading.
+        let finish = writer.finish(&mut outbox, frame);
+        if tokio::time::timeout(CLOSE_TIMEOUT, finish).await.is_err() {
+            tracing::info!("connection dropped: the client did not read its last messages");
+        }
     }
 }
 

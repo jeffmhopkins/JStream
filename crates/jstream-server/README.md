@@ -140,7 +140,10 @@ task speaks the envelope
 `serve_with_shutdown(signal)` stops accepting when `signal` completes and closes every
 open connection (close code 1001), so their clients' pending and later calls fail with
 `Disconnected` and their event streams end. Whenever the server closes a connection,
-what its outbox still holds is sent before the close frame.
+it first ends the session's event subscription, then sends what the outbox still holds
+before the close frame. A client that doesn't take them within a short timeout
+(`CLOSE_TIMEOUT`) is dropped without one, so a client that stopped reading can't keep
+its connection or session open.
 
 ### Logging
 
