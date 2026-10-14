@@ -4,22 +4,27 @@
 //! subscription. [`InProcessControl`] serves it through the `Control` trait in the same
 //! process, one session per [`Engine::connect`] (ADR-0001). Layer 5.
 //!
-//! This first cut is the control plane only. Outputs are a placeholder state machine
-//! until the media pipeline lands, and there is no undo, audit log, persistence,
-//! thread or clock yet.
+//! Without platform backends, outputs are a placeholder state machine.
+//! [`Engine::with_backends`](engine::Engine::with_backends) and
+//! [`Engine::with_publish`](engine::Engine::with_publish) run the media pipeline on
+//! `output.start` instead. There is no undo, audit log or persistence yet.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md
 
 #![forbid(unsafe_code)]
 
 mod engine;
 mod events;
 mod outputs;
+mod runtime;
 mod session;
 #[cfg(test)]
 mod tests;
 
 pub use engine::Engine;
+pub use runtime::{
+    LivePublish, OutputStats, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
+};
 pub use session::InProcessControl;
 
 use std::sync::{Mutex, MutexGuard, PoisonError};

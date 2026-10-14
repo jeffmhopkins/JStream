@@ -9,11 +9,13 @@
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
 use crate::outputs::Outputs;
+use crate::runtime::{LivePublish, MediaHost, OutputStats, Running, launch, parts_from};
 use crate::session::InProcessControl;
 use jstream_graph::Graph;
+use jstream_platform::Backends;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, Event, IdempotencyKey, OutputId, ProtocolError,
-    Query, QueryResult, RequestId, Rev,
+    Action, Batch, Call, CallResult, ClientId, Event, IdempotencyKey, OutputId, OutputState,
+    ProtocolError, Query, QueryResult, RequestId, Rev,
 };
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -27,13 +29,16 @@ use std::task::Waker;
 /// long as any handle or session does; when the last one goes away, every event stream
 /// ends after what it has buffered.
 ///
-/// So far it holds the control plane only: the scene graph (`jstream-graph`), the
-/// outputs' runtime state (a placeholder until the media pipeline lands), per-client
-/// idempotency keys and event fan-out. It starts no threads and needs no async runtime:
-/// every call completes before its future is first polled.
+/// So far the control plane is the scene graph (`jstream-graph`), the outputs'
+/// runtime state, per-client idempotency keys and event fan-out. Without
+/// [`with_backends`](Self::with_backends), an output action only steps the placeholder
+/// state machine and the call completes before its future is first polled. With
+/// backends and a publish target, `output.start` blocks the call until the pipeline
+/// is up or has failed, still without an async runtime.
 #[derive(Clone, Default)]
 pub struct Engine {
     shared: Arc<Mutex<State>>,
+    media: Option<Arc<MediaHost>>,
 }
 
 impl Engine {
@@ -51,6 +56,36 @@ impl Engine {
     pub fn with_output(self, output_id: OutputId) -> Self {
         lock(&self.shared).outputs.add(output_id);
         self
+    }
+
+    /// Injects platform backends. `output.start` then runs the media pipeline
+    /// instead of the placeholder state machine. Configure this before
+    /// [`connect`](Self::connect); clones made earlier do not see it.
+    ///
+    /// A start still needs a publish target ([`with_publish`](Self::with_publish)).
+    /// Without one it fails with `action_failed` and changes no output state.
+    #[must_use]
+    pub fn with_backends(mut self, backends: Backends) -> Self {
+        let host = self.host();
+        *lock(&host.backends) = Some(backends);
+        self
+    }
+
+    /// Stores the destination `output.start` publishes into. The start consumes it.
+    /// A failed launch drops it, so the host sets another before retrying. Requires
+    /// [`with_backends`](Self::with_backends) first; otherwise the target is not kept.
+    #[must_use]
+    pub fn with_publish(self, publish: Box<dyn LivePublish>) -> Self {
+        if let Some(host) = &self.media {
+            *lock(&host.publish) = Some(publish);
+        }
+        self
+    }
+
+    /// Encoder and subscriber counters for the running pipeline, if one is up.
+    pub fn output_stats(&self) -> Option<OutputStats> {
+        let host = self.media.as_ref()?;
+        lock(&host.running).as_ref().map(Running::stats)
     }
 
     /// Opens a new client session. It must send `hello` before any call.
@@ -103,11 +138,22 @@ impl Engine {
             } => Some(output_id.clone()),
             _ => None,
         };
-        let mut wake = Vec::new();
-        let result = lock(&self.shared).execute(client_id, request_id, call, &mut wake);
-        for waker in wake {
-            waker.wake();
-        }
+        let result = if self.backends_ready()
+            && matches!(
+                call,
+                Call::Action {
+                    action: Action::OutputStart { .. } | Action::OutputStop { .. }
+                }
+            ) {
+            self.run_media_action(call)
+        } else {
+            let mut wake = Vec::new();
+            let result = lock(&self.shared).execute(client_id, request_id, call, &mut wake);
+            for waker in wake {
+                waker.wake();
+            }
+            result
+        };
         match (&result, output) {
             (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
             (Ok(_), Some(output_id)) => {
@@ -120,6 +166,142 @@ impl Engine {
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
         }
         result
+    }
+
+    fn host(&mut self) -> Arc<MediaHost> {
+        let host = self.media.get_or_insert_with(|| Arc::new(MediaHost::new()));
+        Arc::clone(host)
+    }
+
+    fn backends_ready(&self) -> bool {
+        self.media
+            .as_ref()
+            .is_some_and(|host| lock(&host.backends).is_some())
+    }
+
+    /// `output.start` / `output.stop` when backends are injected. Events are emitted
+    /// on this thread. The pipeline threads never take the collection lock.
+    fn run_media_action(&self, call: Call) -> Result<CallResult, ProtocolError> {
+        let Call::Action { action } = call else {
+            return Err(not_implemented("this kind of call"));
+        };
+        match action {
+            Action::OutputStart { output_id } => self.start_pipeline(output_id),
+            Action::OutputStop { output_id } => self.stop_pipeline(output_id),
+            other => Err(not_implemented(other.name())),
+        }
+    }
+
+    fn start_pipeline(&self, output_id: OutputId) -> Result<CallResult, ProtocolError> {
+        let Some(host) = &self.media else {
+            return Err(not_implemented("output.start"));
+        };
+        let mut wake = Vec::new();
+        let (parts, publish) = {
+            let mut state = lock(&self.shared);
+            let current = state.outputs.state(&output_id)?;
+            let idle = matches!(current, OutputState::Stopped | OutputState::Failed);
+            if !idle {
+                return Err(already_running(&output_id));
+            }
+            if lock(&host.running).is_some() {
+                return Err(ProtocolError::ActionFailed {
+                    reason: "another output is already running".into(),
+                });
+            }
+            let Some(publish) = lock(&host.publish).take() else {
+                return Err(ProtocolError::ActionFailed {
+                    reason: "output.start has no publish target".into(),
+                });
+            };
+            let parts = {
+                let backends = lock(&host.backends);
+                let Some(backends) = backends.as_ref() else {
+                    drop(backends);
+                    *lock(&host.publish) = Some(publish);
+                    return Err(not_implemented("output.start"));
+                };
+                parts_from(backends)
+            };
+            match state.outputs.begin(&output_id, true) {
+                Ok(step) => emit_output(&mut state, &output_id, step, &mut wake),
+                Err(err) => {
+                    *lock(&host.publish) = Some(publish);
+                    return Err(err);
+                }
+            }
+            (parts, publish)
+        };
+        wake_all(wake);
+
+        match launch(parts, publish, output_id.clone()) {
+            Ok(running) => {
+                *lock(&host.running) = Some(running);
+                self.settle(&output_id, OutputState::Active);
+                Ok(CallResult::Action {})
+            }
+            Err(reason) => {
+                self.settle(&output_id, OutputState::Failed);
+                Err(ProtocolError::ActionFailed { reason })
+            }
+        }
+    }
+
+    fn stop_pipeline(&self, output_id: OutputId) -> Result<CallResult, ProtocolError> {
+        let Some(host) = &self.media else {
+            return Err(not_implemented("output.stop"));
+        };
+        let mut wake = Vec::new();
+        let running = {
+            let mut state = lock(&self.shared);
+            let step = state.outputs.begin(&output_id, false)?;
+            emit_output(&mut state, &output_id, step, &mut wake);
+            match lock(&host.running).take() {
+                Some(running) if running.output_id() == &output_id => Some(running),
+                Some(other) => {
+                    *lock(&host.running) = Some(other);
+                    None
+                }
+                None => None,
+            }
+        };
+        wake_all(wake);
+        // Join outside the collection lock. `Running`'s drop stops the threads.
+        drop(running);
+        self.settle(&output_id, OutputState::Stopped);
+        Ok(CallResult::Action {})
+    }
+
+    fn settle(&self, output_id: &OutputId, state: OutputState) {
+        let mut wake = Vec::new();
+        {
+            let mut engine = lock(&self.shared);
+            engine.outputs.settle(output_id, state);
+            emit_output(&mut engine, output_id, state, &mut wake);
+        }
+        wake_all(wake);
+    }
+}
+
+fn already_running(output_id: &OutputId) -> ProtocolError {
+    ProtocolError::ActionFailed {
+        reason: format!("output `{output_id}` is already running"),
+    }
+}
+
+fn emit_output(state: &mut State, output_id: &OutputId, step: OutputState, wake: &mut Vec<Waker>) {
+    state.subscribers.emit(
+        &Event::OutputStateChanged {
+            output_id: output_id.clone(),
+            state: step,
+        },
+        wake,
+    );
+}
+
+fn wake_all(wake: Vec<Waker>) {
+    for waker in wake {
+        waker.wake();
     }
 }
 

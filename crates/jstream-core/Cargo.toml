@@ -17,9 +17,16 @@ workspace = true
 
 [dependencies]
 futures-core.workspace = true
+jstream-audio.workspace = true
 jstream-control.workspace = true
+jstream-encode.workspace = true
 jstream-graph.workspace = true
+jstream-media.workspace = true
+jstream-mux.workspace = true
+jstream-outputs.workspace = true
+jstream-platform.workspace = true
 jstream-protocol.workspace = true
+jstream-render.workspace = true
 # Spans around commands, outputs and sessions (R-RS-005).
 tracing.workspace = true
 
@@ -30,4 +37,6 @@ jstream-control = { workspace = true, features = ["mock"] }
 jstream-mcp.workspace = true
 # The shared parity fixture that `jstream-graph` and the mock are held to.
 jstream-protocol = { workspace = true, features = ["fixtures"] }
+# Deterministic capture, audio and codecs for the output pipeline test.
+jstream-platform = { workspace = true, features = ["fake"] }
 serde_json.workspace = true

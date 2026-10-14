@@ -720,3 +720,127 @@ fn the_engine_answers_like_the_mock() {
     assert_eq!(real_events, mock_events);
     assert!(real_events.len() >= 5);
 }
+
+/// Backends without a publish target do not start a pipeline and leave the output
+/// stopped. The placeholder path is the engine with no backends at all.
+#[test]
+fn output_start_without_a_publish_target_fails() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::{self, FakeClock};
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let backends = fake::backends(&clock).expect("fake backends");
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends);
+    let control = connected(&engine);
+    let err = block_on(control.call(output_call("yt", true))).expect_err("start");
+    assert_eq!(code(&err), Some("action_failed"));
+    match query(
+        &control,
+        Query::OutputStatus {
+            output_id: OutputId::new("yt"),
+        },
+    )
+    .expect("status")
+    {
+        QueryResult::OutputStatus { state, .. } => assert_eq!(state, OutputState::Stopped),
+        other => panic!("not an output status: {other:?}"),
+    }
+}
+
+/// `output.start` runs capture, one composite, both encodes and the FLV publish
+/// against the platform fakes. A missing software adapter skips the test, and fails
+/// it when `CI` is set.
+#[test]
+fn output_start_publishes_fake_audio_and_video() {
+    use std::io::Write;
+    use std::thread;
+    use std::time::Duration;
+
+    use jstream_media::{ChannelLayout, FrameSize, Timebase};
+    use jstream_mux::flv::TagType;
+    use jstream_platform::Backends;
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use std::sync::Arc;
+
+    use crate::RecordingPublish;
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let size = FrameSize::new(320, 180).expect("size");
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        capture: Arc::new(FakeCapture::new(clock.clone(), size)),
+        audio: Arc::new(audio.clone()),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let publish = RecordingPublish::new();
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_publish(Box::new(publish.clone()));
+    let control = connected(&engine);
+    let mut events = control.events();
+    let started = block_on(control.call(output_call("yt", true)));
+    if let Err(err) = &started
+        && err.protocol().is_some_and(|error| {
+            matches!(error, ProtocolError::ActionFailed { reason } if reason.contains("no wgpu adapter"))
+        })
+    {
+        if std::env::var_os("CI").is_some() {
+            panic!("CI has no wgpu adapter: {err}");
+        }
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping pipeline test, no adapter: {err}"
+        );
+        return;
+    }
+    started.expect("output.start");
+    let steps: Vec<OutputState> = drain(&mut events)
+        .into_iter()
+        .map(|event| match event {
+            Event::OutputStateChanged { state, .. } => state,
+            other => panic!("unexpected event {other:?}"),
+        })
+        .collect();
+    assert_eq!(steps, vec![OutputState::Starting, OutputState::Active]);
+
+    let mut saw_media = false;
+    for _ in 0..40 {
+        audio.deliver(2048, 0.2);
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(20));
+        let tags = publish.tags();
+        let script = tags.iter().any(|tag| tag.tag_type == TagType::Script);
+        let video = tags
+            .iter()
+            .any(|tag| tag.tag_type == TagType::Video && tag.body.get(1) == Some(&1));
+        let audio_raw = tags
+            .iter()
+            .any(|tag| tag.tag_type == TagType::Audio && tag.body.get(1) == Some(&1));
+        if script && video && audio_raw {
+            saw_media = true;
+            break;
+        }
+    }
+    assert!(saw_media, "expected script, a video NAL and raw AAC");
+    let stats = engine.output_stats().expect("stats");
+    assert!(stats.video.received >= 1, "video frames accepted");
+    assert!(stats.audio.received >= 1, "audio blocks accepted");
+    assert!(stats.readbacks >= 1, "the CPU path read a frame back");
+
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    let steps: Vec<OutputState> = drain(&mut events)
+        .into_iter()
+        .map(|event| match event {
+            Event::OutputStateChanged { state, .. } => state,
+            other => panic!("unexpected event {other:?}"),
+        })
+        .collect();
+    assert_eq!(steps, vec![OutputState::Stopping, OutputState::Stopped]);
+    assert!(engine.output_stats().is_none());
+}

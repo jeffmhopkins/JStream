@@ -732,10 +732,17 @@ name = "jstream-core"
 version = "0.0.0"
 dependencies = [
  "futures-core",
+ "jstream-audio",
  "jstream-control",
+ "jstream-encode",
  "jstream-graph",
  "jstream-mcp",
+ "jstream-media",
+ "jstream-mux",
+ "jstream-outputs",
+ "jstream-platform",
  "jstream-protocol",
+ "jstream-render",
  "serde_json",
  "tracing",
 ]
