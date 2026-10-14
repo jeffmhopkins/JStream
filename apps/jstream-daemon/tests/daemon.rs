@@ -324,9 +324,16 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     let welcome = timely(control.hello(hello())).await.expect("welcome");
     assert_eq!(welcome.rev, Rev(0), "no persistence yet");
     stop(&mut again);
+    let first = files[0].clone();
     let files = log_files(&logs);
     assert_eq!(files.len(), 2, "{files:?}");
-    let file = std::fs::read_to_string(&files[1]).expect("the log file is readable");
+    // Both runs can start in the same second, when the names order by process ID, so
+    // the new file is the one that is not the first run's.
+    let newer = files
+        .iter()
+        .find(|f| **f != first)
+        .expect("a second log file");
+    let file = std::fs::read_to_string(newer).expect("the log file is readable");
     assert!(
         !file.contains("connection accepted"),
         "info is filtered out: {file}"

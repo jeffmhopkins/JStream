@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:15db85a1927d1886", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the whole section against this PR: startup (log dir before token), logs.rs (size rotation, retention 10, user-only files) and crash.rs (panic hook, redaction by length+BLAKE3 digest, message redacted before the 16 KiB cut, retention 10) bullets all match the code" }
+verified = { hash = "b3:f3d3fccd6a8d7cc3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for this PR's whole diff plus the test fix: tests/daemon.rs now picks the restart's log file as the one that is not the first run's (both runs can share a UTC second, so names order by pid); the Tests bullet, Log files naming (<UTC time>-<pid>-<n>) and crash bullets still hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
