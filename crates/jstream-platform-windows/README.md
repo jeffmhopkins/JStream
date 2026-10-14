@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:46f99956b36bb41e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main (with #61's H.264 encoder): upstream jstream-platform#purpose gained the GPU-frame types; this section's CPU-path H.264, AAC and Not-yet (GPU interop path, Backends constructor) still hold" }
+verified = { hash = "b3:720e4d5ecf18a56d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B2 on #60: the H.264 bullet now ties the zero-copy D3D11 path to the Windows GpuInterop implementation, not to the GPU frame type this PR adds (h264.rs still takes only Cpu frames; Not-yet lists the GPU interop path); rest of the section re-read vs main and holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -88,7 +88,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     activation object, as Microsoft asks. One output sample is reused for every pull.
   - **H.264 encoder (CPU path):** this takes NV12 `VideoSurface::Cpu` frames and copies
     them into Media Foundation memory buffers. It is ARCH's fallback path; the zero-copy
-    D3D11 path arrives with the GPU frame type
+    D3D11 path arrives with the Windows `GpuInterop` implementation
     ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 6).
     - **Choosing an encoder:** hardware encoder MFTs come first, then the OS software
       encoder, following `HardwarePreference`. The first one that accepts the media
