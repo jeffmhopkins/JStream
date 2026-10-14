@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:67d0ba0e5c7733c6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-encode row and this Purpose are unchanged and still match the crate" }
+verified = { hash = "b3:d57e3b61438733e7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Busy-from-fill_gap gap fix doesn't change the Purpose; main's ADR-0027 sharing sentence (no video chain shares by mix and profile) kept as merged" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -68,7 +68,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:5e2bb060404e1a32", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, encode, daemon, mcp) into the ADR-0031 acceptance: re-read against both; encode's ADR-0003 links re-pointed to ADR-0031, which restates its MF encoder scope unchanged; no other content change" }
+verified = { hash = "b3:5e24f5dbbb915cce", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's design bullet now says a Busy from fill_gap still records the gap and gap clears only after silence and block both succeed; matches audio.rs; main's dependency changes (ADR-0027/0028 text) don't affect the encode thread design" }
 -->
 
 ### Threads and pacing
