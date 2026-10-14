@@ -621,4 +621,4 @@ fn wait_result<S: Read + Write>(
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

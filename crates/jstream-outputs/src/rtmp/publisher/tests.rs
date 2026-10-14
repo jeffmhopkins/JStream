@@ -15,7 +15,7 @@ use crate::rtmp::handshake::{HANDSHAKE_SIZE, RTMP_VERSION};
 use crate::rtmp::test_util::{Duplex, Scripted, TestPki, duplex, tls_server};
 use crate::rtmp::transport::{client_config, connect_tls};
 
-const KEY: &str = "abcd-1234-efgh-5678";
+pub(crate) const KEY: &str = "abcd-1234-efgh-5678";
 
 fn s(v: &str) -> Amf0Value {
     amf_str(v)
@@ -42,16 +42,16 @@ fn status(level: &str, code: &str) -> Amf0Value {
     ])
 }
 
-fn url() -> RtmpUrl {
+pub(crate) fn url() -> RtmpUrl {
     RtmpUrl::parse("rtmp://ingest.example.invalid/live2").unwrap()
 }
 
-fn key() -> StreamKey {
+pub(crate) fn key() -> StreamKey {
     StreamKey::new(KEY).unwrap()
 }
 
 /// Builds server-to-client bytes.
-struct Wire {
+pub(crate) struct Wire {
     enc: ChunkEncoder,
     out: Vec<u8>,
 }
@@ -91,7 +91,7 @@ impl Wire {
 
 /// What the fake server does at each step.
 #[derive(Clone, Copy, PartialEq)]
-enum Mode {
+pub(crate) enum Mode {
     Accept,
     RejectConnect,
     BadKey,
@@ -105,7 +105,18 @@ fn fake_server(io: Duplex, mode: Mode) -> Vec<String> {
 
 /// [`fake_server`] over any transport, for a client that sends `tc_url`. It returns once
 /// the client closes the connection (end of stream, or a TLS session cut short).
-fn fake_server_at(mut io: impl Read + Write, mode: Mode, tc_url: &str) -> Vec<String> {
+fn fake_server_at(io: impl Read + Write, mode: Mode, tc_url: &str) -> Vec<String> {
+    fake_server_until(io, mode, tc_url, None)
+}
+
+/// [`fake_server_at`] that hangs up (drops `io`) right after the `hang_up_after`th
+/// audio or video message, as an ingest server that goes away mid-stream.
+pub(crate) fn fake_server_until(
+    mut io: impl Read + Write,
+    mode: Mode,
+    tc_url: &str,
+    hang_up_after: Option<usize>,
+) -> Vec<String> {
     // Handshake.
     let mut c0c1 = vec![0; 1 + HANDSHAKE_SIZE];
     io.read_exact(&mut c0c1).unwrap();
@@ -123,6 +134,7 @@ fn fake_server_at(mut io: impl Read + Write, mode: Mode, tc_url: &str) -> Vec<St
     let mut wire = Wire::new();
     let mut log = Vec::new();
     let mut buf = [0u8; 1000]; // smaller than a video frame: exercises partial reads
+    let mut media = 0;
     loop {
         let m = match dec.next_message().unwrap() {
             Some(m) => m,
@@ -162,6 +174,10 @@ fn fake_server_at(mut io: impl Read + Write, mode: Mode, tc_url: &str) -> Vec<St
                     m.payload.len(),
                     m.payload[0]
                 ));
+                media += 1;
+                if hang_up_after == Some(media) {
+                    return log;
+                }
             }
             msg_type::DATA_AMF0 => {
                 assert_eq!(m.stream_id, 1);
@@ -410,7 +426,7 @@ fn bad_stream_key_is_rejected() {
 }
 
 /// Server bytes for a handshake and a successful publish on stream 1.
-fn accepting_script(after_start: impl FnOnce(&mut Wire)) -> Vec<u8> {
+pub(crate) fn accepting_script(after_start: impl FnOnce(&mut Wire)) -> Vec<u8> {
     let mut bytes = vec![RTMP_VERSION];
     bytes.extend_from_slice(&[0; 2 * HANDSHAKE_SIZE]);
     let mut wire = Wire::new();

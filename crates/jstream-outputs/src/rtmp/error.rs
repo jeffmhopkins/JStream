@@ -1,6 +1,7 @@
 //! The RTMP client's error type.
 
 use std::io;
+use std::time::Duration;
 
 use jstream_media::MediaError;
 use jstream_mux::MuxError;
@@ -101,6 +102,15 @@ pub enum RtmpError {
     NegativeTimestamp {
         /// The timestamp in milliseconds.
         ms: i64,
+    },
+    /// A [`ReconnectingPublisher`](super::ReconnectingPublisher) reached its policy's
+    /// attempt or outage limit and stopped retrying. Why each attempt failed is logged.
+    #[error("gave up reconnecting after {attempts} attempts and {outage:?} without a connection")]
+    ReconnectGaveUp {
+        /// Reconnect attempts made in the outage.
+        attempts: u32,
+        /// How long the connection had been down.
+        outage: Duration,
     },
 }
 
