@@ -2,14 +2,14 @@
 id = "ADR-0038"
 title = "Generated ADR status banners and index"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0038: Generated ADR status banners and index
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
