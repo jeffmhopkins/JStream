@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:f2dc467e34b19648", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0024 to M1b: added groups as scenes (role, item.move keeping ids, scene_id addressing limited to own scene until variants); other M1 bullets unchanged" }
+verified = { hash = "b3:75c2b581cfe4ce85", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0023 to M1b: filters bullet now says per-placement opacity and blend, no per-placement effects in v1, slot reserved; shared-sources bullet gains the reference/clone conversion that keeps the item; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -74,10 +74,13 @@ verified = { hash = "b3:f2dc467e34b19648", by = "agent:claude@session_01QBbMRwRu
     scenes are built).
   - **Shared sources:** adding an existing source places the *same* instance (one capture,
     one set of source filters) in another scene. **Duplicate** makes an independent copy.
+    An item converts between reference and clone and keeps its id
+    ([ADR-0023](docs/adr/0023-placements-references-and-clones.md)).
   - Place, move, resize, rotate and **crop** scene items (2D transform + crop), with golden
     tests.
-  - **Filters and effects:** source filters apply everywhere the source appears, and item
-    effects apply to one placement.
+  - **Filters and effects:** source filters apply everywhere the source appears. Each
+    placement has its own opacity and blend; per-placement effects are not in v1, and the
+    model reserves a slot for them.
   - Bus-matrix mixer with filters and meters.
   - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
 - **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the

@@ -10,7 +10,8 @@ use jstream_control::protocol::{
 use jstream_control::{Control, ControlError, WsConfig, WsControl};
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::process::{Child, ChildStdout, Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 /// A fresh, empty directory for one test.
@@ -24,7 +25,9 @@ fn scratch(name: &str) -> PathBuf {
 /// A running daemon, killed if the test fails before stopping it.
 struct Daemon {
     child: Child,
-    stdout: BufReader<ChildStdout>,
+    /// Its stdout, line by line (newlines kept), from a reader thread, so a daemon that
+    /// hangs fails the test after a deadline instead of blocking it.
+    stdout: Receiver<String>,
     url: String,
     /// The lines it printed before the URL line.
     banner: Vec<String>,
@@ -52,7 +55,21 @@ fn start(args: &[&str]) -> Daemon {
         .stderr(Stdio::piped())
         .spawn()
         .expect("the binary runs");
-    let stdout = BufReader::new(child.stdout.take().expect("piped stdout"));
+    let mut reader = BufReader::new(child.stdout.take().expect("piped stdout"));
+    let (lines, stdout) = mpsc::channel();
+    std::thread::spawn(move || {
+        loop {
+            let mut line = String::new();
+            match reader.read_line(&mut line) {
+                Ok(0) | Err(_) => break,
+                Ok(_) => {
+                    if lines.send(line).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
     // Owned by the guard from here on, so a failing start doesn't leave it running.
     let mut daemon = Daemon {
         child,
@@ -60,26 +77,48 @@ fn start(args: &[&str]) -> Daemon {
         url: String::new(),
         banner: Vec::new(),
     };
+    let deadline = Instant::now() + Duration::from_secs(10);
     loop {
-        let mut line = String::new();
-        let read = daemon
+        let line = match daemon
             .stdout
-            .read_line(&mut line)
-            .expect("stdout is readable");
-        if read == 0 {
-            let mut stderr = String::new();
-            let _ = daemon
-                .child
-                .stderr
-                .take()
-                .map(|mut e| e.read_to_string(&mut stderr));
-            panic!("the daemon exited before serving: {stderr}");
-        }
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        {
+            Ok(line) => line,
+            Err(RecvTimeoutError::Timeout) => {
+                panic!("the daemon printed no `listening on` line within 10 s")
+            }
+            Err(RecvTimeoutError::Disconnected) => {
+                let mut stderr = String::new();
+                let _ = daemon
+                    .child
+                    .stderr
+                    .take()
+                    .map(|mut e| e.read_to_string(&mut stderr));
+                panic!("the daemon exited before serving: {stderr}");
+            }
+        };
         if let Some(url) = line.trim_end().strip_prefix("listening on ") {
             daemon.url = url.to_owned();
             return daemon;
         }
         daemon.banner.push(line.trim_end().to_owned());
+    }
+}
+
+/// The rest of `daemon`'s stdout, once it has closed (within 10 s).
+#[cfg(unix)]
+fn rest_of_stdout(daemon: &Daemon) -> String {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut rest = String::new();
+    loop {
+        match daemon
+            .stdout
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        {
+            Ok(line) => rest.push_str(&line),
+            Err(RecvTimeoutError::Disconnected) => return rest,
+            Err(RecvTimeoutError::Timeout) => panic!("stdout did not close within 10 s"),
+        }
     }
 }
 
@@ -230,12 +269,7 @@ fn stop(daemon: &mut Daemon) {
             .expect("`kill` runs");
         assert!(status.success(), "SIGINT was sent");
         assert_eq!(wait(&mut daemon.child).code(), Some(0), "a graceful stop");
-        let mut rest = String::new();
-        daemon
-            .stdout
-            .read_to_string(&mut rest)
-            .expect("stdout closes");
-        assert_eq!(rest, "stopped\n");
+        assert_eq!(rest_of_stdout(daemon), "stopped\n");
     }
     #[cfg(not(unix))]
     {

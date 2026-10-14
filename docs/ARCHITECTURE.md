@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:86a303e69b7ff4c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon/README.md only had its design verified line refreshed (ADR-0032 dependency re-check); shape diagram, per-client undo in the engine box and host table unchanged and still hold" }
+verified = { hash = "b3:b17ac8fcee8ca1cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #71: covered apps/ changed only by this PR's daemon README Serving-bullet order and test harness; the daemon and CLI rows and the diagram match main and still hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:89b8da3eb137ab44", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#66, #69, #70): new crates/jstream-audio/Cargo.toml at layer 2 (deps jstream-media, jstream-platform L1, no unsafe) matches the L2 audio row; other rows and edges as on main" }
+verified = { hash = "b3:b3e8d07c9f7c0919", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #74: new crates/jstream-encode/Cargo.toml at layer 3 (dep jstream-platform L1) beside main's jstream-audio (L2), core, daemon and outputs rows; all edges point strictly down (lint-deps ok)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -162,16 +162,17 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0024-scene-structure.md"]
-verified = { hash = "b3:653b22a1da8d1297", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0024 (now a dependency): tree gains folders, labels, hotkeys; Scene gains role, variant_of, overrides, folder, background, icon, color, favourite, show_in_multiview; Source gains labels, favourite; new bullets for groups/item.move, keyframe variants with overrides and the variant-parent cycle edge, scene_id addressing, and folders/metadata as collection state; Built so far lists all of it under Not yet, matching jstream-graph model/" }
+depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md"]
+verified = { hash = "b3:a3951ed0fff748f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0023 (now a dependency): SceneItem gains opacity, blend and reserved-empty effects[]; Source gains duplicated_from; reference/clone terms, no owner, item.set_source keeps the item; cycle check on every nesting edit; transform kept until ADR-0022 lands; Built so far lists the unbuilt ADR-0023 fields under Not yet, matching jstream-graph model/" }
 -->
 
 ```
 Collection (JSON on disk, schema_version, rev: u64)
-├── sources        Source { id, kind, settings, filters[], labels, favourite }   video and/or audio; independent of scenes
+├── sources        Source { id, kind, settings, filters[], duplicated_from?, labels, favourite }   video and/or audio; independent of scenes
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          icon, color, favourite, show_in_multiview, items[] }   flat display order
-│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, blend, effects[] }
+│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, opacity, blend,
+│                              effects[] (reserved, empty in v1) }
 ├── folders        Folder { id, name }   ordered, one level; organising only
 ├── labels         Label { id, name, icon, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
@@ -188,12 +189,18 @@ Collection (JSON on disk, schema_version, rev: u64)
   `program_scene`, including any transition in progress. A `VideoMix` with input
   `Program` follows it.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
-  Adding an *existing* source to a scene adds a `SceneItem` that references it. Changing
-  the source or its `filters[]` changes it everywhere. **Duplicate** creates a new
-  `Source` with its own id.
+  Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
+  shares everything with the other placements of that source except its own placement,
+  opacity and blend. Changing the source or its `filters[]` changes it everywhere.
+  **Duplicate** creates a new `Source` with its own id and `duplicated_from` set to the
+  original; an item placing it is a **clone** and changes independently. Sources have no
+  owner: every placement of a shared source is equal, and a client shows how often a
+  source is placed rather than marking one placement as the original.
+  `item.set_source` switches an item between reference and clone and keeps its id,
+  placement and stacking position ([ADR-0023](adr/0023-placements-references-and-clones.md)).
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
-  scenes nest. A scene never contains itself at any depth, so the graph rejects the edit
-  that would close a cycle.
+  scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
+  that would close a cycle (`item.add`, and `item.set_source`).
 - **Groups and keyframe scenes** ([ADR-0024](adr/0024-scene-structure.md)):
   - A **group** is a scene with `role = group`. The role changes no engine behaviour: a
     group renders, nests and takes filters like any scene, and clients hide groups from
@@ -203,7 +210,7 @@ Collection (JSON on disk, schema_version, rev: u64)
     of `scene.create`, `source.create`, `item.add` and `item.move`.
   - A **keyframe scene** (variant) is a real scene with `variant_of` naming its parent,
     which is not itself a variant. It has no items of its own: it shows the parent's
-    items with per-item `overrides` of placement and visibility (an absent field follows
+    items with per-item `overrides` of placement, visibility and opacity (an absent field follows
     the parent); everything else, including the background, follows the parent. A
     variant can be on program, nested and hotkeyed. The cycle check counts the
     variant → parent edge. Deleting a parent is rejected while it has variants.
@@ -220,7 +227,10 @@ Collection (JSON on disk, schema_version, rev: u64)
   decision. `Scene.background` (absent means transparent) is scene model, not metadata,
   because the compositor draws it wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
-  is used. `SceneItem.effects[]` and `crop` belong to that one placement.
+  is used. A placement owns its transform, `crop`, `visible`, `opacity` (an alpha
+  multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
+  compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
+  stays empty in v1, so adding them later needs no collection migration.
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
   encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
@@ -233,11 +243,11 @@ Collection (JSON on disk, schema_version, rev: u64)
   scene; no settings or filters yet), scenes in display order, and items in stacking
   order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
   they never copy them. Deleting a source an item still places, or a scene a source
-  still shows, is rejected. Not yet: settings, filters, effects, blend, the 3D
-  transform, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
-  variants and overrides, folders, labels, favourites and other organisation metadata,
-  `background`, hotkeys, and everything outside `sources` and `scenes`. Nothing is
-  persisted yet.
+  still shows, is rejected. Not yet: settings, filters, `opacity`, `blend`, the reserved
+  `effects[]`, `duplicated_from`, `item.set_source`, the 3D transform, scene `role` and
+  `item.move`, the `scene_id` addressing of placement edits, variants and overrides,
+  folders, labels, favourites and other organisation metadata, `background`, hotkeys,
+  and everything outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -348,7 +358,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stdio proxy renamed jstream-cli mcp after the maintainer kept the binary name jstream-cli; tools, schema-size, names, access and undo bullets unchanged" }
+verified = { hash = "b3:dca7fe7e8b8a425b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "R-API-002 prose now describes noun-grouped tools with ops, matching the 'Tools are grouped by noun' and Names bullets; jstream-mcp code change only rewords disconnected errors and README adds events options, so tools, schema size, access and undo bullets hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
