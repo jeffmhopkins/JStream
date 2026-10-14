@@ -35,7 +35,9 @@ mod backend {
     /// Codecs through Media Foundation, the OS codecs ADR-0003 chooses.
     ///
     /// It holds no COM objects, so it is `Send + Sync`. Each session starts Media
-    /// Foundation for itself and can be driven from any thread.
+    /// Foundation for itself and can be driven from any thread. Open sessions from a
+    /// thread that is not a single-threaded apartment (not a UI thread): the MFTs are
+    /// free-threaded, but one created in an STA would belong to it.
     #[derive(Debug, Default)]
     pub struct MfCodecs {
         _private: (),
@@ -65,7 +67,7 @@ mod backend {
                 (MFMediaType_Audio, MFAudioFormat_PCM),
                 (MFMediaType_Audio, MFAudioFormat_AAC),
             )?;
-            // Only the first is ever opened, so only it is listed.
+            // Only the first is listed: it is the one `audio_encoder` opens.
             out.extend(
                 aac.into_iter()
                     .take(1)

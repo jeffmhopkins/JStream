@@ -1,6 +1,6 @@
 //! Audio device I/O: capture endpoints, loopback, and output devices.
 //!
-//! Each open stream runs on a backend-owned real-time audio thread (one per device,
+//! Each open stream runs on a backend-owned real-time audio thread (one per stream,
 //! docs/ARCHITECTURE.md#threading) and calls an engine-supplied handler for every device
 //! packet. The handler does the engine's per-device work there (drift tracking and
 //! adaptive resampling into the engine's ring, per docs/adr/0014-media-clock.md), so it

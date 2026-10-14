@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:d54e8d0a254df236", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "MfCodecs vs main: AAC encoder as in #58 plus the CPU-path H.264 encoder (hardware MFTs then software, CBR/VBR, GOP, no B-frames, High, BT.709 limited, exact pts round trip, CleanPoint keyframes, async event pumping, 5 s drain); open question on hardware MFTs refusing system memory; checked against codec/{mod,mf,aac,h264}.rs" }
+verified = { hash = "b3:b372bce8d2832223", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main: the #58 AAC section (per-layout bit rates, non-STA opener, ShutdownObject, reused output sample) plus the CPU-path H.264 encoder (hardware then software MFTs, CBR/VBR, GOP, no B-frames, High, BT.709 limited, exact pts round trip, CleanPoint keyframes, async event pumping, 5 s drain) and its hardware/system-memory open question; checked against codec/{mod,mf,aac,h264}.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -50,7 +50,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     another channel count the stream is stereo, and WASAPI maps it onto the device's
     speakers. `jstream-media`'s 5.1 has its surround pair at the back, so a 5.1 device
     whose mix puts it at the side is opened through the same conversion, and WASAPI
-    maps its channels into that order. Process loopback is asked for 48 kHz stereo, since it has no mix format.
+    maps its channels into that order. Process loopback is asked for 48 kHz stereo,
+    since it has no mix format.
   - **Times and positions:** packet times are WASAPI's QPC positions, `None` when the
     device flags a timestamp error. Device positions count frames since the stream
     started.
@@ -72,17 +73,19 @@ The code is ported from spikes S1 to S3. This first cut has:
   ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md)): the **AAC encoder** and
   the **H.264 encoder from CPU frames**. AAC:
   - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
-    Windows that is Microsoft's software AAC encoder, which takes 44.1 or 48 kHz; mono,
-    stereo or 5.1; and 96, 128, 160 or 192 kbps. Any other configuration is
-    `Unsupported`.
+    Windows that is Microsoft's software AAC encoder. It takes 44.1 or 48 kHz; mono or
+    stereo at 96, 128, 160 or 192 kbps, or 5.1 at six times those (576, 768, 960 or
+    1152 kbps). Any other configuration is `Unsupported`.
   - **Input:** samples are converted from `f32` to 16-bit PCM, clamped and rounded.
   - **Output:** one raw AAC-LC access unit (1024 frames, no ADTS) per packet, the framing
     `jstream-media` defines. Packet times count from the first buffer's `pts`, in the
     input's sample time base, as the `AudioEncoder` trait says. `finish` pads the last
-    access unit with silence, then drains the MFT.
+    access unit with silence, then drains the MFT. An empty output sample is skipped.
   - **Threads:** each session keeps Media Foundation started and the process MTA alive
     (`CoIncrementMTAUsage`), so the engine's encode thread can drive it without
-    initialising COM.
+    initialising COM. Sessions are opened from a thread that isn't an STA.
+  - **Teardown:** dropping a session ends streaming and calls `ShutdownObject` on the
+    activation object, as Microsoft asks. One output sample is reused for every pull.
   - **H.264 encoder (CPU path):** this takes NV12 `VideoSurface::Cpu` frames and copies
     them into Media Foundation memory buffers. It is ARCH's fallback path; the zero-copy
     D3D11 path arrives with the GPU frame type

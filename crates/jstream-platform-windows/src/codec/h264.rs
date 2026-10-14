@@ -179,16 +179,16 @@ mod encoder {
         MFCreateMediaType, MFMediaType_Video, MFNominalRange_16_235, MFT_CATEGORY_VIDEO_ENCODER,
         MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_LOCALMFT, MFT_ENUM_FLAG_SORTANDFILTER,
         MFT_ENUM_FLAG_SYNCMFT, MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
-        MFT_MESSAGE_NOTIFY_END_OF_STREAM, MFT_MESSAGE_NOTIFY_END_STREAMING,
-        MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFVideoFormat_H264, MFVideoFormat_NV12,
-        MFVideoInterlace_Progressive, MFVideoTransferMatrix_BT709, eAVEncCommonRateControlMode_CBR,
-        eAVEncCommonRateControlMode_PeakConstrainedVBR, eAVEncH264VProfile_High,
+        MFT_MESSAGE_NOTIFY_END_OF_STREAM, MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFVideoFormat_H264,
+        MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFVideoTransferMatrix_BT709,
+        eAVEncCommonRateControlMode_CBR, eAVEncCommonRateControlMode_PeakConstrainedVBR,
+        eAVEncH264VProfile_High,
     };
     use windows::Win32::System::Variant::VARIANT;
     use windows::core::{GUID, Interface};
 
     use super::{InFlight, Settings, check, pack_nv12};
-    use crate::codec::mf::{self, Found, MfRuntime, Output};
+    use crate::codec::mf::{self, Found, MfRuntime, Mft, Output};
     use crate::com::{OsResult, os_error};
 
     /// How long `finish` waits for an asynchronous encoder to drain.
@@ -197,7 +197,7 @@ mod encoder {
     /// One H.264 encoder session on a Media Foundation encoder MFT.
     pub(crate) struct MfH264Encoder {
         // Fields drop in order: COM objects before the runtime that keeps MF started.
-        transform: IMFTransform,
+        mft: Mft,
         /// The event queue of an asynchronous MFT; `None` for a synchronous one.
         events: Option<IMFMediaEventGenerator>,
         output: Output,
@@ -250,11 +250,11 @@ mod encoder {
             let mut refusals = Vec::new();
             for (found, hardware) in candidates {
                 match Self::configure(&found, config, settings) {
-                    Ok((transform, events, output)) => {
+                    Ok((mft, events, output)) => {
                         let size = config.size;
                         let frame_bytes = size.width() as usize * size.height() as usize * 3 / 2;
                         return Ok(Self {
-                            transform,
+                            mft,
                             events,
                             output,
                             info: CodecInfo {
@@ -299,8 +299,9 @@ mod encoder {
             found: &Found,
             config: &VideoEncoderConfig,
             s: Settings,
-        ) -> Result<(IMFTransform, Option<IMFMediaEventGenerator>, Output), PlatformError> {
-            let transform = found.activate()?;
+        ) -> Result<(Mft, Option<IMFMediaEventGenerator>, Output), PlatformError> {
+            let mft = found.activate()?;
+            let transform = &mft.transform;
             // SAFETY: plain COM calls on a live transform.
             let attrs = unsafe { transform.GetAttributes() }.os("IMFTransform::GetAttributes")?;
             // SAFETY: as above.
@@ -341,7 +342,7 @@ mod encoder {
                 transform
                     .SetOutputType(0, &out, 0)
                     .os("IMFTransform::SetOutputType (H.264)")?;
-                let input = nv12_input_type(&transform)?;
+                let input = nv12_input_type(transform)?;
                 video_type(&input, &MFVideoFormat_NV12, w, h, s.fps)?;
                 // BT.709 limited range, the colour ARCH's pipeline encodes in (S1).
                 input
@@ -355,7 +356,7 @@ mod encoder {
                     .os("IMFTransform::SetInputType (NV12)")?;
             }
             // An access unit never exceeds an uncompressed frame.
-            let output = Output::new(&transform, w * h * 3 / 2)?;
+            let output = Output::new(transform, w * h * 3 / 2)?;
             let events = if is_async {
                 Some(
                     transform
@@ -372,7 +373,7 @@ mod encoder {
                     .and_then(|()| transform.ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, 0))
                     .os("IMFTransform::ProcessMessage (start)")?;
             }
-            Ok((transform, events, output))
+            Ok((mft, events, output))
         }
 
         /// Handles every queued event of an asynchronous MFT without blocking, or pulls
@@ -409,7 +410,7 @@ mod encoder {
 
         /// Pulls one output sample into `pending`; false when there was none.
         fn collect_one(&mut self) -> Result<bool, PlatformError> {
-            let Some(sample) = self.output.pull(&self.transform)? else {
+            let Some(sample) = self.output.pull(&self.mft.transform)? else {
                 return Ok(false);
             };
             let pts = self.in_flight.receive(sample.time);
@@ -475,13 +476,13 @@ mod encoder {
             let time = self.in_flight.send(info.pts)?;
             let sample = mf::sample_from(&self.nv12, time, self.settings.frame_hns)?;
             // SAFETY: plain COM call; the sample is a live object built above.
-            match unsafe { self.transform.ProcessInput(0, &sample, 0) } {
+            match unsafe { self.mft.transform.ProcessInput(0, &sample, 0) } {
                 Ok(()) => {}
                 Err(e) if e.code() == MF_E_NOTACCEPTING && self.events.is_none() => {
                     // A synchronous MFT only refuses input while it holds output.
                     self.collect_all()?;
                     // SAFETY: as above.
-                    unsafe { self.transform.ProcessInput(0, &sample, 0) }
+                    unsafe { self.mft.transform.ProcessInput(0, &sample, 0) }
                         .os("IMFTransform::ProcessInput (H.264)")?;
                 }
                 Err(e) => return Err(os_error("IMFTransform::ProcessInput (H.264)", &e)),
@@ -503,9 +504,14 @@ mod encoder {
                 self.finished = true;
                 // SAFETY: plain COM calls on a streaming transform.
                 unsafe {
-                    self.transform
+                    self.mft
+                        .transform
                         .ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0)
-                        .and_then(|()| self.transform.ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0))
+                        .and_then(|()| {
+                            self.mft
+                                .transform
+                                .ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0)
+                        })
                         .os("IMFTransform::ProcessMessage (drain)")?;
                 }
                 if self.events.is_none() {
@@ -533,16 +539,6 @@ mod encoder {
             }
             out.append(&mut self.pending);
             Ok(())
-        }
-    }
-
-    impl Drop for MfH264Encoder {
-        fn drop(&mut self) {
-            // SAFETY: plain COM call; an error at teardown changes nothing.
-            let _ = unsafe {
-                self.transform
-                    .ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0)
-            };
         }
     }
 

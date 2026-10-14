@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:478dbb7e1c94c192", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only gained the S3 result paragraph (confirms QPC mapping + adaptive resampling the clock traits assume); purpose text unchanged" }
+verified = { hash = "b3:290aaf0a1167e830", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only renamed audio threads to one per stream; src/audio.rs doc now says the same; purpose text (handlers on the backend's RT audio thread) unchanged and holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

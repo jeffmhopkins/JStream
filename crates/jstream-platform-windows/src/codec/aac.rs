@@ -14,16 +14,20 @@ use jstream_platform::{AudioEncoderConfig, PlatformError};
 pub(crate) const AAC_FRAME: u64 = 1024;
 /// Sample rates the Media Foundation AAC encoder takes.
 const RATES: [u32; 2] = [44_100, 48_000];
-/// Bit rates the Media Foundation AAC encoder offers, in kilobits per second.
-const KBPS: [u32; 4] = [96, 128, 160, 192];
+/// Bit rates the Media Foundation AAC encoder offers for mono and stereo, in kilobits per
+/// second (`MF_MT_AUDIO_AVG_BYTES_PER_SECOND` 12000, 16000, 20000 or 24000).
+const KBPS_STEREO: [u32; 4] = [96, 128, 160, 192];
+/// Bit rates it offers for 5.1: six times the stereo ones (72000 to 144000 bytes/s).
+const KBPS_51: [u32; 4] = [576, 768, 960, 1152];
 
 /// Checks a configuration against what the Media Foundation AAC encoder supports, and
 /// returns the output's `MF_MT_AUDIO_AVG_BYTES_PER_SECOND`.
 ///
 /// # Errors
 /// [`PlatformError::Unsupported`] for another codec, a planar input, a sample rate other
-/// than 44.1 or 48 kHz, a layout other than mono, stereo or 5.1, or a bit rate other than
-/// 96, 128, 160 or 192 kbps.
+/// than 44.1 or 48 kHz, a layout other than mono, stereo or 5.1, or a bit rate the encoder
+/// doesn't offer for the layout: 96, 128, 160 or 192 kbps for mono and stereo, and 576,
+/// 768, 960 or 1152 kbps for 5.1.
 pub(crate) fn check(config: &AudioEncoderConfig) -> Result<u32, PlatformError> {
     let unsupported = |what: String| Err(PlatformError::Unsupported { what });
     let f = config.input_format;
@@ -39,16 +43,17 @@ pub(crate) fn check(config: &AudioEncoderConfig) -> Result<u32, PlatformError> {
             f.sample_rate()
         ));
     }
-    if !matches!(
-        f.layout(),
-        ChannelLayout::Mono | ChannelLayout::Stereo | ChannelLayout::Surround51
-    ) {
-        return unsupported(format!("AAC in {:?}", f.layout()));
-    }
-    if !KBPS.contains(&config.kbps) {
+    let offered = match f.layout() {
+        ChannelLayout::Mono | ChannelLayout::Stereo => KBPS_STEREO,
+        ChannelLayout::Surround51 => KBPS_51,
+        other => return unsupported(format!("AAC in {other:?}")),
+    };
+    if !offered.contains(&config.kbps) {
         return unsupported(format!(
-            "AAC at {} kbps (the Media Foundation encoder offers 96, 128, 160 or 192)",
-            config.kbps
+            "AAC {:?} at {} kbps (the Media Foundation encoder offers {:?} kbps for it)",
+            f.layout(),
+            config.kbps,
+            offered
         ));
     }
     Ok(config.kbps * 1000 / 8)
@@ -138,24 +143,23 @@ mod encoder {
     use jstream_platform::media::{AudioBuffer, Packet};
     use jstream_platform::{AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, PlatformError};
     use windows::Win32::Media::MediaFoundation::{
-        IMFTransform, MF_E_NOTACCEPTING, MF_MT_AAC_PAYLOAD_TYPE, MF_MT_AUDIO_AVG_BYTES_PER_SECOND,
+        MF_E_NOTACCEPTING, MF_MT_AAC_PAYLOAD_TYPE, MF_MT_AUDIO_AVG_BYTES_PER_SECOND,
         MF_MT_AUDIO_BITS_PER_SAMPLE, MF_MT_AUDIO_BLOCK_ALIGNMENT, MF_MT_AUDIO_NUM_CHANNELS,
         MF_MT_AUDIO_SAMPLES_PER_SECOND, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE, MFAudioFormat_AAC,
         MFAudioFormat_PCM, MFCreateMediaType, MFMediaType_Audio, MFT_CATEGORY_AUDIO_ENCODER,
         MFT_ENUM_FLAG_LOCALMFT, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
         MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
-        MFT_MESSAGE_NOTIFY_END_OF_STREAM, MFT_MESSAGE_NOTIFY_END_STREAMING,
-        MFT_MESSAGE_NOTIFY_START_OF_STREAM,
+        MFT_MESSAGE_NOTIFY_END_OF_STREAM, MFT_MESSAGE_NOTIFY_START_OF_STREAM,
     };
 
     use super::{AAC_FRAME, Framing, check, write_pcm16};
-    use crate::codec::mf::{self, MfRuntime, Output};
+    use crate::codec::mf::{self, MfRuntime, Mft, Output};
     use crate::com::OsResult;
 
     /// One AAC encoder session on the Media Foundation AAC encoder MFT.
     pub(crate) struct MfAacEncoder {
         // Fields drop in order: the transform before the runtime that keeps MF started.
-        transform: IMFTransform,
+        mft: Mft,
         output: Output,
         info: CodecInfo,
         config: AudioEncoderConfig,
@@ -189,7 +193,8 @@ mod encoder {
                     what: "AAC encoding: no Media Foundation AAC encoder is installed".into(),
                 });
             };
-            let transform: IMFTransform = mft.activate()?;
+            let session = mft.activate()?;
+            let transform = &session.transform;
             let f = config.input_format;
             let channels = f.channels() as u32;
             let rate = f.sample_rate();
@@ -225,7 +230,7 @@ mod encoder {
                     .os("IMFTransform::SetInputType (PCM)")?;
             }
             // One AAC access unit is at most 768 bytes per channel.
-            let output = Output::new(&transform, 768 * channels)?;
+            let output = Output::new(transform, 768 * channels)?;
             // SAFETY: plain COM calls on a configured transform.
             unsafe {
                 transform
@@ -234,7 +239,7 @@ mod encoder {
                     .os("IMFTransform::ProcessMessage (start)")?;
             }
             Ok(Self {
-                transform,
+                mft: session,
                 output,
                 info: CodecInfo {
                     name: mft.name,
@@ -269,14 +274,14 @@ mod encoder {
             let start = self.framing.frames_in() - frames;
             let sample = mf::sample_from(pcm, hns(start), hns(start + frames) - hns(start))?;
             // SAFETY: plain COM call; the sample is a live object built above.
-            match unsafe { self.transform.ProcessInput(0, &sample, 0) } {
+            match unsafe { self.mft.transform.ProcessInput(0, &sample, 0) } {
                 Ok(()) => {}
                 Err(e) if e.code() == MF_E_NOTACCEPTING => {
                     // A synchronous MFT only refuses input while it holds output: collect
                     // it, then the input fits.
                     self.collect()?;
                     // SAFETY: as above.
-                    unsafe { self.transform.ProcessInput(0, &sample, 0) }
+                    unsafe { self.mft.transform.ProcessInput(0, &sample, 0) }
                         .os("IMFTransform::ProcessInput (AAC)")?;
                 }
                 Err(e) => return Err(crate::com::os_error("IMFTransform::ProcessInput (AAC)", &e)),
@@ -286,7 +291,7 @@ mod encoder {
 
         /// Moves every access unit the MFT has ready into `pending`.
         fn collect(&mut self) -> Result<(), PlatformError> {
-            while let Some(sample) = self.output.pull(&self.transform)? {
+            while let Some(sample) = self.output.pull(&self.mft.transform)? {
                 let pts = self.framing.next_pts()?;
                 self.pending
                     .push(Packet::new(self.info.codec, true, pts, pts, sample.data)?);
@@ -341,24 +346,19 @@ mod encoder {
                 debug_assert_eq!(self.framing.frames_in() % AAC_FRAME, 0);
                 // SAFETY: plain COM calls on a streaming transform.
                 unsafe {
-                    self.transform
+                    self.mft
+                        .transform
                         .ProcessMessage(MFT_MESSAGE_NOTIFY_END_OF_STREAM, 0)
-                        .and_then(|()| self.transform.ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0))
+                        .and_then(|()| {
+                            self.mft
+                                .transform
+                                .ProcessMessage(MFT_MESSAGE_COMMAND_DRAIN, 0)
+                        })
                         .os("IMFTransform::ProcessMessage (drain)")?;
                 }
                 self.collect()?;
             }
             self.poll(out)
-        }
-    }
-
-    impl Drop for MfAacEncoder {
-        fn drop(&mut self) {
-            // SAFETY: plain COM call; an error at teardown changes nothing.
-            let _ = unsafe {
-                self.transform
-                    .ProcessMessage(MFT_MESSAGE_NOTIFY_END_STREAMING, 0)
-            };
         }
     }
 }
@@ -389,8 +389,12 @@ mod tests {
         );
         assert_eq!(check(&config(44_100, ChannelLayout::Mono, 96)), Ok(12_000));
         assert_eq!(
-            check(&config(48_000, ChannelLayout::Surround51, 192)),
-            Ok(24_000)
+            check(&config(48_000, ChannelLayout::Surround51, 576)),
+            Ok(72_000)
+        );
+        assert_eq!(
+            check(&config(48_000, ChannelLayout::Surround51, 1152)),
+            Ok(144_000)
         );
     }
 
@@ -400,6 +404,9 @@ mod tests {
             |c: AudioEncoderConfig| matches!(check(&c), Err(PlatformError::Unsupported { .. }));
         assert!(unsupported(config(32_000, ChannelLayout::Stereo, 128)));
         assert!(unsupported(config(48_000, ChannelLayout::Stereo, 320)));
+        // Each layout has its own bit rates: stereo ones don't apply to 5.1, or back.
+        assert!(unsupported(config(48_000, ChannelLayout::Surround51, 192)));
+        assert!(unsupported(config(48_000, ChannelLayout::Stereo, 576)));
         let mut c = config(48_000, ChannelLayout::Stereo, 128);
         c.codec = Codec::H264;
         assert!(unsupported(c));
