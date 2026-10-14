@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:90e16827519d8887", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only gained a paragraph on jstream-audio's resampler; the Audio bullet (handlers on the RT audio thread, backends never resample, adaptive resampling is the engine's job) still holds and jstream-audio now implements AudioInputHandler" }
+verified = { hash = "b3:08235abb8c816a16", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; platform traits, GPU interop and capture hand-off are unaffected" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

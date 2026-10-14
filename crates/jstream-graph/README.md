@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:f78c10be7991b250", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Tests line now names the parity cases from jstream_protocol::parity (reads and rejected batches) that read.rs runs; Reading paragraph unchanged and still matches Graph::query; graph() helper now builds the shared collection; apply.rs untouched" }
+verified = { hash = "b3:71a1ff1101c4bbf6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency protocol#design's Undo subsection now points to ADR-0032 for undo/redo requests; graph still returns inverses with no expected_rev for core's history to choose, consistent with the ADR" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
