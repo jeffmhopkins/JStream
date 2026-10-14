@@ -224,7 +224,8 @@ mod encoder {
                     .SetInputType(0, &input, 0)
                     .os("IMFTransform::SetInputType (PCM)")?;
             }
-            let output = Output::new(&transform)?;
+            // One AAC access unit is at most 768 bytes per channel.
+            let output = Output::new(&transform, 768 * channels)?;
             // SAFETY: plain COM calls on a configured transform.
             unsafe {
                 transform
@@ -285,10 +286,10 @@ mod encoder {
 
         /// Moves every access unit the MFT has ready into `pending`.
         fn collect(&mut self) -> Result<(), PlatformError> {
-            while let Some(data) = self.output.pull(&self.transform)? {
+            while let Some(sample) = self.output.pull(&self.transform)? {
                 let pts = self.framing.next_pts()?;
                 self.pending
-                    .push(Packet::new(self.info.codec, true, pts, pts, data)?);
+                    .push(Packet::new(self.info.codec, true, pts, pts, sample.data)?);
             }
             Ok(())
         }

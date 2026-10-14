@@ -5,10 +5,11 @@ use std::mem::ManuallyDrop;
 
 use jstream_platform::PlatformError;
 use windows::Win32::Media::MediaFoundation::{
-    IMFActivate, IMFSample, IMFTransform, MF_E_TRANSFORM_NEED_MORE_INPUT, MF_VERSION,
-    MFCreateMemoryBuffer, MFCreateSample, MFSTARTUP_NOSOCKET, MFShutdown, MFStartup, MFT_ENUM_FLAG,
-    MFT_FRIENDLY_NAME_Attribute, MFT_OUTPUT_DATA_BUFFER, MFT_OUTPUT_STREAM_PROVIDES_SAMPLES,
-    MFT_REGISTER_TYPE_INFO, MFTEnumEx,
+    IMFActivate, IMFSample, IMFTransform, MF_E_TRANSFORM_NEED_MORE_INPUT,
+    MF_E_TRANSFORM_STREAM_CHANGE, MF_VERSION, MFCreateMemoryBuffer, MFCreateSample,
+    MFSTARTUP_NOSOCKET, MFSampleExtension_CleanPoint, MFShutdown, MFStartup, MFT_ENUM_FLAG,
+    MFT_FRIENDLY_NAME_Attribute, MFT_OUTPUT_DATA_BUFFER, MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES,
+    MFT_OUTPUT_STREAM_PROVIDES_SAMPLES, MFT_REGISTER_TYPE_INFO, MFTEnumEx,
 };
 use windows::Win32::System::Com::{
     CO_MTA_USAGE_COOKIE, CoDecrementMTAUsage, CoIncrementMTAUsage, CoTaskMemFree,
@@ -160,6 +161,15 @@ pub(crate) fn sample_from(
     }
 }
 
+/// One output sample's bytes and what the MFT said about it.
+pub(crate) struct OutSample {
+    pub(crate) data: Vec<u8>,
+    /// The sample time in 100 ns units, if the MFT set one.
+    pub(crate) time: Option<i64>,
+    /// Whether the sample is a clean point (`MFSampleExtension_CleanPoint`): a keyframe.
+    pub(crate) keyframe: bool,
+}
+
 /// How a transform's output stream wants its samples.
 pub(crate) struct Output {
     /// Whether the MFT allocates its own output samples.
@@ -170,25 +180,52 @@ pub(crate) struct Output {
 
 impl Output {
     /// Reads output stream 0's requirements. Call after the media types are set.
-    pub(crate) fn new(transform: &IMFTransform) -> Result<Self, PlatformError> {
+    /// `min_size` bounds the buffer size from below, for MFTs that report 0 or too
+    /// little before streaming starts.
+    pub(crate) fn new(transform: &IMFTransform, min_size: u32) -> Result<Self, PlatformError> {
         // SAFETY: plain COM call on a configured transform.
         let info =
             unsafe { transform.GetOutputStreamInfo(0) }.os("IMFTransform::GetOutputStreamInfo")?;
+        let provides =
+            (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES.0 | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES.0) as u32;
         Ok(Self {
-            provides_samples: info.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES.0 as u32 != 0,
-            // Some MFTs report 0 until streaming starts; one AAC or small H.264 access
-            // unit fits in 64 KiB, and a larger one fails visibly rather than truncating.
-            buffer_size: if info.cbSize == 0 {
-                65_536
-            } else {
-                info.cbSize
-            },
+            provides_samples: info.dwFlags & provides != 0,
+            buffer_size: info.cbSize.max(min_size),
         })
     }
 
-    /// One `ProcessOutput` call: the bytes of the next output sample, or `None` when the
-    /// MFT needs more input.
-    pub(crate) fn pull(&self, transform: &IMFTransform) -> Result<Option<Vec<u8>>, PlatformError> {
+    /// Takes the next output sample, or `None` when the MFT needs more input. A format
+    /// change on the output (`MF_E_TRANSFORM_STREAM_CHANGE`) is accepted and the call
+    /// retried once.
+    pub(crate) fn pull(
+        &self,
+        transform: &IMFTransform,
+    ) -> Result<Option<OutSample>, PlatformError> {
+        for _ in 0..2 {
+            match self.pull_once(transform)? {
+                Pulled::Sample(s) => return Ok(Some(s)),
+                Pulled::NeedInput => return Ok(None),
+                Pulled::StreamChange => {
+                    // SAFETY: plain COM calls on a live transform.
+                    unsafe {
+                        let t = transform
+                            .GetOutputAvailableType(0, 0)
+                            .os("IMFTransform::GetOutputAvailableType")?;
+                        transform
+                            .SetOutputType(0, &t, 0)
+                            .os("IMFTransform::SetOutputType (stream change)")?;
+                    }
+                }
+            }
+        }
+        Err(PlatformError::Os {
+            call: "IMFTransform::ProcessOutput",
+            code: None,
+            message: "the output format kept changing".into(),
+        })
+    }
+
+    fn pull_once(&self, transform: &IMFTransform) -> Result<Pulled, PlatformError> {
         let sample = if self.provides_samples {
             None
         } else {
@@ -219,7 +256,8 @@ impl Output {
         };
         match result {
             Ok(()) => {}
-            Err(e) if e.code() == MF_E_TRANSFORM_NEED_MORE_INPUT => return Ok(None),
+            Err(e) if e.code() == MF_E_TRANSFORM_NEED_MORE_INPUT => return Ok(Pulled::NeedInput),
+            Err(e) if e.code() == MF_E_TRANSFORM_STREAM_CHANGE => return Ok(Pulled::StreamChange),
             Err(e) => return Err(crate::com::os_error("IMFTransform::ProcessOutput", &e)),
         }
         let sample = sample.ok_or_else(|| PlatformError::Os {
@@ -240,7 +278,18 @@ impl Output {
                 .os("IMFMediaBuffer::Lock")?;
             let data = std::slice::from_raw_parts(ptr, len as usize).to_vec();
             buffer.Unlock().os("IMFMediaBuffer::Unlock")?;
-            Ok(Some(data))
+            Ok(Pulled::Sample(OutSample {
+                data,
+                time: sample.GetSampleTime().ok(),
+                keyframe: sample.GetUINT32(&MFSampleExtension_CleanPoint).unwrap_or(0) != 0,
+            }))
         }
     }
+}
+
+/// What one `ProcessOutput` call gave.
+enum Pulled {
+    Sample(OutSample),
+    NeedInput,
+    StreamChange,
 }
