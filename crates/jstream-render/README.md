@@ -2,32 +2,34 @@
 id = "CRATE-jstream-render"
 title = "jstream-render"
 kind = "normative"
-status = "draft"
+status = "active"
 review_every = "90d"
 -->
 
 # jstream-render
 
-Design for the one-scene GPU compositor, written before the code. The crate does not
-exist yet; this note is the contract the implementation follows. It becomes the crate
-README when the code lands.
+The one-scene GPU compositor. It owns a wgpu device, or uses the platform's, and draws
+a single canvas.
 
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
+covers = ["crates/jstream-render/src/**"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
+verified = { hash = "b3:084a418d94915711", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read against the crate: one canvas, legacy placement, opacity, src-over, Compositor::open versus on_context, sRGB import and RGBA8 readback. The crate-map row, GPU pipeline paragraph, ADR-0004 and ADR-0022 decision 5 still match." }
 -->
 
 One scene, composited on the GPU with wgpu
-([ADR-0004](../adr/0004-wgpu-with-native-interop.md)). This is the M1a
+([ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md)). This is the M1a
 compositor in [ROADMAP › M1](../../ROADMAP.md#m1): a single canvas and a stack of
 items, not the full mix graph. Layer 2, no `unsafe`
-([ARCH › Crate map](../ARCHITECTURE.md#crate-map)).
+([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)).
 
 **Why its own crate.** The crate map already places the device, the compositor and
 snapshot readback here. `jstream-graph` is the same layer and stays free of GPU code,
 so the two cannot depend on each other. `jstream-platform` holds the `unsafe` interop
-and must not contain WGSL. `jstream-core` (layer 5) is what will build a render
-snapshot and call this crate.
+and must not contain WGSL. `jstream-core` (layer 5) is what builds a render snapshot
+and calls this crate.
 
 **What one scene means.**
 
@@ -35,15 +37,15 @@ snapshot and call this crate.
   straight-alpha sRGB clear colour.
 - Items in stacking order, bottom first, matching `Scene::items`.
 - Each item places one image with the **legacy 0.3 placement**
-  ([ADR-0022](../adr/0022-item-transform-and-canvas.md) decision 5): crop in
+  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) decision 5): crop in
   source pixels, then scale the remaining rectangle by `scale` relative to the
   source's current size, put its top-left at `position` in canvas pixels, and rotate
   clockwise about that corner. The source size is the image's size, which is runtime
   state, so the compositor evaluates it on every `render`.
 - `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
 - Opacity is a straight-alpha multiplier in `[0, 1]`, default 1. The graph does not
-  store it yet; the snapshot carries it so `jstream-core` can pass it when it does
-  ([ARCH › Data model](../ARCHITECTURE.md#data-model)). The only blend is
+  store it; the snapshot carries it so `jstream-core` can pass it when it does
+  ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)). The only blend is
   premultiplied src-over. Other modes stay rejected by the engine until a later change
   draws them.
 - Nested scenes are not walked here. The caller renders the inner scene and places
@@ -53,7 +55,7 @@ snapshot and call this crate.
 
 - It does **not** open the media adapter. When platform interop works, the engine
   constructs the compositor on `GpuContext`'s device, queue and adapter
-  ([jstream-platform › GPU frames](../../crates/jstream-platform/README.md#gpu-frames)), so
+  ([jstream-platform › GPU frames](../jstream-platform/README.md#gpu-frames)), so
   capture, composite and encode share one device. `Compositor::open` is the other
   path: no interop (the fakes, CI, a headless machine). It opens a device itself,
   software adapter first, as ARCH principle 7 and that section's "when there is no
@@ -67,8 +69,8 @@ snapshot and call this crate.
 - The graph's `ItemTransform` and `Crop` are not named here. `Placement` and `Crop`
   are the same fields (top-left `position`, `scale`, clockwise `rotation_deg`; crop
   insets in source pixels), so the engine's mapping is field by field. The shared
-  geometry formula ADR-0022 puts in `jstream-protocol` is not in the tree yet, and
-  this crate will not invent a second one.
+  geometry formula ADR-0022 puts in `jstream-protocol` is not in the tree, and this
+  crate does not invent a second one.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. It is the snapshot path (`video.snapshot` later encodes it). It
   is not the encoder's NV12 texture.
@@ -78,16 +80,19 @@ P010 conversion, encode-target export and the D3D12 `PRESENT` transition, WGSL e
 packs, fit modes, 3D tilt/turn/depth/perspective, transitions, the master chain and
 the privacy stage. ADR-0022 keeps 3D and fit modes out until the protocol formula
 exists; the GPU pipeline's encode steps stay in
-[ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline).
+[ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline).
 
 <a id="design"></a>
 ## Design
 <!-- @section
+covers = ["crates/jstream-render/src/**"]
+depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
+verified = { hash = "b3:4e97d543c7bc7065", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read the pass and resource layout against compositor.rs, the WGSL and place.rs. R-RT-002 still holds: no control-plane wait, no file or network I/O, bind groups live on Image, readback is opt-in. ADR-0004's single wgpu pin is unchanged." }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
-([R-RT-002](../RULES.md#R-RT-002)). There is no render thread in this crate
-yet, so there is no lock-free hand-off to build ([R-RT-003](../RULES.md#R-RT-003)).
+([R-RT-002](../../docs/RULES.md#R-RT-002)). This crate has no render thread, so
+there is no lock-free hand-off to build ([R-RT-003](../../docs/RULES.md#R-RT-003)).
 Calling `render` is the caller's tick. GPU calls may allocate inside the driver; this
 crate does not allocate per item on the steady path.
 
@@ -158,8 +163,9 @@ Opacity outside `[0, 1]` and any non-finite placement, colour or opacity is
 `Compositor::open` builds an instance with
 `InstanceDescriptor::new_without_display_handle` and the backends this crate enables:
 Vulkan, DX12 and Metal (one `wgpu` pin, ADR-0004; features are additive,
-[R-RS-010](../RULES.md#R-RS-010)). No GLES backend: lavapipe covers Linux
-without an EGL stack.
+[R-RS-010](../../docs/RULES.md#R-RS-010)). No GLES backend: lavapipe covers Linux
+without an EGL stack. Instance flags start empty and `with_env()`, so a debug build
+does not require the Khronos validation layer; `WGPU_VALIDATION` still opts in.
 
 Adapter order when `OpenOptions` asks for software (the test and headless default):
 
@@ -175,13 +181,16 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <a id="testing"></a>
 ## Testing
 <!-- @section
+covers = ["crates/jstream-render/src/tests.rs"]
+depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
+verified = { hash = "b3:8449a55e83a4d38e", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read tests.rs: offscreen readback, interior-pixel tolerance, stderr skip when no adapter, panic when CI is set. R-TEST-003 still forbids hand-edited goldens, R-TEST-004 still requires no physical GPU, and the testing table's lavapipe and WARP rows are what CI uses." }
 -->
 
-CI has no GPU ([R-TEST-004](../RULES.md#R-TEST-004)). The
-[testing table](../RULES.md#testing) already names the two software adapters:
+CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
+[testing table](../../docs/RULES.md#testing) already names the two software adapters:
 Linux lavapipe for a render smoke, Windows WARP as the golden-frame reference.
-`cargo xtask golden` does not exist yet, and
-[R-TEST-003](../RULES.md#R-TEST-003) says files under `tests/golden/` change
+`cargo xtask golden` does not exist, and
+[R-TEST-003](../../docs/RULES.md#R-TEST-003) says files under `tests/golden/` change
 only through that command on WARP. This cut therefore does **not** add golden PNGs.
 It renders offscreen and checks pixels in the crate tests, with a tolerance, so the
 same tests run on lavapipe and on WARP.
@@ -210,13 +219,13 @@ without rendering.
 **CI install (Linux `test` job only).** `mesa-vulkan-drivers` and `libvulkan1`, and
 `VK_DRIVER_FILES` pointed at lavapipe's ICD so the job cannot pick another driver.
 wgpu loads `libvulkan` at runtime; no new native crate and no `lint-deps` allowlist
-change ([R-DEP-002](../RULES.md#R-DEP-002)). Windows already has WARP through
+change ([R-DEP-002](../../docs/RULES.md#R-DEP-002)). Windows already has WARP through
 DX12; that job needs no package. macOS has no software adapter: Metal if the runner
 has one, otherwise the skip. The `macos` job is not required. Editing the workflow is
 a governance change because `.github/**` is protected; it adds a package so tests can
 render, and it does not weaken a check.
 
-**Not measured** ([R-RT-005](../RULES.md#R-RT-005)). No frame-time numbers.
+**Not measured** ([R-RT-005](../../docs/RULES.md#R-RT-005)). No frame-time numbers.
 
 <a id="open-questions"></a>
 ## Open questions
@@ -225,7 +234,7 @@ render, and it does not weaken a check.
 
 - **Geometry and fit modes.** ADR-0022's `ItemGeometry` (centre, size, `stretch` /
   `fit` / `fill`, rotation about the centre) is specified but not in
-  `jstream-protocol` yet, and the ADR says that formula lives there so the UI and the
+  `jstream-protocol`, and the ADR says that formula lives there so the UI and the
   compositor share it. This crate implements only the legacy evaluation. When the
   function exists, the snapshot should carry its projected quad (or the geometry plus
   the source size) instead of a second copy of the math. `fill` also needs a clip to
@@ -242,16 +251,16 @@ render, and it does not weaken a check.
 - **Opacity and blend ownership** was left open by ADR-0022 (decision-register D2).
   The snapshot puts opacity on the item because that is what ARCH's data model and
   the compositor consequences of
-  [ADR-0023](../adr/0023-placements-references-and-clones.md) describe. Blend modes other than src-over
+  [ADR-0023](../../docs/adr/0023-placements-references-and-clones.md) describe. Blend modes other than src-over
   are not represented.
 - **Background.** The clear colour is a field of the snapshot. `Scene.background` is
-  not in the graph yet.
+  not in the graph.
 - **Golden files.** When `cargo xtask golden` exists, WARP renders under
   `tests/golden/` should freeze the cases these tolerance checks cover. Until then
   the tolerance checks are the pixel oracle on both software adapters.
 - **Render thread.** Per-frame work is bounded for a caller that reuses `Image`s, but
   the thread, the snapshot swap and the panic boundary
-  ([R-RT-006](../RULES.md#R-RT-006)) belong to `jstream-core`.
+  ([R-RT-006](../../docs/RULES.md#R-RT-006)) belong to `jstream-core`.
 - **Output stability.** Callers that need the sRGB texture after the next `render`
   must copy it. Whether `render` should copy into a caller-supplied texture (the
   encode target, a preview) is open; the first engine wiring can decide.

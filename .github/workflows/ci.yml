@@ -58,7 +58,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-      - run: cargo test --workspace --locked
+      # Headless compositor tests need a software Vulkan adapter. lavapipe ships in
+      # mesa-vulkan-drivers; VK_DRIVER_FILES keeps the job off the other ICDs.
+      - name: Software Vulkan (lavapipe)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+          icd=$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)
+          if [ -z "$icd" ]; then
+            echo "::error::lavapipe ICD not found after installing mesa-vulkan-drivers"
+            ls -la /usr/share/vulkan/icd.d || true
+            exit 1
+          fi
+          echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
+      - name: Test
+        run: cargo test --workspace --locked
 
   doc:
     runs-on: ubuntu-latest

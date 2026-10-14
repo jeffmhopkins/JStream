@@ -1,0 +1,25 @@
+[package]
+name = "jstream-render"
+version = "0.0.0"
+description = "The JStream GPU compositor: one scene, drawn with wgpu into an offscreen sRGB target."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+jstream-media.workspace = true
+jstream-platform.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+# Backends are additive (R-RS-010): Vulkan for lavapipe, DX12 for WARP, Metal on macOS.
+# `wgsl` compiles the compositor shaders. The version is the workspace pin (ADR-0004).
+wgpu = { workspace = true, features = ["vulkan", "dx12", "metal", "wgsl"] }

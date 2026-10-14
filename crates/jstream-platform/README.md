@@ -98,13 +98,15 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:008a4835cb3bdbdf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-platform row and the GPU pipeline are unchanged, so GPU frames still holds" }
+verified = { hash = "b3:0e6c2bfcff54172d", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read after ARCH#gpu-pipeline named the one-scene compositor. GpuFrame, FrameSync and the unsafe-import split still hold; render uses this device when present, opens its own otherwise, and does not write the NV12 encode target." }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
 → NV12 → encoder with no CPU copy). The types below are built in this crate, and the
-Windows `GpuInterop` opens the device and encode targets. Capture into shared textures,
-the encoders' GPU input and `jstream-render` come next.
+Windows `GpuInterop` opens the device and encode targets. `jstream-render` composites one
+scene on that device when the engine has one, and opens its own (software adapter first)
+when it does not; it does not write the NV12 encode target. Capture into shared textures
+and the encoders' GPU input come next.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -128,9 +130,10 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
   - `open_device()` returns a **`GpuContext`**: the `wgpu::Adapter`, `Device` and `Queue`,
     opened on the **media adapter**, plus an `AdapterId` (the LUID on Windows).
     - The media adapter is the one that drives the captured display, with
-      `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device instead of
-      creating its own, so capture, render and encode share one adapter. On a hybrid-GPU
-      machine where that isn't possible, the platform says so (ARCH step 6).
+      `TEXTURE_FORMAT_NV12`, as S1 chose it. `jstream-render` uses this device when the
+      engine has one, so capture, render and encode share one adapter. With no interop it
+      opens its own, software adapter first. On a hybrid-GPU machine where sharing an
+      adapter isn't possible, the platform says so (ARCH step 6).
     - The platform keeps the raw objects it took from the device (S1's
       `ID3D12Device` clone) inside its own state. It releases them before the wgpu device,
       as ARCH step 2 requires: `GpuContext` drops the platform's state first.
