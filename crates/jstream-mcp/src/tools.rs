@@ -4,9 +4,11 @@
 //! Tools are grouped by noun (docs/ARCHITECTURE.md#mcp): every edit, action and query in
 //! `jstream_protocol::json_schema()` is named `noun.verb`, and the `noun` tool takes it as
 //! its `op` argument. So a command added to the protocol shows up here with no code
-//! change. Two fixed tools sit beside the groups: `batch` (several edits, atomically) and
-//! `describe_api` (the whole protocol schema).
+//! change. Three fixed tools sit beside the groups: `batch` (several edits, atomically),
+//! `describe_api` (the whole protocol schema) and `events` (the engine's events, read
+//! with a cursor).
 
+use crate::events::{BUFFER_CAPACITY, PAGE_SIZE};
 use jstream_protocol::{
     Action, Batch, Call, Edit, IdempotencyKey, ProtocolError, Query, Rev, json_schema,
 };
@@ -19,6 +21,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) const BATCH_TOOL: &str = "batch";
 /// The tool that returns the whole protocol schema.
 pub(crate) const DESCRIBE_TOOL: &str = "describe_api";
+/// The tool that returns the engine's events after a cursor.
+pub(crate) const EVENTS_TOOL: &str = "events";
 
 /// How the protocol classifies an op (ADR-0013), plus queries, which only read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -51,6 +55,7 @@ enum ToolKind {
     Batch,
     Group(Vec<Op>),
     Describe,
+    Events,
 }
 
 #[derive(Debug)]
@@ -68,6 +73,8 @@ pub(crate) enum Invocation {
     Call(Call),
     /// The protocol schema, which needs no engine.
     Describe,
+    /// The buffered events after the cursor `after` (0 for all).
+    Events { after: u64 },
 }
 
 /// Every tool, in the order `tools/list` returns them (sorted by name).
@@ -113,7 +120,7 @@ impl Tools {
             }
         }
 
-        let mut tools = vec![batch_tool(defs, &groups), describe_tool()];
+        let mut tools = vec![batch_tool(defs, &groups), describe_tool(), events_tool()];
         let mut owners = BTreeMap::new();
         for (noun, ops) in &groups {
             for (op, _) in ops {
@@ -153,6 +160,8 @@ impl Tools {
                 Some(args) if args.is_empty() => Ok(Invocation::Describe),
                 _ => Err(malformed("`describe_api` takes no arguments")),
             },
+            ToolKind::Events => from_value::<EventsArgs>(arguments, "arguments")
+                .map(|args| Invocation::Events { after: args.after }),
             ToolKind::Group(ops) => self.decode_op(&tool.name, ops, arguments),
         })
     }
@@ -235,6 +244,14 @@ struct BatchArgs {
     idempotency_key: Option<IdempotencyKey>,
 }
 
+/// The `events` tool's arguments.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EventsArgs {
+    #[serde(default)]
+    after: u64,
+}
+
 fn decode_batch(arguments: Value) -> Result<Invocation, ProtocolError> {
     let args: BatchArgs = from_value(arguments, "arguments")?;
     Ok(Invocation::Call(Call::Batch(Batch {
@@ -309,6 +326,41 @@ fn describe_tool() -> Tool {
             DESCRIBE_TOOL,
             description,
             json!({"type": "object", "additionalProperties": false}),
+        ),
+    }
+}
+
+fn events_tool() -> Tool {
+    let description = format!(
+        "Returns the engine's events after the cursor `after`, oldest first, without \
+         waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` \
+         say whose batch did it) and `output.state_changed`, from every client, yours \
+         included. Each comes with a `seq`, a sequence number of this MCP server, starting \
+         at 1 when your first call opened the session. Pass the returned `next` as \
+         `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At \
+         most {PAGE_SIZE} events come back at once; `more` says others are waiting. The \
+         server keeps the last {BUFFER_CAPACITY}: `dropped` counts events after your \
+         cursor that were discarded before you read them, so re-read the state if it is \
+         not 0. `ended` means the session is gone and no more events will come."
+    );
+    Tool {
+        name: EVENTS_TOOL.into(),
+        kind: ToolKind::Events,
+        definition: definition(
+            EVENTS_TOOL,
+            &description,
+            json!({
+                "type": "object",
+                "properties": {
+                    "after": {
+                        "description": "The `next` of your previous read; 0 or omitted \
+                                        for the oldest kept event.",
+                        "type": "integer",
+                        "minimum": 0,
+                    }
+                },
+                "additionalProperties": false,
+            }),
         ),
     }
 }
@@ -508,6 +560,14 @@ mod tests {
         };
         assert_eq!(query, Ok(Invocation::Call(expected)));
         assert_eq!(decode("describe_api", json!({})), Ok(Invocation::Describe));
+        assert_eq!(
+            decode("events", json!({})),
+            Ok(Invocation::Events { after: 0 })
+        );
+        assert_eq!(
+            decode("events", json!({"after": 12})),
+            Ok(Invocation::Events { after: 12 })
+        );
     }
 
     #[test]
@@ -553,6 +613,10 @@ mod tests {
         assert!(r.starts_with("arguments:"), "{r}");
         let r = reason(decode("describe_api", json!({"verbose": true})));
         assert!(r.contains("no arguments"), "{r}");
+        let r = reason(decode("events", json!({"after": -1})));
+        assert!(r.starts_with("arguments:"), "{r}");
+        let r = reason(decode("events", json!({"since": 3})));
+        assert!(r.contains("unknown field `since`"), "{r}");
         let r = reason(decode("scene", json!("scene.list")));
         assert!(r.starts_with("arguments:"), "{r}");
     }

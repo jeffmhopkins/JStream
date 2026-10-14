@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:517e0d94907a7192", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #48 N1: a failed stdin read in mcp now prints 'could not read the input: ...' (JSON code io, message with that prefix); exit row 1 ('output could not be written, or mcp could not read stdin'), the MCP Exit bullet (1 if stdin or stdout fails) and the io code in the Errors bullet still hold" }
+verified = { hash = "b3:9847908e5df0513a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited only the mcp 'lost engine' bullet: events now also answers after the loss (buffered events, ended set) and a restart gives a new client with its own undo history, as tests/mcp.rs now asserts; covered src files unchanged" }
 -->
 
 ```sh
@@ -137,9 +137,10 @@ for example:
   with one undo history; `hello` is sent before the first call that needs the engine,
   with the MCP client's name (`clientInfo.name`) instead of `jstream-cli`.
 - **A lost engine doesn't stop the proxy.** Each tool call that needs the engine is then
-  answered with the `disconnected` tool error, and `describe_api` still works. The proxy
-  doesn't reconnect: the MCP client restarts it to get a new session
-  ([open question 6](#design)).
+  answered with the `disconnected` tool error, and `describe_api` still works, as does
+  `events`, which returns what was buffered and says the feed ended. The proxy doesn't
+  reconnect: the MCP client restarts it to get a new session, a new client of the
+  engine with its own undo history ([open question 6](#design)).
 - **Exit:** 0 when stdin ends, whatever the engine did meanwhile; 1 if stdin or stdout
   fails (a closed stdout exits silently).
 
