@@ -98,7 +98,7 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:7c2e5aeacf252627", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #63: intro now says the Windows GpuInterop exists and capture/encoder GPU input/render remain (N2); FrameSync bullet adds stage-right-before-a-submit since staged ops attach to the queue's next submit (N5); rest unchanged" }
+verified = { hash = "b3:897b5b2a98493e9e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#gpu-pipeline only gained ADR-0029's planned transition node paragraph; steps 2, 5 and 6 this section cites are unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

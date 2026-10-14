@@ -93,7 +93,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "UI bullet now names canvas editing: drag-to-place, resize/rotate, crop handles, snapping, add-existing vs duplicate; Leptos/preview/Tauri/studio items unchanged and still match ADR-0002" }
+verified = { hash = "b3:120acc39fff30338", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Studio-mode bullet spelled out per ADR-0029: presets with a default, into/out-of overrides, Move pairing by source, per-item delay/easing/glide/effects; other M2 items unchanged" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
@@ -104,7 +104,10 @@ verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRu
 - Preview as low-res H.264 over binary WebSocket frames → WebCodecs → `<canvas>`, with a JPEG fallback.
 - `jstream-desktop` (Tauri) and `jstream-daemon` serving the same UI. Token pairing for
   remote browsers.
-- Studio mode (Preview/Program) and transitions.
+- Studio mode (Preview/Program) and transitions
+  ([ADR-0029](docs/adr/0029-transitions.md)): transition presets (Cut, Fade, Move) with a
+  default, per-scene "into" and "out of" overrides, Move pairing items by source, and
+  per-item delay, easing, glide and appear and disappear effects.
 
 **Demo:** everything from M1, done by hand in the desktop app and in a browser.
 
