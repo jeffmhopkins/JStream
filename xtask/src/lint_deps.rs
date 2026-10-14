@@ -40,11 +40,19 @@ const C_BUILD_TOOLS: &[&str] = &["cc", "cmake", "autotools", "nasm-rs"];
 
 /// Native-code packages allowed by R-DEP-002: (package, feature that must be enabled, why).
 /// Adding an entry needs the same justification as a new dependency (R-DEP-004).
-const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[(
-    "blake3",
-    Some("pure"),
-    "build-depends on `cc` for SIMD code; with the `pure` feature its build script compiles no C",
-)];
+const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
+    (
+        "blake3",
+        Some("pure"),
+        "build-depends on `cc` for SIMD code; with the `pure` feature its build script compiles no C",
+    ),
+    (
+        "wasm-bindgen-shared",
+        None,
+        "`links = \"wasm_bindgen\"` only enforces one version per graph; its build script sets \
+         environment variables and compiles nothing. Reached through wgpu's wasm32-only dependencies",
+    ),
+];
 
 /// One rule violation, reported as `<where>: <rule>: <what>`.
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]

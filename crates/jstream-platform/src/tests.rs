@@ -12,9 +12,9 @@ use crate::fake::{self, FakeAudioIo, FakeClock, FakeVcamSink};
 use crate::{
     AudioEncoder, AudioEncoderConfig, AudioInputHandler, AudioInputTarget, AudioIo,
     AudioOutputHandler, AudioOutputTarget, AudioPacket, AudioRenderBuffer, AudioStream, Backends,
-    Capture, CaptureStream, CaptureTarget, Codecs, DeviceId, HardwarePreference, MediaClock,
-    PlatformError, RateControl, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig,
-    VideoEncoder, VideoEncoderConfig, VideoSurface,
+    Capture, CaptureStream, CaptureTarget, Codecs, DeviceId, FrameSync, GpuContext, GpuFrame,
+    GpuInterop, HardwarePreference, MediaClock, PlatformError, RateControl, VcamFormat, VcamSink,
+    VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 
 fn assert_send<T: Send + ?Sized>() {}
@@ -27,6 +27,12 @@ fn traits_are_dyn_compatible_with_their_thread_bounds() {
     assert_send_sync::<dyn Capture>();
     assert_send_sync::<dyn AudioIo>();
     assert_send_sync::<dyn Codecs>();
+    assert_send_sync::<dyn GpuInterop>();
+    assert_send_sync::<dyn FrameSync>();
+    // Frames cross threads: capture to render to encode.
+    assert_send_sync::<GpuFrame>();
+    assert_send_sync::<VideoSurface>();
+    assert_send_sync::<GpuContext>();
     // Sessions: moved to the thread that drives them.
     assert_send::<dyn CaptureStream>();
     assert_send::<dyn AudioStream>();
@@ -443,6 +449,41 @@ fn dropping_a_started_vcam_sink_stops_it() {
 fn surfaces_report_their_frame_info() {
     let s = nv12(ms(7));
     assert_eq!(s.info().size, size());
-    let VideoSurface::Cpu(frame) = s;
+    let VideoSurface::Cpu(frame) = s else {
+        panic!("the fake capture delivers CPU frames");
+    };
     assert_eq!(frame.planes().len(), 2);
+}
+
+#[test]
+fn fake_backends_have_no_gpu_interop() {
+    let clock = FakeClock::new(Timebase::NANOS);
+    let backends = fake::backends(&clock).expect("backends");
+    assert!(matches!(
+        backends.gpu.open_device(),
+        Err(PlatformError::Unsupported { .. })
+    ));
+}
+
+#[test]
+fn adapter_ids_compare_by_luid_and_vendor() {
+    use crate::AdapterId;
+    let amd = AdapterId {
+        luid: None,
+        vendor: 0x1002,
+    };
+    assert_eq!(
+        amd,
+        AdapterId {
+            luid: None,
+            vendor: 0x1002
+        }
+    );
+    assert_ne!(
+        amd,
+        AdapterId {
+            luid: Some(7),
+            vendor: 0x1002
+        }
+    );
 }

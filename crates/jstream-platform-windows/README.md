@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:1e47fbc9ab0414c9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#56 follow-ups: a zero channel mask counts as unspecified (default positions, opened as is), Format bullet rewrapped; rest of the section unchanged and holds against the code" }
+verified = { hash = "b3:8f33b7bb37301f7b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream jstream-platform#purpose gained the GPU-frame types; this section's Not-yet (GPU interop path, Backends constructor) still holds, nothing else depends on it" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

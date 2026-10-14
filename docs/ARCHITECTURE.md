@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:d64ba8b8a96fe8eb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate jstream-platform-windows vs main: matches its row (L2, unsafe yes); only internal dependency is jstream-platform (L1), strictly lower; lint-deps ok; table text unchanged" }
+verified = { hash = "b3:bce9d14c34d06b6f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-platform (L1) now depends on wgpu, matching its row (GpuInterop uses wgpu types); no new internal edges; lint-deps ok; table text unchanged (render's 'owns the wgpu device' wording left for when jstream-render lands, #59 N4)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
