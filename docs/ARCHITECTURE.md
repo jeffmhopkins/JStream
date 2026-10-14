@@ -162,15 +162,16 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "b3:92b0462b389879d4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read merged section: shared-source/duplicate, scenes-as-sources (merged with main's Nesting bullet, no duplicate), filters vs effects, and main's Built-so-far graph paragraph all consistent" }
+depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md"]
+verified = { hash = "b3:a3951ed0fff748f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0023 (now a dependency): SceneItem gains opacity, blend and reserved-empty effects[]; Source gains duplicated_from; reference/clone terms, no owner, item.set_source keeps the item; cycle check on every nesting edit; transform kept until ADR-0022 lands; Built so far lists the unbuilt ADR-0023 fields under Not yet, matching jstream-graph model/" }
 -->
 
 ```
 Collection (JSON on disk, schema_version, rev: u64)
-├── sources        Source { id, kind, settings, filters[] }   video and/or audio; independent of scenes
+├── sources        Source { id, kind, settings, filters[], duplicated_from? }   video and/or audio; independent of scenes
 ├── scenes         Scene { id, name, items[] }
-│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, blend, effects[] }
+│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, opacity, blend,
+│                              effects[] (reserved, empty in v1) }
 ├── studio         { program_scene, preview_scene, transition }   (studio-mode state)
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
 ├── audio          sends: (source_id, bus_id) → gain_db
@@ -184,14 +185,23 @@ Collection (JSON on disk, schema_version, rev: u64)
   `program_scene`, including any transition in progress. A `VideoMix` with input
   `Program` follows it.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
-  Adding an *existing* source to a scene adds a `SceneItem` that references it. Changing
-  the source or its `filters[]` changes it everywhere. **Duplicate** creates a new
-  `Source` with its own id.
+  Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
+  shares everything with the other placements of that source except its own placement,
+  opacity and blend. Changing the source or its `filters[]` changes it everywhere.
+  **Duplicate** creates a new `Source` with its own id and `duplicated_from` set to the
+  original; an item placing it is a **clone** and changes independently. Sources have no
+  owner: every placement of a shared source is equal, and a client shows how often a
+  source is placed rather than marking one placement as the original.
+  `item.set_source` switches an item between reference and clone and keeps its id,
+  placement and stacking position ([ADR-0023](adr/0023-placements-references-and-clones.md)).
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
-  scenes nest. A scene never contains itself at any depth, so the graph rejects the edit
-  that would close a cycle.
+  scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
+  that would close a cycle (`item.add`, and `item.set_source`).
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
-  is used. `SceneItem.effects[]` and `crop` belong to that one placement.
+  is used. A placement owns its transform, `crop`, `visible`, `opacity` (an alpha
+  multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
+  compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
+  stays empty in v1, so adding them later needs no collection migration.
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
   encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
@@ -204,8 +214,9 @@ Collection (JSON on disk, schema_version, rev: u64)
   scene; no settings or filters yet), scenes in display order, and items in stacking
   order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
   they never copy them. Deleting a source an item still places, or a scene a source
-  still shows, is rejected. Not yet: settings, filters, effects, blend, the 3D
-  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
+  still shows, is rejected. Not yet: settings, filters, `opacity`, `blend`, the reserved
+  `effects[]`, `duplicated_from`, `item.set_source`, the 3D transform, and everything
+  outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -269,7 +280,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e8027b2bf38c832e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0034: planned YouTube bullet (chat send, featured message, youtube.stats); covered control/server READMEs changed only by verified lines in this PR" }
+verified = { hash = "b3:69afe8461ed4b3b3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): covered changes are main's server test and README verified lines plus this PR's refreshes; body (with ADR-0034's planned YouTube bullet) unchanged and still matches the code" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -320,7 +331,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:b22c57ced4477146", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp README changed only by a verified line in this PR; the youtube tool group is still listed as coming with its commands, which ADR-0034 adds in M3" }
+verified = { hash = "b3:463f8b03d43f264b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): jstream-mcp not-sent error wording and README additions per main's verification, plus this PR's verified-line refresh; tools (youtube group still listed as coming with its commands), names, access and undo bullets hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

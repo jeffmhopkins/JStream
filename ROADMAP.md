@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:935465d03f8c01b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b expanded per maintainer: browser source (ADR-0021, after S4), scenes as sources with cycle rejection, shared vs duplicate sources, transform+crop, source filters vs item effects; M1a/c/d unchanged" }
+verified = { hash = "b3:75c2b581cfe4ce85", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0023 to M1b: filters bullet now says per-placement opacity and blend, no per-placement effects in v1, slot reserved; shared-sources bullet gains the reference/clone conversion that keeps the item; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -70,10 +70,13 @@ verified = { hash = "b3:935465d03f8c01b9", by = "agent:claude@session_01QBbMRwRu
   - **Scenes as sources**: a scene placed inside another scene, with cycles rejected.
   - **Shared sources:** adding an existing source places the *same* instance (one capture,
     one set of source filters) in another scene. **Duplicate** makes an independent copy.
+    An item converts between reference and clone and keeps its id
+    ([ADR-0023](docs/adr/0023-placements-references-and-clones.md)).
   - Place, move, resize, rotate and **crop** scene items (2D transform + crop), with golden
     tests.
-  - **Filters and effects:** source filters apply everywhere the source appears, and item
-    effects apply to one placement.
+  - **Filters and effects:** source filters apply everywhere the source appears. Each
+    placement has its own opacity and blend; per-placement effects are not in v1, and the
+    model reserves a slot for them.
   - Bus-matrix mixer with filters and meters.
   - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
 - **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the

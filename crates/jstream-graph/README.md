@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:f6a2598010175d4c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0034's chat sending and audience stats on the jstream-youtube row and the chat message kind on the jstream-sources row; this crate's own row and layer and the section's claims are unchanged" }
+verified = { hash = "b3:77f8bb1e3d1f8727", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023 data-model edits, verified there); dependency ARCH#crate-map only gained ADR-0034's chat sending/stats on the jstream-youtube row and the chat message kind on jstream-sources; this crate's row unchanged; the model and edits listed still match the code" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
