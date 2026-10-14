@@ -57,17 +57,25 @@ must have a written result before the browser source is built.
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
-depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:c82b2bc5b6f493bc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's ADR-0023 M1b edits (reference/clone, opacity and blend, reserved effects) with ADR-0027's reserved Output chains line; M1a/c/d unchanged" }
+depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
+verified = { hash = "b3:3c78f71437377d43", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b source-kinds bullet now lists ADR-0031's kinds (display, window, video capture device with MJPEG and audio, image formats, color, text, audio input, desktop and application audio, browser) beside main's ADR-0023/0024/0028 bullets; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
   MF AAC (WASAPI mic + desktop loopback) → FLV → RTMPS to YouTube with a stream key. Minimal
   `jstream-core`, `jstream-server`, `jstream-mcp`, `jstream-cli`, `video.snapshot`.
 - **M1b Scenes and mixing:**
-  - Scene graph and sources: window, webcam (incl. MJPEG decode), image, color, text, and
-    **browser** ([ADR-0021](docs/adr/0021-browser-source.md); after spike S4).
+  - Scene graph and source kinds
+    ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)): display, window,
+    video capture device (webcam or capture card, incl. MJPEG decode, with its audio),
+    image (PNG, JPEG, WebP, animated GIF), color, text, audio input, desktop audio,
+    application audio, and **browser** ([ADR-0021](docs/adr/0021-browser-source.md);
+    after spike S4).
   - **Scenes as sources**: a scene placed inside another scene, with cycles rejected.
+  - **Groups as scenes** ([ADR-0024](docs/adr/0024-scene-structure.md)): a scene `role`
+    (`scene` or `group`), `item.move` between scenes keeping the item's id, and the
+    optional `scene_id` addressing of placement edits (own scene only until keyframe
+    scenes are built).
   - **Shared sources:** adding an existing source places the *same* instance (one capture,
     one set of source filters) in another scene. **Duplicate** makes an independent copy.
     An item converts between reference and clone and keeps its id
@@ -77,7 +85,9 @@ verified = { hash = "b3:c82b2bc5b6f493bc", by = "agent:claude@session_01QBbMRwRu
   - **Filters and effects:** source filters apply everywhere the source appears. Each
     placement has its own opacity and blend; per-placement effects are not in v1, and the
     model reserves a slot for them.
-  - Bus-matrix mixer with filters and meters.
+  - Bus-matrix mixer ([ADR-0028](docs/adr/0028-audio-model-v2.md)): a master bus,
+    per-source and per-bus faders and mute, audio that follows the program
+    (`when_shown`), filters, and peak, true-peak and loudness meters.
   - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
     The `Output` model reserves its video and audio chains, empty by default
     ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
@@ -93,7 +103,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:3d448cefa69b8ec0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0027 acceptance: ROADMAP M2 keeps the spelled-out transitions bullet and the master/output chains/privacy bullet; ARCH data-model, protocol and GPU pipeline carry both ADRs' additions; built-crate text unchanged" }
+verified = { hash = "b3:eed1c82a752d1079", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M2 gains ADR-0031's media file, audio waveform and audio spectrum bullet between main's ADR-0029 transitions and ADR-0024 UI-built bullets; other M2 bullets unchanged" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
@@ -110,6 +120,13 @@ verified = { hash = "b3:3d448cefa69b8ec0", by = "agent:claude@session_01QBbMRwRu
   per-item delay, easing, glide and appear and disappear effects.
 - The program master chain, per-output chains with their cost shown, and the privacy
   screen ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
+- Source kinds ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)): **media
+  file** (video or audio, looping; OS demux and decode, A/V sync on the media clock),
+  **audio waveform** and **audio spectrum**.
+- Built with the UI that uses them ([ADR-0024](docs/adr/0024-scene-structure.md)):
+  keyframe scenes (variants with per-item overrides), scene folders, organisation
+  metadata (labels, favourites, scene icons and colours, show in multiview, scene
+  background colour) and hotkey bindings.
 
 **Demo:** everything from M1, done by hand in the desktop app and in a browser.
 
@@ -125,6 +142,7 @@ verified = { hash = "b3:3d448cefa69b8ec0", by = "agent:claude@session_01QBbMRwRu
 - CLAP audio effect filters, hosted out of process
   ([ADR-0035](docs/adr/0035-clap-plugins-out-of-process.md)).
 - macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).
+  A Syphon receiver, the macOS follow-up to Spout2, is considered with it.
 - Linux: codec-path ADR first, then the platform crate (virtual camera via v4l2loopback,
   which needs root, so it gets its own ADR too).
 
@@ -133,5 +151,5 @@ verified = { hash = "b3:3d448cefa69b8ec0", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 -->
 
-- Media-file source, replay buffer.
+- Spout2 receiver source (Windows), when wanted; replay buffer.
 - Virtual microphone (needs a kernel-driver ADR), SRT/WHIP outputs, OBS scene-collection import.

@@ -26,14 +26,14 @@ OBS, built to be driven equally well by a human or an AI agent.
 ## Platforms
 <!-- @section
 depends_on = ["docs/adr/0008-windows-support-policy.md"]
-verified = { hash = "b3:3c8dacdf807896be", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: Windows build 22000 fact marker, serviced-versions policy (ADR-0008) and macOS/Linux deferrals (ADR-0003) all current" }
+verified = { hash = "b3:174bb43ca018529b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Linux row's link moved from superseded ADR-0003 to ADR-0031, which restates the Linux codec-path deferral unchanged; Windows fact marker and ADR-0008 policy, macOS row unchanged" }
 -->
 
 | Platform | Status | Support |
 |---|---|---|
 | Windows | Primary target | Runs on Windows 11 build 22000<!--fact:min-windows-build--> and later; supported on the versions Microsoft currently services ([ADR-0008](docs/adr/0008-windows-support-policy.md)) |
 | macOS | Later (M3) | To be decided in the macOS ADR |
-| Linux | Later (M3) | Codec path to be decided in an ADR first ([ADR-0003](docs/adr/0003-media-stack-and-codecs.md)) |
+| Linux | Later (M3) | Codec path to be decided in an ADR first ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)) |
 
 <a id="documentation"></a>
 ## Documentation
@@ -47,6 +47,9 @@ verified = { hash = "b3:3c8dacdf807896be", by = "agent:claude@session_01QBbMRwRu
 - [ROADMAP.md](ROADMAP.md): milestones
 - [CLAUDE.md](CLAUDE.md): the entry point for builder agents
 - [REVIEW.md](REVIEW.md): the reviewer agent's instructions; its verdict gates merges
+- [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and
+  [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): who works on JStream, how to report bugs and
+  vulnerabilities, and the conduct expected in its spaces
 
 <a id="license"></a>
 ## License

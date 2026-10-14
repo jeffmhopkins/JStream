@@ -7,10 +7,10 @@ use std::net::{Ipv4Addr, SocketAddr};
 
 /// The control token every connection must present (ADR-0006).
 ///
-/// Its `Debug` form never shows the value, and it is compared in time that reveals neither
-/// the value nor its length.
+/// Only its BLAKE3 digest is kept, so its `Debug` form can't show the value, and a
+/// presented token is compared in time that reveals neither the value nor its length.
 #[derive(Clone)]
-pub struct Token(String);
+pub struct Token(blake3::Hash);
 
 impl Token {
     /// Wraps a token. It must be non-empty visible ASCII (`!` to `~`), so it fits an
@@ -27,24 +27,18 @@ impl Token {
                 reason: "it must be visible ASCII, with no spaces",
             });
         }
-        Ok(Token(value))
+        Ok(Token(blake3::hash(value.as_bytes())))
     }
 
     /// Whether `presented` is this token, in time that depends only on `presented`'s
     /// length: neither where the first difference is nor the token's own length shows.
     ///
-    /// Every presented byte is compared with the token repeated to that length (a token
-    /// is never empty), and the difference of the two lengths is folded in, so a value
-    /// that is the token repeated (`abcabc` for `abc`) still fails.
+    /// `presented` is hashed to the same fixed 32 bytes as the token (whose digest was
+    /// taken once, in [`Token::new`]), and the two digests are compared with
+    /// `blake3::Hash`'s equality, which is constant-time: it always looks at all 32
+    /// bytes. Hashing takes time that depends only on the input's length.
     pub(crate) fn matches(&self, presented: &[u8]) -> bool {
-        let expected = self.0.as_bytes();
-        let lengths = expected.len() ^ presented.len();
-        let bytes = expected
-            .iter()
-            .cycle()
-            .zip(presented)
-            .fold(0u8, |diff, (a, b)| diff | (a ^ b));
-        (lengths | usize::from(bytes)) == 0
+        blake3::hash(presented) == self.0
     }
 }
 
@@ -64,8 +58,11 @@ pub struct ServerConfig {
     pub token: Token,
     /// `Host` values (`name:port`) accepted besides the loopback names
     /// (`127.0.0.1`, `localhost`, `[::1]`) and the bound address, each with the bound
-    /// port. Compared without regard to ASCII case. A `Host` without a port means port 80,
-    /// so it matches `name:80` when the server listens on port 80, and nothing otherwise.
+    /// port. Compared without regard to ASCII case. Each must name its port:
+    /// [`Server::bind`](crate::Server::bind) refuses an entry without one
+    /// ([`ServerError::InvalidHost`]), which would never match. A request's `Host`
+    /// without a port means port 80, so it matches `name:80` when the server listens on
+    /// port 80, and nothing otherwise.
     pub extra_hosts: Vec<String>,
     /// `Origin` values (`scheme://host[:port]`) accepted besides the server's own
     /// (`http://` plus an accepted `Host`). Compared without regard to ASCII case.

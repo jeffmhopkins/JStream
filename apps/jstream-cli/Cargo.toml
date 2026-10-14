@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 6
-summary = "`jstream-cli` (control and mcp only)"
+summary = "`jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this)"
 unsafe_allowed = false
 
 [lints]

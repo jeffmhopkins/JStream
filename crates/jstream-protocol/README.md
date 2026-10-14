@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:ca6ca100fccc7e27", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged; no CLAP filter kind exists in the protocol, as ADR-0035 requires until M3" }
+verified = { hash = "b3:4d9140e26aaf164a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-protocol row and this Purpose are unchanged and still match the crate" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -334,11 +334,13 @@ described above.
    also publish a plain `.json` file for non-Rust clients?
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an
     ADR ([R-ARCH-004](../../docs/RULES.md#R-ARCH-004)) once they are settled?
-11. **Source kinds.** `SourceKind::Builtin` names a kind by string, as a placeholder
-    until `jstream-sources` defines typed kinds with settings. Should those replace it
-    (a breaking change), or arrive as more `SourceKind` variants beside it? Like the
-    string enums in question 8, a new `SourceKind` variant breaks older clients today.
-12. **Deleting referenced objects.** `source.delete` and `scene.delete` are rejected
-    while an item or a `scene` source still refers to them, so the client removes those
-    first. Should the protocol also offer a cascading delete (one edit whose inverse
-    restores everything it removed)?
+11. **Source kinds.** Settled by
+    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md): `builtin` stays,
+    its `kind` names a kind the engine describes (`kind.list`, `kind.describe`), and
+    settings travel beside it as a map validated against that kind's descriptor. No new
+    `SourceKind` variants. Not built yet: the first cut has no settings.
+12. **Deleting referenced objects.** Settled by
+    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md): rejection stays
+    the only delete, with no cascading edit. The error will list every blocker, and a
+    `delete.plan` query will return the batch that removes the target and its blockers.
+    Not built yet: today the client removes the blockers itself, as described above.

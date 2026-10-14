@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:7186cfa574ae25fa", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged" }
+verified = { hash = "b3:ba46c2696c11e15f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-core row and this Purpose are unchanged and still match the crate" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f09a773d4f6b9bbe", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0027 adds master, privacy and output chains to the data model and planned protocol, none built; Engine still handles only OutputStart/OutputStop and the graph edits it applies, so the design holds" }
+verified = { hash = "b3:aa2979a3af7c15cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains ADR-0028's audio.reset_loudness and meter fields, none built; Engine still applies only built graph edits and OutputStart/OutputStop, so the design holds" }
 -->
 
 ### Engine and sessions

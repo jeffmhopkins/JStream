@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:193b748b34b35ca0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73) into the ADR-0035 PR: main's server.rs not-sent wording and tests leave the contents list true; dependency ARCH#crate-map only gained ADR-0035's planned plugin rows, this crate's row unchanged" }
+verified = { hash = "b3:b18fad5b9420e0cd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-mcp row and this Purpose are unchanged and still match the crate" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context

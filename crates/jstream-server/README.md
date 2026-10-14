@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:5fd206ada5d83eb5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): only tests.rs changed there; dependency ARCH#crate-map only gained ADR-0035's planned plugin rows, layer 4 and contents unchanged" }
+verified = { hash = "b3:6f7f5e7b6592ff8b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-server row and this Purpose are unchanged and still match the crate" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1d666044d46ca2f0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Planned privacy.set/privacy.changed (ADR-0027) are ordinary protocol calls and events; the server forwards Calls and events unchanged and has no privacy-specific path, so the design holds" }
+verified = { hash = "b3:67f447f6c8df8f56", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains ADR-0028's meter stream fields and audio.reset_loudness, not built; the server forwards Calls and events unchanged and has no binary meter stream yet, so the design holds" }
 -->
 
 ### Listening and admission
@@ -78,10 +78,15 @@ listens on port 80, `localhost` is the same as `localhost:80` and is accepted (a
 `http://localhost` is its own origin). On any other port, the default and ephemeral
 ones included, a `Host` without a port names a different port and is refused.
 
-**Token compare.** Each presented byte is compared with the token repeated to the
-presented length, and the difference of the lengths is folded into the result, so the
-time taken depends only on what the client sent: neither the first difference nor the
-token's length shows.
+**Extra hosts.** Each configured extra host must be `name:port` with a port from 1 to
+65535. An entry without a port could never match, since the gate compares hosts with
+their port, so `Server::bind` refuses it (`ServerError::InvalidHost`) before opening
+the socket rather than ignoring it.
+
+**Token compare.** `Token` keeps only the BLAKE3 digest of the token. The presented
+value is hashed to the same fixed 32 bytes and the digests are compared with
+`blake3::Hash`'s constant-time equality, so the time taken depends only on the
+presented value's length: neither the first difference nor the token's length shows.
 
 ### Sessions
 
@@ -121,7 +126,8 @@ open connection (close code 1001), so their clients' pending and later calls fai
 axum (features `http1`, `tokio`, `ws`, no defaults) for HTTP and the upgrade, which
 brings hyper, tower and `tokio-tungstenite` without TLS; tokio for the listener and the
 connection tasks; `futures-util` to split the socket and run calls concurrently
-(`FuturesUnordered`). No TLS crate is in the tree, so no `ring` or `rustls`.
+(`FuturesUnordered`); `blake3` (the workspace's `pure` build, already used by `xtask`)
+for the token digest. No TLS crate is in the tree, so no `ring` or `rustls`.
 
 ### Open questions
 

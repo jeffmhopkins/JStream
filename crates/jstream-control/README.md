@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:219b143a23c84b4c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged" }
+verified = { hash = "b3:b8188339ebedc34b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-control row and this Purpose are unchanged and still match the crate" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:4df8d4c22e5fff6b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH protocol gains ADR-0027's planned privacy.set/privacy.changed and per-output session reporting, none built; Control trait and mock still forward any Call and answer unhandled ones with not_implemented, so the design holds" }
+verified = { hash = "b3:41c7225248653edb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains ADR-0028's meter fields and audio.reset_loudness and main's ADR-0022/0024/0025 planned calls, none built; the Control trait and mock forward any Call unchanged, so the design holds" }
 -->
 
 ### The trait

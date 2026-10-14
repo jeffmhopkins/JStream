@@ -12,11 +12,11 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:6cbe587b08482964", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
+verified = { hash = "b3:73dd3d747e7191e3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-mux row and this Purpose are unchanged and still match the crate" }
 -->
 
-Layer-2 pure-Rust container muxers ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md):
+Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):
 muxers are written in Rust, no FFmpeg). This first cut writes **FLV** for H.264 and AAC,
 the container M1a's RTMP(S) output sends to YouTube
 ([ADR-0009](../../docs/adr/0009-youtube-rtmps-and-api.md)). It consumes

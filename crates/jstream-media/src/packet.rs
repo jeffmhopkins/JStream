@@ -13,7 +13,7 @@ pub enum MediaKind {
     Audio,
 }
 
-/// A compressed format. The baseline set follows docs/adr/0003-media-stack-and-codecs.md:
+/// A compressed format. The baseline set follows docs/adr/0031-source-types-and-decoding-scope.md:
 /// H.264 video and AAC audio, from OS encoders.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[non_exhaustive]
