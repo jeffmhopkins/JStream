@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:0c07faa209aff911", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "tests.rs hello minor is 5. Server, config, gate and session contents are unchanged." }
+verified = { hash = "b3:e6f67a8d29a125e0", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the session bullet. The connection task and bounded outbox are unchanged. The new test only observes the subscription Design already ends when a connection closes." }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -49,7 +49,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c6e0b90d28d0535b", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read sessions against the protocol change: video.snapshot is a JSON response the task forwards like any other. Binary frames are still malformed. The 4 MiB cap, Origin-optional admission and close behaviour are unchanged." }
+verified = { hash = "b3:aa9fd8ea4953f2f5", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the shutdown paragraph against session.rs. drop(events) still runs before the close timeout, and CLOSE_TIMEOUT still drops a client that stopped reading. The new test checks the subscription count during that wait. Admission, the slow-client buffer and logging are unchanged." }
 -->
 
 ### Listening and admission

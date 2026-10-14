@@ -74,6 +74,21 @@ impl MockEngine {
     pub fn emit(&self, event: Event) {
         lock(&self.shared).emit(event);
     }
+
+    /// How many event subscriptions are still receiving.
+    ///
+    /// A subscription counts while its stream exists and has not been closed. Dropping
+    /// the stream, which is what `jstream-server` does when a connection starts to
+    /// close, drops the count at once: the session can still be alive, finishing its
+    /// last writes. A closed stream stays uncounted, including across later
+    /// [`Self::emit`] calls.
+    pub fn subscriber_count(&self) -> usize {
+        lock(&self.shared)
+            .subscribers
+            .iter()
+            .filter(|weak| weak.upgrade().is_some_and(|queue| !lock(&queue).closed))
+            .count()
+    }
 }
 
 /// One client session with a [`MockEngine`].
@@ -1254,6 +1269,31 @@ mod tests {
         let other = connected(&engine);
         let error = batch(&*other, keyed).expect_err("scene a exists");
         assert_eq!(code(&error), Some("already_exists"));
+    }
+
+    #[test]
+    fn subscriber_count_follows_live_streams() {
+        let engine = MockEngine::new();
+        assert_eq!(engine.subscriber_count(), 0);
+        let first = engine.connect();
+        let second = engine.connect();
+        let first_events = first.events();
+        let second_events = second.events();
+        assert_eq!(engine.subscriber_count(), 2);
+        // Dropping the stream unsubscribes before the session is dropped.
+        drop(first_events);
+        assert_eq!(engine.subscriber_count(), 1);
+        drop(first);
+        assert_eq!(engine.subscriber_count(), 1);
+        // Closing the session ends a stream that is still held.
+        drop(second);
+        assert_eq!(engine.subscriber_count(), 0);
+        drop(second_events);
+        engine.emit(Event::OutputStateChanged {
+            output_id: OutputId::new("gone"),
+            state: OutputState::Stopped,
+        });
+        assert_eq!(engine.subscriber_count(), 0);
     }
 
     #[test]

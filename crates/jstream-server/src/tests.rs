@@ -798,3 +798,51 @@ fn shutdown_drops_a_client_that_stopped_reading() {
         "the server waited for the client and sent its close frame"
     );
 }
+
+/// #110 review N1: dropping the connection's event stream, which happens before the
+/// close timeout, stops the engine queueing for that connection. A client that has
+/// stopped reading is still held open here, so the count is not falling only because
+/// the connection task has exited.
+#[test]
+fn closing_a_connection_drops_its_event_subscription() {
+    let engine = MockEngine::new();
+    let mut harness = start(&engine);
+    // A second connection that reads, so shutdown has more than the stuck client to close.
+    let _steady = harness.session();
+    let mut slow = slow_client(&harness);
+    harness.run(async { tokio::time::sleep(Duration::from_millis(50)).await });
+    assert_eq!(engine.subscriber_count(), 2);
+    for n in 0..10_000 {
+        engine.emit(numbered(n));
+    }
+    harness.run(async { tokio::time::sleep(Duration::from_millis(300)).await });
+    assert_eq!(
+        engine.subscriber_count(),
+        2,
+        "both connections are still subscribed while the server is up"
+    );
+    harness.shut_down();
+    // Inside the close timeout (2s), and without reading: reading would unblock the
+    // writer and let the close finish. The reading client has already been closed, so
+    // a count of 1 here would be the stuck connection's subscription still live.
+    harness.run(async { tokio::time::sleep(Duration::from_millis(500)).await });
+    assert_eq!(
+        engine.subscriber_count(),
+        0,
+        "the closing connection's subscription is already gone"
+    );
+    harness.run(async { tokio::time::sleep(Duration::from_secs(3)).await });
+    let closed = harness.run(async {
+        loop {
+            match slow.next().await {
+                Some(Ok(Message::Close(_))) => break true,
+                Some(Ok(_)) => continue,
+                None | Some(Err(_)) => break false,
+            }
+        }
+    });
+    assert!(
+        !closed,
+        "the server waited for the client and sent its close frame"
+    );
+}
