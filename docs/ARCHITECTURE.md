@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:e226c507cfa5aa7b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed by this PR's CLI README mcp bullet (events tool) and main's #95 daemon README re-verify (extra-hosts and token-compare dependency); layer diagram and app roles unchanged" }
+verified = { hash = "b3:b23410e055c58ec9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed by this PR's daemon logging and RUST_LOG exit code and main's #96 CLI events bullet; layer diagram and app roles unchanged" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:830f789f5a30eea5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds ADR-0034's chat sending and audience stats to the jstream-youtube row and its chat message kind (M3) to main's ADR-0031 jstream-sources row; other rows match main" }
+verified = { hash = "b3:d15e8340677ed098", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered manifests changed by this PR's tracing dependency (core, mcp, server, outputs) and tracing-subscriber (daemon only); no new JStream edges, so every row's layer and dependencies still hold; table text unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -410,7 +410,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:b792aec35d55d5eb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered server README changed by this PR's extra-hosts and token-compare text; main's planned additions (ADR-0022/0024/0025/0027/0028/0034) unchanged; bullets match protocol 0.3 as built" }
+verified = { hash = "b3:1a94bcde30467931", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered core/server/control READMEs changed by this PR's logging text and main's #95/#96 merges; no protocol behaviour changes; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -486,7 +486,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:d8baf8e7ca51e1f4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Events bullet (polling events tool, bounded buffer of 1000, explicit dropped count, ADR-0036) sits beside main's planned youtube tool noun; grouping, schema size and naming bullets unchanged" }
+verified = { hash = "b3:735f9b14c1e44756", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp README gains this PR's Logging subsection beside main's #96 Events subsection; ARCH's MCP bullets (incl. #96's Events bullet) unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

@@ -25,6 +25,8 @@ jstream-protocol.workspace = true
 jstream-server.workspace = true
 # The runtime the server runs on; `signal` for Ctrl-C (and SIGTERM on Unix).
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
+# The log subscriber: the libraries' `tracing` events, filtered by `RUST_LOG`, on stderr.
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 # The tests drive the daemon through the WebSocket client, as the CLI does.

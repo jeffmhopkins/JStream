@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:7a03362624bd4242", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds the events tool (ADR-0036) to the crate's purpose; main's crate-map changes (ADR-0031/0034 rows) don't touch the jstream-mcp row, so Purpose still matches the crate" }
+verified = { hash = "b3:62f26e4467ed08a3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's #96 events tool into the Purpose beside this PR's tracing; crate-map row unchanged; Purpose matches the crate" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -43,7 +43,7 @@ Not here yet: the streamable-HTTP transport ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:ddd4a86214efc92b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: events row in the tools table, malformed for a cursor past the newest seq, new Events subsection (subscribe before first hello, BUFFER_CAPACITY drop-oldest, PAGE_SIZE, next/dropped/more/ended, no engine call once subscribed), N4 re-hello never yields a new client_id with the CLI e2e test cited; checked against server.rs, events.rs, tools.rs and ADR-0036" }
+verified = { hash = "b3:4c9c4b9df6baa5bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's Logging subsection (mcp_session/mcp_request/tool_call spans, never arguments) with main's #96 events tool row, malformed cursor and Events subsection; the Not implemented line now names both the events tool and tracing; depends_on keeps ADR-0036; matches server.rs" }
 -->
 
 ### Tools
@@ -96,7 +96,9 @@ to move forward, so the server is dual-era, which 2026-07-28 allows:
 - Any other request with neither gets `-32602`, naming both ways in.
 
 Not implemented: resources, prompts, subscriptions (`subscriptions/listen`, list-changed
-notifications; engine events come through the `events` tool instead), progress, logging, cancellation (requests are answered in order, so there
+notifications; engine events come through the `events` tool instead), progress, MCP logging
+(`logging/setLevel` and log notifications; the server logs through `tracing` instead, see
+*Logging*), cancellation (requests are answered in order, so there
 is nothing in flight to cancel), pagination (one page), `outputSchema`, and JSON-RPC
 batches (MCP removed them in 2025-06-18).
 
@@ -192,6 +194,20 @@ given.
 Streamable HTTP is deferred to `jstream-server`, which owns the HTTP stack and the token
 and `Origin` checks: it will feed request bodies to `Server::handle`.
 
+### Logging
+
+The server logs through `tracing` ([R-RS-005](../../docs/RULES.md#R-RS-005)) and
+installs no subscriber; the host decides where logs go. `jstream-cli mcp` installs none,
+so nothing is logged there, and `tracing` never writes to the stdout that carries MCP.
+Each `Server` has an `info` span `mcp_session`. Every request runs in a `debug` span
+`mcp_request` under it with the JSON-RPC method, and a request answered with a JSON-RPC
+error logs its code at `debug`. Each `tools/call` runs in an `info` span `tool_call`
+with the tool's name, and logs at `debug` whether it succeeded or, for a result with
+`isError`, its error code. `initialize` (client name and settled revision) and the
+engine session's `hello` (its `client_id`) log at `info`; a failed `hello` and a
+connection lost during a call log at `warn`. Tool arguments and results are never
+logged ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+
 ### No MCP SDK
 
 The server implements its JSON-RPC and MCP subset on `serde_json` instead of using the
@@ -202,7 +218,8 @@ official Rust SDK (`rmcp`):
   `futures`, `tracing`, `indexmap` and `pin-project-lite`, and its default `server`
   feature adds `schemars` with `chrono`, `uuid` and proc-macro crates. That would force a
   runtime on every client of this crate. This crate needs only crates the workspace
-  already has (`serde`, `serde_json`, `thiserror`) plus the two JStream crates.
+  already has (`serde`, `serde_json`, `thiserror`, `tracing`) plus the two JStream
+  crates.
 - **Fit.** The SDK's main help is deriving tool schemas from Rust types with its macros.
   Here the tools are generated from the protocol's schema at runtime, so that help
   doesn't apply; the table-driven code is short.

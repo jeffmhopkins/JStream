@@ -79,18 +79,57 @@ impl Engine {
 
     /// Executes `call` for `client_id`, whose request it is, and wakes the subscribers
     /// its events reached.
+    ///
+    /// The call runs in a `command` span naming the command and the request. Its outcome
+    /// is logged after the lock is released, so a slow log writer never holds up other
+    /// sessions. Only names, IDs and error codes are logged, never a command's arguments
+    /// (R-SEC-001).
     pub(crate) fn execute(
         &self,
         client_id: &ClientId,
         request_id: &RequestId,
         call: Call,
     ) -> Result<CallResult, ProtocolError> {
+        let span = tracing::info_span!(
+            "command",
+            command = command_name(&call),
+            client_id = %client_id,
+            request_id = %request_id,
+        );
+        let _entered = span.enter();
+        let output = match &call {
+            Call::Action {
+                action: Action::OutputStart { output_id } | Action::OutputStop { output_id },
+            } => Some(output_id.clone()),
+            _ => None,
+        };
         let mut wake = Vec::new();
         let result = lock(&self.shared).execute(client_id, request_id, call, &mut wake);
         for waker in wake {
             waker.wake();
         }
+        match (&result, output) {
+            (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
+            (Ok(_), Some(output_id)) => {
+                tracing::info!(output_id = %output_id, "output action done");
+            }
+            (Ok(_), None) => tracing::debug!("call done"),
+            (Err(error), Some(output_id)) => {
+                tracing::info!(output_id = %output_id, code = error.code(), "output action failed");
+            }
+            (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
+        }
         result
+    }
+}
+
+/// The name a `command` span carries: `batch`, or the action's or query's own name.
+fn command_name(call: &Call) -> &'static str {
+    match call {
+        Call::Batch(_) => "batch",
+        Call::Action { action } => action.name(),
+        Call::Query { query } => query.name(),
+        _ => "unknown",
     }
 }
 

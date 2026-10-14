@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d8dcd54503c2ba9f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's extra-hosts rule (bracketed IPv6, exactly one port) and BLAKE3 token-compare wording beside main's crate-map changes (ADR-0031/0034 rows, none for the server); Purpose matches the crate" }
+verified = { hash = "b3:aefc31c2bb5a6738", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds tracing; main's #95 extra-hosts and token-compare text kept; Purpose matches the crate" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:54e13395ef9bbd98", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Extra hosts paragraph (IPv6 in brackets, one port, a reason per refusal) and Token compare paragraph (BLAKE3 digest compare) match gate.rs; main's protocol changes are planned additions the server forwards unchanged" }
+verified = { hash = "b3:99bcb121169fd69a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's connection span and refusal logging (reason, never header values) with main's #95 extra-hosts rule (bracketed IPv6, one port) and BLAKE3 token compare; matches gate.rs and lib.rs" }
 -->
 
 ### Listening and admission
@@ -70,7 +70,7 @@ token). The `Host` check defeats DNS rebinding: a page on an attacker's domain t
 resolves to `127.0.0.1` still sends its own name. The `Origin` check stops foreign
 pages, since browsers always send `Origin` on a WebSocket upgrade; native clients send
 the server's own. A request without `Origin` is refused too, so every client must send
-one. The token is never logged, and `Token`'s `Debug` form hides it.
+one. The token is never logged (see *Logging*), and `Token`'s `Debug` form hides it.
 
 **`Host` without a port.** A `Host` (or `Origin`) without a port names the scheme's
 default port, 80 for `http` and `ws`, and browsers leave `:80` out. So when the server
@@ -123,13 +123,34 @@ task speaks the envelope
 open connection (close code 1001), so their clients' pending and later calls fail with
 `Disconnected` and their event streams end.
 
+### Logging
+
+The server logs through `tracing` ([R-RS-005](../../docs/RULES.md#R-RS-005)) and
+installs no subscriber; the host app does. The listener records each connection's peer
+address (axum's `ConnectInfo`), for logging only: admission depends on the headers
+alone.
+
+- **Refused upgrades** are logged at `warn` as `connection refused`, with the peer
+  address and the reason (`Host not allowed`, `Origin not allowed`, or `missing or wrong
+  control token`). No header value is logged: not the token, nor the refused `Host` or
+  `Origin` ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The test
+  `gate::tests::refusals_are_logged_without_the_token` checks this with a capturing
+  subscriber, and `jstream-daemon`'s end-to-end test checks its stderr.
+- **Accepted connections** get an `info` span `connection` with a number (counting from
+  1 per server) and the peer address, and log `connection accepted`. The session the
+  `Connector` opens is created inside that span, so the engine's own `session` and
+  `command` spans nest under it. The connection task logs the handshake's outcome
+  (`client_id`, or the refusal's code) and how the connection ended, at `info`, or
+  `warn` when the engine failed (close code 1011). Message contents are never logged.
+- A request that isn't a WebSocket upgrade is logged at `debug`.
+
 ### Dependencies
 
 axum (features `http1`, `tokio`, `ws`, no defaults) for HTTP and the upgrade, which
 brings hyper, tower and `tokio-tungstenite` without TLS; tokio for the listener and the
 connection tasks; `futures-util` to split the socket and run calls concurrently
 (`FuturesUnordered`); `blake3` (the workspace's `pure` build, already used by `xtask`)
-for the token digest. No TLS crate is in the tree, so no `ring` or `rustls`.
+for the token digest; `tracing` for the spans and events above. No TLS crate is in the tree, so no `ring` or `rustls`.
 
 ### Open questions
 
@@ -153,9 +174,9 @@ for the token digest. No TLS crate is in the tree, so no `ring` or `rustls`.
    token file at a path it is given and listens on a free port by default; a default
    port and file location are its open questions
    ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
-6. **Logging.** [R-RS-005](../../docs/RULES.md#R-RS-005) asks for `tracing` spans around
-   sessions. The first cut logs nothing; adding `tracing` is a new dependency for a
-   later PR.
+6. **Logging volume.** Every refused upgrade is logged at `warn` (see *Logging*). A
+   foreign page that keeps retrying can fill the log; whether refusals need rate
+   limiting or a summary line is open.
 7. **Backpressure.** Events and answers are written as they come; a client that stops
    reading makes the connection task wait on the socket, which holds that session's
    events in its unbounded buffer

@@ -14,6 +14,7 @@ use jstream_protocol::{Hello, PROTOCOL_VERSION, ProtocolError, WireError, json_s
 use serde_json::{Map, Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
+use tracing::Instrument;
 
 /// The MCP revision served statelessly, with per-request metadata.
 pub const MODERN_VERSION: &str = "2026-07-28";
@@ -66,8 +67,14 @@ enum Era {
 /// [`handle`](Server::handle) answers one message. It needs no particular executor: the
 /// future only awaits the [`Control`] futures. [`serve_stdio`](crate::serve_stdio) runs it
 /// over a byte stream.
+///
+/// Logging (R-RS-005): each server has an `mcp_session` span, every request runs in an
+/// `mcp_request` span under it naming the method, and each tool call in a `tool_call`
+/// span naming the tool. Tool arguments and results are never logged (R-SEC-001), only
+/// names, codes and whether the call failed.
 pub struct Server {
     control: Arc<dyn Control>,
+    span: tracing::Span,
     tools: Tools,
     /// Whether `hello` succeeded on `control`.
     opened: AtomicBool,
@@ -83,6 +90,7 @@ impl Server {
     pub fn new(control: Arc<dyn Control>) -> Self {
         Server {
             control,
+            span: tracing::info_span!("mcp_session"),
             tools: Tools::generate(),
             opened: AtomicBool::new(false),
             feed: OnceLock::new(),
@@ -98,9 +106,18 @@ impl Server {
             Err(reply) => reply,
             Ok(Incoming::Notification | Incoming::Response) => return None,
             Ok(Incoming::Request { id, method, params }) => {
-                match self.request(&method, &params).await {
+                let span =
+                    tracing::debug_span!(parent: &self.span, "mcp_request", method = %method);
+                match self
+                    .request(&method, &params)
+                    .instrument(span.clone())
+                    .await
+                {
                     Ok(result) => jsonrpc::result_reply(&id, result),
-                    Err(error) => jsonrpc::error_reply(Some(&id), &error),
+                    Err(error) => {
+                        span.in_scope(|| tracing::debug!(code = error.code, "request failed"));
+                        jsonrpc::error_reply(Some(&id), &error)
+                    }
                 }
             }
         };
@@ -199,6 +216,11 @@ impl Server {
             .and_then(|info| info.get("name"))
             .and_then(Value::as_str)
             .map(str::to_owned);
+        tracing::info!(
+            client_name = client_name.as_deref().unwrap_or(""),
+            version,
+            "initialized"
+        );
         *lock(&self.legacy) = Some(LegacySession { client_name });
         Ok(json!({
             "protocolVersion": version,
@@ -233,10 +255,38 @@ impl Server {
         }))
     }
 
+    /// `tools/call`, in a `tool_call` span naming the tool. Logs the outcome: the error
+    /// code of a failed call, never its arguments or result.
+    async fn call(
+        &self,
+        params: &Map<String, Value>,
+        client_name: Option<String>,
+    ) -> Result<Value, RpcError> {
+        let tool = params.get("name").and_then(Value::as_str).unwrap_or("");
+        let span = tracing::info_span!("tool_call", tool = %tool);
+        let result = self
+            .call_tool(params, client_name)
+            .instrument(span.clone())
+            .await;
+        span.in_scope(|| match &result {
+            Ok(value) if value.get("isError") == Some(&Value::Bool(true)) => {
+                let code = value
+                    .pointer("/structuredContent/error/code")
+                    .and_then(Value::as_str)
+                    .unwrap_or("");
+                tracing::debug!(code, "tool call failed");
+            }
+            Ok(_) => tracing::debug!("tool call done"),
+            // A JSON-RPC error: `handle` logs it as a failed request.
+            Err(_) => {}
+        });
+        result
+    }
+
     /// `tools/call`. An unknown tool or a request that doesn't fit `CallToolRequest` is a
     /// JSON-RPC error. Everything else, including arguments that don't fit the tool and
     /// every engine error, is a result with `isError`, so the agent can correct itself.
-    async fn call(
+    async fn call_tool(
         &self,
         params: &Map<String, Value>,
         client_name: Option<String>,
@@ -262,6 +312,7 @@ impl Server {
         };
         let client_name = client_name.unwrap_or_else(|| DEFAULT_CLIENT_NAME.to_owned());
         if let Err(error) = self.open(client_name).await {
+            tracing::warn!(error = %error, "could not open the engine session");
             return Ok(match error {
                 // The call was never sent. Over `WsControl` this is permanent: a closed
                 // connection never reopens, so every later `hello` fails the same way.
@@ -293,6 +344,7 @@ impl Server {
             Err(ControlError::Disconnected { reason }) => {
                 // The session may be gone: say `hello` again before the next call.
                 self.opened.store(false, Ordering::Release);
+                tracing::warn!(reason = %reason, "engine connection lost during a tool call");
                 disconnected(format!(
                     "connection to the engine lost: {reason}; whether the call took effect \
                      is unknown, so re-read the state before retrying. The next call tries \
@@ -350,8 +402,9 @@ impl Server {
             protocol: PROTOCOL_VERSION,
             client_name,
         };
-        self.control.hello(hello).await?;
+        let welcome = self.control.hello(hello).await?;
         self.opened.store(true, Ordering::Release);
+        tracing::info!(client_id = %welcome.client_id, "engine session opened");
         Ok(())
     }
 

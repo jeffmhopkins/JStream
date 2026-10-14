@@ -47,6 +47,12 @@ tokio = { version = "1", default-features = false }
 # No TLS feature: plain `ws://` only, so no `rustls`/`ring` in the tree yet.
 tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect"] }
 toml = "1"
+# Logging (R-RS-005). Libraries depend on `tracing` only, and only apps install a
+# subscriber. `std` without the default `attributes`, so no proc-macro crates.
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+# The daemon's subscriber: `fmt` to stderr, filtered by `Targets` parsed from `RUST_LOG`.
+# No `env-filter` (it pulls in `regex`), `ansi` or `tracing-log`.
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 # GPU (ADR-0004): pinned exactly, because wgpu-hal interop can change between releases;
 # the version spike S1 proved the Windows interop on. Backends are picked per crate.
 wgpu = { version = "=30.0.1", default-features = false, features = ["std"] }

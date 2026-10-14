@@ -21,7 +21,8 @@
 //! before the server binds, since it could never match.
 //!
 //! A refused `Host` or `Origin` is HTTP 403, a missing or wrong token 401. Each header
-//! must appear exactly once.
+//! must appear exactly once. `Gate::admit` logs each refusal at `warn` with its reason
+//! and the peer address, and never a header's value, so never the token (R-SEC-001).
 
 use crate::config::{ServerConfig, Token};
 use crate::error::ServerError;
@@ -42,6 +43,17 @@ pub(crate) enum Refusal {
     Origin,
     /// The control token is missing or wrong.
     Token,
+}
+
+impl Refusal {
+    /// The reason, as logged.
+    fn reason(self) -> &'static str {
+        match self {
+            Refusal::Host => "Host not allowed",
+            Refusal::Origin => "Origin not allowed",
+            Refusal::Token => "missing or wrong control token",
+        }
+    }
 }
 
 impl IntoResponse for Refusal {
@@ -99,6 +111,17 @@ impl Gate {
             hosts,
             extra_origins,
         }
+    }
+
+    /// Checks an upgrade request's headers, as [`check`](Gate::check) does, and logs a
+    /// refusal with its reason and `peer`, the address it came from. Nothing from the
+    /// headers is logged: not the token, nor the `Host` or `Origin` values.
+    pub(crate) fn admit(&self, headers: &HeaderMap, peer: SocketAddr) -> Result<(), Refusal> {
+        let result = self.check(headers);
+        if let Err(refusal) = result {
+            tracing::warn!(peer = %peer, reason = refusal.reason(), "connection refused");
+        }
+        result
     }
 
     /// Checks an upgrade request's headers.
@@ -237,7 +260,12 @@ mod tests {
     use crate::config::{ServerConfig, Token};
     use crate::error::ServerError;
     use axum::http::{HeaderMap, HeaderName, HeaderValue, header};
+    use std::fmt;
     use std::net::SocketAddr;
+    use std::sync::{Arc, Mutex};
+    use tracing::field::{Field, Visit};
+    use tracing::span::{Attributes, Id, Record};
+    use tracing::{Metadata, Subscriber};
 
     fn gate(extra_hosts: &[&str], extra_origins: &[&str]) -> Gate {
         gate_on(4455, extra_hosts, extra_origins)
@@ -484,6 +512,97 @@ mod tests {
             reason("[::1]:80:80"),
             "its port must be a number from 1 to 65535"
         );
+    }
+
+    /// A minimal subscriber that keeps every span's and event's fields as text, so a
+    /// test can check what would be logged.
+    #[derive(Clone, Default)]
+    struct Capture(Arc<Mutex<Vec<String>>>);
+
+    impl Capture {
+        fn push(&self, text: String) {
+            self.0.lock().expect("not poisoned").push(text);
+        }
+
+        fn text(&self) -> String {
+            self.0.lock().expect("not poisoned").join("\n")
+        }
+    }
+
+    /// The fields of one span or event, as `name=value` pairs.
+    #[derive(Default)]
+    struct Fields(String);
+
+    impl Visit for Fields {
+        fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+            self.0.push_str(&format!("{}={value:?} ", field.name()));
+        }
+    }
+
+    impl Subscriber for Capture {
+        fn enabled(&self, _: &Metadata<'_>) -> bool {
+            true
+        }
+
+        fn new_span(&self, span: &Attributes<'_>) -> Id {
+            let mut fields = Fields::default();
+            span.record(&mut fields);
+            self.push(format!("span {} {}", span.metadata().name(), fields.0));
+            Id::from_u64(1)
+        }
+
+        fn record(&self, _: &Id, values: &Record<'_>) {
+            let mut fields = Fields::default();
+            values.record(&mut fields);
+            self.push(format!("record {}", fields.0));
+        }
+
+        fn record_follows_from(&self, _: &Id, _: &Id) {}
+
+        fn event(&self, event: &tracing::Event<'_>) {
+            let mut fields = Fields::default();
+            event.record(&mut fields);
+            self.push(format!("event {} {}", event.metadata().level(), fields.0));
+        }
+
+        fn enter(&self, _: &Id) {}
+
+        fn exit(&self, _: &Id) {}
+    }
+
+    /// R-SEC-001: a refused upgrade is logged with its reason and the peer, and neither
+    /// the presented token nor the real one appears in what is logged.
+    #[test]
+    fn refusals_are_logged_without_the_token() {
+        let gate = gate(&[], &[]);
+        let peer = SocketAddr::from(([127, 0, 0, 1], 50_000));
+        let capture = Capture::default();
+        tracing::subscriber::with_default(capture.clone(), || {
+            assert_eq!(
+                gate.admit(
+                    &with(header::AUTHORIZATION, Some("Bearer wr0ng-s3cret")),
+                    peer
+                ),
+                Err(Refusal::Token)
+            );
+            assert_eq!(
+                gate.admit(&with(header::ORIGIN, Some("http://evil.example")), peer),
+                Err(Refusal::Origin)
+            );
+            assert_eq!(gate.admit(&headers(&good()), peer), Ok(()));
+        });
+        let logged = capture.text();
+        assert!(
+            logged.contains("connection refused")
+                && logged.contains("missing or wrong control token")
+                && logged.contains("Origin not allowed")
+                && logged.contains("127.0.0.1:50000"),
+            "{logged}"
+        );
+        assert_eq!(logged.lines().count(), 2, "only the refusals: {logged}");
+        for secret in ["wr0ng-s3cret", "t0ken", "evil.example"] {
+            assert!(!logged.contains(secret), "{secret} logged: {logged}");
+        }
     }
 
     #[test]
