@@ -18,6 +18,8 @@ workspace = true
 [dependencies]
 jstream-media.workspace = true
 jstream-platform.workspace = true
+# The shared 0.3 placement. Layer 1, so a layer-2 compositor may call it (R-ARCH-002).
+jstream-protocol.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 # Backends are additive (R-RS-010): Vulkan for lavapipe, DX12 for WARP, Metal on macOS.

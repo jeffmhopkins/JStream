@@ -892,6 +892,7 @@ version = "0.0.0"
 dependencies = [
  "jstream-media",
  "jstream-platform",
+ "jstream-protocol",
  "thiserror",
  "tracing",
  "wgpu",
