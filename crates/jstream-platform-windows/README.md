@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:658d611de3fdfcf7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's README wrap and '(except a reused window handle)' Start note beside main's ADR-0031 dependency; backends unchanged and Purpose matches the crate" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
+verified = { hash = "b3:206203426740222b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's README wrap and '(except a reused window handle)' Start note beside main's ADR-0031 dependency; backends unchanged and Purpose matches the crate" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

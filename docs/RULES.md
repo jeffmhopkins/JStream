@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:f4ea80564c01f0a9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's lock-free privacy flag and fail-closed preallocated pass, consistent with R-RT-001/002, beside ADR-0028/0035 text" }
+verified = { hash = "b3:28d7d137a39d4fac", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's lock-free privacy flag and fail-closed preallocated pass, consistent with R-RT-001/002, beside ADR-0028/0035 text" }
 -->
 
 <a id="R-RT-001"></a>
@@ -320,7 +320,7 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:3880b2102b8ccc98", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and R-DEP-002's link moved to ADR-0031; R-DEP-002 gains ADR-0031's sentence that pure-Rust image and font crates are not banned codec libraries; deny.toml bans and lint-deps allowlist enforcement unchanged" }
+verified = { hash = "b3:58068a9c133cbde8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and R-DEP-002's link moved to ADR-0031; R-DEP-002 gains ADR-0031's sentence that pure-Rust image and font crates are not banned codec libraries; deny.toml bans and lint-deps allowlist enforcement unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:6b91d4f329169329", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0034's youtube.chat.send/feature actions and youtube.stats event are additive minor-release changes under R-API-001 and follow R-API-002 noun.verb, beside main's additive ADR-0022/0024/0025/0027/0028 changes" }
+verified = { hash = "b3:317c898164734031", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0034's youtube.chat.send/feature actions and youtube.stats event are additive minor-release changes under R-API-001 and follow R-API-002 noun.verb, beside main's additive ADR-0022/0024/0025/0027/0028 changes" }
 -->
 
 <a id="R-API-001"></a>
@@ -640,7 +640,7 @@ dependency or performance claim (`.github/pull_request_template.md`).
 ## Documentation
 <!-- @section
 depends_on = ["docs/DOCS.md#gate"]
-verified = { hash = "b3:3c4c265c0f82b211", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against the edited DOCS#gate: the applies_to typo report is now keyed by crate directory (apps/ vs crates/ per the crate-map apps/* row); R-DOC-012's 'neither exists nor appears in the crate map' still holds, others unaffected" }
+verified = { hash = "b3:7e3c516b0824daca", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against the edited DOCS#gate: the applies_to typo report is now keyed by crate directory (apps/ vs crates/ per the crate-map apps/* row); R-DOC-012's 'neither exists nor appears in the crate map' still holds, others unaffected" }
 -->
 
 <a id="R-DOC-001"></a>
@@ -776,7 +776,7 @@ rules.
 ## Governance
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:35b9b27ed7b49afd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-GOV-001..005 against ADR-0019: owner-only verdicts live in REVIEW/gate, labels+justification, tiers and proxy decisions unchanged" }
+verified = { hash = "b3:6a3bee027e59ef38", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-GOV-001..005 against ADR-0019: owner-only verdicts live in REVIEW/gate, labels+justification, tiers and proxy decisions unchanged" }
 -->
 
 <a id="R-GOV-001"></a>

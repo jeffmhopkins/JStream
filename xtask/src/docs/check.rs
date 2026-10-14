@@ -277,7 +277,8 @@ fn check_section_meta(
         }
     }
     for dep in deps {
-        let (file, frag) = dep.split_once('#').unwrap_or((dep.as_str(), ""));
+        let (file, section, key) = hash::split_dep(&dep);
+        let frag = section.unwrap_or_default();
         if let Some(target) = file.strip_prefix("ext:") {
             out.push(diag(
                 &doc.path,
@@ -297,6 +298,24 @@ fn check_section_meta(
                     &doc.path,
                     line,
                     format!("`depends_on` anchor `{dep}` does not exist"),
+                ));
+            }
+            // ADR-0039: a row reference names exactly one table row of a section.
+            Some(t)
+                if let Some(key) = key
+                    && let Err(e) = hash::row(t, frag, key) =>
+            {
+                let why = match e {
+                    hash::RowError::NoSection => format!("`{frag}` is not a section"),
+                    hash::RowError::NoRow => format!("no table row has a cell `` `{key}` ``"),
+                    hash::RowError::Ambiguous => {
+                        format!("several table rows have a cell `` `{key}` ``")
+                    }
+                };
+                out.push(diag(
+                    &doc.path,
+                    line,
+                    format!("`depends_on` row `{dep}`: {why}"),
                 ));
             }
             Some(t) if !doc.is_adr() && t.meta_str("status") == Some("superseded") => {

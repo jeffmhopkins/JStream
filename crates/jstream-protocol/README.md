@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:e7bff6bee96ecb90", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-protocol row and this Purpose are unchanged and still match the crate" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
+verified = { hash = "b3:fff413e1972691bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-protocol row and this Purpose are unchanged and still match the crate" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined

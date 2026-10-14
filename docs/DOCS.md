@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:94d974c034e2104a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against repo_path's lexical .. normalization and directory-keyed known_crates/glob_crate: available-now, docs for and reports (unknown applies_to crate) bullets still match xtask/src/docs" }
+verified = { hash = "b3:43197b2f41c47f6e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against ADR-0039's xtask change (metadata-stripped hashing in hash.rs, block ranges in parse.rs, row-reference checks in check.rs, docs rehash in mod.rs): the hash-bound bullet now names the rule and the migration; check, references, back-reference and docs-for bullets still match" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -33,7 +33,10 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **Hash-bound verification** ([Hash-bound verification](#verification)): `docs check`
   fails on any section whose stored hash no longer matches its text, covered files and
   dependencies, and `cargo xtask docs verify` records a re-read. Every `bootstrap`
-  placeholder was replaced, each after a re-read, in the PR that added hashing.
+  placeholder was replaced, each after a re-read, in the PR that added hashing. Hashes
+  skip metadata blocks, `depends_on` can name one table row, and `cargo xtask docs rehash`
+  is the one-time migration to that rule
+  ([ADR-0039](adr/0039-hash-ignores-metadata-and-row-dependencies.md)).
 - **Unmatched globs** ([R-DOC-012](RULES.md#R-DOC-012)): `covers` globs that match no
   tracked file fail (warn in drafts; retired docs are exempt); `applies_to` globs are
   checked for validity only. `verify` refuses while untracked files match the section's
@@ -118,6 +121,12 @@ verified = { hash = "b3:4f1c9a0e7d2b8c61", by = "agent:claude@<session-url>", no
 - `depends_on`: the **sections** this one relies on, as `path#anchor` or
   `path` for a whole ADR. These are section-level edges only. Docs never depend on whole
   docs, because coarse edges create re-verification storms.
+  A section that relies on one row of a table can name just that row as
+  `path#anchor/<key>`: the single table row in that section with a cell that is exactly
+  `` `<key>` ``. Each crate README's Purpose depends on its own crate-map row this way
+  (`docs/ARCHITECTURE.md#crate-map/jstream-core`, or `…#crate-map/apps/*` for the apps),
+  so editing one row doesn't stale every crate. No matching row, or more than one, is a
+  broken reference ([ADR-0039](adr/0039-hash-ignores-metadata-and-row-dependencies.md)).
 - `verified` is required when either `covers` or `depends_on` is set.
 - A `###` belongs to its `##`. Rules are the exception: they are `###` headings with their
   own anchor and an `@rule` block (see [Rules](#rules)).
@@ -201,23 +210,36 @@ It lists:
 
 `verified.hash` is a BLAKE3 digest (16 hex chars, `b3:` prefix) over:
 
-1. the section's body text, normalized (metadata comment removed, LF line endings,
+1. the section's body text, normalized (metadata blocks removed, LF line endings,
    trailing whitespace stripped);
 2. for each git-tracked file matched by `covers`, in sorted order: its path plus a hash
-   of its contents. In workflow files (`.github/workflows/`), the commit SHA and version
-   comment of `uses:` pins are ignored, so Dependabot pin bumps don't make the
-   specifying doc stale ([ADR-0018](adr/0018-ci-supply-chain-policy.md));
-3. for each `depends_on` target: its reference plus a hash of its normalized body.
+   of its contents. In Markdown files, metadata blocks are removed first. In workflow
+   files (`.github/workflows/`), the commit SHA and version comment of `uses:` pins are
+   ignored, so Dependabot pin bumps don't make the specifying doc stale
+   ([ADR-0018](adr/0018-ci-supply-chain-policy.md));
+3. for each `depends_on` target: its reference plus a hash of its normalized body
+   (metadata blocks removed), or of its one row for a `path#anchor/<key>` reference.
 
-So the verification is stale as soon as **any** of these change: the section, a covered
-file (including a file being added, removed or renamed), or a section it depends on.
+**Metadata blocks** are exactly the blocks the parser reads as metadata: the `@doc` block
+at the start of the file, an `@section` block right after an anchored `##` heading (not
+in ADRs) and an `@rule` block right after an anchored `### R-…` heading, outside code
+fences, whose opening line is exactly the marker and whose body parses as TOML. Anything
+else is content and is hashed, including a look-alike comment elsewhere, one with text
+after its marker, one in a code fence and one that isn't valid TOML, so text can't hide
+from the hash by posing as metadata
+([ADR-0039](adr/0039-hash-ignores-metadata-and-row-dependencies.md)).
+
+So the verification is stale as soon as **any** content among these changes: the
+section, a covered file (including a file being added, removed or renamed), or a section
+(or row) it depends on.
 That means:
 - **No merge-base logic is needed.** Staleness is a pure function of the tree, so squash
   merges, rebases and merges from `main` all behave the same.
 - **An edit made after a verify is caught**, because the hash no longer matches.
 - **Propagation is exactly one hop.** A dependent's hash includes its target's text,
   but not the target's covered files. A verify-only change edits only metadata, which
-  is excluded from the hash, so it never cascades.
+  is excluded from every hash (own body, covered Markdown and dependencies alike), so it
+  never makes another section stale.
 - **Parallel PRs only conflict when they re-verify the same section**, which is a real
   semantic conflict. After merging `main`, the hash is recomputed and the section may
   need re-verifying against the combined change. That is correct.
@@ -231,7 +253,15 @@ cargo xtask docs verify ARCH#gpu-pipeline \
 cargo xtask docs review ARCH --note "…"        # doc-level TTL review          (planned)
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git     (planned)
 cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
+cargo xtask docs rehash                        # one-time ADR-0039 migration (below)
 ```
+
+`docs rehash` moved stored hashes to the rule above when it was introduced. It rewrites
+a section's `hash` (keeping `by` and `note`) only when the stored hash is what the
+previous rule (metadata hashed, row references read as their whole section) computes for
+the current tree, or what this rule computes with row references read as their whole
+section. It decides every section against the unchanged tree before writing, so it
+can't restamp a stale section: those stay stale until someone re-reads and verifies them.
 
 <a id="history"></a>
 ## History, revisions and dates

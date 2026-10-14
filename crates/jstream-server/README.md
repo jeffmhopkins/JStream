@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d8dcd54503c2ba9f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's extra-hosts rule (bracketed IPv6, exactly one port) and BLAKE3 token-compare wording beside main's crate-map changes (ADR-0031/0034 rows, none for the server); Purpose matches the crate" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
+verified = { hash = "b3:cb6f06c084f1e3a5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's extra-hosts rule (bracketed IPv6, exactly one port) and BLAKE3 token-compare wording beside main's crate-map changes (ADR-0031/0034 rows, none for the server); Purpose matches the crate" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote

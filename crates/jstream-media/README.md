@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:86b370f74192d572", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Restored the ADR-0031 dependency a merge dropped; ADR-0031 restates ADR-0003's media stack, and this Purpose (layer-0 media value types, no I/O, GPU, platform code or unsafe) still matches it and the crate" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-media", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
+verified = { hash = "b3:e161d8c86d2b601e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Restored the ADR-0031 dependency a merge dropped; ADR-0031 restates ADR-0003's media stack, and this Purpose (layer-0 media value types, no I/O, GPU, platform code or unsafe) still matches it and the crate" }
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,

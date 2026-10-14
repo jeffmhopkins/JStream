@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:d57e3b61438733e7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Busy-from-fill_gap gap fix doesn't change the Purpose; main's ADR-0027 sharing sentence (no video chain shares by mix and profile) kept as merged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
+verified = { hash = "b3:12874f109ba82b91", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Busy-from-fill_gap gap fix doesn't change the Purpose; main's ADR-0027 sharing sentence (no video chain shares by mix and profile) kept as merged" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
