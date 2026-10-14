@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:e972548237a639e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model gains ADR-0037's transition kinds with settings, plugin kinds, the state type and the full cycle-checked edit list, none built; the graph still holds only sources, scenes and items and only item.add adds nesting today, so this Purpose holds" }
+verified = { hash = "b3:1e12214d53ff6b5f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model gains #94's override and hotkey rules and ADR-0037's preset settings, none built; Purpose lists only built behaviour" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

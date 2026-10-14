@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b23410e055c58ec9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed by this PR's daemon logging and RUST_LOG exit code and main's #96 CLI events bullet; layer diagram and app roles unchanged" }
+verified = { hash = "b3:75cc7cbc7f54bee4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by main's #98 daemon logging text and their re-verified lines in this PR; layer diagram and app roles unchanged" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:d15e8340677ed098", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered manifests changed by this PR's tracing dependency (core, mcp, server, outputs) and tracing-subscriber (daemon only); no new JStream edges, so every row's layer and dependencies still hold; table text unchanged" }
+verified = { hash = "b3:464b34f2a91e8126", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR rewrites the jstream-encode row to ADR-0027's sharing rule (#86 N4), and the jstream-mcp and jstream-server rows for MCP streamable HTTP served by the server; covered manifests changed by main's #98 tracing and the jstream-mcp summary edit here; layers and edges unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -165,7 +165,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:9ee630879201e456", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for ADR-0037: TransitionPreset is { id, name, kind, duration_ms, easing, settings } with cut/fade/move as the first transition kinds and unmatched/stagger_ms as fade and move settings, missing kind cuts; Settings bullet adds transition and CLAP plugin kinds, the opaque state type and the full cycle-checked edit list; depends_on adds ADR-0037; ADR-0029's default, resolution and per-item fields kept" }
+verified = { hash = "b3:2f12d08a378c4e73", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds #94's rules (orphaned overrides dropped in the same edit and restored by its inverse; an override follows a group to every placement; a hotkey with a deleted target stays, broken, re-pointable) and ADR-0037 (transition presets carry kind plus settings, CLAP plugin kinds with an opaque state parameter, non-exhaustive cycle-check list); depends_on adds 0037; all marked not built" }
 -->
 
 ```
@@ -248,17 +248,18 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     applies to every placement of that group in the variant's tree, including two
     placements in the same parent. To vary one copy, duplicate the group.
 - **Folders and organisation are collection state:** folders, labels, favourites, scene
-  icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable
-  edits and saved with the collection, so every client and agent sees the same thing
-  ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not
-  per person). Folders change no rendering, switching or nesting; scenes keep their flat
+  icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits
+  and saved with the collection, so every client and agent sees the same thing
+  ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not per
+  person). Folders change no rendering, switching or nesting; scenes keep their flat
   display order, and a variant sits under its parent, never in a folder. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
   decision. Deleting the scene, source or output a binding's action names succeeds: the
   binding stays, is reported as broken, does nothing when pressed, and can be re-pointed
-  with `hotkey.set`; undoing the delete makes it work again. `Scene.background` (absent means transparent) is scene model, not metadata,
-  because the compositor draws it wherever the scene renders.
+  with `hotkey.set`; undoing the delete makes it work again. `Scene.background` (absent
+  means transparent) is scene model, not metadata, because the compositor draws it
+  wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
   is used. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
@@ -352,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:293a67e227482cb3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #90: new live-value handover paragraph decides a per-subsystem generation counter (control bumps on publish, each RT reader atomically stores the generation it adopted, live override released once all readers report >= the commit's), not built; consistent with ADR-0032's keep-live-until-snapshot rule and R-RT-001/002" }
+verified = { hash = "b3:b3acfef215377e3b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds the Live-value handover paragraph (per-subsystem generation counter, RT threads publish with one atomic store, live values released once every reader reports the commit's generation; R-RT-001/002; not built) beside main's ADR-0028/0035 text" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -429,13 +430,12 @@ time the control side publishes a subsystem's snapshot it bumps that subsystem's
 generation and stores it in the snapshot. Each real-time thread that reads the snapshot
 (the render thread for render, the mixer for audio) publishes the last generation it
 adopted with one atomic store when it picks up a new snapshot, which allocates, locks and
-waits on nothing ([R-RT-001](RULES.md#R-RT-001),
-[R-RT-002](RULES.md#R-RT-002)). When a gesture's committing batch
-applies, the control side notes the generation of the snapshot that carries it, and
-releases the gesture's live values from the parameter channels once every thread that
-reads them has reported a generation at least that high. Until then the parameter
-channel keeps the live value, so no frame shows the old value in between. The control side polls
-the published generations; the real-time threads never wait for it.
+waits on nothing ([R-RT-001](RULES.md#R-RT-001), [R-RT-002](RULES.md#R-RT-002)). When a
+gesture's committing batch applies, the control side notes the generation of the snapshot
+that carries it, and releases the gesture's live values from the parameter channels once
+every thread that reads them has reported a generation at least that high. Until then the
+parameter channel keeps the live value, so no frame shows the old value in between. The
+control side polls the published generations; the real-time threads never wait for it.
 
 The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
 reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1a94bcde30467931", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered core/server/control READMEs changed by this PR's logging text and main's #95/#96 merges; no protocol behaviour changes; bullets match protocol 0.3 as built" }
+verified = { hash = "b3:494c8393434d0d0a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds: a missing Origin allowed, a present one checked (#44, not built); MCP streamable HTTP served by jstream-server (#37); a Slow clients bullet (bounded buffer, events.dropped, re-read state; not built); presets carry kind and settings (ADR-0037); covered READMEs re-verified here; main's #96/#98 text unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -466,11 +466,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
-- **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update
-  and delete presets (each with a kind and a settings map or patch,
-  [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default, and set a scene's `transition_in` and
-  `transition_out` and an item's transition settings. The scene-switch action takes an
-  optional preset.
+- **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
+  delete presets (each with a kind and a settings map or patch,
+  [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
+  and set a scene's `transition_in` and `transition_out` and an item's transition
+  settings. The scene-switch action takes an optional preset.
 - **Live values** (`live.set`, `live.cancel`; events `live.changed`, `live.ended`):
   actions that override live-adjustable parameters during a drag or a live dialog, with
   no `rev` bump or undo step; one batch commits the gesture
@@ -533,7 +533,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:735f9b14c1e44756", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp README gains this PR's Logging subsection beside main's #96 Events subsection; ARCH's MCP bullets (incl. #96's Events bullet) unchanged" }
+verified = { hash = "b3:34dbedc7d0c34410", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's access bullet says MCP streamable HTTP (not built) is served by jstream-server behind the same token and Origin checks (#37 N1); covered mcp/CLI READMEs re-verified here; main's #96 Events bullet unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -557,7 +557,8 @@ verified = { hash = "b3:735f9b14c1e44756", by = "agent:claude@session_01QBbMRwRu
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
   streamable-HTTP transport (not built) is served by `jstream-server` on the control port,
-  behind the same token and `Origin` checks as the WebSocket API, so it validates `Origin`, as the
+  behind the same token and `Origin` checks as the WebSocket API, so it validates
+  `Origin`, as the
   [MCP transport spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
   requires.
 - Every agent action goes to the audit log with the client's name. Undo is per client,

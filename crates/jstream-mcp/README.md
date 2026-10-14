@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:62f26e4467ed08a3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's #96 events tool into the Purpose beside this PR's tracing; crate-map row unchanged; Purpose matches the crate" }
+verified = { hash = "b3:bdcef093ba5aa906", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Purpose says MCP streamable HTTP is served by jstream-server, not this crate (#37 N1), beside main's #96 events tool; matches the crate" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -44,7 +44,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:4c9c4b9df6baa5bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's Logging subsection (mcp_session/mcp_request/tool_call spans, never arguments) with main's #96 events tool row, malformed cursor and Events subsection; the Not implemented line now names both the events tool and tracing; depends_on keeps ADR-0036; matches server.rs" }
+verified = { hash = "b3:5d13c0dbd0ec49eb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Async and transports now say streamable HTTP is served by jstream-server (not built); open question 3 stays settled by ADR-0036 (main's #96) and question 4 records #37's decision; main's #98 Logging subsection kept; depends_on keeps ADR-0036" }
 -->
 
 ### Tools

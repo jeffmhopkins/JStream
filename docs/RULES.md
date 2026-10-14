@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:80a1ae28c3f1b00d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains the decided generation-counter handover, whose RT side is one atomic store per adopted snapshot, so R-RT-001 (no alloc/lock/block) and R-RT-002 (never wait on the control plane) still hold as written" }
+verified = { hash = "b3:f315a837358f5623", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's live-value handover (one atomic store per RT thread, nothing waits), consistent with R-RT-001/002" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2a7b14c51f0912aa", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#protocol's planned preset edits now carry a kind and settings per ADR-0037; presets are not on the wire yet, so the new shape is additive under R-API-001 and the state parameter type is additive through ADR-0025's unknown fallback" }
+verified = { hash = "b3:854c497e0324367d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0037's transition-preset settings, plugin kinds and opaque state type, and #94's override and hotkey rules, are additive or behavioural refinements of unbuilt features; R-API-001..004 hold" }
 -->
 
 <a id="R-API-001"></a>

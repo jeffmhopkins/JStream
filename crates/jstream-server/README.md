@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:aefc31c2bb5a6738", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds tracing; main's #95 extra-hosts and token-compare text kept; Purpose matches the crate" }
+verified = { hash = "b3:fc8e87ad921d55a8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's README records #44's decisions (missing Origin to be allowed; bounded buffer with events.dropped) and that MCP streamable HTTP will be served here; main's #98 tracing text kept; Purpose matches the crate as built" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:99bcb121169fd69a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's connection span and refusal logging (reason, never header values) with main's #95 extra-hosts rule (bracketed IPv6, one port) and BLAKE3 token compare; matches gate.rs and lib.rs" }
+verified = { hash = "b3:e5585f21cdb18f70", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Admission text says a missing Origin is refused today and will be allowed (#44); open question 7 records the decided bounded buffer, not built; question 6 keeps main's logging-volume question from #98; matches gate.rs as built" }
 -->
 
 ### Listening and admission

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:5f541c5353cb4f6a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-audio row is unchanged, and Threads' new handover paragraph is design only, so this Purpose still matches" }
+verified = { hash = "b3:832359a22175d8b3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading gains the live-value handover paragraph (not built); Purpose's mapping of the first cut onto ADR-0028 unchanged" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -92,7 +92,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:59c0f7d791eab3c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading gains the generation-counter handover: the mixer will publish the adopted generation with one atomic store; src/rt is unchanged and still allocation- and lock-free, and live values are not built" }
+verified = { hash = "b3:61ba4dd4917cd61c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Threads' handover asks each RT thread for one atomic store of the adopted generation, which fits this crate's allocation- and lock-free rt code; nothing in the crate changed" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
