@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:ba7e0756587bdab5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:b88009c4d3bb7cc0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed only by the daemon README's re-verified Design line (ADR-0025 persistence dependency); the layer diagram and app roles are unchanged" }
 -->
 
 ```
@@ -164,8 +164,8 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md"]
-verified = { hash = "b3:2047ab7805c8e8bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined main's ADR-0022 (canvas on the collection, SceneItem.geometry, legacy placement bullet) with ADR-0024 (Scene role, variant_of, overrides, folder, background, organisation fields; folders, labels, hotkeys) plus ADR-0023/0029 fields; depends_on lists 0022, 0023, 0024; variant overrides of placement now mean geometry; not-yet list names canvas, geometry and every ADR-0024 field" }
+depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
+verified = { hash = "b3:9aa77b9f57411e59", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Main's ADR-0022 canvas/geometry and ADR-0024 scene structure now sit beside this PR's Settings bullet (descriptor-described settings, typed scene/source/asset references in cycle checks and delete rejection); depends_on lists 0022-0025; settings are still in the not-yet list" }
 -->
 
 ```
@@ -246,6 +246,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.
+- **Settings:** a source's `settings`, and each filter's, are a map of values described by
+  its kind's descriptor, which the engine reports and validates against. References to
+  scenes, sources and asset files inside settings are typed, so the graph tracks them in
+  cycle checks and delete rejection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
 - **Transitions** ([ADR-0029](adr/0029-transitions.md)): exactly one preset is the
   default, and it can't be deleted. Deleting a preset clears the overrides that use it in
   the same edit. The engine picks a switch's preset: the one the switch action names, else
@@ -349,7 +353,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:cb5415aa6f063df9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Edits-bullet sentence on ADR-0024's item.move and scene_id addressing (not built) sits beside main's ADR-0022 and ADR-0029 planned edits; covered server README changed by #72's extra-host and token-compare text only; other bullets match protocol 0.3 as built" }
+verified = { hash = "b3:e5ccc408953aa746", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered protocol README marks open questions 11 and 12 settled by ADR-0025 (kind.list/kind.describe, settings map validated per kind, blocker list on delete rejection, delete.plan; not built); main adds ADR-0022/0024 planned edits; the bullets here still match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -492,12 +496,16 @@ plus an `effect.toml` manifest.
 ## Persistence, config and secrets
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
-depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001"]
-verified = { hash = "b3:233514b2be0b9df3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: collections+migrations, jstream.toml, OS credential store, token file and local minidumps match R-API-003, R-SEC-001 and R-SEC-004" }
+depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
+verified = { hash = "b3:0e05e58970c4134c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025 dependency now links ADR-0032 for live hints (review N2); data-model Settings bullet and persistence Asset files bullet unaffected" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
   `jstream-graph`.
+- **Asset files** named in settings are stored relative to the collection folder or the
+  app asset folder when they are under one, so a moved or portable setup still finds them.
+  Each stored source and filter records its kind's descriptor version, migrated on load
+  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
 - **Control token:** a random token in a user-only file in the config directory

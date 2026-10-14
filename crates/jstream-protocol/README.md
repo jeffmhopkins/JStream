@@ -334,11 +334,13 @@ described above.
    also publish a plain `.json` file for non-Rust clients?
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an
     ADR ([R-ARCH-004](../../docs/RULES.md#R-ARCH-004)) once they are settled?
-11. **Source kinds.** `SourceKind::Builtin` names a kind by string, as a placeholder
-    until `jstream-sources` defines typed kinds with settings. Should those replace it
-    (a breaking change), or arrive as more `SourceKind` variants beside it? Like the
-    string enums in question 8, a new `SourceKind` variant breaks older clients today.
-12. **Deleting referenced objects.** `source.delete` and `scene.delete` are rejected
-    while an item or a `scene` source still refers to them, so the client removes those
-    first. Should the protocol also offer a cascading delete (one edit whose inverse
-    restores everything it removed)?
+11. **Source kinds.** Settled by
+    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md): `builtin` stays,
+    its `kind` names a kind the engine describes (`kind.list`, `kind.describe`), and
+    settings travel beside it as a map validated against that kind's descriptor. No new
+    `SourceKind` variants. Not built yet: the first cut has no settings.
+12. **Deleting referenced objects.** Settled by
+    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md): rejection stays
+    the only delete, with no cascading edit. The error will list every blocker, and a
+    `delete.plan` query will return the batch that removes the target and its blockers.
+    Not built yet: today the client removes the blockers itself, as described above.
