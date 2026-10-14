@@ -2,7 +2,7 @@
 id = "ADR-0023"
 title = "Placements, references and clones"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
@@ -31,7 +31,8 @@ places.
 
 **What the UI needs.** The chosen UI prototype
 ([design/ui-prototype](../../design/ui-prototype/README.md#settles), direction D) and its
-decision register (`design/ui-prototype/decision-register.md`, entries D2 and D3) show:
+[decision register](../../design/ui-prototype/decision-register.md) (entries D2 and D3)
+show:
 - a reference "shares everything with its source except its placement (position, size,
   rotation, crop)". The prototype routes opacity and blend to the **source**, so every
   placement of a source blends the same way;
