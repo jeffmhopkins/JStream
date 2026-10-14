@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:ed88e1ccda6edf33", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the sentence that continuous parameters are live values on the wire (ADR-0032); the mixer's API, time line and per-input gain description is unaffected" }
+verified = { hash = "b3:f81deaf00f853cad", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained ADR-0027's planned privacy flag on the parameter channels; the mixer's first cut (one bus, gains, meters, no filters) and its API are unaffected" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -89,7 +89,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:07e903a8816f33f8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 wire sentence on live values; rt/ rings, atomics for gains and meters, and R-RT-001 claims are unchanged, and atomics remain the parameter-channel form for gains" }
+verified = { hash = "b3:89c760bbadf64d25", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained ADR-0027's planned privacy flag on the parameter channels; rings, atomics and R-RT-001 claims unchanged, and the master/privacy audio stages are not built here" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

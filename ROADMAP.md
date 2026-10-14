@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:935465d03f8c01b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b expanded per maintainer: browser source (ADR-0021, after S4), scenes as sources with cycle rejection, shared vs duplicate sources, transform+crop, source filters vs item effects; M1a/c/d unchanged" }
+verified = { hash = "b3:a1aa0fa595215a9b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b encoder-sharing bullet now says the Output model reserves empty video/audio chains, as ADR-0027's consequences ask; other M1 items unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -76,6 +76,8 @@ verified = { hash = "b3:935465d03f8c01b9", by = "agent:claude@session_01QBbMRwRu
     effects apply to one placement.
   - Bus-matrix mixer with filters and meters.
   - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
+    The `Output` model reserves its video and audio chains, empty by default
+    ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
 - **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the
   portable zip ([ADR-0020](docs/adr/0020-portable-windows-distribution.md); from spike S2).
 - **M1d Hardening:** RTMP reconnect with backoff, log rotation, local minidumps, `stats.tick`,
@@ -88,7 +90,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "UI bullet now names canvas editing: drag-to-place, resize/rotate, crop handles, snapping, add-existing vs duplicate; Leptos/preview/Tauri/studio items unchanged and still match ADR-0002" }
+verified = { hash = "b3:df29b2e4bf253fab", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added the master chain, per-output chains with cost shown and the privacy screen in the UI, per ADR-0027's consequences; other M2 items unchanged" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
@@ -100,6 +102,8 @@ verified = { hash = "b3:1a376084e78f2060", by = "agent:claude@session_01QBbMRwRu
 - `jstream-desktop` (Tauri) and `jstream-daemon` serving the same UI. Token pairing for
   remote browsers.
 - Studio mode (Preview/Program) and transitions.
+- The program master chain, per-output chains with their cost shown, and the privacy
+  screen ([ADR-0027](docs/adr/0027-program-master-and-output-chains.md)).
 
 **Demo:** everything from M1, done by hand in the desktop app and in a browser.
 

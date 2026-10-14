@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:a356d168d6f85bf5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; R-RT-001..006 still hold, and R-RT-003's parameter channels are exactly what live values use" }
+verified = { hash = "b3:3e42c31a89991624", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained ADR-0027's planned privacy flag on the parameter channels; that flag uses R-RT-003's parameter channels and allocates nothing (R-RT-001/002), so R-RT-001..006 hold" }
 -->
 
 <a id="R-RT-001"></a>
@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:443a19bc0fe91573", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gained Live values and History bullets (ADR-0032); they are planned minor additions, so R-API-001..004 hold unchanged, and R-API-004's expected_rev, idempotency and per-client undo match the ADR's history calls" }
+verified = { hash = "b3:b9caee4368c7ccef", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0027's planned privacy.set/privacy.changed and output.status session reporting, none built; these are planned minor additions under R-API-001, and privacy.set is an action so R-API-004 is unaffected" }
 -->
 
 <a id="R-API-001"></a>

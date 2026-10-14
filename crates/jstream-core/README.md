@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b7bea814811e4853", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Not yet: per-client undo now names history.undo/redo and undo_conflict per ADR-0032, and live values are listed as not built; engine still keeps no history and drops Graph::apply's inverse, matching engine.rs" }
+verified = { hash = "b3:7d47e1eb10ec3894", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0027's planned privacy.set/privacy.changed and output.status session reporting, none built; engine's outputs are still a placeholder state machine and Not yet still lists real outputs, so the section holds" }
 -->
 
 ### Engine and sessions

@@ -163,7 +163,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "b3:92b0462b389879d4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read merged section: shared-source/duplicate, scenes-as-sources (merged with main's Nesting bullet, no duplicate), filters vs effects, and main's Built-so-far graph paragraph all consistent" }
+verified = { hash = "b3:6195a30c20f46984", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per accepted ADR-0027: master stage and privacy setting in the model tree, Output gains video/audio chains, new bullets for master/output chains, encoder-sharing key (chained outputs keyed by output ID) and privacy as runtime state; Built-so-far still says nothing outside sources and scenes exists" }
 -->
 
 ```
@@ -176,7 +176,9 @@ Collection (JSON on disk, schema_version, rev: u64)
 ├── audio          sends: (source_id, bus_id) → gain_db
 │                  Bus { id, name, filters[], monitor_device? }
 ├── encoders       EncoderProfile { id, codec, rate_control, … }
-└── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile }
+├── master         Master { video_filters[], audio_filters[] }   applies to everything leaving JStream
+├── privacy        Privacy { look: Blur { strength } | Slate { color | image }, muted_sources: [source_id] }
+└── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, video_filters[], audio_filters[] }
                    kind: Rtmp { target: Generic { url } | YouTube { broadcast_binding } } | Record { path, container } | VirtualCam
 ```
 
@@ -193,9 +195,27 @@ Collection (JSON on disk, schema_version, rev: u64)
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
   is used. `SceneItem.effects[]` and `crop` belong to that one placement.
 - The preview shown in the UI is a protocol stream, not an `Output`.
-- **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
-  encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
-  count.
+- **Master and output chains**
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)): the `master` stage applies
+  to every output, whichever mix and buses it takes, but not to the editing canvas or
+  audio monitoring. Its video chain runs once per tick on each mix some output consumes;
+  its audio chain runs on each bus that feeds an output, after the bus's own chain
+  (monitors tap the bus before it). Each output may add its own chains after the master
+  stage; `VirtualCam` has no audio, so it has only a video chain.
+- **Encoder sharing** ([ADR-0027](adr/0027-program-master-and-output-chains.md)):
+  outputs whose video chain is empty share one encoder session when they have the same
+  `(video_mix, encoder_profile)`, the master stage counting as part of the mix. An
+  output with a video chain, even one holding only disabled filters, gets its own render
+  pass and session, keyed by its output ID. An output's own audio chain gives it its own
+  audio encode and never affects video sharing. Hardware session caps differ by GPU
+  vendor, so the engine reports, per output, whether it shares and with which outputs,
+  plus the sessions in use. It does not guess the caps.
+- **Privacy screen** ([ADR-0027](adr/0027-program-master-and-output-chains.md)): whether
+  it is on is runtime state, set by an action and never stored in the collection; it
+  starts off. The collection's `privacy` setting only says how it looks (a blur or a
+  slate) and which sources it mutes, by default every audio input-device source,
+  independently of each source's own mute. While on, it covers every output and every
+  preview stream of a post-master stage.
 - **Color:** compositing is done in linear light in an FP16 working format. Output is
   BT.709 limited range by default. HDR (FP16) capture is tone-mapped to SDR. HDR output is later.
 - **Undo** primitives (an edit plus its inverse) live in `jstream-graph`. The per-client
@@ -212,7 +232,7 @@ Collection (JSON on disk, schema_version, rev: u64)
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:1882506d5cf34ee5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: the parameter-channel sentence now says continuous parameters are live values on the wire, committed by one batch (ADR-0032); clock, thread table, S3 result and arc-swap snapshot text unchanged and still match" }
+verified = { hash = "b3:746c18f6022b9813", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0027: added the privacy flag on the parameter channels (next tick and block, pass preallocated), marked not built; clock, thread table, S3 result and snapshot text unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -264,12 +284,18 @@ lock-free parameter channels. On the wire they are live values, committed by one
 at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
+The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
+reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
+so it takes effect on the next tick and block. The blur or slate pass exists whenever an
+output does, so turning privacy on allocates nothing on a real-time thread. Not built
+yet.
+
 <a id="protocol"></a>
 ## Control protocol
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:9a70e815e411c6c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added Live values (live.set/live.cancel actions, live.changed/live.ended) and History (history.undo/redo, a fourth call kind) bullets citing ADR-0032; covered control/server/protocol READMEs changed only as verified in this PR; other bullets still match the code" }
+verified = { hash = "b3:67716fc0cf1bf7c4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0027: planned privacy.set action and privacy.changed event, planned per-output session reporting in output.status and the session-limit error; covered control/server READMEs changed only by verified lines in this PR" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -292,6 +318,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+- **Privacy screen** (planned): the action `privacy.set { on }` on the master stage, never
+  undoable or batchable and with no `rev` change; every change emits
+  `privacy.changed { on }` to every client and goes to the audit log
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
+- **Encoder sessions** (planned): `output.status` reports, per output, whether it shares
+  an encoder session and with which outputs, plus the hardware sessions in use. When the
+  encoder refuses a session, `output.start` fails with a stable session-limit error code
+  naming the outputs that hold sessions, with no fallback to a software encoder
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
   `output.status`; later `video.snapshot`, `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `stats.tick`, …).
@@ -345,7 +380,7 @@ verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:890531688bbbe6e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered code: gpu/mod.rs only re-exports adapter_drives_monitor for WGC capture's own device; steps 1-6 unchanged, and the new CPU capture path is step 6's fallback, on the display's adapter as the hybrid-GPU note asks" }
+verified = { hash = "b3:92ca104038879e0d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0027: added the output path order (mix, master chain, output chain, privacy, colour conversion, encoder), render-plan nodes and fail-closed privacy, stated as not built; S1 steps and results unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -390,6 +425,13 @@ The encoded output decodes to the test page's colours (BT.709 limited range). St
 
 wgpu is pinned exactly, because hal interop can change between releases. Effects are WGSL
 plus an `effect.toml` manifest.
+
+**Output path** ([ADR-0027](adr/0027-program-master-and-output-chains.md)), for each
+output: mix → master video chain → the output's own video chain → privacy stage → colour
+conversion (step 4) → encoder. The render plan has a master node per consumed mix, a
+node per output with a video chain, and a privacy node per output. The privacy stage
+comes last, so no output chain can undo it, and it fails closed: if its pass can't run,
+the output gets a black frame. None of this is built yet.
 
 <a id="persistence"></a>
 ## Persistence, config and secrets

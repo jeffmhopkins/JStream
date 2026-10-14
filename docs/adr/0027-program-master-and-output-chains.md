@@ -2,7 +2,7 @@
 id = "ADR-0027"
 title = "Program master, per-output chains and the privacy screen"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 

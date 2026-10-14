@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:08235abb8c816a16", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; platform traits, GPU interop and capture hand-off are unaffected" }
+verified = { hash = "b3:8af8e1279c633ab2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained ADR-0027's planned privacy flag on the parameter channels; platform traits, capture mailbox and audio handlers are unaffected" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -98,7 +98,7 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:7c2e5aeacf252627", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #63: intro now says the Windows GpuInterop exists and capture/encoder GPU input/render remain (N2); FrameSync bullet adds stage-right-before-a-submit since staged ops attach to the queue's next submit (N5); rest unchanged" }
+verified = { hash = "b3:b2e12cf1fcb7db42", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#gpu-pipeline only gained ADR-0027's planned output path (master, output chain, privacy before colour conversion); steps 2, 5 and 6 this section cites are unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
