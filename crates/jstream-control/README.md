@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:00c14f0f8cc72c6f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): contents list keeps ws.rs (WsControl, feature ws) and mock.rs; Cargo.toml now has both the native-only ws deps and the jstream-protocol fixtures dev-dependency" }
+verified = { hash = "b3:f7c54997bee67713", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Mock bullet now says clients use it without the engine and names jstream-core's InProcessControl as the real in-process implementation held to the mock's answers (core's differential test); rest of the contents list unchanged" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -29,7 +29,9 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
 - **Mock** (`mock.rs`, feature `mock`): `MockEngine` and `MockControl`, an in-memory
-  implementation for developing and testing clients before the engine exists.
+  implementation for developing and testing clients without the engine, which
+  they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
+  implementation; its tests hold it to the mock's answers.
 - **WebSocket client** (`ws.rs`, feature `ws`, native targets): `WsControl` and
   `WsConfig`, the `Control` trait over the engine's WebSocket API, and `WS_PATH`, the
   API's path, shared with `jstream-server`.
@@ -42,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:f1811ac0efb8c61a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#42): design holds both main's parity paragraph (shared jstream_protocol::parity fixture) and this PR's WebSocket client section; checked both against mock.rs, ws.rs and Cargo.toml" }
+verified = { hash = "b3:4c98be2b3741b9b2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only the mock.rs module doc and the mock feature comment in Cargo.toml were reworded (without the engine, instead of before it exists); trait, async shape, mock behaviour, WebSocket client and open questions unchanged" }
 -->
 
 ### The trait

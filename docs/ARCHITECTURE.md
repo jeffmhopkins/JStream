@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:11b187bb687ac5e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only a comment in jstream-platform-windows/Cargo.toml changed (hw-tests feature, N4); rows and edges unchanged" }
+verified = { hash = "b3:4e648699b830644c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crates/jstream-core/Cargo.toml: layer 5, summary equals the L5 row, unsafe no; deps control/graph/protocol and dev-dep jstream-mcp (L3) are all lower layers; no client reaches core (lint-deps ok); jstream-control Cargo.toml only had a comment reworded" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -260,7 +260,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:ad39205686c679a3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #44 N1/N2 in jstream-server (length-independent token compare in config.rs, portless Host accepted only on port 80 in gate.rs): Transport bullet (token required, Origin/Host validated, 127.0.0.1 default, plain ws://) still holds; no wire, envelope or versioning change" }
+verified = { hash = "b3:72c53eff8945061e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Transport bullet now names InProcessControl and links jstream-core Design; envelope, edits/actions/queries/events and errors bullets still match what the engine implements (no undo on the wire yet); re-verified after jstream-server README's verified line changed (metadata only)" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -284,9 +284,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   meters. Not designed yet.
 - **Schema:** the JSON Schema is generated from the Rust types, and its snapshot is
   the API review ([R-TEST-002](RULES.md#R-TEST-002)).
-- **Transport:** the `Control` trait is implemented in-process by core and over WebSocket
-  by `jstream-control` (`WsControl`, feature `ws`). `jstream-server` serves the
-  WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
+- **Transport:** the `Control` trait is implemented in-process by core
+  (`InProcessControl`, [jstream-core › Design](../crates/jstream-core/README.md#design))
+  and over WebSocket by `jstream-control` (`WsControl`, feature `ws`). `jstream-server`
+  serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
   default, with the token required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
   for now; TLS is an open question there.

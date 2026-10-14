@@ -1,0 +1,31 @@
+[package]
+name = "jstream-core"
+version = "0.0.0"
+description = "The JStream engine: owns the scene graph, executes protocol calls and serves them in-process through `InProcessControl`."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 5
+summary = "`Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+futures-core.workspace = true
+jstream-control.workspace = true
+jstream-graph.workspace = true
+jstream-protocol.workspace = true
+
+[dev-dependencies]
+# The mock engine, for a differential test: the same calls must get the same answers.
+jstream-control = { workspace = true, features = ["mock"] }
+# `tests/mcp.rs`: an MCP agent driving the real engine through `InProcessControl`.
+jstream-mcp.workspace = true
+# The shared parity fixture that `jstream-graph` and the mock are held to.
+jstream-protocol = { workspace = true, features = ["fixtures"] }
+serde_json.workspace = true
