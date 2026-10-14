@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:084a418d94915711", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read against the crate: one canvas, legacy placement, opacity, src-over, Compositor::open versus on_context, sRGB import and RGBA8 readback. The crate-map row, GPU pipeline paragraph, ADR-0004 and ADR-0022 decision 5 still match." }
+verified = { hash = "b3:d238d8c2646f50d7", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Edited the API bullet and the not-in-this-cut paragraph: the shared formula is in jstream-protocol, and place.rs still evaluates the legacy 0.3 placement itself. Re-read the rest against compositor.rs and place.rs: canvas, opacity, src-over, open versus on_context, and RGBA8 readback are unchanged. ADR-0022 decision 5 and the GPU pipeline one-scene paragraph still match." }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -69,8 +69,9 @@ and calls this crate.
 - The graph's `ItemTransform` and `Crop` are not named here. `Placement` and `Crop`
   are the same fields (top-left `position`, `scale`, clockwise `rotation_deg`; crop
   insets in source pixels), so the engine's mapping is field by field. The shared
-  geometry formula ADR-0022 puts in `jstream-protocol` is not in the tree, and this
-  crate does not invent a second one.
+  formula now lives in `jstream-protocol` (`ItemGeometry`, `legacy_quad`). This crate
+  still evaluates the legacy placement in `place.rs` and does not call that function
+  yet.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. It is the snapshot path (`video.snapshot` later encodes it). It
   is not the encoder's NV12 texture.
@@ -78,8 +79,9 @@ and calls this crate.
 **Not in this cut.** The render thread (`frame_loop.rs`), arc-swap snapshots, NV12 or
 P010 conversion, encode-target export and the D3D12 `PRESENT` transition, WGSL effect
 packs, fit modes, 3D tilt/turn/depth/perspective, transitions, the master chain and
-the privacy stage. ADR-0022 keeps 3D and fit modes out until the protocol formula
-exists; the GPU pipeline's encode steps stay in
+the privacy stage. The protocol formula for fit modes and 3D now exists; this crate
+still does not draw them. 3D fields stay neutral until M3. The GPU pipeline's encode
+steps stay in
 [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline).
 
 <a id="design"></a>
@@ -232,15 +234,15 @@ render, and it does not weaken a check.
 <!-- @section
 -->
 
-- **Geometry and fit modes.** ADR-0022's `ItemGeometry` (centre, size, `stretch` /
-  `fit` / `fill`, rotation about the centre) is specified but not in
-  `jstream-protocol`, and the ADR says that formula lives there so the UI and the
-  compositor share it. This crate implements only the legacy evaluation. When the
-  function exists, the snapshot should carry its projected quad (or the geometry plus
-  the source size) instead of a second copy of the math. `fill` also needs a clip to
-  the box, which this pipeline does not have.
-- **3D.** Tilt, turn, depth and perspective are defined and rejected by the engine
-  until M3. No fields for them here.
+- **Geometry and fit modes.** The shared formula is `ItemGeometry` in
+  `jstream-protocol`: `project` (the box, rotation about its centre), `content`
+  (`stretch`, `fit`, `fill`) and `legacy_quad` (the 0.3 placement this crate still
+  computes in `place.rs`). The snapshot should carry that projected quad, or the
+  geometry plus the source size, instead of the second copy. `fill` still needs a clip
+  to the box, which this pipeline does not have.
+- **3D.** `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` are fields on
+  `ItemGeometry` and default to neutral. `is_neutral_3d` is the check an engine uses
+  to reject a non-neutral value until M3 draws it. No 3D uniforms here.
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. Software adapters often lack `TEXTURE_FORMAT_NV12`,
   so that pass cannot be the CI path. Proposed default: keep this RGBA output, and

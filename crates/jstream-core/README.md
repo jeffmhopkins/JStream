@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:da0bcd4c5399b4f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: control#design changed only in its Auth bullet's Origin wording and wrap; core's in-process Control, idempotency and events text is unaffected" }
+verified = { hash = "b3:a61d9ef77eb68265", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read engine sessions, batches, queries, actions and events against the protocol design change. The new Item geometry subsection is not a message and this engine does not call it; hello, expected_rev, idempotency and state.changed are unchanged." }
 -->
 
 ### Engine and sessions

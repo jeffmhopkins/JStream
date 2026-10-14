@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5e40db06ecce1ee0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: the server change is only the close timeout; Transport (Origin optional) and Slow clients bullets still hold, and closing behaviour isn't described here" }
+verified = { hash = "b3:47b87f81a4b2d71e", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the edits, queries, events, schema and transport bullets against the protocol crate. geometry.rs is a pure function, not a new command, query or event, so those lists still match. The schema snapshot's only change is ItemTransform's description. Slow clients and events.dropped are unchanged." }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -573,7 +573,7 @@ verified = { hash = "b3:2dfd99573c6826a8", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:a1ea68e404e5d206", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read the new one-scene paragraph against jstream-render: legacy 0.3 placement, opacity, src-over, Rgba16Float then Rgba8UnormSrgb readback, GpuContext or its own software-first device. Steps 1-2 and 4-6, transitions and the ADR-0027 output path are unchanged." }
+verified = { hash = "b3:c6151c969fa53885", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against the render README edit. Placement in this crate is still the legacy 0.3 evaluation in place.rs; fit modes and 3D are still not drawn here. Steps 1-2 and 4-6, transitions and the ADR-0027 output path are unchanged." }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
