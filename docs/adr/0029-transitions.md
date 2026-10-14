@@ -2,7 +2,7 @@
 id = "ADR-0029"
 title = "Transitions"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 

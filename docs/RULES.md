@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:443a19bc0fe91573", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gained Live values and History bullets (ADR-0032); they are planned minor additions, so R-API-001..004 hold unchanged, and R-API-004's expected_rev, idempotency and per-client undo match the ADR's history calls" }
+verified = { hash = "b3:3d0d9a72bd9f3471", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0029's planned transition preset/override edits and the optional preset on the scene-switch action, none built; they are planned minor additions under R-API-001 and the preset edits are ordinary edits under R-API-004" }
 -->
 
 <a id="R-API-001"></a>
