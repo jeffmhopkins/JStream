@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:89b8da3eb137ab44", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#66, #69, #70): new crates/jstream-audio/Cargo.toml at layer 2 (deps jstream-media, jstream-platform L1, no unsafe) matches the L2 audio row; other rows and edges as on main" }
+verified = { hash = "b3:b3e8d07c9f7c0919", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #74: new crates/jstream-encode/Cargo.toml at layer 3 (dep jstream-platform L1) beside main's jstream-audio (L2), core, daemon and outputs rows; all edges point strictly down (lint-deps ok)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
