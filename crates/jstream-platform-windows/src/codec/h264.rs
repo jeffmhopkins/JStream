@@ -19,7 +19,7 @@ use jstream_platform::{PlatformError, RateControl, VideoEncoderConfig};
 pub(crate) struct Settings {
     /// `MF_MT_FRAME_RATE`: frames per second as numerator and denominator.
     pub(crate) fps: (u32, u32),
-    /// The duration of one frame in 100 ns units, rounded.
+    /// The duration of one frame in 100 ns units, rounded to the nearest.
     pub(crate) frame_hns: i64,
     /// The mean bit rate, in bits per second.
     pub(crate) bitrate: u32,
@@ -62,8 +62,8 @@ pub(crate) fn check(config: &VideoEncoderConfig) -> Result<Settings, PlatformErr
     let bps = |k: u32| k.saturating_mul(1000);
     // A frame period of num/den seconds is den/num frames per second.
     let p = config.frame_period;
-    let frame_hns =
-        i64::try_from(u64::from(p.num()) * 10_000_000 / u64::from(p.den())).unwrap_or(i64::MAX);
+    let (num, den) = (u64::from(p.num()), u64::from(p.den()));
+    let frame_hns = i64::try_from((num * 10_000_000 + den / 2) / den).unwrap_or(i64::MAX);
     Ok(Settings {
         fps: (p.den(), p.num()),
         frame_hns,
@@ -188,7 +188,7 @@ mod encoder {
     use windows::core::{GUID, Interface};
 
     use super::{InFlight, Settings, check, pack_nv12};
-    use crate::codec::mf::{self, Found, MfRuntime, Mft, Output};
+    use crate::codec::mf::{self, Found, MfRuntime, Mft, Output, PullMode, RetypeArgs};
     use crate::com::{OsResult, os_error};
 
     /// How long `finish` waits for an asynchronous encoder to drain.
@@ -356,7 +356,16 @@ mod encoder {
                     .os("IMFTransform::SetInputType (NV12)")?;
             }
             // An access unit never exceeds an uncompressed frame.
-            let output = Output::new(transform, w * h * 3 / 2)?;
+            let output = Output::new(transform, w * h * 3 / 2)?.with_retype(
+                retype,
+                RetypeArgs {
+                    width: w,
+                    height: h,
+                    fps: s.fps,
+                    bitrate: s.bitrate,
+                    profile: eAVEncH264VProfile_High.0 as u32,
+                },
+            );
             let events = if is_async {
                 Some(
                     transform
@@ -395,7 +404,9 @@ mod encoder {
                 if kind == METransformNeedInput {
                     self.need_input = self.need_input.saturating_add(1);
                 } else if kind == METransformHaveOutput {
-                    self.collect_one()?;
+                    // One ProcessOutput per event: calling again without one is
+                    // E_UNEXPECTED on an asynchronous MFT.
+                    self.collect_one(PullMode::Once)?;
                 } else if kind == METransformDrainComplete {
                     self.drained = true;
                 }
@@ -404,13 +415,13 @@ mod encoder {
 
         /// Pulls output until the MFT needs more input (synchronous MFTs).
         fn collect_all(&mut self) -> Result<(), PlatformError> {
-            while self.collect_one()? {}
+            while self.collect_one(PullMode::Drain)? {}
             Ok(())
         }
 
         /// Pulls one output sample into `pending`; false when there was none.
-        fn collect_one(&mut self) -> Result<bool, PlatformError> {
-            let Some(sample) = self.output.pull(&self.mft.transform)? else {
+        fn collect_one(&mut self, mode: PullMode) -> Result<bool, PlatformError> {
+            let Some(sample) = self.output.pull(&self.mft.transform, mode)? else {
                 return Ok(false);
             };
             let pts = self.in_flight.receive(sample.time);
@@ -542,6 +553,19 @@ mod encoder {
         }
     }
 
+    /// Re-applies the configured output attributes to the type an encoder offers after a
+    /// stream change, which may not carry them.
+    fn retype(t: &IMFMediaType, a: &RetypeArgs) -> windows::core::Result<()> {
+        let pack = |hi: u32, lo: u32| (u64::from(hi) << 32) | u64::from(lo);
+        // SAFETY: plain COM calls on a live media type.
+        unsafe {
+            t.SetUINT64(&MF_MT_FRAME_SIZE, pack(a.width, a.height))?;
+            t.SetUINT64(&MF_MT_FRAME_RATE, pack(a.fps.0, a.fps.1))?;
+            t.SetUINT32(&MF_MT_AVG_BITRATE, a.bitrate)?;
+            t.SetUINT32(&MF_MT_MPEG2_PROFILE, a.profile)
+        }
+    }
+
     /// The MFT's own NV12 input type, which carries any attributes it needs; a fresh
     /// one if it lists none.
     fn nv12_input_type(transform: &IMFTransform) -> Result<IMFMediaType, PlatformError> {
@@ -625,7 +649,8 @@ mod tests {
     fn derives_mft_settings() {
         let s = check(&config()).expect("valid");
         assert_eq!(s.fps, (30_000, 1001));
-        assert_eq!(s.frame_hns, 333_666);
+        // 333 666.67 rounds up.
+        assert_eq!(s.frame_hns, 333_667);
         assert_eq!(s.bitrate, 6_000_000);
         assert_eq!(s.max_bitrate, None);
         let mut c = config();
@@ -635,7 +660,7 @@ mod tests {
         };
         c.frame_period = Timebase::new(1, 60).expect("60");
         let s = check(&c).expect("valid");
-        assert_eq!((s.fps, s.frame_hns), ((60, 1), 166_666));
+        assert_eq!((s.fps, s.frame_hns), ((60, 1), 166_667));
         assert_eq!(s.max_bitrate, Some(8_000_000));
     }
 

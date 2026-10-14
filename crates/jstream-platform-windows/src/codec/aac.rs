@@ -153,7 +153,7 @@ mod encoder {
     };
 
     use super::{AAC_FRAME, Framing, check, write_pcm16};
-    use crate::codec::mf::{self, MfRuntime, Mft, Output};
+    use crate::codec::mf::{self, MfRuntime, Mft, Output, PullMode};
     use crate::com::OsResult;
 
     /// One AAC encoder session on the Media Foundation AAC encoder MFT.
@@ -291,7 +291,7 @@ mod encoder {
 
         /// Moves every access unit the MFT has ready into `pending`.
         fn collect(&mut self) -> Result<(), PlatformError> {
-            while let Some(sample) = self.output.pull(&self.mft.transform)? {
+            while let Some(sample) = self.output.pull(&self.mft.transform, PullMode::Drain)? {
                 let pts = self.framing.next_pts()?;
                 self.pending
                     .push(Packet::new(self.info.codec, true, pts, pts, sample.data)?);
