@@ -311,7 +311,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:0c9e3188a184e432", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: ADR-0032 live/history bullets and this PR's meter-frame/audio.reset_loudness bullet both present, no overlap; nothing new is built" }
+verified = { hash = "b3:93e33e5bff338fa7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Cascade from the server README's re-verified line after the ADR-0023 merge; content re-read: ADR-0032 bullets and this PR's meter bullet both present" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
