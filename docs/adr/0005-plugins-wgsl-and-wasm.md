@@ -2,7 +2,8 @@
 id = "ADR-0005"
 title = "Extensibility through WGSL effects and WASM plugins"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0035-clap-plugins-out-of-process.md"
 -->
 
 # ADR-0005: Extensibility through WGSL effects and WASM plugins
