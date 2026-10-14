@@ -2,7 +2,7 @@
 id = "ADR-0039"
 title = "Doc hashes ignore metadata blocks; row-level crate-map dependencies"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
