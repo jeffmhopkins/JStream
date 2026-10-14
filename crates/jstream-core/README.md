@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:020d5e26f5e6af7d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed by the crate-map rows for encode, mcp and server and main's #98 tracing; core's row and Purpose unchanged" }
+verified = { hash = "b3:f5af83854ebfd993", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Purpose now names snapshot.rs, set_source_frame, the second compositor lock, and the lavapipe test. Capture, audio, encode and real outputs stay in Not yet. The crate-map row is unchanged." }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -27,20 +27,25 @@ host hands them an `InProcessControl` as a `dyn Control`.
 This first cut is the **control plane only** (the minimal `jstream-core` of
 [ROADMAP › M1](../../ROADMAP.md#m1)). Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
-  `Engine::new()` and `with_output(id)`; `connect()` opens a session; `rev()`. It holds
-  the `jstream-graph` `Graph`, the outputs, the idempotency keys and the subscribers
-  behind one lock, and executes batches, actions and queries.
+  `Engine::new()` and `with_output(id)`; `connect()` opens a session; `rev()`;
+  `set_source_frame` stores the latest RGBA8 frame of a source. It holds the
+  `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys and the
+  subscribers behind one lock, and the snapshot compositor behind another, and
+  executes batches, actions and queries.
+- **Snapshot** (`snapshot.rs`): `video.snapshot`, the program mix read back as a PNG.
 - **Session** (`session.rs`): `InProcessControl`, one client session.
 - **Events** (`events.rs`): the per-subscription queues behind `Control::events`.
 - **Outputs** (`outputs.rs`): the outputs' runtime state, a placeholder state machine.
 - **Tests** (`tests.rs`, `tests/mcp.rs`): the protocol rules through
   `InProcessControl`, the shared parity fixture, a differential run against
-  `jstream-control`'s mock, many sessions on many threads, and an MCP agent
+  `jstream-control`'s mock, many sessions on many threads, a headless
+  `video.snapshot` on the software adapter, and an MCP agent
   (`jstream-mcp`, a dev-dependency) driving the engine in-process.
 
-Not here yet: media (sources, render, audio, encode, outputs), threads and the media
+Not here yet: capture, audio, encode and real outputs, threads and the media
 clock (`src/runtime/`, [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)),
-platform backends, per-client undo, the audit log, persistence and settings. See
+platform backends, per-client undo, the audit log, persistence and settings. The
+snapshot compositor is the one piece of render this cut calls. See
 [Design › Not yet](#design).
 
 Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
@@ -52,12 +57,13 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:da0bcd4c5399b4f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: control#design changed only in its Auth bullet's Origin wording and wrap; core's in-process Control, idempotency and events text is unaffected" }
+verified = { hash = "b3:b764f2346d968319", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Design now describes the snapshot: first scene, 1920x1080, opacity 1, nearest cap at 1280, collection lock released before the GPU wait. Dependencies include jstream-render and png. The differential script still omits video.snapshot." }
 -->
 
 ### Engine and sessions
 
-`Engine` is a handle around one `Arc<Mutex<State>>`; cloning it shares the engine, so a
+`Engine` is a handle around one `Arc` of shared state: the collection mutex, and a
+separate mutex for the snapshot compositor. Cloning it shares the engine, so a
 host can give one clone to the server's connector and another to an MCP session.
 `Engine::connect()` opens an `InProcessControl`, which holds a clone too: the engine
 lives as long as any handle or session does.
@@ -80,8 +86,12 @@ WebSocket API does, minus serialization:
 ### Dependencies
 
 `jstream-protocol` (the messages), `jstream-control` (the `Control` trait),
-`jstream-graph` (the collection and every edit rule), `futures-core` (the `Stream`
-trait of event streams) and `tracing` (see *Logging*). No async runtime, and no `jstream-platform` until a backend is
+`jstream-graph` (the collection and every edit rule), `jstream-media` (the canvas
+`FrameSize`), `jstream-render` (the snapshot compositor), `png` (encodes that
+readback; default features off, deflate stays pure Rust, allowed by
+[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
+(`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
+`tracing` (see *Logging*). No async runtime, and no `jstream-platform` until a backend is
 injected. Dev-dependencies: `jstream-control`'s `mock` feature and `jstream-protocol`'s
 `fixtures` feature (the differential and parity tests), `jstream-mcp` and `serde_json`
 (`tests/mcp.rs`). All of them are in lower layers
@@ -90,9 +100,10 @@ crate.
 
 ### Calls
 
-All three kinds of call execute under the engine's lock, so calls from different
-sessions are serialized, and their events are queued in the order the changes
-happened.
+Batches, actions and the collection queries execute under the collection lock, so
+calls from different sessions are serialized, and their events are queued in the
+order the changes happened. `video.snapshot` copies what it needs under that lock
+and composites after releasing it (see *Snapshots*).
 
 - **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule:
   `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
@@ -105,15 +116,51 @@ happened.
   are remembered, so a retry of a failed batch is applied. Keys are kept for the
   engine's lifetime ([protocol open question 6](../jstream-protocol/README.md#open-questions)).
 - **Queries** that read the collection go to `Graph::query`; `output.status` reads the
-  outputs (`not_found` for an unknown one).
+  outputs (`not_found` for an unknown one). `video.snapshot` is answered here, not by
+  the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below).
-- A call, query or action added to the protocol after this engine answers `internal`,
-  as the mock does.
+- A call, query or action this engine does not implement answers `internal`, as the
+  mock does.
 
-The engine's answers are the mock's: `tests.rs` runs one script of calls against both
-and compares results, error codes and fields, and events. The mock stays the reference
-clients were developed against, and `jstream-graph` the only implementation of the
-edit rules here.
+The engine's answers are the mock's for the differential script: `tests.rs` runs one
+script of calls against both and compares results, error codes and fields, and events.
+That script does not call `video.snapshot`. The mock has no compositor and answers it
+with `internal`, so the two are not compared. The mock stays the reference clients
+were developed against, and `jstream-graph` the only implementation of the edit rules
+here.
+
+### Snapshots
+
+`video.snapshot` returns the program mix as a PNG
+([jstream-protocol › Design](../jstream-protocol/README.md#design)). Until studio
+state exists, that scene is the first one in display order. `Program` will follow
+`program_scene` once studio mode is built
+([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)); that state is M2
+([ROADMAP › M2](../../ROADMAP.md#m2)). An empty collection is an opaque black canvas.
+
+The canvas is [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s default,
+1920×1080. `canvas.set_size` is not a message yet, so every snapshot uses that size.
+A nested `scene` source is composited at the canvas size and then placed. Hidden
+items are skipped. A source with no stored frame is skipped, not drawn as a
+placeholder. Opacity is 1 and the only blend is src-over: the graph does not store
+either yet, and the compositor's blend is src-over. The graph already rejects a
+cycle at `item.add`; a cycle in the copied shot paints black for the repeated scene.
+
+`Engine::set_source_frame` stores the latest straight sRGB RGBA8 frame for a source
+id. It changes no `rev` and emits no event, and a frame may arrive before the source
+exists. Width or height of zero, a buffer whose length is not `width * height * 4`,
+or a size that does not fit in memory is `SourceFrameError`.
+
+The compositor opens on the first snapshot, software adapter first
+(`OpenOptions::headless`: lavapipe or WARP). No adapter is `internal`, and the reason
+starts with `no wgpu adapter`. The readback is scaled so its longest side is at most
+1280 ([ARCH › MCP](../../docs/ARCHITECTURE.md#mcp)), nearest-neighbour. Equal sizes
+are not resampled. The PNG is standard base64 with padding and no line breaks.
+
+The collection lock is not held across the GPU wait
+([R-RT-002](../../docs/RULES.md#R-RT-002)). The compositor has its own mutex, taken
+only after the collection lock is released. This query is control-plane work, not
+the render thread.
 
 ### Events
 
@@ -154,9 +201,11 @@ output, asynchronously, and `reconnecting` will appear.
 ### Locking
 
 `std::sync::Mutex` locks, always taken in one order: a session's identity lock (held
-by `hello` while it registers the client), then the engine's, then a subscription
-queue's. A stream's poll takes only its queue's lock. No lock is held across an
-`await` (there are none). A poisoned lock is recovered rather than propagated:
+by `hello` while it registers the client), then the engine's collection lock, then a
+subscription queue's. The snapshot compositor's lock is separate and is taken only
+when the collection lock is not held. A stream's poll takes only its queue's lock.
+No lock is held across an `await` (there are none). The GPU wait of `video.snapshot`
+holds only the compositor lock. A poisoned lock is recovered rather than propagated:
 `Graph::apply` changes a working copy and replaces the state only on success, and the
 engine's other changes are single inserts or assignments, so the data stays
 consistent. Nothing is logged while a lock is held.
@@ -188,6 +237,8 @@ revisions and error codes are logged, never a call's arguments
   parameter channels.
 - The audit log, persistence (the collection file) and settings.
 - Threads, the media clock and real-time hand-off
-  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)), and the subsystems:
-  sources, render, audio, encode and real outputs.
+  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)), and the subsystems that
+  feed and consume frames: capture, the render thread, audio, encode and real
+  outputs. `video.snapshot` composites from frames the host injects with
+  `set_source_frame`.
 - `R-SEC-001`'s `secrets_are_redacted` test: the engine holds no secret yet.

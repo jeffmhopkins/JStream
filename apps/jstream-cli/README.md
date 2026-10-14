@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:44b28f8af7a3ed5d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #44 slow clients: run.rs only gains the events.dropped print arm; the Contents list (args, run, exit, block, mcp) and never-links-the-engine claim still hold" }
+verified = { hash = "b3:b4313766e004105f", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "args.rs parses video snapshot as one more query. The contents list still says the parser maps commands onto protocol calls, and the binary still does not link the engine." }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:bd2b7788be6fb2ce", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the Events bullet: run.rs now prints events.dropped <count> for the server's drop notice (tested by events_golden_dropped_notice); --json still prints the event as the protocol serializes it; version line now reports protocol 0.4 via PROTOCOL_VERSION" }
+verified = { hash = "b3:b38612a7625cdf9f", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Added the video snapshot row and the human line that prints size and base64 length without the payload. --json still prints the protocol response. Exit 19 remains internal." }
 -->
 
 ```sh
@@ -82,6 +82,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output status <id>` | query `output.status` |
+| `video snapshot` | query `video.snapshot` |
 | `output start <id>`, `output stop <id>` | action `output.start`, `output.stop` |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
 | `events [--count <n>]` | the event subscription |
@@ -107,6 +108,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `ROTATION` and `CROP` (`left,top,right,bottom`) in the argument order of the edits
   that set them. `state get` prints the sources, then each scene in display order with
   its items. An empty list prints `no scenes`, `no sources` or `no items`.
+  `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
+  payload; `--json` prints the full response.
 - **Errors** go to stderr. For people: `error: <message>`, with ` (<code>)` appended
   when it is an engine error (``error: scene `x` does not exist (not_found)``). With
   `--json` (found among the global options even when parsing fails): an object
@@ -172,7 +175,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:7184f1e57f71f3e6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: control#design changed only by rewrapping its Auth bullet (Host, and Origin when present); the CLI still sends an Origin via WsControl and exit code 3 still covers a refused token, Origin or Host" }
+verified = { hash = "b3:dc3f47821ece2d06", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against control design: the mock now answers video.snapshot with internal, and the CLI still sends that query through the same connector. Hand-rolled parsing, block_on and exit code 3 are unchanged." }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

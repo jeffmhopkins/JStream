@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:fe9338ddea0a74ee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events bullet to list events.dropped beside state.changed and output.state_changed, matching event.rs; PROTOCOL_VERSION bump to 0.4 is in version.rs as listed" }
+verified = { hash = "b3:809a5cd90ebf2376", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Queries bullet now lists video.snapshot beside the collection reads; version.rs is 0.5; events.dropped and the other contents still match lib.rs." }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -34,9 +34,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `source.delete`), with `ItemTransform`, `Crop` and `SourceKind`; `Action`
   (`output.start`, `output.stop`); `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list` and
-  `output.status`, with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo`
-  and `ItemInfo` shapes it reports.
+- **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
+  `output.status` and `video.snapshot`, with `QueryResult` and the `SceneSummary`,
+  `SceneInfo`, `SourceInfo` and `ItemInfo` shapes the collection reads report.
+  `video.snapshot` returns the program mix as a PNG.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed` and `events.dropped`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, and `WireError`, its wire form with a message.
@@ -60,7 +61,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:27abfc2990f7d24c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: handshake example bumped to 0.4 (R-API-001 minor for an added event) and Events gains events.dropped {count} (per-connection server drop, answers never dropped, re-read with state.get); protocol.snap diff is one added oneOf entry plus title 0.4, examples.snap adds the notice line and 0.4 versions" }
+verified = { hash = "b3:fd5c7b8d278d4b49", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Handshake example is 0.5. Queries gain video.snapshot (base64 PNG, longest side 1280, layout rev). Binary streams keep preview and meters deferred; the PNG is a JSON result field, matching query.rs and ROADMAP M1a versus M2 preview." }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -80,8 +81,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":4},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":4},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":5},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":5},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -194,6 +195,11 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `not_found` for a missing scene.
 - `output.status {output_id}`: an output's runtime state, which is not collection
   state, so it carries no `rev`.
+- `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
+  base64 with padding and no line breaks. `width` and `height` are that image's size;
+  the longest side is at most 1280. `rev` is the collection revision of the layout.
+  Source pixels are runtime state and can change without a new `rev`. The query takes
+  no arguments and changes nothing.
 
 An item is reported with its `source_id`, `transform`, `crop` and `visible`: every
 property an edit sets, so a client can compute any edit, or its inverse, from what it
@@ -295,14 +301,17 @@ after 1.0:
 
 ### Binary streams (deferred)
 
-Snapshots (PNG/JPEG), preview video and audio meters
-([ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol)) are deferred to a later
-PR. The intended shape: they travel as WebSocket binary frames with a small fixed header
-(stream ID, stream kind, the `rev` or media timestamp they show), so they never pass
-through JSON. They are opened and closed with JSON requests: `video.snapshot` is a
-query whose result names the binary frame that carries the image, and preview and
-meters are subscriptions. The header layout and the subscription commands are part of
-that PR.
+Preview video and audio meters
+([ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol)) stay WebSocket binary
+frames, not designed yet except the meter frame's fields. Preview is the M2 low-res
+H.264 stream ([ROADMAP › M2](../../ROADMAP.md#m2)). They will travel with a small fixed
+header (stream ID, stream kind, the `rev` or media timestamp they show) and be opened
+and closed with JSON subscriptions. That header is part of the preview work.
+
+`video.snapshot` is not one of those frames. M1a uses it so an agent can check a scene
+over the JSON API and over MCP ([ROADMAP › M1](../../ROADMAP.md#m1),
+[ARCH › MCP](../../docs/ARCHITECTURE.md#mcp)), so the PNG is a field of the query
+result. A binary snapshot frame would need a second channel those clients do not have.
 
 <a id="open-questions"></a>
 ## Open questions

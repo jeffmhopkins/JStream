@@ -461,7 +461,7 @@ fn malformed_messages_get_malformed_errors() {
     }
     // The wire form from the protocol README: the response and the event carry the
     // client's own request ID.
-    let hello = r#"{"type":"hello","protocol":{"major":0,"minor":4},"client_name":"raw"}"#;
+    let hello = r#"{"type":"hello","protocol":{"major":0,"minor":5},"client_name":"raw"}"#;
     assert!(matches!(
         exchange(&harness, &mut socket, hello),
         ServerMessage::Welcome(_)

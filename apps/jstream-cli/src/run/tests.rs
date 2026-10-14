@@ -132,16 +132,28 @@ fn refuse(_: &Connection) -> Result<Box<dyn Control>, CliError> {
 }
 
 #[test]
+fn video_snapshot_on_the_mock_reports_internal() {
+    let engine = MockEngine::new();
+    assert_eq!(
+        run_on(&engine, &["video", "snapshot"]),
+        failed(
+            19,
+            "error: internal error: the mock engine does not implement video.snapshot (internal)\n"
+        )
+    );
+}
+
+#[test]
 fn version_and_help_need_no_connection() {
     let version = env!("CARGO_PKG_VERSION");
     assert_eq!(
         run_with(&refuse, &["version"]),
-        ok(&format!("jstream-cli {version}, protocol 0.4\n"))
+        ok(&format!("jstream-cli {version}, protocol 0.5\n"))
     );
     assert_eq!(
         run_with(&refuse, &["--json", "version"]),
         ok(&format!(
-            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":0,\"minor\":4}}}}\n"
+            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":0,\"minor\":5}}}}\n"
         ))
     );
     let help = run_with(&refuse, &["help"]);
@@ -158,11 +170,11 @@ fn hello_prints_the_session() {
     let engine = populated();
     assert_eq!(
         run_on(&engine, &["--mock", "hello"]),
-        ok("connected: protocol 0.4, client mock_2, rev 1\n")
+        ok("connected: protocol 0.5, client mock_2, rev 1\n")
     );
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "hello"]),
-        ok("{\"protocol\":{\"major\":0,\"minor\":4},\"client_id\":\"mock_3\",\"rev\":1}\n")
+        ok("{\"protocol\":{\"major\":0,\"minor\":5},\"client_id\":\"mock_3\",\"rev\":1}\n")
     );
 }
 

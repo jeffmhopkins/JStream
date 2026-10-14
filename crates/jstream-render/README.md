@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:084a418d94915711", by = "agent:grok@bc-5649c334-02be-5a33-9d65-07ad70338af2", note = "Re-read against the crate: one canvas, legacy placement, opacity, src-over, Compositor::open versus on_context, sRGB import and RGBA8 readback. The crate-map row, GPU pipeline paragraph, ADR-0004 and ADR-0022 decision 5 still match." }
+verified = { hash = "b3:becefa3c7260c43f", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Readback sentence now says jstream-core encodes it as the video.snapshot PNG. One canvas, legacy placement, opacity, src-over, open versus on_context, and RGBA8 readback still match the crate. Render sources were not edited." }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -72,7 +72,7 @@ and calls this crate.
   geometry formula ADR-0022 puts in `jstream-protocol` is not in the tree, and this
   crate does not invent a second one.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
-  BT.709 primaries. It is the snapshot path (`video.snapshot` later encodes it). It
+  BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.
 
 **Not in this cut.** The render thread (`frame_loop.rs`), arc-swap snapshots, NV12 or

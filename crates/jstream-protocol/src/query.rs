@@ -38,6 +38,14 @@ pub enum Query {
     /// didn't cause, or before an edit it sends with `expected_rev`.
     #[serde(rename = "state.get")]
     StateGet,
+    /// The current program mix, as a PNG.
+    ///
+    /// The result's `png` is standard base64 with padding and no line breaks. `width`
+    /// and `height` are that image's size in pixels; the longest side is at most 1280.
+    /// `rev` is the collection revision of the layout the image shows. Source pixels are
+    /// runtime state and can change without a new `rev`.
+    #[serde(rename = "video.snapshot")]
+    VideoSnapshot,
 }
 
 impl Query {
@@ -49,6 +57,7 @@ impl Query {
             Query::SourceList => "source.list",
             Query::ItemList { .. } => "item.list",
             Query::StateGet => "state.get",
+            Query::VideoSnapshot => "video.snapshot",
         }
     }
 }
@@ -103,6 +112,18 @@ pub enum QueryResult {
         /// Every scene with its items, in display order.
         scenes: Vec<SceneInfo>,
     },
+    /// The result of `video.snapshot`: the program mix encoded as a PNG.
+    #[serde(rename = "video.snapshot")]
+    VideoSnapshot {
+        /// The collection revision of the layout this image shows.
+        rev: Rev,
+        /// PNG width in pixels.
+        width: u32,
+        /// PNG height in pixels.
+        height: u32,
+        /// The PNG file, standard base64 with padding and no line breaks.
+        png: String,
+    },
 }
 
 impl QueryResult {
@@ -114,6 +135,7 @@ impl QueryResult {
             QueryResult::SourceList { .. } => "source.list",
             QueryResult::ItemList { .. } => "item.list",
             QueryResult::StateGet { .. } => "state.get",
+            QueryResult::VideoSnapshot { .. } => "video.snapshot",
         }
     }
 }

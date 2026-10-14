@@ -38,6 +38,7 @@ Commands:
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   output status <output-id>        report an output's state (query output.status)
+  video snapshot                   the program mix as a PNG (query video.snapshot)
   output start <output-id>         start an output (action output.start)
   output stop <output-id>          stop an output (action output.stop)
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
@@ -229,6 +230,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["output", "status", id] => Command::Query(Query::OutputStatus {
             output_id: OutputId::new(*id),
         }),
+        ["video", "snapshot"] => Command::Query(Query::VideoSnapshot),
         ["output", "start", id] => Command::Action(Action::OutputStart {
             output_id: OutputId::new(*id),
         }),
@@ -240,8 +242,8 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["mcp"] => Command::Mcp,
         [word, ..] => {
             let known = [
-                "help", "version", "hello", "state", "scene", "source", "item", "output", "edit",
-                "events", "mcp",
+                "help", "version", "hello", "state", "scene", "source", "item", "output", "video",
+                "edit", "events", "mcp",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -544,6 +546,12 @@ mod tests {
             ok(&["output", "stop", "o"]).command,
             Command::Action(Action::OutputStop { output_id: id() })
         );
+        assert_eq!(
+            ok(&["video", "snapshot"]).command,
+            Command::Query(Query::VideoSnapshot)
+        );
+        assert!(err(&["video"]).starts_with("wrong arguments for `"));
+        assert!(err(&["video", "snapshot", "extra"]).starts_with("wrong arguments for `"));
     }
 
     #[test]

@@ -1304,6 +1304,37 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "state"
+    },
+    {
+      "description": "Runs one `video` operation: set `op.type` to one of `video.snapshot` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `video` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "The current program mix, as a PNG.\n\nThe result's `png` is standard base64 with padding and no line breaks. `width`\nand `height` are that image's size in pixels; the longest side is at most 1280.\n`rev` is the collection revision of the layout the image shows. Source pixels are\nruntime state and can change without a new `rev`.",
+                "properties": {
+                  "type": {
+                    "const": "video.snapshot",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "video"
     }
   ]
 }
