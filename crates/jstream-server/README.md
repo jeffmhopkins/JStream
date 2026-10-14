@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:c821449cc9dc66db", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #44 N1/N2: config.rs (Token::matches now length-independent, extra_hosts doc) and gate.rs (portless Host on port 80) change behaviour inside existing modules only; contents list (lib, config, gate, session, error), layer 4 and deferred items still hold" }
+verified = { hash = "b3:73969a262000247a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #44 follow-up: config.rs (Token keeps a BLAKE3 digest), gate.rs (check_extra_hosts), error.rs (InvalidHost variant) and lib.rs (bind validates first) change existing modules only; contents list, layer 4 and the not-here-yet items still hold; crate-map dependency only reworded the CLI apps row" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3733aa8769829f50", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only open question 5 edited: the server still takes port and token from its caller; jstream-daemon now exists and creates/reuses the token file at a given path and binds a free port by default via ServerConfig::new with the port changed; server code unchanged" }
+verified = { hash = "b3:44e344d8429ef46c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#70 daemon): #44 edits (BLAKE3-hashed token, digest compare; extra_hosts without a port rejected at bind with InvalidHost; blake3 dependency) plus main's open question 5 about the daemon; both re-read together, consistent with config.rs/gate.rs/lib.rs" }
 -->
 
 ### Listening and admission
@@ -78,10 +78,15 @@ listens on port 80, `localhost` is the same as `localhost:80` and is accepted (a
 `http://localhost` is its own origin). On any other port, the default and ephemeral
 ones included, a `Host` without a port names a different port and is refused.
 
-**Token compare.** Each presented byte is compared with the token repeated to the
-presented length, and the difference of the lengths is folded into the result, so the
-time taken depends only on what the client sent: neither the first difference nor the
-token's length shows.
+**Extra hosts.** Each configured extra host must be `name:port` with a port from 1 to
+65535. An entry without a port could never match, since the gate compares hosts with
+their port, so `Server::bind` refuses it (`ServerError::InvalidHost`) before opening
+the socket rather than ignoring it.
+
+**Token compare.** `Token` keeps only the BLAKE3 digest of the token. The presented
+value is hashed to the same fixed 32 bytes and the digests are compared with
+`blake3::Hash`'s constant-time equality, so the time taken depends only on the
+presented value's length: neither the first difference nor the token's length shows.
 
 ### Sessions
 
@@ -121,7 +126,8 @@ open connection (close code 1001), so their clients' pending and later calls fai
 axum (features `http1`, `tokio`, `ws`, no defaults) for HTTP and the upgrade, which
 brings hyper, tower and `tokio-tungstenite` without TLS; tokio for the listener and the
 connection tasks; `futures-util` to split the socket and run calls concurrently
-(`FuturesUnordered`). No TLS crate is in the tree, so no `ring` or `rustls`.
+(`FuturesUnordered`); `blake3` (the workspace's `pure` build, already used by `xtask`)
+for the token digest. No TLS crate is in the tree, so no `ring` or `rustls`.
 
 ### Open questions
 

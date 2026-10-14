@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:436c2dd6cdd03618", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Not-here-yet paragraph edited: jstream-daemon now serves a real engine (point --url at its printed URL and --token-file at its token file); --mock still needs the mock feature; contents list and CLI code unchanged" }
+verified = { hash = "b3:dc31c79746fdeaae", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#70): main's 'a host exists' paragraph kept; #48 changes (read vs write errors, per-process token name in tests/mcp.rs) don't touch purpose text; dependencies re-read" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:cd8fc421faba1df1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covers gains mcp.rs. Command table adds mcp, and hello-first now excludes it; new MCP part (launch example, same --url/token file/--mock options, stdout only JSON-RPC, errors before serving on stderr incl. --json, connect failure exits 2/3 with empty stdout, one session with hello under clientInfo.name, lost engine answered with disconnected tool errors while serving continues and no reconnect, exit 0 at EOF and 1 on stdin/stdout failure); exit table row 1 names stdin; checked against args.rs USAGE/parse, run.rs execute, mcp.rs serve, jstream_mcp::serve_stdio and the new unit and e2e tests" }
+verified = { hash = "b3:517e0d94907a7192", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #48 N1: a failed stdin read in mcp now prints 'could not read the input: ...' (JSON code io, message with that prefix); exit row 1 ('output could not be written, or mcp could not read stdin'), the MCP Exit bullet (1 if stdin or stdout fails) and the io code in the Errors bullet still hold" }
 -->
 
 ```sh
@@ -169,7 +169,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6601bec42edd69a7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only open question 5 edited: still no default --url or token file; now says the daemon listens on a free port unless --port and creates/reuses the file at the path given via the same JSTREAM_TOKEN_FILE, linking the daemon's open questions 1-2; CLI code and Cargo.toml unchanged, control#design dependency unchanged" }
+verified = { hash = "b3:ecc247ca7e365ce8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#70): #48 errors bullet (CliError::Read 'could not read the input', exit 1, json code io) and failing-input test, plus main's open question 5 (daemon exists); re-read together against run.rs/mcp.rs" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -219,8 +219,13 @@ verified = { hash = "b3:6601bec42edd69a7", by = "agent:claude@session_01QBbMRwRu
   itself ([open question 6](#design)).
 - **Errors are typed, not `anyhow`.** Each failure must map to its own exit code, so
   `CliError` keeps the `ControlError` (and its protocol code) instead of erasing it.
+  `jstream-mcp` reports a failed read and a failed write as the same transport error,
+  so `mcp` notes failures of its own input and reports those as `CliError::Read`
+  ("could not read the input"), not as unwritable output; both exit 1 with the JSON
+  code `io`.
 - **Tests.** The unit tests drive `mcp` through `run` with in-memory input and output
-  (`initialize`, `tools/list`, `tools/call`, a refused connection and a lost one), and
+  (`initialize`, `tools/list`, `tools/call`, a refused connection, a lost one and a
+  failing input), and
   `tests/mcp.rs` runs the binary's `mcp` against a real `jstream-server` on a loopback
   port, through a server shutdown. `jstream-server` and tokio (for the runtime the test
   serves on) are dev-dependencies only; the binary itself gains only `jstream-mcp`.

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:ce25d06345f18b0b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only tests.rs and schema changed (new state group and query ops appear with no code change); contents list of server.rs, tools.rs, jsonrpc.rs, stdio.rs, error.rs still matches" }
+verified = { hash = "b3:0e8fe445de3ad093", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only reworded jstream-cli's apps row (test-only dev-deps outside it); mcp's layer 3 over jstream-control, contents (server, tools, jsonrpc, stdio, McpError) unaffected" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context

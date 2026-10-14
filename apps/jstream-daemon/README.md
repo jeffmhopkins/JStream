@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d593b312e436e9a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "token.rs: a create_new failure other than AlreadyExists now still goes to read_existing when something is at the path (Windows reports a directory as AccessDenied), so 'is not a regular file' refusal holds on Windows too, as the text already says; nothing else changed" }
+verified = { hash = "b3:2c8de9fe6fa8c9a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed (jstream-server design: hashed token compare, extra_hosts port check; cli design: read errors); the daemon passes no extra_hosts and uses Token::new as before, so nothing here changes" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -93,7 +93,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:ea0232de037ffc29", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "token.rs: a create_new failure other than AlreadyExists now still goes to read_existing when something is at the path (Windows reports a directory as AccessDenied), so 'is not a regular file' refusal holds on Windows too, as the text already says; nothing else changed" }
+verified = { hash = "b3:1771958bfaa9325a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "As purpose: server's hashed token compare and extra_hosts bind check don't affect the daemon (no extra_hosts, Token never printed, still parsed by Token::new); token-file design unchanged" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

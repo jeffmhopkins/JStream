@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:a98bceccabe53440", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream src/gpu.rs only changed FrameSync docs (one hold per texture, each stage one use, stage right before a submit); purpose text unchanged and holds" }
+verified = { hash = "b3:3851e73bd9e5c170", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only reworded jstream-cli's apps row (test-only dev-deps outside it); platform's layer 1, single owner of encoder/decoder traits and its deps unaffected" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -98,7 +98,7 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:7c2e5aeacf252627", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #63: intro now says the Windows GpuInterop exists and capture/encoder GPU input/render remain (N2); FrameSync bullet adds stage-right-before-a-submit since staged ops attach to the queue's next submit (N5); rest unchanged" }
+verified = { hash = "b3:5b747143e7ca8962", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only reworded jstream-cli's apps row (test-only dev-deps outside it); GPU-frame types, single-owner trait claim and FrameSync text unaffected" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

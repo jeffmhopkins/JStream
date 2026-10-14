@@ -57,7 +57,11 @@ struct App {
 
 impl Server {
     /// Opens the listening socket. Nothing is served until [`serve`](Server::serve).
+    ///
+    /// An extra host without a port (or with an invalid one) is refused with
+    /// [`ServerError::InvalidHost`] before anything is opened, since it could never match.
     pub async fn bind(config: ServerConfig, connector: Connector) -> Result<Server, ServerError> {
+        gate::check_extra_hosts(&config.extra_hosts)?;
         let bind_error = |source| ServerError::Bind {
             addr: config.bind,
             source,

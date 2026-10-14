@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:0288f441497ff857", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon changed only in token.rs (directory at the token path refused on Windows too); the daemon row (first cut serves the WebSocket API) and diagram still hold" }
+verified = { hash = "b3:35d79be62b5371cf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased: covered apps/ READMEs: CLI design (read errors) and daemon READMEs re-verified only; shape diagram and rows unchanged" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:5f6fbb149a0ef9d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main with #68: new apps/jstream-daemon/Cargo.toml at layer 6 (deps core L5, server L4, protocol, control-ws dev) and jstream-platform-windows' WGC features; daemon row says the first cut serves the WebSocket API only; all edges point strictly down (lint-deps ok)" }
+verified = { hash = "b3:4504ebc15cd480b1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#69, #70): #48 N2 apps row ('control and mcp only; test-only dev-dependencies ... outside this') matches the CLI summary; jstream-server gains blake3 (external, already in the tree); daemon row from #70 kept" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -152,7 +152,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -260,7 +260,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:76f774d80b9243fd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only through jstream-server/README.md (open question 5 reworded for the daemon); transport bullet (WsControl, /api/v1/ws, 127.0.0.1 default, token and Origin/Host checks, plain ws://) still matches, and the daemon serves exactly that" }
+verified = { hash = "b3:e6601ef17ccf829d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-server README: hashed token compare and extra_hosts port check (transport hardening, no wire change); Transport bullet (token required, Origin/Host validated, 127.0.0.1, plain ws://) still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -298,7 +298,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stdio proxy renamed jstream-cli mcp after the maintainer kept the binary name jstream-cli; tools, schema-size, names, access and undo bullets unchanged" }
+verified = { hash = "b3:a0739b1d335e07ca", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only jstream-mcp README's purpose verified line changed (metadata); tools, schema size, names, access (jstream-cli mcp reads the token file) and audit bullets still hold; no jstream-mcp code changed" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

@@ -559,3 +559,25 @@ fn dropping_the_client_closes_its_session() {
     assert_eq!(engine.rev(), Rev(2));
     assert_eq!(harness.sessions.load(Ordering::SeqCst), 2);
 }
+
+/// #44: an extra host without a port could never match a request, so binding refuses it
+/// instead of starting a server that silently ignores it.
+#[test]
+fn binding_refuses_an_extra_host_without_a_port() {
+    let harness = start(&MockEngine::new());
+    let engine = MockEngine::new();
+    let connector: Connector = Arc::new(move || Box::new(engine.connect()));
+    let mut config = match Token::new(TOKEN) {
+        Ok(token) => ServerConfig::new(token),
+        Err(error) => panic!("token: {error}"),
+    };
+    config.extra_hosts = vec!["studio.lan".to_owned()];
+    match harness.run(Server::bind(config, connector)) {
+        Err(crate::ServerError::InvalidHost { host, .. }) => assert_eq!(host, "studio.lan"),
+        Err(other) => panic!("expected InvalidHost, got {other}"),
+        Ok(server) => panic!(
+            "bound on {} with a portless extra host",
+            server.local_addr()
+        ),
+    }
+}
