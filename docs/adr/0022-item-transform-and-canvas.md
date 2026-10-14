@@ -53,7 +53,8 @@ frame while dragging.
   ([R-ARCH-004](../RULES.md#R-ARCH-004)) and one minor release of deprecation first.
 
 This decision stays within accepted ADRs. It builds on [ADR-0013](0013-command-model.md)
-(edits and their inverses, runtime state carries no `rev`) and
+(edits and their inverses, runtime state carries no `rev`, collection reads change only
+with `rev`), [ADR-0032](0032-live-edits-and-undo.md) (live values for drags) and
 [ADR-0001](0001-library-first-engine.md) (protocol first). It leaves these questions
 open:
 - whether opacity and blend belong to the item or the source (register D2, for the
@@ -116,10 +117,10 @@ these wire fields (all numbers are `Finite32`):
 - **Default placement (from 1.0):** `item.add` without a geometry places the item
   centred on the canvas, with `size` equal to the canvas and `fit_mode = fit`. Clients
   that want the source's native size send it explicitly. The graph never needs runtime
-  sizes to apply an edit. During the 0.4 deprecation window an `item.add` with neither
-  `geometry` nor `transform` keeps its 0.3 meaning instead (native size, top-left at
-  (0, 0)), through the shim below, because a minor release can't change what an
-  omitted field means ([R-API-001](../RULES.md#R-API-001)).
+  sizes to apply an edit. Until 1.0 an `item.add` with neither `geometry` nor
+  `transform` keeps its 0.3 meaning instead (native size, top-left at (0, 0)): it
+  stores a legacy placement with the identity transform (decision 5), because a minor
+  release can't change what an omitted field means ([R-API-001](../RULES.md#R-API-001)).
 
 **3. The formula, defined once.** A point (u, v) in the box's local frame (origin at the
 box centre, y down, z toward the viewer) is placed as follows:
@@ -140,7 +141,9 @@ So perspective is per item and centred on the item, with no shared scene camera.
   which is layer 1 and WASM-safe. It gives the box's projected corner quad (needing no
   source size) and the content rectangle within the box for a given source size and
   crop. The engine's compositor and the web UI both use it, so the overlay and the
-  output can't disagree. Golden tests and unit tests lock it.
+  output can't disagree. Golden tests and unit tests lock it. The same module holds the
+  legacy evaluation of decision 5, which turns a 0.3 transform, a crop and a source size
+  into the box it draws.
 - **3D is defined now and built in M3.** Until the compositor draws them, the engine
   rejects non-neutral `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` with
   `invalid_argument`. Stored state never claims something that isn't drawn, and
@@ -154,60 +157,110 @@ So perspective is per item and centred on the item, with no shared scene camera.
 - New event `source.size_changed { source_id, size? }`: sent when a source's size
   changes, including when it becomes known or unknown.
 - From these and decision 3, a client draws the overlay locally while dragging, with no
-  round trip per frame. It also derives "% of native size" and crop handle positions
-  from them.
+  round trip per frame. It also derives "% of native size", crop handle positions and
+  the box of a legacy placement (decision 5) from them. Protocol 0.3 reports no source
+  size at all, so the query and the event are needed for this and come with 0.4.
 
 **5. Compatibility and migration.** The change of meaning follows R-API-001 and the
 protocol README's versioning rules:
 - **0.4, a minor release that adds and deprecates.** It adds:
   - the canvas, in `state.get`, and `canvas.set_size`;
   - `ItemGeometry`, with an optional `geometry` on `item.add` and a new edit
-    `item.set_geometry` (its inverse: `item.set_geometry` with the previous value);
-  - `ItemInfo.geometry`;
+    `item.set_geometry`;
+  - `ItemInfo.geometry` and `ItemInfo.placement`;
   - `source.sizes` and `source.size_changed`.
 
   It deprecates `ItemTransform`, `item.set_transform`, `item.add`'s `transform` and
-  `ItemInfo.transform`. Their old meaning keeps working through a shim in the engine,
-  which knows source sizes:
-  - a deprecated write (an `item.add` with `transform` or with neither field, or an
-    `item.set_transform`) is never refused for want of a size, so every batch that 0.3
-    accepts is still accepted. The item keeps the deprecated transform as given, as its
-    *pending* placement. The engine converts it to a geometry with the source's size as
-    soon as that size is known: at once if it already is, otherwise on the source's
-    first `source.size_changed`. Until then the item draws nothing, which is what a
-    source with no frame draws anyway. The conversion is not an edit: it changes no
-    `rev` and leaves no undo step, and the undo inverse of the deprecated write restores
-    the previous placement, pending or converted;
-  - `ItemInfo.transform` returns a pending transform exactly as given. For a converted
-    one it is computed from the geometry and the current size, and while that size is
-    unknown, as if the cropped source were exactly the box's size (scale 1);
-  - `ItemInfo.geometry` is absent while the placement is pending;
-  - sending both `transform` and `geometry` is `invalid_argument`.
-- **The next major release (1.0) removes them.** That follows `can_serve`: a 0.4 server
-  still serves 0.3 clients, and 1.0 doesn't. Other breaking changes from the decision
-  register may join the same major release, so the protocol breaks once rather than
-  several times.
+  `ItemInfo.transform`. Their 0.3 meaning keeps working, unchanged, until 1.0.
+- **Two placement forms.** Until 1.0 an item's stored placement is one of two forms,
+  and only an edit changes it:
+  - a **geometry** (decision 2), written by `item.add` with `geometry` or by
+    `item.set_geometry`;
+  - a **legacy placement**: the 0.3 `ItemTransform` exactly as written, by `item.add`
+    with `transform`, by `item.add` with neither field (the identity transform), or by
+    `item.set_transform`. A deprecated write is never refused for want of a size, so
+    every batch that 0.3 accepts is still accepted. Sending both `transform` and
+    `geometry` is `invalid_argument`.
+- **A legacy placement keeps its 0.3 meaning.** The compositor evaluates it every frame
+  against the source's *current* size, as 0.3 defines it: the cropped source, scaled by
+  `scale`, with its top-left corner at `position`, rotated clockwise about that corner.
+  A window capture that is resized therefore grows on the canvas, as in 0.3. Nothing
+  converts it implicitly: not the first frame, not a size change. A source with no
+  frame draws nothing, as in 0.3. Whatever consumes item boxes at runtime (the
+  overlay, a Move transition) uses that frame's evaluated box.
+- **Converting is an explicit edit.** A client turns a legacy placement into a
+  geometry by sending `item.set_geometry`. It may build the geometry from the transform
+  and the source's current size with the shared legacy evaluation (decision 3), which
+  gives the box drawn now with `fit_mode = stretch`, so non-uniform scales stay exact.
+  It is an ordinary edit: it bumps `rev`, sends `state.changed` and is one undo step.
+  From then on the box is fixed, as for any geometry.
+- **Inverses** (ADR-0013): `item.set_geometry` and `item.set_transform` each restore the
+  previous placement in whichever form it had, so the inverse of a conversion is
+  `item.set_transform` with the legacy transform. `item.remove`'s inverse is `item.add`
+  with the field matching the removed item's form. The edit set stays closed under
+  inversion.
+- **Reads** (`state.get`, `item.list`):
+  - `ItemInfo.placement` is `legacy` or `geometry`, so a 0.4 client knows which form is
+    in use. It is a new field, which 0.3 clients ignore. Its two values are the
+    complete set, and `legacy` goes in 1.0;
+  - for a legacy item, `ItemInfo.transform` is the stored transform exactly as written,
+    and `ItemInfo.geometry` is **absent**, because the box depends on the source's
+    runtime size. A 0.4 UI draws the box itself with the legacy evaluation, from the
+    transform and the size it gets from `source.sizes` and `source.size_changed`
+    (decision 4);
+  - for a geometry item, `ItemInfo.geometry` is the stored geometry, and the deprecated
+    `ItemInfo.transform` is a compatibility view computed from the stored geometry
+    alone: `position` is the box's top-left corner after rotation about `center`,
+    `rotation_deg` is the box's rotation, and `scale` is (1, 1), as if the source were
+    exactly the box's size. It is exact for the box's position and rotation, and states
+    neither its size relative to the source, its fit mode nor its 3D fields. It depends
+    on no runtime size, so it changes only with `rev`. A 0.3 client never sees a
+    geometry item unless a 0.4 client made it. If it writes the view back with
+    `item.set_transform`, the item becomes a legacy placement with exactly the 0.3
+    meaning of what it wrote, which is native size at scale (1, 1).
+
+  Every collection read is therefore a function of stored state: it changes only with
+  an edit, which bumps `rev` and sends `state.changed`, as the protocol README and
+  ADR-0013's `expected_rev` require.
+- **Live values** ([ADR-0032](0032-live-edits-and-undo.md)): `item.set_geometry` is
+  live-adjustable. It is a parameter-channel value that needs no new resources, so it
+  meets ADR-0032's criterion and adds to its list rather than changing it. An item's
+  placement is one live parameter, whichever form a value has: a live
+  `item.set_geometry` or `item.set_transform` replaces the gesture's previous value for
+  that item's placement, and for the gesture's duration the item draws the live value
+  in its own form, a legacy one evaluated every frame. The committing batch, its
+  `rev` bump and its undo step follow ADR-0032 unchanged, and the stored form changes
+  only when that batch applies.
+- **The next major release (1.0) removes the deprecated forms.** That follows `can_serve`: a 0.4 server
+  still serves 0.3 clients, and 1.0 doesn't. Legacy placements go with them: a
+  collection that still holds one is converted by 1.0's collection migration, which may
+  change meaning because it is a major release, and which settles how to size a source
+  that has no frame at load. Other breaking changes from the decision register may join
+  the same major release, so the protocol breaks once rather than several times.
 - **Snapshot and schema review:** both releases change `schema/protocol.snap` and
   `schema/examples.snap`, and those diffs are the API review
   ([R-TEST-002](../RULES.md#R-TEST-002)). The parity fixture's expected answers change
   with them.
 - **Collections:** nothing is persisted yet, so no collection migration is needed if
   this lands first. If persistence lands first, the change ships a `schema_version`
-  bump, a migration and a fixture test ([R-API-003](../RULES.md#R-API-003)).
+  bump, a migration and a fixture test ([R-API-003](../RULES.md#R-API-003)); that
+  migration stores every existing item as a legacy placement, which keeps its meaning.
 
 <a id="consequences"></a>
 ## Consequences
 - **Easier:**
-  - a rotated or resized window capture stays in its box;
+  - a rotated or resized window capture placed with a geometry stays in its box;
   - the UI's interaction model maps one to one onto the stored fields;
   - agents reason in canvas pixels and boxes, not in scale factors of a size they can't
     see;
-  - the overlay works before a source produces its first frame;
+  - a geometry item's overlay works before its source produces a first frame;
   - groups and mask scenes get a defined coordinate space, should the maintainer decide
     for them.
 - **Harder:**
   - the protocol takes one deprecation cycle and then a major bump;
-  - the engine carries a conversion shim for one minor release;
+  - until 1.0 items have two placement forms, and the compositor evaluates legacy ones
+    against the source's current size every frame;
+  - a 0.3 client sees a geometry item only through a lossy compatibility transform;
   - `fill` needs clipping to the box in the compositor;
   - every client depends on the shared formula, so changing it is a protocol change.
 - **Not decided here:**
@@ -218,12 +271,13 @@ protocol README's versioning rules:
     centre.
 - **Follow-up implementation PR** (this ADR changes no code):
   - `jstream-protocol` 0.4: the new types, edits, query and event, the shared formula
-    function with unit tests, the deprecation notes on the old forms (including fixing
-    the `ItemTransform` doc comment's "added fields with defaults" promise), and the
-    snapshot updates;
-  - `jstream-graph`: the canvas, the geometry, their edits and inverses, the
+    function and the legacy evaluation with unit tests, `ItemInfo.placement`, the
+    deprecation notes on the old forms (including fixing the `ItemTransform` doc
+    comment's "added fields with defaults" promise), and the snapshot updates;
+  - `jstream-graph`: the canvas, both placement forms, their edits and inverses, the
     validation, and the property test extended to cover them;
-  - `jstream-core`: the shim, runtime source sizes and the size event;
+  - `jstream-core`: runtime source sizes and the size event, live geometry values, and
+    the per-frame evaluation of legacy placements for the render plan;
   - the compositor in M1b: 2D geometry, fit modes and crop, with golden tests;
   - 3D rendering in M3.
 

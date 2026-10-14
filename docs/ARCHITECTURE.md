@@ -163,7 +163,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md"]
-verified = { hash = "b3:74b07b9301d43227", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #79: tree keeps ADR-0023's opacity, blend, reserved effects[] and duplicated_from and ADR-0029's transition fields and transitions collection, with ADR-0022's canvas and geometry replacing Transform3D; bullets joined (reference/clone plus Canvas and geometry); Built-so-far Not yet lists every merged ADR's fields; depends_on gains ADR-0023 beside ADR-0022" }
+verified = { hash = "b3:04b2b9fb9f194341", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0022 now keeps deprecated transforms as a stored legacy placement evaluated against the current source size every frame, converted only by an explicit item.set_geometry; Canvas and geometry bullet gains that, tree shows the target geometry, Filters bullet says geometry, Built-so-far unchanged and consistent" }
 -->
 
 ```
@@ -202,7 +202,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
   and 3D tilt, turn, depth and per-item perspective, drawn in stacking order with no
   depth buffer. `crop` is in source pixels. A source's current size is runtime state,
-  not part of the collection.
+  not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,
+  protocol 0.3's transform as written, which the compositor evaluates against the
+  source's current size every frame. Only an explicit `item.set_geometry` turns it into
+  a geometry.
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
   scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
   that would close a cycle (`item.add`, and `item.set_source`).
