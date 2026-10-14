@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:3c78f71437377d43", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b source-kinds bullet now lists ADR-0031's kinds (display, window, video capture device with MJPEG and audio, image formats, color, text, audio input, desktop and application audio, browser) beside main's ADR-0023/0024/0028 bullets; M1a/c/d unchanged" }
+verified = { hash = "b3:40d51e6f1cf12572", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b keeps this PR's reservation of Output video/audio chains beside main's ADR-0023/0024/0028/0031 bullets; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -103,7 +103,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:eed1c82a752d1079", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M2 gains ADR-0031's media file, audio waveform and audio spectrum bullet between main's ADR-0029 transitions and ADR-0024 UI-built bullets; other M2 bullets unchanged" }
+verified = { hash = "b3:3a2c3ebbe214c9ef", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M2 keeps this PR's master chain, per-output chains and privacy screen bullet beside main's ADR-0029 transitions, ADR-0031 media-file/waveform/spectrum and ADR-0024 UI-built bullets" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).

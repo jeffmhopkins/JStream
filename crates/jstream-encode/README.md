@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:820e84e4173c54d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-encode row and this Purpose are unchanged and still match the crate" }
+verified = { hash = "b3:86945651f89e935c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Purpose's sharing sentence matches ADR-0027 (only outputs with no video chain share by mix and profile; a chained output gets its own session); main's ADR-0028 master bus doesn't change it" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

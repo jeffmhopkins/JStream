@@ -165,7 +165,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:e45efcf5eba44a05", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined ADR-0028 (Source.audio and SourceAudio, master bus, bus fader/mute/monitor, Audio and Shown-on-program bullets; 'independent of scenes' dropped) with main's ADR-0022 canvas/geometry, ADR-0024 scene structure and ADR-0025 Settings; depends_on lists 0022-0025 and 0028, not the superseded 0007; not-yet list adds source audio settings" }
+verified = { hash = "b3:cd990defe31dbe5d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's master, privacy and per-output video/audio chains, the Master/output chains bullet, ADR-0027 encoder-sharing rule and Privacy bullet with main's ADR-0022/0024/0025/0028 tree and bullets; the old encoder-sharing bullet is replaced, not duplicated; depends_on adds 0027 and keeps 0028" }
 -->
 
 ```
@@ -328,7 +328,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:eede437e183b3eb5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR edits the Mixer row (activity gains, keys in audio-graph order, latency compensation), adds the Audio timestamps paragraph (a block's pts is its input's media time; delay filter is a stamped shift) and ADR-0028 to depends_on; main's ADR-0035 CLAP host paragraph (latency d plus the plugin's own, compensated) agrees with it; none built beyond the first-cut mixer" }
+verified = { hash = "b3:892b195a6dd6cf3d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading now holds this PR's privacy flag on the parameter channels (not built) beside main's ADR-0028 mixer row and pts paragraph and ADR-0035 CLAP host; depends_on restored to ADR-0014 and ADR-0028 after the merge" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -410,7 +410,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:8cbe42013fc01956", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered control/core/server/protocol READMEs changed only by re-verified Purpose lines after the ADR-0031 crate-map row; no protocol text changes in this PR; bullets match protocol 0.3 as built" }
+verified = { hash = "b3:1a6cbceab4a15a13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's planned privacy.set (refused inside a batch with malformed), privacy.changed after handshake, per-output session reporting and session-limit error sit beside main's ADR-0022/0024/0025/0028 additions; covered control/core/server READMEs changed only by re-verified lines; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
