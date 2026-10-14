@@ -354,7 +354,11 @@ pub(crate) fn open_process(pid: u32) -> Result<Session, PlatformError> {
         event: Arc::clone(&done),
     }
     .into();
-    // Boxed, so it can be leaked if activation times out while COM may still read it.
+    // The activation parameters and the PROPVARIANT that points to them are both boxed.
+    // Whether ActivateAudioInterfaceAsync copies them before it returns isn't documented,
+    // so they are kept alive until the completion handler has run. If it never runs (a
+    // timeout, or a failed wait), both are leaked rather than freed while COM might still
+    // read them.
     let mut params = Box::new(AUDIOCLIENT_ACTIVATION_PARAMS {
         ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
         Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
@@ -366,7 +370,7 @@ pub(crate) fn open_process(pid: u32) -> Result<Session, PlatformError> {
     });
     // A VT_BLOB pointing at `params`. ManuallyDrop: PropVariantClear would try to free the
     // blob, which Rust owns.
-    let prop = ManuallyDrop::new(PROPVARIANT {
+    let prop = Box::new(ManuallyDrop::new(PROPVARIANT {
         Anonymous: PROPVARIANT_0 {
             Anonymous: ManuallyDrop::new(PROPVARIANT_0_0 {
                 vt: VT_BLOB,
@@ -381,20 +385,23 @@ pub(crate) fn open_process(pid: u32) -> Result<Session, PlatformError> {
                 },
             }),
         },
-    });
-    // SAFETY: `prop` and the boxed `params` it points to stay alive until activation has
-    // completed; on a timeout `params` is leaked below instead of freed.
+    }));
+    // SAFETY: `prop` and the `params` it points to are heap allocations that stay alive
+    // until activation has completed, or are leaked below if it doesn't.
     let op = unsafe {
         ActivateAudioInterfaceAsync(
             VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK,
             &IAudioClient::IID,
-            Some(&raw const *prop),
+            Some(&raw const **prop),
             &handler,
         )
     }
     .os("ActivateAudioInterfaceAsync")?;
-    if crate::com::wait_any(&[&done], ACTIVATE_TIMEOUT_MS)? == crate::com::Woke::Timeout {
+    let waited = crate::com::wait_any(&[&done], ACTIVATE_TIMEOUT_MS);
+    if waited != Ok(crate::com::Woke::Index(0)) {
+        std::mem::forget(prop);
         std::mem::forget(params);
+        waited?;
         return Err(PlatformError::Os {
             call: "ActivateAudioInterfaceAsync",
             code: None,
@@ -403,6 +410,7 @@ pub(crate) fn open_process(pid: u32) -> Result<Session, PlatformError> {
             ),
         });
     }
+    drop(prop);
     drop(params);
     let mut hr = HRESULT(0);
     let mut unk: Option<IUnknown> = None;

@@ -68,10 +68,11 @@ mod backend {
     }
 }
 
-/// Tests against real devices. They are ignored by default, because CI machines may have
-/// no audio devices (R-TEST-004). Run them on a Windows machine with a microphone and
-/// speakers: `cargo test -p jstream-platform-windows -- --ignored`.
-#[cfg(all(test, windows))]
+/// Platform tests against real devices (R-TEST-004): behind the `hw-tests` feature and
+/// `#[ignore]`d, because CI machines may have no audio devices. Run them on a Windows
+/// machine with a microphone and speakers:
+/// `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
+#[cfg(all(test, windows, feature = "hw-tests"))]
 mod device_tests {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicU64, Ordering};

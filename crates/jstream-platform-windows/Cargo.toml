@@ -25,6 +25,13 @@ print_stderr = "deny"                     # R-RS-005
 allow_attributes_without_reason = "deny"  # R-RS-009
 undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
+[features]
+# Platform tests against real audio devices (docs/RULES.md#testing): additive, off by
+# default, and the tests are also `#[ignore]`d. Run them on a Windows machine with a
+# microphone and speakers:
+# `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
+hw-tests = []
+
 [dependencies]
 jstream-platform.workspace = true
 

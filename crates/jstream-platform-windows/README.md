@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:a2f753d105fdfab3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after moving the input loop state into InputState and gating the helpers to Windows and tests; behaviour as described is unchanged" }
+verified = { hash = "b3:46566ee00cf367c4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1/N2/N4 on #56: device tests now behind hw-tests + #[ignore] with the matching run command; process-loopback params and PROPVARIANT both boxed and leaked together if activation doesn't complete; Format bullet covers render upmix and 5.1 back/side" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -46,8 +46,11 @@ The code is ported from spikes S1 to S3. This first cut has:
     mix format is already `f32` in a layout `jstream-media` has (mono, stereo, 5.1) is
     opened as is. For any other format the backend asks WASAPI to convert
     (`AUTOCONVERTPCM`) to `f32` at the same rate: it converts integer samples and
-    downmixes other channel counts to stereo, and never resamples. Process loopback is
-    asked for 48 kHz stereo, since it has no mix format.
+    downmixes other channel counts to stereo, and never resamples. For an output with
+    another channel count the stream is stereo, and WASAPI maps it onto the device's
+    speakers. A 5.1 device is reported as `Surround51` whether its mix format puts the
+    surround pair at the back or the side, since `jstream-media`'s 5.1 doesn't tell the
+    two apart. Process loopback is asked for 48 kHz stereo, since it has no mix format.
   - **Times and positions:** packet times are WASAPI's QPC positions, `None` when the
     device flags a timestamp error. Device positions count frames since the stream
     started.
@@ -71,9 +74,11 @@ virtual-camera sink, and a `Backends` constructor, which needs all of them.
 
 **Tests:** the clock conversion and the stream helpers (format choice, sample copies,
 packet flags, positions across a device move) run on every platform, and the QPC clock
-test runs on Windows. Tests against real devices are `#[ignore]`d, because CI machines
-may have none ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). Run them on a Windows
-machine with a microphone and speakers: `cargo test -p jstream-platform-windows -- --ignored`.
+test runs on Windows. Tests against real devices are platform tests: behind the
+`hw-tests` feature and `#[ignore]`d, because CI machines may have no audio devices
+([R-TEST-004](../../docs/RULES.md#R-TEST-004)). Run them on a Windows machine with a
+microphone and speakers:
+`cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 
 <a id="open-questions"></a>
 ## Open questions
