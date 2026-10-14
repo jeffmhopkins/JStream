@@ -217,19 +217,27 @@ impl CoFormat {
         let wf = unsafe { self.0.read_unaligned() };
         let tag = u32::from(wf.wFormatTag);
         let ext_len = size_of::<WAVEFORMATEXTENSIBLE>() - size_of::<WAVEFORMATEX>();
-        let float32 = if tag == WAVE_FORMAT_EXTENSIBLE && usize::from(wf.cbSize) >= ext_len {
+        let (float32, mask) = if tag == WAVE_FORMAT_EXTENSIBLE && usize::from(wf.cbSize) >= ext_len
+        {
             // SAFETY: `cbSize` says the extensible fields follow, inside the same
             // allocation.
             let ext = unsafe { self.0.cast::<WAVEFORMATEXTENSIBLE>().read_unaligned() };
             let sub = ext.SubFormat;
-            sub == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT && wf.wBitsPerSample == 32
+            (
+                sub == KSDATAFORMAT_SUBTYPE_IEEE_FLOAT && wf.wBitsPerSample == 32,
+                Some(ext.dwChannelMask),
+            )
         } else {
-            tag == WAVE_FORMAT_IEEE_FLOAT && wf.wBitsPerSample == 32
+            (
+                tag == WAVE_FORMAT_IEEE_FLOAT && wf.wBitsPerSample == 32,
+                None,
+            )
         };
         Ok(MixFormat {
             rate: wf.nSamplesPerSec,
             channels: wf.nChannels,
             float32,
+            mask,
         })
     }
 }
@@ -430,6 +438,7 @@ pub(crate) fn open_process(pid: u32) -> Result<Session, PlatformError> {
         rate: PROCESS_RATE,
         channels: PROCESS_CHANNELS,
         float32: true,
+        mask: None,
     })?;
     let wf = float_format(plan.format);
     let flags = AUDCLNT_STREAMFLAGS_LOOPBACK

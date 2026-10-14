@@ -13,6 +13,8 @@ pub(crate) struct MixFormat {
     pub(crate) channels: u16,
     /// Whether the samples are 32-bit IEEE float.
     pub(crate) float32: bool,
+    /// The speaker positions (`dwChannelMask`), when the format names them.
+    pub(crate) mask: Option<u32>,
 }
 
 /// How to open a stream on a device with a given mix format.
@@ -56,6 +58,10 @@ pub(crate) fn channel_mask(layout: ChannelLayout) -> u32 {
 /// and any other channel count (a 4-channel mic array, 7.1 speakers) is downmixed to
 /// stereo by WASAPI: the proposed default in the `jstream-platform` README.
 ///
+/// A 6-channel mix is opened as is only when its speakers are `jstream-media`'s 5.1
+/// (surround pair at the back). Any other 5.1 (surround pair at the side, `0x60F`) is
+/// converted, so WASAPI maps its channels into that order.
+///
 /// # Errors
 /// [`PlatformError::Unsupported`] for a mix format without a rate or channels.
 pub(crate) fn plan(mix: MixFormat) -> Result<Plan, PlatformError> {
@@ -70,9 +76,11 @@ pub(crate) fn plan(mix: MixFormat) -> Result<Plan, PlatformError> {
     let native = layout_for(mix.channels);
     let layout = native.unwrap_or(ChannelLayout::Stereo);
     let format = AudioFormat::new(mix.rate, layout, SampleFormat::F32Interleaved)?;
+    let speakers_match =
+        layout != ChannelLayout::Surround51 || mix.mask.is_none_or(|m| m == channel_mask(layout));
     Ok(Plan {
         format,
-        convert: !mix.float32 || native.is_none(),
+        convert: !mix.float32 || native.is_none() || !speakers_match,
     })
 }
 
@@ -160,6 +168,7 @@ mod tests {
             rate,
             channels,
             float32,
+            mask: None,
         }
     }
 
@@ -176,6 +185,27 @@ mod tests {
             assert_eq!(p.format.sample_rate(), 48_000);
             assert_eq!(p.format.sample_format(), SampleFormat::F32Interleaved);
         }
+    }
+
+    #[test]
+    fn side_surround_51_is_remapped_to_back() {
+        let with = |mask| MixFormat {
+            mask: Some(mask),
+            ..mix(48_000, 6, true)
+        };
+        // Back surround (KSAUDIO_SPEAKER_5POINT1): already jstream-media's order.
+        let back = plan(with(0x3F)).expect("plannable");
+        assert!(!back.convert);
+        // Side surround (KSAUDIO_SPEAKER_5POINT1_SURROUND): WASAPI remaps it.
+        let side = plan(with(0x60F)).expect("plannable");
+        assert!(side.convert);
+        assert_eq!(side.format.layout(), ChannelLayout::Surround51);
+        // Stereo and mono masks don't affect the plan.
+        let stereo = MixFormat {
+            mask: Some(0x3),
+            ..mix(48_000, 2, true)
+        };
+        assert!(!plan(stereo).expect("plannable").convert);
     }
 
     #[test]

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:46566ee00cf367c4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1/N2/N4 on #56: device tests now behind hw-tests + #[ignore] with the matching run command; process-loopback params and PROPVARIANT both boxed and leaked together if activation doesn't complete; Format bullet covers render upmix and 5.1 back/side" }
+verified = { hash = "b3:33bd7713c71348b2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate vs main: QPC clock (100 ns, monotonic); WASAPI listing and streams for every trait target; f32 at device rate, AUTOCONVERTPCM for integer, unknown channel counts (stereo) and side-surround 5.1 (remapped to jstream-media's back order), never resampling; default following; error/panic reporting; buffers; hw-tests platform tests" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -48,9 +48,9 @@ The code is ported from spikes S1 to S3. This first cut has:
     (`AUTOCONVERTPCM`) to `f32` at the same rate: it converts integer samples and
     downmixes other channel counts to stereo, and never resamples. For an output with
     another channel count the stream is stereo, and WASAPI maps it onto the device's
-    speakers. A 5.1 device is reported as `Surround51` whether its mix format puts the
-    surround pair at the back or the side, since `jstream-media`'s 5.1 doesn't tell the
-    two apart. Process loopback is asked for 48 kHz stereo, since it has no mix format.
+    speakers. `jstream-media`'s 5.1 has its surround pair at the back, so a 5.1 device
+    whose mix puts it at the side is opened through the same conversion, and WASAPI
+    maps its channels into that order. Process loopback is asked for 48 kHz stereo, since it has no mix format.
   - **Times and positions:** packet times are WASAPI's QPC positions, `None` when the
     device flags a timestamp error. Device positions count frames since the stream
     started.
