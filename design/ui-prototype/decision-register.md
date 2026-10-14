@@ -16,7 +16,10 @@ It is analysis, not a decision: each entry ends in a recommendation, and the dec
 themselves land as ADRs and `docs/ARCHITECTURE.md` edits. Line numbers in file references
 are as of the commit that added this register; use `git log` on this file to find it.
 
+<a id="sources-read"></a>
 ## Sources read
+<!-- @section
+-->
 
 - Prototype: `design/ui-prototype/README.md` (all), `Docking.dc.html` (script part, lines
   896–3506, and the header and canvas markup), `Panel.dc.html` (script part, lines
@@ -29,7 +32,10 @@ are as of the commit that added this register; use `git log` on this file to fin
   README, `crates/jstream-platform/src/{capture,audio}.rs` plus the trait list, and the
   open-question sections of every crate README.
 
+<a id="notation"></a>
 ## Notation
+<!-- @section
+-->
 
 - **Status:** *covered* (docs or code already decide it), *gap* (the docs say nothing),
   or *conflict* (it contradicts an accepted ADR, ARCH text or the maintainer-set ROADMAP).
@@ -48,7 +54,10 @@ matter.
 
 ---
 
+<a id="summary-table"></a>
 ## Summary table
+<!-- @section
+-->
 
 | ID | Decision | Status | Tier | Urgency |
 |---|---|---|---|---|
@@ -99,7 +108,10 @@ matter.
 
 ---
 
+<a id="a-scene-graph-and-item-model-m1b-shapes"></a>
 ## A. Scene graph and item model (M1b shapes)
+<!-- @section
+-->
 
 ### D1. Item transform: size vs scale, rotation pivot, crop units, canvas size
 
@@ -458,7 +470,10 @@ in M1b.
 
 ---
 
+<a id="b-filters-and-the-render-pipeline"></a>
 ## B. Filters and the render pipeline
+<!-- @section
+-->
 
 ### D9. Filter model: separate video and audio chains on sources, scenes, outputs and buses
 
@@ -751,7 +766,10 @@ targets.
 
 ---
 
+<a id="c-audio"></a>
 ## C. Audio
+<!-- @section
+-->
 
 ### D17. Mixer UI (master + source faders) vs the ADR-0007 bus matrix
 
@@ -991,7 +1009,10 @@ long as D15's filter-latency reporting exists.
 
 ---
 
+<a id="d-transitions-and-studio"></a>
 ## D. Transitions and studio
+<!-- @section
+-->
 
 ### D24. Transition presets, a default, and per-scene in/out overrides
 
@@ -1145,7 +1166,10 @@ program" (non-studio) or "click = set preview" (studio).
 
 ---
 
+<a id="e-sources"></a>
 ## E. Sources
+<!-- @section
+-->
 
 ### D28. Source type list
 
@@ -1335,7 +1359,10 @@ even if only to clarify.
 
 ---
 
+<a id="f-protocol-and-clients"></a>
 ## F. Protocol and clients
+<!-- @section
+-->
 
 ### D33. Continuous edits: scrubbing, drags, live dialogs with Cancel; undo granularity
 
@@ -1664,7 +1691,10 @@ then stays a plain inverse batch, and the edits stay narrow.
 
 ---
 
+<a id="proposed-adr-grouping"></a>
 ## Proposed ADR grouping
+<!-- @section
+-->
 
 Numbers are provisional (the next free one is 0022).
 
@@ -1688,7 +1718,10 @@ Numbers are provisional (the next free one is 0022).
 The minimum set before more M1b code lands: **0022, 0023, 0025, 0026, 0028, 0031, 0032**.
 Of these, 0023, 0028 and 0031 need the maintainer.
 
+<a id="architecture-md-and-roadmap-edits"></a>
 ## ARCHITECTURE.md and ROADMAP edits
+<!-- @section
+-->
 
 ### Agent tier: write-ups of direction that is already accepted
 
@@ -1741,7 +1774,10 @@ above decides.
 7. **ROADMAP › M3:** YouTube chat send, feature-on-stream and audience stats (D40);
    native projector windows (D36); CLAP hosting (D23).
 
+<a id="things-not-decided-here-but-noticed"></a>
 ## Things not decided here, but noticed
+<!-- @section
+-->
 
 - The prototype's loop check for scene-referencing filters is incomplete
   (`sceneChoices`, `D:2268-2285`, only excludes containing scenes). The engine check in
