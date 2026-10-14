@@ -1057,6 +1057,177 @@ fn output_publish_failure_settles_failed() {
     assert_eq!(output_steps(&mut events), vec![OutputState::Failed]);
 }
 
+/// A publish failure whose teardown panics still lets the next `output.start` return.
+///
+/// The panic is an audio stream's drop on the publish watcher. Encoder `finish`
+/// is caught inside the encode thread and comes back as an error, so it does not
+/// unwind this join. Without the drain guard the second start waits forever; the
+/// timeout fails that case instead of hanging the suite.
+#[test]
+fn output_start_returns_after_a_panicking_teardown() {
+    use std::io::Write;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::mpsc;
+    use std::thread;
+    use std::time::Duration;
+
+    use jstream_media::{ChannelLayout, FrameSize, Timebase};
+    use jstream_mux::flv::FlvTag;
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::{
+        AudioInputHandler, AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget,
+        AudioStream, Backends, PlatformError,
+    };
+
+    use crate::{LivePublish, PublishError, RecordingPublish};
+
+    struct FailPublish {
+        fail: Arc<AtomicBool>,
+    }
+
+    impl LivePublish for FailPublish {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.fail.load(Ordering::Relaxed) {
+                Err(PublishError::new("publish broken"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            if self.fail.load(Ordering::Relaxed) {
+                Err(PublishError::new("publish broken"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+    }
+
+    /// One drop panics, and only when this thread is not already unwinding.
+    struct PanicStream {
+        inner: Box<dyn AudioStream>,
+        armed: Arc<AtomicBool>,
+    }
+
+    impl AudioStream for PanicStream {
+        fn format(&self) -> jstream_media::AudioFormat {
+            self.inner.format()
+        }
+    }
+
+    impl Drop for PanicStream {
+        fn drop(&mut self) {
+            if !thread::panicking() && self.armed.swap(false, Ordering::AcqRel) {
+                panic!("audio stream teardown");
+            }
+        }
+    }
+
+    struct PanicAudio {
+        inner: FakeAudioIo,
+        armed: Arc<AtomicBool>,
+    }
+
+    impl AudioIo for PanicAudio {
+        fn devices(&self) -> Result<Vec<jstream_platform::AudioDeviceInfo>, PlatformError> {
+            self.inner.devices()
+        }
+
+        fn open_input(
+            &self,
+            target: &AudioInputTarget,
+            handler: Box<dyn AudioInputHandler>,
+        ) -> Result<Box<dyn AudioStream>, PlatformError> {
+            let inner = self.inner.open_input(target, handler)?;
+            Ok(Box::new(PanicStream {
+                inner,
+                armed: Arc::clone(&self.armed),
+            }))
+        }
+
+        fn open_output(
+            &self,
+            target: &AudioOutputTarget,
+            handler: Box<dyn AudioOutputHandler>,
+        ) -> Result<Box<dyn AudioStream>, PlatformError> {
+            self.inner.open_output(target, handler)
+        }
+    }
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let armed = Arc::new(AtomicBool::new(true));
+    let audio = PanicAudio {
+        inner: FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio"),
+        armed: Arc::clone(&armed),
+    };
+    let size = FrameSize::new(320, 180).expect("size");
+    let fail = Arc::new(AtomicBool::new(false));
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        capture: Arc::new(FakeCapture::new(clock, size)),
+        audio: Arc::new(audio),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_publish(Box::new(FailPublish {
+            fail: Arc::clone(&fail),
+        }));
+    let control = connected(&engine);
+    let started = block_on(control.call(output_call("yt", true)));
+    if let Err(err) = &started
+        && err.protocol().is_some_and(|error| {
+            matches!(error, ProtocolError::ActionFailed { reason } if reason.contains("no wgpu adapter"))
+        })
+    {
+        if std::env::var_os("CI").is_some() {
+            panic!("CI has no wgpu adapter: {err}");
+        }
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping panicking-teardown test, no adapter: {err}"
+        );
+        return;
+    }
+    started.expect("output.start");
+
+    fail.store(true, Ordering::Relaxed);
+    let mut failed = false;
+    for _ in 0..100 {
+        if output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none() {
+            failed = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(failed, "publish failure left the output running");
+
+    let engine = engine.with_publish(Box::new(RecordingPublish::new()));
+    let restart = connected(&engine);
+    let (tx, rx) = mpsc::channel();
+    let restart_thread = thread::spawn(move || {
+        let result = block_on(restart.call(output_call("yt", true)));
+        let _ = tx.send(());
+        result
+    });
+    rx.recv_timeout(Duration::from_secs(15))
+        .expect("second output.start blocked after a panicking teardown");
+    let restarted = restart_thread.join().expect("restart thread");
+    restarted.expect("second output.start");
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    assert!(
+        !armed.load(Ordering::Acquire),
+        "the first pipeline never dropped its audio stream"
+    );
+}
+
 /// Dropping the last engine handle stops a running pipeline. The publish watcher
 /// must not keep that handle alive.
 #[test]

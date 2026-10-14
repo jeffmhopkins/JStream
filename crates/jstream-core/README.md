@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:a0700b8dcafb479d", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs bullet against the drain guard. The pipeline still emits starting then active or failed, and a publish failure still settles failed. The guard only clears the wait if the join unwinds; the written steps are unchanged." }
+verified = { hash = "b3:cc5a80629b43ab24", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs bullet against the regression test and the drop-order change. The pipeline still emits starting then active or failed, and a publish failure still settles failed. The written steps are unchanged." }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -67,7 +67,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9bbdd2d484691438", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Outputs and Locking against ClearDrain. A later start still waits, without the collection lock, until the failed pipeline has finished joining. The guard also clears that wait if the join unwinds, which the section does not need to spell out." }
+verified = { hash = "b3:25a267fcf0550171", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Outputs and Locking against the drain guard. A later start still waits, without the collection lock, until the failed pipeline has finished joining, and that wait now also ends when the teardown panics. Lock order is unchanged." }
 -->
 
 ### Engine and sessions
@@ -243,8 +243,10 @@ pointers until that failure arrives, so it does not keep the engine alive: dropp
 the last engine handle and its sessions joins the pipeline. `output_stats` is then
 empty. This cut does not reconnect. `failed` counts as idle, and a later start needs
 a new publish target. That start waits until the failed pipeline has finished
-joining, so the new devices do not overlap the old teardown. A `finish` error while
-a stop is tearing the session down is not a second failure.
+joining, so the new devices do not overlap the old teardown. The wait also ends if
+that teardown panics, so a later start is not left waiting on a join that already
+unwound. A `finish` error while a stop is tearing the session down is not a second
+failure.
 
 The render thread reads the platform capture mailbox, composites the primary target
 at 30 frames per second, repeats the last frame when capture is empty, and reads the
