@@ -3,7 +3,7 @@
 //! (side effects); queries read; events push changes; errors carry stable codes. The JSON
 //! Schema is generated from these types. Layer 1: plain data, WASM-safe, no I/O.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#design, docs/adr/0013-command-model.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#design, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md
 
 #![forbid(unsafe_code)]
 
@@ -12,6 +12,7 @@ mod envelope;
 mod error;
 mod event;
 mod finite;
+mod geometry;
 mod id;
 #[cfg(feature = "fixtures")]
 pub mod parity;
@@ -29,6 +30,10 @@ pub use envelope::{
 pub use error::{EntityKind, ProtocolError, WireError};
 pub use event::{Event, OutputState};
 pub use finite::Finite32;
+pub use geometry::{
+    CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, Placed,
+    ProjectedQuad, Size, legacy_quad,
+};
 pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};
 pub use query::{ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
 pub use schema::json_schema;

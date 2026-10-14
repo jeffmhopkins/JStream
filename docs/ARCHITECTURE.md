@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:eda44539b0c13851", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Queries list video.snapshot as a JSON PNG. Binary streams are preview and meters; the snapshot sentence matches the protocol design. Slow clients, events.dropped and Origin-optional transport are unchanged." }
+verified = { hash = "b3:e872deb079228b47", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read queries, events and binary streams against the protocol design. video.snapshot is a JSON PNG. Binary frames stay preview and meters. Geometry types are still not commands. Slow clients, events.dropped and Origin-optional transport are unchanged." }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -537,7 +537,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:6923f49b7be60020", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Tool nouns include video. Snapshots still cap the longest side at 1280 with rev, and the video tool leads with an image block, matching server.rs tool_result." }
+verified = { hash = "b3:25e99f8ec6765b2f", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the noun list and snapshots bullet against tools.snap. Nouns include video. video.snapshot leads with an image block. ItemTransform descriptions name ItemGeometry. Tools stay grouped by noun." }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -577,7 +577,7 @@ verified = { hash = "b3:6923f49b7be60020", by = "agent:grok@bc-49a8266d-f517-52b
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:8d47f188b61a08c7", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the one-scene paragraph against jstream-render. The README now says core encodes the RGBA8 readback as the snapshot PNG. Placement, opacity, src-over, Rgba16Float then Rgba8UnormSrgb, and the software-first device are unchanged. Steps 1-2 and 4-6 are unchanged." }
+verified = { hash = "b3:b20db406b0c12925", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the one-scene paragraph against the render README. Placement is still the legacy 0.3 evaluation; fit modes and 3D are not drawn. The readback is RGBA8. Steps 1-2 and 4-6 are unchanged." }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

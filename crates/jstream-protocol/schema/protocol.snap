@@ -793,7 +793,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "ItemTransform": {
-      "description": "Where a scene item sits in its scene.\n\nA deliberately small first cut: position, scale and rotation about the item's\ntop-left corner. The full 3D transform and crop (ARCH data model) replace it in a\nlater minor version, as added fields with defaults.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
+      "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
       "properties": {
         "position": {
           "$ref": "#/$defs/Vec2",

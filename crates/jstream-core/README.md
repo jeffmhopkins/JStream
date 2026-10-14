@@ -57,7 +57,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b764f2346d968319", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Design now describes the snapshot: first scene, 1920x1080, opacity 1, nearest cap at 1280, collection lock released before the GPU wait. Dependencies include jstream-render and png. The differential script still omits video.snapshot." }
+verified = { hash = "b3:0f995309696dc1ea", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read sessions, snapshots, outputs and locking against the merged protocol design. Snapshot is still the first scene at 1920x1080, opacity 1, nearest cap 1280, lock released before the GPU wait. canvas.set_size is still not a message. The differential script still omits video.snapshot." }
 -->
 
 ### Engine and sessions
