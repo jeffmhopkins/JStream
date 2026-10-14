@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:24998181bc72639b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #66 B1: open question 4 (wss://) now says ring is already allowlisted for jstream-outputs RTMPS, so only the tokio-tungstenite TLS feature and wiring remain; the 'no rustls or ring in this crate's tree' line still holds (cargo tree -i ring shows only jstream-outputs); rest unchanged" }
+verified = { hash = "b3:fa1d9d3c517f7e76", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gained ADR-0032's live and history bullets, not built; the trait's call() still takes one batch, action or query, and the mock still has no undo, both true of the code" }
 -->
 
 ### The trait

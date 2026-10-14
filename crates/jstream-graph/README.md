@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a654f68ae73c5929", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only via ARCH#data-model: Model list still matches model/ (Item has transform, crop, visible; no canvas yet); nothing in apply.rs or tests changed; canvas/geometry are listed under Not yet with ADR-0022" }
+verified = { hash = "b3:fbf3df6c2172a212", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #79: dependency ARCH#data-model gains this PR's canvas/geometry target text (Built so far still the 0.3 transform); the graph README's built-code description and its Not yet pointer to ADR-0022 still hold" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

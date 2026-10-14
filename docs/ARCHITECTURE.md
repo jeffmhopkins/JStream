@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:e8ae47c79a1a16c2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: covered apps/ READMEs only had verified lines refreshed (cli, daemon design) for the TLS open-question rewording; shape diagram and daemon/cli rows unchanged" }
+verified = { hash = "b3:86a303e69b7ff4c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon/README.md only had its design verified line refreshed (ADR-0032 dependency re-check); shape diagram, per-client undo in the engine box and host table unchanged and still hold" }
 -->
 
 ```
@@ -220,7 +220,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:df495b08c49b1355", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New covered code crates/jstream-audio/src/rt/**: audio threads resample into a per-input ring, mixer reads it on the engine clock, gains via lock-free atomics, clock/drift text matches; added an 'In the engine' paragraph saying the port uses S3's loop and tuning with its own sinc resampler and absolute error, simulated not measured" }
+verified = { hash = "b3:1882506d5cf34ee5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: the parameter-channel sentence now says continuous parameters are live values on the wire, committed by one batch (ADR-0032); clock, thread table, S3 result and arc-swap snapshot text unchanged and still match" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -268,7 +268,8 @@ simulated (within 0.05 ms after settling), not yet measured on hardware.
 **State to RT threads:** each subsystem (render, audio, outputs) gets its own immutable
 snapshot through `arc-swap`, rebuilt only when that subsystem's state changes.
 Continuous parameters (fader moves, transform drags) bypass snapshots and go through
-lock-free parameter channels. GPU resources are owned by `render`, keyed by ID, created
+lock-free parameter channels. On the wire they are live values, committed by one batch
+at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
 <a id="protocol"></a>
@@ -276,7 +277,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:ead9d8ac84b9aaa2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged: covered server README now has both the RTMPS PR's TLS open-question wording and main's daemon open question 5; Transport bullet (plain ws://, TLS open question in the server README) still holds" }
+verified = { hash = "b3:9a70e815e411c6c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added Live values (live.set/live.cancel actions, live.changed/live.ended) and History (history.undo/redo, a fourth call kind) bullets citing ADR-0032; covered control/server/protocol READMEs changed only as verified in this PR; other bullets still match the code" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -292,6 +293,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
+- **Live values** (`live.set`, `live.cancel`; events `live.changed`, `live.ended`):
+  actions that override live-adjustable parameters during a drag or a live dialog, with
+  no `rev` bump or undo step; one batch commits the gesture
+  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+- **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
+  of call that applies a step's inverse (or the step again) as one `rev` bump
+  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
   `output.status`; later `video.snapshot`, `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `stats.tick`, …).
