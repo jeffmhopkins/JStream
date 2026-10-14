@@ -163,7 +163,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:da4d59b1f099c5f7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0025: data-model depends on both; main's placement bullet (opacity, blend, reserved effects) kept and the Settings bullet follows it unchanged; other sections changed only by verified lines or the merged data-model" }
+verified = { hash = "b3:9907df1bb3fcb3dd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025 dependency now links ADR-0032 for live hints (review N2); data-model Settings bullet and persistence Asset files bullet unaffected" }
 -->
 
 ```
@@ -411,7 +411,7 @@ plus an `effect.toml` manifest.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:7ba4e2e08d90eee5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added Asset files bullet (collection- or app-relative storage, per-source kind descriptor version migrated on load) per ADR-0025, ADR added to depends_on; collections, jstream.toml, credential store, token and minidump bullets unchanged and still match R-API-003, R-SEC-001, R-SEC-004" }
+verified = { hash = "b3:0e05e58970c4134c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025 dependency now links ADR-0032 for live hints (review N2); data-model Settings bullet and persistence Asset files bullet unaffected" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

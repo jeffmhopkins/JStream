@@ -81,9 +81,10 @@ protocol defines the descriptor and value shapes once. It never defines a type p
   - hints for UIs: a `group`, an `advanced` flag, and a `visible_if` condition on another
     parameter's value. Hints never affect validation;
   - `live`: whether a change applies without restarting the source or filter (a colour,
-    an opacity) or restarts it (a capture device, a canvas size). It is a hint for now.
-    How continuous edits travel and undo is left to a later ADR on live parameter edits
-    (protocol [open question 4](../../crates/jstream-protocol/README.md#open-questions)).
+    an opacity) or restarts it (a capture device, a canvas size).
+    How continuous edits travel and undo is decided by
+    [ADR-0032](0032-live-edits-and-undo.md): a `live` parameter can be overridden with
+    `live.set` during a gesture, and one batch commits it as one undo step.
 
   `ParamType` gets an `unknown` fallback, so adding a parameter type is a minor change. A
   client shows a parameter of an unknown type read-only.
@@ -234,8 +235,8 @@ protocol defines the descriptor and value shapes once. It never defines a type p
   - **Asset paths resolved by search order** (collection folder, then app folder, then
     absolute) were rejected for an explicit root. Then a file in one root can't silently
     shadow another.
-- **Live edits.** The `live` hint carries no protocol behaviour until the ADR on live
-  parameter edits decides how continuous changes are sent and grouped for undo.
+- **Live edits.** The `live` hint marks the parameters that
+  [ADR-0032](0032-live-edits-and-undo.md)'s `live.set` may override during a gesture.
 - **Security review.** `asset.list` is the first query that exposes the host filesystem,
   even in part. Its implementation PR gets a security review against the constraints
   above.
