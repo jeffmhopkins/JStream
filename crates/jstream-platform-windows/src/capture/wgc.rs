@@ -122,6 +122,10 @@ struct Resolved {
     monitor: HMONITOR,
     /// Names the target in a `DeviceLost` error.
     what: String,
+    /// The kind and ID for a `NotFound` error, when the target goes before the capture
+    /// starts.
+    kind: &'static str,
+    id: String,
 }
 
 fn resolve(target: &CaptureTarget) -> Result<Resolved, PlatformError> {
@@ -140,6 +144,8 @@ fn resolve(target: &CaptureTarget) -> Result<Resolved, PlatformError> {
                 source: Source::Monitor(monitor.handle),
                 monitor: monitor.handle,
                 what: format!("display {id}"),
+                kind: "display",
+                id: id.to_string(),
             })
         }
         CaptureTarget::Window(id) => {
@@ -159,6 +165,8 @@ fn resolve(target: &CaptureTarget) -> Result<Resolved, PlatformError> {
                 source: Source::Window(hwnd),
                 monitor,
                 what: format!("window {id}"),
+                kind: "window",
+                id: id.to_string(),
             })
         }
         other => Err(PlatformError::Unsupported {
@@ -167,9 +175,39 @@ fn resolve(target: &CaptureTarget) -> Result<Resolved, PlatformError> {
     }
 }
 
-fn create_item(source: &Source) -> Result<GraphicsCaptureItem, PlatformError> {
+/// Creates the capture item. A target that has gone since `resolve` checked it (a window
+/// closed, a display unplugged, in between) is `NotFound`, as `Capture::start` promises,
+/// rather than the OS error.
+fn create_item(resolved: &Resolved) -> Result<GraphicsCaptureItem, PlatformError> {
     let interop = windows::core::factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>()
         .os("GraphicsCaptureItem activation factory")?;
+    create_item_for(&interop, &resolved.source).map_err(|e| {
+        if target_gone(&resolved.source) {
+            PlatformError::NotFound {
+                kind: resolved.kind,
+                id: resolved.id.clone(),
+            }
+        } else {
+            e
+        }
+    })
+}
+
+/// Whether the target `source` names no longer exists.
+fn target_gone(source: &Source) -> bool {
+    match *source {
+        Source::Monitor(m) => targets::monitors()
+            .map(|monitors| monitors.iter().all(|monitor| monitor.handle != m))
+            .unwrap_or(false),
+        // SAFETY: IsWindow accepts any value and says whether it names a window.
+        Source::Window(h) => !unsafe { IsWindow(Some(h)) }.as_bool(),
+    }
+}
+
+fn create_item_for(
+    interop: &IGraphicsCaptureItemInterop,
+    source: &Source,
+) -> Result<GraphicsCaptureItem, PlatformError> {
     match *source {
         Source::Monitor(m) => {
             // SAFETY: plain COM call; a monitor that has gone since it was listed fails it.
@@ -290,8 +328,9 @@ struct Converter {
     /// The size the pool's buffers were last created with.
     pool_size: SizeInt32,
     staging: Option<Staging>,
-    /// A frame the reader never took, reused for the next one of the same size so a
-    /// reader that falls behind costs no allocation.
+    /// A frame the reader never took, reused for the next one of the same size, so a
+    /// reader that falls behind doesn't reallocate the frame's planes. (The mailbox still
+    /// boxes each frame it is given.)
     spare: Option<VideoFrame>,
 }
 
@@ -543,7 +582,7 @@ struct WgcStream {
 
 impl WgcStream {
     fn start(resolved: Resolved, mta: MtaUsage) -> Result<Self, PlatformError> {
-        let item = create_item(&resolved.source)?;
+        let item = create_item(&resolved)?;
         let device = create_device(resolved.monitor)?;
         let size = item.Size().os("GraphicsCaptureItem::Size")?;
         let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(

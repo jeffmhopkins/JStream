@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:64d8714779d19f29", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added the WgcCapture bullet (targets and DeviceId encoding, own D3D11 device on the display's adapter, BGRA->NV12 BT.709 limited CPU path, odd sizes cropped to even, pool Recreate on size change, lock-free one-pointer mailbox and frames_skipped, SystemRelativeTime used as QPC hns pts, best-effort border/cursor, Closed -> DeviceLost, caught panics, MTA kept alive), dropped WGC from Not yet, extended Tests; rest re-read against main and unchanged" }
+verified = { hash = "b3:d575dca23a6b7d34", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #68 follow-ups: WgcCapture Frames bullet now says chroma is left-sited ([1 2 1] tap on the block's left column, rows averaged) as convert.rs does; Mailbox bullet says planes are reused and the mailbox boxes every frame (mailbox.rs put); new Start bullet: a target gone before CreateForWindow/Monitor is NotFound (create_item/target_gone); Not yet names the uncounted, unbudgeted CPU readback (ARCH step 6). Rest unchanged against main" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -85,14 +85,17 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Frames:** a free-threaded frame pool of two BGRA buffers. On each `FrameArrived`,
     on a WinRT thread-pool thread, the frame is copied into a staging texture, read back
     and converted to NV12 in BT.709 limited range, which is what the H.264 encoder's CPU
-    path takes. Each chroma sample is the average of its 2x2 block. NV12 needs even
+    path takes. Chroma is left-sited, the H.264 default: each chroma sample filters the
+    two rows of its block with a `[1 2 1]` tap centred on the block's left column. NV12
+    needs even
     dimensions, so an odd width or height loses its last column or row. When the content
     size changes, the pool is recreated at the new size, and the frames after it have
     that size.
   - **Mailbox:** frames go to a single-slot mailbox, one atomic pointer that both sides
     swap, so `latest` never waits ([R-RT-002](../../docs/RULES.md#R-RT-002)). A frame
-    replaced before `latest` took it counts in `frames_skipped`, and its buffer is reused
-    for the next frame. Otherwise each frame is a new allocation, on the capture thread.
+    replaced before `latest` took it counts in `frames_skipped`, and its planes are reused
+    for the next frame of the same size. Otherwise each frame allocates its planes, on
+    the capture thread, and the mailbox boxes every frame it is given.
   - **Times:** `pts` is the frame's `SystemRelativeTime`, which WGC reports as QPC in
     100 ns units. That is `QpcClock`'s time line and unit, so it is used as is. The
     capture test checks that every `pts` is at most a second before `QpcClock::now`, and
@@ -106,7 +109,11 @@ The code is ported from spikes S1 to S3. This first cut has:
     panics too.
   - **Threads:** each capture keeps the process MTA alive (`CoIncrementMTAUsage`), so it
     can be started, read and dropped from threads that never initialised COM.
-  - **Not yet:** the GPU path, capture into shared textures (ARCH steps 1 and 2).
+  - **Start:** a target that goes between the lookup and the start of the capture is
+    `NotFound`, as for a target that was never there.
+  - **Not yet:** the GPU path, capture into shared textures (ARCH steps 1 and 2). The
+    CPU readback is not yet counted in stats or measured against a budget, as ARCH step
+    6 asks.
 
 - **`MfCodecs`** (`Codecs`), Media Foundation codecs
   ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md)): the **AAC encoder** and
