@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:65650e4a1b7fa0bc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Restored the ADR-0031 dependency a merge dropped; the MF H.264/AAC, WASAPI and WGC backends still match ADR-0031's OS-API media path" }
+verified = { hash = "b3:6ba4557b371c75ae", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Crate-map platform-windows row unchanged; Threads and RULES#real-time gain only the render and mixer generation-counter handover (one atomic store, R-RT-001/002 unchanged), which changes nothing in the WASAPI, WGC or MF threads described here" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

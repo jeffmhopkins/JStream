@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:6ac385a27e0fd004", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the apps row and the CLI's Purpose are unchanged" }
+verified = { hash = "b3:c9259942aee48709", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-cli row is unchanged and this Purpose still matches it" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -169,7 +169,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:85eb691d94ff7805", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #72: #48's read-vs-write error text (CliError::Read) and per-process token file sit beside main's open question 5 (daemon exists) and wss:// wording; re-read against run.rs/mcp.rs/exit.rs" }
+verified = { hash = "b3:79c5a5f12d14ad80", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-control#design gains only open question 1's note on the decided server-side bounded buffer and events.dropped; the CLI subscribes to no event stream of its own and its mcp proxy stays stdio, so the design still holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:67d0ba0e5c7733c6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-encode row and this Purpose are unchanged and still match the crate" }
+verified = { hash = "b3:4f0321fe71cbc1c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Crate-map jstream-encode row now states the same ADR-0027 sharing key this Purpose gives (no video chain shares per mix and profile, a chained output gets its own session); Threads' new live-value handover and Data model's override and hotkey clarifications touch neither the encode thread nor encoder sharing" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

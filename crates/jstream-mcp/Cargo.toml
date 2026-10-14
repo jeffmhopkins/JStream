@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 3
-summary = "MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports"
+summary = "MCP server over `dyn Control`: generated grouped tools and the stdio transport; jstream-server serves its streamable-HTTP transport (not built)"
 unsafe_allowed = false
 
 [lints]

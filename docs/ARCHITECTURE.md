@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:3209f6acc31fb5a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by re-verified Purpose lines after this PR's jstream-youtube and jstream-sources crate-map rows; layer diagram and app roles unchanged" }
+verified = { hash = "b3:81891e0573e8eaf7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps READMEs changed only by re-verified lines; the daemon row (serves the UI, WebSocket API and MCP over HTTP) and the cli row (stdio MCP proxy) already match #37 N1's decision that jstream-server serves streamable HTTP and stdio stays in the CLI" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:830f789f5a30eea5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds ADR-0034's chat sending and audience stats to the jstream-youtube row and its chat message kind (M3) to main's ADR-0031 jstream-sources row; other rows match main" }
+verified = { hash = "b3:9e78262382bf7595", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #86 N4 and #37 N1: jstream-encode row now states ADR-0027's sharing key as the Data model and encode Purpose do; jstream-mcp row and its Cargo.toml summary say stdio here and streamable HTTP served by jstream-server, not built; jstream-server row says it serves that transport behind the same checks; crate map is hand-maintained, not generated from summary" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -146,10 +146,10 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
-| 3 | `jstream-encode` | Shared encoder sessions keyed by (mix, settings); rate control; fan-out of packet streams | no |
-| 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports | no |
+| 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
+| 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` (not built) | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
-| 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; serves UI assets; mounts MCP over HTTP; token and Origin checks | no |
+| 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks (not built) | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0034](adr/0034-youtube-interaction-scope-v2.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
@@ -165,7 +165,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:cd990defe31dbe5d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined this PR's master, privacy and per-output video/audio chains, the Master/output chains bullet, ADR-0027 encoder-sharing rule and Privacy bullet with main's ADR-0022/0024/0025/0028 tree and bullets; the old encoder-sharing bullet is replaced, not duplicated; depends_on adds 0027 and keeps 0028" }
+verified = { hash = "b3:e446ee6e49bcb75d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #94: groups bullet says scene.set_role, removing or set_source-retargeting a group's placing item and set_role on a variant drop orphaned overrides in the same edit with an inverse that restores them, and that an override follows a group to every placement in the variant's tree; organisation bullet says a hotkey whose target is deleted stays, reported broken and inert, re-pointable, healed by undo. Clarifies ADR-0024 without contradicting it" }
 -->
 
 ```
@@ -237,6 +237,16 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     variant → parent edge. Deleting a parent is rejected while it has variants.
   - Placement edits take an optional `scene_id`: absent or the item's own scene changes
     the item; a variant writes that variant's override; `item.clear_override` removes one.
+  - **Orphaned overrides are dropped, never refused.** An edit that leaves overrides
+    naming items outside their variant's tree drops those overrides in the same edit, and
+    its inverse restores them, as `item.move` and `item.remove` do. That covers
+    `scene.set_role` on a group (its children leave the tree), removing the item that
+    places a group or retargeting it with `item.set_source`, and `scene.set_role` on a
+    variant.
+  - **An override follows a group everywhere it is placed.** Overrides are keyed by item
+    ID and a group is one shared scene, so a variant's override on a group's child
+    applies to every placement of that group in the variant's tree, including two
+    placements in the same parent. To vary one copy, duplicate the group.
 - **Folders and organisation are collection state:** folders, labels, favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable
   edits and saved with the collection, so every client and agent sees the same thing
@@ -245,7 +255,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   display order, and a variant sits under its parent, never in a folder. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
-  decision. `Scene.background` (absent means transparent) is scene model, not metadata,
+  decision. Deleting the scene, source or output a binding's action names succeeds: the
+  binding stays, is reported as broken, does nothing when pressed, and can be re-pointed
+  with `hotkey.set`; undoing the delete makes it work again. `Scene.background` (absent means transparent) is scene model, not metadata,
   because the compositor draws it wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
   is used. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
@@ -328,7 +340,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:892b195a6dd6cf3d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading now holds this PR's privacy flag on the parameter channels (not built) beside main's ADR-0028 mixer row and pts paragraph and ADR-0035 CLAP host; depends_on restored to ADR-0014 and ADR-0028 after the merge" }
+verified = { hash = "b3:293a67e227482cb3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #90: new live-value handover paragraph decides a per-subsystem generation counter (control bumps on publish, each RT reader atomically stores the generation it adopted, live override released once all readers report >= the commit's), not built; consistent with ADR-0032's keep-live-until-snapshot rule and R-RT-001/002" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -399,6 +411,20 @@ lock-free parameter channels. On the wire they are live values, committed by one
 at the end of the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). GPU resources are owned by `render`, keyed by ID, created
 when a snapshot references them and destroyed after the frame fence that last used them.
 
+**Live-value handover** (decided, not built yet): the engine learns that a real-time
+thread holds a committed snapshot through a **generation counter per subsystem**. Each
+time the control side publishes a subsystem's snapshot it bumps that subsystem's
+generation and stores it in the snapshot. Each real-time thread that reads the snapshot
+(the render thread for render, the mixer for audio) publishes the last generation it
+adopted with one atomic store when it picks up a new snapshot, which allocates, locks and
+waits on nothing ([R-RT-001](RULES.md#R-RT-001),
+[R-RT-002](RULES.md#R-RT-002)). When a gesture's committing batch
+applies, the control side notes the generation of the snapshot that carries it, and
+releases the gesture's live values from the parameter channels once every thread that
+reads them has reported a generation at least that high. Until then the parameter
+channel keeps the live value, so no frame shows the old value in between. The control side polls
+the published generations; the real-time threads never wait for it.
+
 The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
 reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
 so it takes effect on the next tick and block. The blur or slate pass exists whenever an
@@ -410,7 +436,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:b65806c4da94ef9a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's planned YouTube bullet (youtube.chat.send, youtube.chat.feature, youtube.stats; not built) sits beside main's planned additions; covered control/core/server/protocol READMEs changed only by re-verified lines; bullets match protocol 0.3 as built" }
+verified = { hash = "b3:64593ae2976f503d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #44 N3: transport bullet records the decided, unbuilt Origin rule (missing allowed with the token, present must be on the allow list) and MCP streamable HTTP on the control port; new slow-clients bullet records the bounded per-connection buffer, events.dropped notice and state.get re-read, not built; covered server and control READMEs now record the same decisions as open questions" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -478,7 +504,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
   default, with the token required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
-  for now; TLS is an open question there.
+  for now; TLS is an open question there. Decided, not built yet: an upgrade with no
+  `Origin` header is allowed, because the token is the gate, while an `Origin` that is
+  present must be on the allow list (today a missing one is refused). The same server
+  serves MCP's streamable-HTTP transport on the control port, behind the same checks
+  ([MCP](#mcp)).
+- **Slow clients** (decided, not built yet): each connection gets a bounded event buffer.
+  When it overflows, the server drops the queued events and sends one `events.dropped`
+  notice, and the client re-reads state (`state.get` carries `rev`). One slow client
+  never slows the engine or other clients. Today the buffer is unbounded.
 - **Versioning:** [R-API-001](RULES.md#R-API-001).
 
 <a id="mcp"></a>
@@ -486,7 +520,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d5ba2ff9794ff37f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp and CLI READMEs changed only by re-verified Purpose lines; the youtube tool noun named in the grouping bullet is planned, matching ADR-0034's MCP exposure" }
+verified = { hash = "b3:418d582d220a5142", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #37 N1: access bullet says the streamable-HTTP transport, not built, is served by jstream-server on the control port behind the same token and Origin checks; covered jstream-mcp README (Purpose, Async and transports, open question 4) and Cargo.toml summary now say the same; tool grouping and stdio proxy text unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -506,7 +540,8 @@ verified = { hash = "b3:d5ba2ff9794ff37f", by = "agent:claude@session_01QBbMRwRu
   the state `rev` they show.
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
-  HTTP transport validates `Origin`, as the
+  streamable-HTTP transport (not built) is served by `jstream-server` on the control port,
+  behind the same token and `Origin` checks as the WebSocket API, so it validates `Origin`, as the
   [MCP transport spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
   requires.
 - Every agent action goes to the audit log with the client's name. Undo is per client,

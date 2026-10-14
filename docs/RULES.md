@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:f4ea80564c01f0a9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's lock-free privacy flag and fail-closed preallocated pass, consistent with R-RT-001/002, beside ADR-0028/0035 text" }
+verified = { hash = "b3:80a1ae28c3f1b00d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains the decided generation-counter handover, whose RT side is one atomic store per adopted snapshot, so R-RT-001 (no alloc/lock/block) and R-RT-002 (never wait on the control plane) still hold as written" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:6b91d4f329169329", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0034's youtube.chat.send/feature actions and youtube.stats event are additive minor-release changes under R-API-001 and follow R-API-002 noun.verb, beside main's additive ADR-0022/0024/0025/0027/0028 changes" }
+verified = { hash = "b3:f1bb9190a7e489c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Protocol gains decided, unbuilt items: an events.dropped notice (an additive event under R-API-001) and admission of upgrades without Origin (a server gate change, not a protocol shape); MCP over HTTP adds no protocol change" }
 -->
 
 <a id="R-API-001"></a>

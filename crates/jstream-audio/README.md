@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:3c23e532628fd243", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-audio row and this Purpose are unchanged and still match the crate" }
+verified = { hash = "b3:5f541c5353cb4f6a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-audio row is unchanged, and Threads' new handover paragraph is design only, so this Purpose still matches" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -92,7 +92,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:3c765bfdbadae101", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading now holds this PR's privacy flag on the parameter channels (not built) beside main's ADR-0028 mixer row and pts paragraph and ADR-0035 CLAP host; the rt code is unchanged and still allocation- and lock-free" }
+verified = { hash = "b3:59c0f7d791eab3c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading gains the generation-counter handover: the mixer will publish the adopted generation with one atomic store; src/rt is unchanged and still allocation- and lock-free, and live values are not built" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

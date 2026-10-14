@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:0a9a4fe91df802f9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-core row and this Purpose are unchanged and still match the crate" }
+verified = { hash = "b3:1e4dc65d71c975dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-core row is unchanged and this Purpose still matches it" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:481c4d43d7675728", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains ADR-0034's planned YouTube actions (not built); Engine still applies only built edits and OutputStart/OutputStop" }
+verified = { hash = "b3:fb1f4909825bda03", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed: ARCH#protocol gains the decided per-connection bounded buffer in jstream-server, control q1 notes it; core's own subscriptions stay unbounded with no drops, so the Events paragraph still holds; the rest re-read unchanged" }
 -->
 
 ### Engine and sessions

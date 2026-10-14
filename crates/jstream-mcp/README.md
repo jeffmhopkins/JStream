@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:36349a961e161b81", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-mcp row and this Purpose are unchanged and still match the crate" }
+verified = { hash = "b3:df231b9063af0676", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: says the streamable-HTTP transport is not in this crate but served by jstream-server, not built, matching the edited crate-map row; contents list still matches src" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -34,14 +34,15 @@ Contents (a first cut; [Design](#design) explains the choices):
   `BufRead`/`Write` pair.
 - **Errors** (`error.rs`): `McpError`, a `thiserror` enum for a transport that stops.
 
-Not here yet: the streamable-HTTP transport ([Design](#design)).
+The streamable-HTTP transport is not in this crate: `jstream-server` serves it, and it is
+not built yet ([Design](#design)).
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:49c0763d39419a32", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: errors table splits lost-during-call from hello-failed (call not sent, restart for a new session with its own undo history); Session and identity explains why re-hello never splits undo (Control contract, InProcessControl never disconnects, WsControl never reconnects); tools, revisions, async/transports re-read against server.rs" }
+verified = { hash = "b3:134f8186f4b8cea9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Async and transports: streamable HTTP served by jstream-server on the control port behind the same token and Origin checks, stdio stays in the CLI; Cargo.toml changed only in its metadata summary; Session and identity note on the HTTP listener still holds" }
 -->
 
 ### Tools
@@ -154,8 +155,10 @@ one at a time, in order. Blank lines are skipped, a line that isn't UTF-8 gets a
 error, and end of input ends the transport. Nothing else may write to the stdout it is
 given.
 
-Streamable HTTP is deferred to `jstream-server`, which owns the HTTP stack and the token
-and `Origin` checks: it will feed request bodies to `Server::handle`.
+Streamable HTTP is served by `jstream-server` on the control port, behind the same token
+and `Origin` checks as the WebSocket API (decided, not built yet): it owns the HTTP stack
+and will feed request bodies to `Server::handle`. stdio stays in the CLI
+(`jstream-cli mcp`).
 
 ### No MCP SDK
 
@@ -211,8 +214,9 @@ official Rust SDK (`rmcp`):
      `request_id`), and misses an output that started and stopped between two polls.
 
    The polling tool is the smallest step, once the buffer policy is settled.
-4. **Streamable HTTP.** Mounted by `jstream-server` (planned above), or a feature of this
-   crate on a small HTTP stack?
+4. **Streamable HTTP.** Decided: `jstream-server` serves it on the control port, behind
+   the same token and `Origin` checks, and stdio stays in the CLI
+   ([Async and transports](#design)). Not built yet; question 6 is still open for it.
 5. **Legacy support.** How long to keep the handshake-based era once clients move to
    2026-07-28.
 6. **One session per server.** Every MCP client of one server shares an undo history.
