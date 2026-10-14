@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a954d62c00fe8b94", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model now joins ADR-0022 canvas/geometry and ADR-0024 scene structure, none built; Purpose lists only built behaviour (items with 0.3 transform, crop, visible; nesting cycle check) and its Not yet points at ADR-0022" }
+verified = { hash = "b3:898ee1c8076e5e8a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model now carries ADR-0022 geometry, ADR-0024 scene structure and ADR-0025 settings, none built; Purpose lists only built behaviour (no settings, kind name only) and stays accurate" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

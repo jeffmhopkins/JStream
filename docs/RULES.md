@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:22b6d10f5c1d78d6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0024's item.move edit, optional scene_id on placement edits, item.clear_override and new Scene fields, and ADR-0029's transition edits and fields, are all additive with defaults, minor-release changes under R-API-001; names follow R-API-002 noun.verb" }
+verified = { hash = "b3:2e713a39f858cc99", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025's kind versions migrate separately from PROTOCOL_VERSION and schema_version with fixture tests (R-API-003); the merged ADR-0022/0024 additions are minor-release changes too, and ADR-0022's 1.0 removal follows R-API-001" }
 -->
 
 <a id="R-API-001"></a>

@@ -93,7 +93,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:3bab5ad595365144", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency server#design gained the extra_hosts port check and hashed token compare; the daemon passes no extra_hosts and builds its Token with Token::new, so its token-file and serving design still hold" }
+verified = { hash = "b3:9e92dc182252d892", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#persistence gains ADR-0025's asset-file and kind-version bullet, not built; the daemon still persists nothing but its token file, and main's #72 server changes (extra_hosts name:port, BLAKE3 token compare) don't change what the daemon passes" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
