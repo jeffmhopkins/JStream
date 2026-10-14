@@ -12,6 +12,11 @@
 //! the thread parks in between. A read drains it first, under the same lock and with the
 //! thread's waker, so it sees every event the engine has delivered so far.
 //!
+//! `stats.tick` is not buffered: it arrives about once a second per running pipeline and
+//! would soon push `state.changed` and `output.state_changed` out of the buffer, and
+//! ADR-0036 keeps such high-rate events out of this feed unless an agent asks for them,
+//! which it can't yet. Skipped events get no sequence number, so they leave no gap.
+//!
 //! Docs: crates/jstream-mcp/README.md#design, docs/adr/0036-mcp-events-polling-tool.md
 
 use jstream_control::EventStream;
@@ -130,7 +135,11 @@ impl Shared {
         let mut cx = Context::from_waker(waker);
         while let Some(stream) = self.stream.as_mut() {
             match stream.as_mut().poll_next(&mut cx) {
-                Poll::Ready(Some(event)) => self.buffer.push(event),
+                Poll::Ready(Some(event)) => {
+                    if is_buffered(&event) {
+                        self.buffer.push(event);
+                    }
+                }
                 Poll::Ready(None) => {
                     self.stream = None;
                     self.buffer.ended = true;
@@ -139,6 +148,13 @@ impl Shared {
             }
         }
     }
+}
+
+/// Whether the feed keeps `event`. High-rate telemetry (`stats.tick`) is left out, so it
+/// can't evict the state and output events agents follow
+/// (docs/adr/0036-mcp-events-polling-tool.md, Consequences).
+fn is_buffered(event: &Event) -> bool {
+    !matches!(event, Event::StatsTick { .. })
 }
 
 fn lock(mutex: &Mutex<Shared>) -> MutexGuard<'_, Shared> {

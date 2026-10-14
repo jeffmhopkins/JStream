@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:3cdd20a50b304db5", by = "agent:grok@stats-tick", note = "Re-read the module list against lib.rs and version.rs. PROTOCOL_VERSION is 0.6 because stats.tick is that minor; video.snapshot stays the 0.5 addition. Events list stats.tick. Geometry types are still not messages." }
+verified = { hash = "b3:50b1ee83ef0e1782", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the module list against event.rs: DropCounts gained #[serde(default)] only, so the Events bullet and PROTOCOL_VERSION 0.6 still hold; no message was added or renamed; schema.rs and query.rs unchanged" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -73,7 +73,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:4d80d2daa21b1ac9", by = "agent:grok@stats-tick", note = "Re-read the handshake example, the stats.tick paragraph and the geometry subsection against version.rs and event.rs. Hello and welcome are minor 6. The tick is a running total emitted by jstream-stats about once a second, added in 0.6, and render_ticks stays 0 in this cut. Schema snaps title the protocol 0.6. item.add still takes ItemTransform." }
+verified = { hash = "b3:2a473fb1b016849a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the video.snapshot bullet (added the Size paragraph: RGBA8 1280x720 from the fixed 1920x1080 canvas in core snapshot.rs, ~4.9 MB base64 worst case; jstream-server's 4 MiB MAX_MESSAGE_BYTES is set via max_message_size on the upgrade and bounds inbound only; WsControl uses connect_async defaults), the stats.tick paragraph (missing counters parse as 0), and the compatibility bullets: DropCounts' fields leaving 'required' in protocol.snap relaxes parsing only, the wire output is unchanged, so no version bump" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -213,6 +213,15 @@ Queries read and never change `rev`. Those that read the collection state carry 
   the longest side is at most 1280. `rev` is the collection revision of the layout.
   Source pixels are runtime state and can change without a new `rev`. The query takes
   no arguments and changes nothing.
+  **Size.** The PNG is RGBA8 and nothing caps its byte size, so a noise-like frame,
+  which PNG can't compress, can be as large as its raw pixels: today's canvas is
+  always 1920×1080, so the image is 1280×720, 3.7 MB raw, and `png` can reach about
+  4.9 MB of base64 (a square canvas, once its size can be set, about 8.7 MB). A typical
+  frame is far smaller. The 4 MiB limit `jstream-server` sets applies only to messages
+  it receives, not to its answers
+  ([jstream-server › Design](../jstream-server/README.md#design)), so a client must
+  accept an answer of that size: `jstream-control`'s WebSocket client keeps
+  tungstenite's default limits, which are well above it.
 
 An item is reported with its `source_id`, `transform`, `crop` and `visible`: every
 property an edit sets, so a client can compute any edit, or its inverse, from what it
@@ -272,7 +281,9 @@ After `welcome`, the server pushes every event to every client.
   finished), `encode_frames` and `encode_blocks` (video frames and audio blocks
   dropped before an encoder accepted them) and `output_packets` (encoded packets
   dropped handing a stream to an output). Silence inserted to cover a gap is not a
-  drop. `seq` starts at 1 and increases by one each sample. While an output is
+  drop. A counter missing from `drops` parses as 0 (`DropCounts` is
+  `#[serde(default)]`), so a counter added later is an optional field (minor). `seq`
+  starts at 1 and increases by one each sample. While an output is
   running, the pipeline's `jstream-stats` thread emits a tick about once a second;
   an idle engine emits none. This cut's render loop does not skip a late tick, so
   `render_ticks` stays 0. Until [open question 7](#open-questions) every client

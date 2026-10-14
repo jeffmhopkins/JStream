@@ -336,7 +336,8 @@ fn events_tool() -> Tool {
          waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` \
          say whose batch did it) and `output.state_changed`, from every client, yours \
          included, and `events.dropped` (the server dropped `count` events because this \
-         session fell behind; re-read the state). Each comes with a `seq`, a sequence number of this MCP server, starting \
+         session fell behind; re-read the state). The once-a-second `stats.tick` \
+         is not returned. Each comes with a `seq`, a sequence number of this MCP server, starting \
          at 1 when your first call opened the session. Pass the returned `next` as \
          `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At \
          most {PAGE_SIZE} events come back at once; `more` says others are waiting. The \
