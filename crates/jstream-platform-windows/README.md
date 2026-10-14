@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:33bd7713c71348b2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate vs main: QPC clock (100 ns, monotonic); WASAPI listing and streams for every trait target; f32 at device rate, AUTOCONVERTPCM for integer, unknown channel counts (stereo) and side-surround 5.1 (remapped to jstream-media's back order), never resampling; default following; error/panic reporting; buffers; hw-tests platform tests" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
+verified = { hash = "b3:30922ac9cbbdf002", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Adds MfCodecs: AAC encoder MFT (PCM16 in, 44.1/48k, mono/stereo/5.1, 96-192 kbps, raw AUs, pts from first buffer, finish pads then drains, MTA kept alive per session), video Unsupported; Tests paragraph covers AAC helpers and the MF hw-test; checked against codec/{mod,aac,mf}.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -68,16 +68,34 @@ The code is ported from spikes S1 to S3. This first cut has:
     thread loses nothing. Render asks for 40 ms, which bounds how far ahead the output
     handler is asked for samples.
 
-**Not yet:** Windows.Graphics.Capture, Media Foundation encoders and decoders, the GPU
-interop path ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)), the
+- **`MfCodecs`** (`Codecs`), Media Foundation codecs
+  ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md)). So far it has the **AAC
+  encoder**:
+  - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
+    Windows that is Microsoft's software AAC encoder, which takes 44.1 or 48 kHz; mono,
+    stereo or 5.1; and 96, 128, 160 or 192 kbps. Any other configuration is
+    `Unsupported`.
+  - **Input:** samples are converted from `f32` to 16-bit PCM, clamped and rounded.
+  - **Output:** one raw AAC-LC access unit (1024 frames, no ADTS) per packet, the framing
+    `jstream-media` defines. Packet times count from the first buffer's `pts`, in the
+    input's sample time base, as the `AudioEncoder` trait says. `finish` pads the last
+    access unit with silence, then drains the MFT.
+  - **Threads:** each session keeps Media Foundation started and the process MTA alive
+    (`CoIncrementMTAUsage`), so the engine's encode thread can drive it without
+    initialising COM.
+  - **Not yet:** video encoders and decoders, which report `Unsupported` until then.
+
+**Not yet:** Windows.Graphics.Capture, Media Foundation video encoders and decoders, the
+GPU interop path ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)), the
 virtual-camera sink, and a `Backends` constructor, which needs all of them.
 
-**Tests:** the clock conversion and the stream helpers (format choice, sample copies,
-packet flags, positions across a device move) run on every platform, and the QPC clock
-test runs on Windows. Tests against real devices are platform tests: behind the
-`hw-tests` feature and `#[ignore]`d, because CI machines may have no audio devices
-([R-TEST-004](../../docs/RULES.md#R-TEST-004)). Run them on a Windows machine with a
-microphone and speakers:
+**Tests:** the clock conversion, the stream helpers (format choice, sample copies,
+packet flags, positions across a device move) and the AAC helpers (configuration check,
+PCM conversion, packet timing and padding) run on every platform, and the QPC clock test
+runs on Windows. Tests against real devices and the OS encoder are platform tests: behind
+the `hw-tests` feature and `#[ignore]`d, because CI machines may have no audio devices
+or Media Foundation ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). Run them on a Windows
+machine with a microphone and speakers:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 
 <a id="open-questions"></a>

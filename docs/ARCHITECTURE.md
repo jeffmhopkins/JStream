@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:d64ba8b8a96fe8eb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate jstream-platform-windows vs main: matches its row (L2, unsafe yes); only internal dependency is jstream-platform (L1), strictly lower; lint-deps ok; table text unchanged" }
+verified = { hash = "b3:2deab9e1da36a0f1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-platform-windows (L2, unsafe yes) gains MF codecs, matching its row ('MF encode/decode'); still depends only on jstream-platform (L1); only Win32 MF features added to the windows dep; table text unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
