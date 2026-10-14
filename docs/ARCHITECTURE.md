@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:5f6fbb149a0ef9d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main with #68: new apps/jstream-daemon/Cargo.toml at layer 6 (deps core L5, server L4, protocol, control-ws dev) and jstream-platform-windows' WGC features; daemon row says the first cut serves the WebSocket API only; all edges point strictly down (lint-deps ok)" }
+verified = { hash = "b3:fec96c32215a6d35", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main with #69/#70: adds crates/jstream-encode/Cargo.toml at layer 3, summary identical to the jstream-encode row, unsafe_allowed false, only member dependency jstream-platform (L1); main's daemon row and edges unchanged by this; all edges strictly down (lint-deps ok)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
