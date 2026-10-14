@@ -573,7 +573,7 @@ verified = { hash = "b3:e9fa1c035e9dd062", by = "agent:grok@bc-154a1201-b120-575
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c6151c969fa53885", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against the render README edit. Placement in this crate is still the legacy 0.3 evaluation in place.rs; fit modes and 3D are still not drawn here. Steps 1-2 and 4-6, transitions and the ADR-0027 output path are unchanged." }
+verified = { hash = "b3:e8d73feff5a6f2e0", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against the test-only lock. Placement is still the legacy 0.3 evaluation in place.rs. Fit modes and 3D are not drawn. Steps 1-2 and 4-6, transitions and the ADR-0027 output path are unchanged." }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
