@@ -260,7 +260,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1488f993c34767a3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered change is a jstream-server test assertion only (re-hello after shutdown is Disconnected); envelope, edits/actions/queries/events, transport and versioning bullets unchanged" }
+verified = { hash = "b3:4f7d8bd20718519b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased: covered changes are jstream-mcp's re-hello error wording and README (no wire change) and a jstream-server test; Transport and error bullets still hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

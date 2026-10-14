@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a154357e93222506", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only tests.rs changed: after serve_with_shutdown a re-hello on the same WsControl fails with Disconnected, consistent with 'pending and later calls fail with Disconnected'; admission, sessions, request-id remap and close codes unchanged" }
+verified = { hash = "b3:6e2060f17bf8d039", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#70 daemon open question 5): this PR only extends tests.rs (a second hello on a WsControl after shutdown fails with Disconnected); design text, including main's daemon question, still holds" }
 -->
 
 ### Listening and admission
