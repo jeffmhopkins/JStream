@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6807b0c730ea00c3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained the InProcessControl name in its Transport bullet; sessions via Connector, request-id remap (InProcessControl queues the state.changed before call returns, which the hold-back already handles) and stream-end close codes still hold; no server code changed" }
+verified = { hash = "b3:3733aa8769829f50", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only open question 5 edited: the server still takes port and token from its caller; jstream-daemon now exists and creates/reuses the token file at a given path and binds a free port by default via ServerConfig::new with the port changed; server code unchanged" }
 -->
 
 ### Listening and admission
@@ -138,10 +138,12 @@ connection tasks; `futures-util` to split the socket and run calls concurrently
 4. **Requests without `Origin`.** Refused today. Non-browser tools (`websocat`, scripts)
    must send one; allowing a missing `Origin` together with a valid token is safe from
    browsers but loosens the check, so it is the maintainer's call.
-5. **Default port and token file.** The host apps (`jstream-daemon`, `jstream-desktop`)
-   will choose the port and create the user-only token file
-   ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)); neither exists yet,
-   so the server takes both from its caller.
+5. **Default port and token file.** The host apps choose the port and create the
+   user-only token file ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)),
+   so the server takes both from its caller. `jstream-daemon` creates or reuses the
+   token file at a path it is given and listens on a free port by default; a default
+   port and file location are its open questions
+   ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 6. **Logging.** [R-RS-005](../../docs/RULES.md#R-RS-005) asks for `tracing` spans around
    sessions. The first cut logs nothing; adding `tracing` is a new dependency for a
    later PR.

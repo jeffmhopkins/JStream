@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:cc37cf0d3b6b01f8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-cli row ('jstream-cli mcp runs a stdio MCP proxy to it', no engine link) now describes implemented code: mcp.rs serves jstream-mcp over the WsControl session; CLI README purpose/usage/design re-verified; tests/mcp.rs uses jstream-server only as a dev-dependency; diagram unchanged" }
+verified = { hash = "b3:0288f441497ff857", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon changed only in token.rs (directory at the token path refused on Windows too); the daemon row (first cut serves the WebSocket API) and diagram still hold" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:cc37cf0d3b6b01f8", by = "agent:claude@session_01QBbMRwRu
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API only ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:44bc690f6ca4d0a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "jstream-platform-windows/Cargo.toml gained windows API features for WGC/WinRT/Dwm/WindowsAndMessaging plus a description and hw-tests comment; no dependency, layer or unsafe change, so rows and edges hold" }
+verified = { hash = "b3:5f6fbb149a0ef9d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main with #68: new apps/jstream-daemon/Cargo.toml at layer 6 (deps core L5, server L4, protocol, control-ws dev) and jstream-platform-windows' WGC features; daemon row says the first cut serves the WebSocket API only; all edges point strictly down (lint-deps ok)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -260,7 +260,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:72c53eff8945061e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Transport bullet now names InProcessControl and links jstream-core Design; envelope, edits/actions/queries/events and errors bullets still match what the engine implements (no undo on the wire yet); re-verified after jstream-server README's verified line changed (metadata only)" }
+verified = { hash = "b3:76f774d80b9243fd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only through jstream-server/README.md (open question 5 reworded for the daemon); transport bullet (WsControl, /api/v1/ws, 127.0.0.1 default, token and Origin/Host checks, plain ws://) still matches, and the daemon serves exactly that" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

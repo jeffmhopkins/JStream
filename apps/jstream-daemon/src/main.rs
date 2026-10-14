@@ -1,0 +1,136 @@
+//! `jstream-daemon`: the headless engine host. It runs a `jstream-core` `Engine` and
+//! serves it through `jstream-server`'s authenticated WebSocket API on `127.0.0.1`, one
+//! `InProcessControl` session per connection, so `jstream-cli --url …` and
+//! `jstream-cli mcp` can drive it (ADR-0001: the app only wires the engine to its
+//! interfaces). It creates or reuses the user-only control token file (ADR-0006) and
+//! stops gracefully on Ctrl-C. Not yet: the web UI, MCP over HTTP and `--collection`.
+//!
+//! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-daemon/README.md#purpose, apps/jstream-daemon/README.md#usage, apps/jstream-daemon/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0006-mcp-full-access.md
+
+#![forbid(unsafe_code)]
+
+mod args;
+mod serve;
+mod token;
+
+use anyhow::Context;
+use args::{Invocation, Options};
+use jstream_protocol::PROTOCOL_VERSION;
+use std::io::{Write, stderr, stdout};
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+/// Stopped by a signal, or printed the help or version.
+const OK: u8 = 0;
+/// Could not start (token file, port, runtime) or the server failed while serving.
+const FAILED: u8 = 1;
+/// The command line could not be parsed, or names no token file.
+const USAGE: u8 = 2;
+
+/// The environment variable naming the token file when `--token-file` is not given,
+/// the same one `jstream-cli` reads.
+const TOKEN_FILE_ENV: &str = "JSTREAM_TOKEN_FILE";
+
+/// Why the daemon did not run.
+enum Failure {
+    Usage(String),
+    Failed(anyhow::Error),
+}
+
+impl From<anyhow::Error> for Failure {
+    fn from(error: anyhow::Error) -> Self {
+        Failure::Failed(error)
+    }
+}
+
+fn main() -> ExitCode {
+    let mut args = Vec::new();
+    for arg in std::env::args_os().skip(1) {
+        match arg.into_string() {
+            Ok(arg) => args.push(arg),
+            Err(arg) => {
+                // Best effort: the exit code reports the usage error either way.
+                let _ = writeln!(
+                    stderr().lock(),
+                    "error: argument `{}` is not valid UTF-8",
+                    arg.to_string_lossy()
+                );
+                return ExitCode::from(USAGE);
+            }
+        }
+    }
+    let result = match args::parse(&args) {
+        Ok(Invocation::Help) => print(args::USAGE),
+        Ok(Invocation::Version) => print(&format!(
+            "jstream-daemon {}, protocol {PROTOCOL_VERSION}\n",
+            env!("CARGO_PKG_VERSION")
+        )),
+        Ok(Invocation::Serve(options)) => run(options),
+        Err(message) => Err(Failure::Usage(format!(
+            "{message}\n(run `jstream-daemon --help` for usage)"
+        ))),
+    };
+    let code = match result {
+        Ok(()) => OK,
+        Err(Failure::Usage(message)) => {
+            let _ = writeln!(stderr().lock(), "error: {message}");
+            USAGE
+        }
+        Err(Failure::Failed(error)) => {
+            // `{:#}` prints the whole chain of causes on one line.
+            let _ = writeln!(stderr().lock(), "error: {error:#}");
+            FAILED
+        }
+    };
+    ExitCode::from(code)
+}
+
+/// Writes `text` to stdout. Clippy denies `print!` (R-RS-005).
+fn print(text: &str) -> Result<(), Failure> {
+    let mut out = stdout().lock();
+    out.write_all(text.as_bytes())
+        .and_then(|()| out.flush())
+        .context("could not write to stdout")?;
+    Ok(())
+}
+
+/// Loads or creates the token, then serves until a signal arrives.
+fn run(options: Options) -> Result<(), Failure> {
+    let path = match options.token_file.clone() {
+        Some(path) => PathBuf::from(path),
+        None => match std::env::var_os(TOKEN_FILE_ENV) {
+            Some(path) if !path.is_empty() => PathBuf::from(path),
+            _ => {
+                return Err(Failure::Usage(format!(
+                    "no control token file: pass `--token-file <path>` or set {TOKEN_FILE_ENV}"
+                )));
+            }
+        },
+    };
+    let (token, provenance) = token::load_or_create(&path)?;
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .context("could not start the async runtime")?;
+    runtime.block_on(async {
+        let stop = serve::shutdown_signal().context("could not install the Ctrl-C handler")?;
+        let engine = serve::engine(&options);
+        let server = serve::bind(engine, options.port, token)
+            .await
+            .map_err(anyhow::Error::from)?;
+        let shown = path.display();
+        let token_line = match provenance {
+            token::Provenance::Created => format!("token file: {shown} (created, new token)"),
+            token::Provenance::Existing => format!("token file: {shown} (existing token)"),
+        };
+        // The URL line comes last: it tells a script or a test that the daemon serves.
+        // Output is best effort: with stdout closed the server still runs.
+        let _ = print(&format!("{token_line}\nlistening on {}\n", server.ws_url()));
+        server
+            .serve_with_shutdown(stop)
+            .await
+            .map_err(anyhow::Error::from)?;
+        let _ = print("stopped\n");
+        Ok::<(), Failure>(())
+    })
+}
