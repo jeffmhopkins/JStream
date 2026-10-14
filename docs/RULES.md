@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d456320db2215082", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol has ADR-0029's planned transition edits and optional preset on the switch action, none built; planned minor additions under R-API-001, preset edits are ordinary edits under R-API-004; main's R-API-002 rewording as verified there" }
+verified = { hash = "b3:22b6d10f5c1d78d6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0024's item.move edit, optional scene_id on placement edits, item.clear_override and new Scene fields, and ADR-0029's transition edits and fields, are all additive with defaults, minor-release changes under R-API-001; names follow R-API-002 noun.verb" }
 -->
 
 <a id="R-API-001"></a>

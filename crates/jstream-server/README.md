@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:54a3b72e4c219ae1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029, daemon, mcp, encode) into the #44/#48 follow-ups: this PR's server gate/config and cli changes are untouched by main; sections changed only by main's text and verified lines, re-read and still hold" }
+verified = { hash = "b3:e1b849fcf169a47f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Main's #72 changed this section's body (extra hosts need name:port, token compared by BLAKE3 digest); dependency ARCH#protocol gains ADR-0024's item.move/scene_id, not built; the server forwards every Call unchanged, so the design holds" }
 -->
 
 ### Listening and admission
