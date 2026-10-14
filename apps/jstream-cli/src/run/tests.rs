@@ -136,12 +136,12 @@ fn version_and_help_need_no_connection() {
     let version = env!("CARGO_PKG_VERSION");
     assert_eq!(
         run_with(&refuse, &["version"]),
-        ok(&format!("jstream-cli {version}, protocol 0.3\n"))
+        ok(&format!("jstream-cli {version}, protocol 0.4\n"))
     );
     assert_eq!(
         run_with(&refuse, &["--json", "version"]),
         ok(&format!(
-            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":0,\"minor\":3}}}}\n"
+            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":0,\"minor\":4}}}}\n"
         ))
     );
     let help = run_with(&refuse, &["help"]);
@@ -158,11 +158,11 @@ fn hello_prints_the_session() {
     let engine = populated();
     assert_eq!(
         run_on(&engine, &["--mock", "hello"]),
-        ok("connected: protocol 0.3, client mock_2, rev 1\n")
+        ok("connected: protocol 0.4, client mock_2, rev 1\n")
     );
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "hello"]),
-        ok("{\"protocol\":{\"major\":0,\"minor\":3},\"client_id\":\"mock_3\",\"rev\":1}\n")
+        ok("{\"protocol\":{\"major\":0,\"minor\":4},\"client_id\":\"mock_3\",\"rev\":1}\n")
     );
 }
 
@@ -507,6 +507,26 @@ fn events_golden_unknown_skipped_and_an_ended_stream_is_disconnected() {
         CliError::Control(ControlError::Disconnected { .. })
     ));
     assert_eq!(error.exit_code(), exit::DISCONNECTED);
+}
+
+#[test]
+fn events_golden_dropped_notice() {
+    let engine = populated();
+    let control = session(&engine);
+    let events = control.events();
+    engine.emit(Event::EventsDropped { count: 1500 });
+    let mut out = Vec::new();
+    stream_events(events, Some(1), false, &mut out).expect("one event");
+    assert_eq!(String::from_utf8_lossy(&out), "events.dropped 1500\n");
+
+    let events = control.events();
+    engine.emit(Event::EventsDropped { count: 3 });
+    let mut out = Vec::new();
+    stream_events(events, Some(1), true, &mut out).expect("one event");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "{\"type\":\"events.dropped\",\"count\":3}\n"
+    );
 }
 
 #[test]

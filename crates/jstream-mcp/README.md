@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:19a62ef0d7e5a78c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: only the tool_call span parent changed in server.rs; Server/Tools/Events contents and layering unchanged" }
+verified = { hash = "b3:3dfb015f46e749d2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: tools.rs only changes the events tool description to name events.dropped; the module list (server, tools, events, jsonrpc, stdio, error) is unchanged" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -44,7 +44,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:41a61af4dfd918de", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Logging paragraph now says tool_call is a child of mcp_session, so it keeps its session when the debug mcp_request span is off; matches info_span!(parent: &self.span) in Server::call" }
+verified = { hash = "b3:3a0a408315b6eec9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Events: added that an events.dropped event in the feed is the server's per-connection drop (distinct from the buffer's dropped field), and the agent re-reads state; tools.snap regenerated, diff is only the events tool description" }
 -->
 
 ### Tools
@@ -169,6 +169,11 @@ then returns at most `PAGE_SIZE` events after `after`:
 | `dropped` | events after `after` that the full buffer dropped before this read; not 0 means re-read the state |
 | `more` | further events are buffered after `next` |
 | `ended` | the subscription has ended with the session; no more events will come |
+
+An `events.dropped` event among `events` is a different gap: over the WebSocket API,
+`jstream-server` dropped events this session's connection had not read yet
+([jstream-server › Design](../jstream-server/README.md#design)). The thread drains the
+subscription as events arrive, so it is rare; either way, the agent re-reads the state.
 
 A read sends no call to the engine. Only when no tool call has opened the session yet
 does it send `hello`, which starts the subscription, so that first read holds at most

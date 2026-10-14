@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:83d44b55e17d503e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by main's #98 daemon logging text and their re-verified lines in this PR; layer diagram and app roles unchanged" }
+verified = { hash = "b3:819e2fde4946e3b2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: apps changes are the CLI's events.dropped print and 0.4 version goldens; the host table (desktop, daemon, cli) and diagram are unaffected" }
 -->
 
 ```
@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:330dfc37e4d6196c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: covered crates changed only in the extra_hosts rustdoc (server) and the MCP tool_call span parent; envelope, admission and Origin/Host text unaffected" }
+verified = { hash = "b3:371a51ce4dcaf96b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: Slow clients bullet now built (bounded per-connection buffer, server keeps draining events, one events.dropped {count} in protocol 0.4, answers never dropped) and Events list gains events.dropped; Origin/Transport bullet left as is (missing-Origin decision still pending)" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -495,7 +495,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
   `output.status`; later `video.snapshot`, `audio.levels`).
-- **Events** (`state.changed{rev}`, `output.state_changed`, `stats.tick`, …).
+- **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick`, …).
 - **YouTube** (planned for M3, [ADR-0034](adr/0034-youtube-interaction-scope-v2.md)):
   the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
   the channel and goes to the audit log, and `youtube.chat.feature { message_id }`, which
@@ -522,10 +522,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   list. The same server
   serves MCP's streamable-HTTP transport on the control port, behind the same checks
   ([MCP](#mcp)).
-- **Slow clients** (decided, not built yet): each connection gets a bounded event buffer.
-  When it overflows, the server drops the queued events and sends one `events.dropped`
-  notice, and the client re-reads state (`state.get` carries `rev`). One slow client
-  never slows the engine or other clients. Today the buffer is unbounded.
+- **Slow clients:** each connection gets a bounded event buffer, and the server keeps
+  draining the engine's events while a client is slow to read. When the buffer
+  overflows, the server drops the queued events and sends one `events.dropped {count}`
+  notice (protocol 0.4), and the client re-reads state (`state.get` carries `rev`).
+  Answers are never dropped. One slow client never slows the engine or other clients
+  ([jstream-server › Design](../crates/jstream-server/README.md#design)).
 - **Versioning:** [R-API-001](RULES.md#R-API-001).
 
 <a id="mcp"></a>
@@ -533,7 +535,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:d41661e807a29ea4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read the Names bullet against R-API-002 (tool names match the pattern, one tool per noun, ops are noun.verb); it holds" }
+verified = { hash = "b3:a976ee210bcf0acd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: the Events bullet (events tool, bounded buffer, reports drops) still holds; jstream-mcp's change is the events tool description naming events.dropped, no tool or op change" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

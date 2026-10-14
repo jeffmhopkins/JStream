@@ -33,6 +33,17 @@ pub enum Event {
         /// Its new state.
         state: OutputState,
     },
+    /// This connection's queued events were dropped because the client read them too
+    /// slowly: the server keeps a bounded buffer per connection and empties it when it
+    /// overflows. `state.changed` events may be among those lost, so the client re-reads
+    /// the state with `state.get`, which carries `rev`. Drops that happen before the
+    /// notice is sent add up in that one notice. Only events are dropped: every request
+    /// still gets its answer. Sent by the WebSocket server, never by an in-process engine.
+    #[serde(rename = "events.dropped")]
+    EventsDropped {
+        /// How many events were dropped.
+        count: u64,
+    },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -46,6 +57,7 @@ impl Event {
         match self {
             Event::StateChanged { .. } => Some("state.changed"),
             Event::OutputStateChanged { .. } => Some("output.state_changed"),
+            Event::EventsDropped { .. } => Some("events.dropped"),
             Event::Unknown => None,
         }
     }

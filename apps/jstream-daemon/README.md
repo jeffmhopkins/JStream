@@ -100,7 +100,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:04589956249e2533", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency server#design records #44's Origin and buffer decisions (not built); the daemon still passes no extra hosts and installs the log subscriber as in main's #98" }
+verified = { hash = "b3:7f495f6a868bb455", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the server design's new Slow clients bullet and core's Events note: the daemon still hands the server an Engine::connect connector and calls serve_with_shutdown; it needs no change for the per-connection outbox, and clients still see each other's events (or a drop notice)" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

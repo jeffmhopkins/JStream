@@ -237,6 +237,7 @@ pub(crate) fn events() -> Vec<Event> {
             state,
         });
     }
+    events.push(Event::EventsDropped { count: 1500 });
     events
 }
 
