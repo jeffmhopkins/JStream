@@ -93,7 +93,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:ea0232de037ffc29", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "token.rs: a create_new failure other than AlreadyExists now still goes to read_existing when something is at the path (Windows reports a directory as AccessDenied), so 'is not a regular file' refusal holds on Windows too, as the text already says; nothing else changed" }
+verified = { hash = "b3:55cb817d0ddaa54b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-core#design changed only its Not yet list (undo and live values per ADR-0032); the daemon's one-engine, session-per-connection serving is unaffected" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
