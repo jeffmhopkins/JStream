@@ -75,8 +75,8 @@ impl Crop {
 /// Legacy 0.3 placement: top-left, scale against the source's current size, clockwise
 /// rotation about that top-left.
 ///
-/// The same fields as the protocol's `ItemTransform`. Evaluated every frame against the
-/// image's size (ADR-0022 decision 5).
+/// The same fields as the protocol's `ItemTransform`. `place` maps them onto that type
+/// and calls `legacy_quad`, every frame, against the image's size (ADR-0022 decision 5).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Placement {
     /// Top-left corner, in canvas pixels. x right, y down.

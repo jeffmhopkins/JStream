@@ -1,4 +1,6 @@
-//! Legacy 0.3 placement: crop, then scale, then rotate clockwise about the top-left.
+//! Legacy 0.3 placement, evaluated by [`jstream_protocol::legacy_quad`].
+
+use jstream_protocol::{Crop as ProtocolCrop, Finite32, ItemTransform, Vec2, legacy_quad};
 
 use crate::error::RenderError;
 use crate::scene::{Crop, Placement};
@@ -12,6 +14,9 @@ pub(crate) struct Quad {
 
 /// The quad for one item, or `Ok(None)` when the crop or the scale leaves nothing to draw.
 ///
+/// Corners and UVs come from [`legacy_quad`]. A non-finite component, including a product
+/// that overflows, is [`RenderError::Invalid`].
+///
 /// # Errors
 /// [`RenderError::Invalid`] when a placement component is not finite.
 pub(crate) fn quad(
@@ -20,55 +25,34 @@ pub(crate) fn quad(
     placement: Placement,
     crop: Crop,
 ) -> Result<Option<Quad>, RenderError> {
-    if !placement.position.iter().all(|v| v.is_finite())
-        || !placement.scale.iter().all(|v| v.is_finite())
-        || !placement.rotation_deg.is_finite()
-    {
-        return Err(RenderError::Invalid {
-            what: "placement",
-            detail: "a component is not finite".into(),
-        });
-    }
-    if source_width == 0 || source_height == 0 {
-        return Ok(None);
-    }
-    let Some(cropped_w) = source_width
-        .checked_sub(crop.left)
-        .and_then(|w| w.checked_sub(crop.right))
-        .filter(|w| *w > 0)
-    else {
-        return Ok(None);
+    let transform = ItemTransform {
+        position: finite_vec(placement.position)?,
+        scale: finite_vec(placement.scale)?,
+        rotation_deg: Finite32::new(placement.rotation_deg).ok_or_else(not_finite)?,
     };
-    let Some(cropped_h) = source_height
-        .checked_sub(crop.top)
-        .and_then(|h| h.checked_sub(crop.bottom))
-        .filter(|h| *h > 0)
-    else {
-        return Ok(None);
+    let crop = ProtocolCrop {
+        left: crop.left,
+        top: crop.top,
+        right: crop.right,
+        bottom: crop.bottom,
     };
-    let dw = cropped_w as f32 * placement.scale[0];
-    let dh = cropped_h as f32 * placement.scale[1];
-    if dw == 0.0 || dh == 0.0 {
-        return Ok(None);
-    }
-
-    let sw = source_width as f32;
-    let sh = source_height as f32;
-    let u0 = crop.left as f32 / sw;
-    let v0 = crop.top as f32 / sh;
-    let u1 = (crop.left + cropped_w) as f32 / sw;
-    let v1 = (crop.top + cropped_h) as f32 / sh;
-    let uvs = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
-
-    let (sin, cos) = placement.rotation_deg.to_radians().sin_cos();
-    let px = placement.position[0];
-    let py = placement.position[1];
-    let rot =
-        |dx: f32, dy: f32| -> [f32; 2] { [px + dx * cos - dy * sin, py + dx * sin + dy * cos] };
-    Ok(Some(Quad {
-        corners: [rot(0.0, 0.0), rot(dw, 0.0), rot(dw, dh), rot(0.0, dh)],
-        uvs,
+    let placed =
+        legacy_quad(transform, crop, source_width, source_height).map_err(|_| not_finite())?;
+    Ok(placed.map(|quad| Quad {
+        corners: quad.corners.map(|point| [point.x, point.y]),
+        uvs: quad.uvs,
     }))
+}
+
+fn finite_vec(xy: [f32; 2]) -> Result<Vec2, RenderError> {
+    Vec2::new(xy[0], xy[1]).ok_or_else(not_finite)
+}
+
+fn not_finite() -> RenderError {
+    RenderError::Invalid {
+        what: "placement",
+        detail: "a component is not finite".into(),
+    }
 }
 
 #[cfg(test)]
@@ -90,8 +74,8 @@ mod tests {
     #[test]
     fn identity_is_the_source_rectangle_at_the_top_left() {
         let q = quad(4, 2, Placement::IDENTITY, Crop::NONE)
-            .unwrap()
-            .unwrap();
+            .expect("finite")
+            .expect("draws");
         assert_eq!(q.corners[0], [0.0, 0.0]);
         assert_eq!(q.corners[1], [4.0, 0.0]);
         assert_eq!(q.corners[2], [4.0, 2.0]);
@@ -113,7 +97,7 @@ mod tests {
             right: 0,
             bottom: 0,
         };
-        let q = quad(4, 2, placement, crop).unwrap().unwrap();
+        let q = quad(4, 2, placement, crop).expect("finite").expect("draws");
         // Cropped size is 2x2, scaled to 4x6, top-left at (10, 4).
         assert_eq!(q.corners[0], [10.0, 4.0]);
         assert_eq!(q.corners[1], [14.0, 4.0]);
@@ -129,11 +113,29 @@ mod tests {
             scale: [1.0, 1.0],
             rotation_deg: 90.0,
         };
-        let q = quad(20, 10, placement, Crop::NONE).unwrap().unwrap();
+        let q = quad(20, 10, placement, Crop::NONE)
+            .expect("finite")
+            .expect("draws");
         near(q.corners[0], [30.0, 30.0]);
         near(q.corners[1], [30.0, 50.0]);
         near(q.corners[2], [20.0, 50.0]);
         near(q.corners[3], [20.0, 30.0]);
+    }
+
+    #[test]
+    fn a_negative_scale_reflects_about_the_top_left() {
+        let placement = Placement {
+            position: [8.0, 6.0],
+            scale: [-1.0, 1.0],
+            rotation_deg: 0.0,
+        };
+        let q = quad(4, 2, placement, Crop::NONE)
+            .expect("finite")
+            .expect("draws");
+        assert_eq!(q.corners[0], [8.0, 6.0]);
+        assert_eq!(q.corners[1], [4.0, 6.0]);
+        assert_eq!(q.corners[2], [4.0, 8.0]);
+        assert_eq!(q.corners[3], [8.0, 8.0]);
     }
 
     #[test]
@@ -144,19 +146,32 @@ mod tests {
             right: 2,
             bottom: 0,
         };
-        assert!(quad(4, 2, Placement::IDENTITY, full).unwrap().is_none());
+        assert!(
+            quad(4, 2, Placement::IDENTITY, full)
+                .expect("finite")
+                .is_none()
+        );
         let over = Crop {
             left: 5,
             top: 0,
             right: 0,
             bottom: 0,
         };
-        assert!(quad(4, 2, Placement::IDENTITY, over).unwrap().is_none());
+        assert!(
+            quad(4, 2, Placement::IDENTITY, over)
+                .expect("finite")
+                .is_none()
+        );
         let flat = Placement {
             scale: [0.0, 1.0],
             ..Placement::IDENTITY
         };
-        assert!(quad(4, 2, flat, Crop::NONE).unwrap().is_none());
+        assert!(quad(4, 2, flat, Crop::NONE).expect("finite").is_none());
+        assert!(
+            quad(0, 2, Placement::IDENTITY, Crop::NONE)
+                .expect("finite")
+                .is_none()
+        );
     }
 
     #[test]

@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:02d4acb55a28915d", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the jstream-core row against its Cargo.toml: layer 5, unsafe_allowed false, and the summary still matches. New deps are jstream-render, jstream-media and png; the row text is unchanged." }
+verified = { hash = "b3:6e7e2d6e5176717c", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the jstream-render row against its Cargo.toml. Layer stays 2, unsafe_allowed stays false, and the summary still matches. The new dependency is jstream-protocol, layer 1. The core row is unchanged: layer 5, and its png dependency is already on main." }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -577,7 +577,7 @@ verified = { hash = "b3:25e99f8ec6765b2f", by = "agent:grok@bc-49a8266d-f517-52b
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:631e06b3093202b1", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the one-scene paragraph against the render README and Opened. Placement is still the legacy 0.3 evaluation; fit modes and 3D are not drawn. The readback is RGBA8. Steps 1-2 and 4-6, transitions and the ADR-0027 output path are unchanged. Opened is not a pipeline step." }
+verified = { hash = "b3:0bd26d2fddcf17ce", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against place.rs calling legacy_quad. Crop, scale, top-left and clockwise rotation are unchanged. The resolve target is still RGBA8. Opened is not a pipeline step. Steps 1-2 and 4-6, fit modes, 3D and the ADR-0027 output path are unchanged." }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -605,10 +605,11 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement is
-the legacy 0.3 evaluation (crop in source pixels, scale against the current source size,
-top-left at `position`, clockwise rotation about that corner). Opacity is a straight
-multiplier in `[0, 1]` and the blend is premultiplied src-over. The composite pass writes
-premultiplied linear light into `Rgba16Float`; a resolve pass un-premultiplies into
+that 0.3 evaluation from `jstream-protocol`'s `legacy_quad` (crop in source pixels, scale
+against the current source size, top-left at `position`, clockwise rotation about that
+corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
+resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a software adapter
 first. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
