@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:0699fa538505968c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and the RTMP(S)-in-Rust link moved from ADR-0003 to ADR-0031, which keeps that bullet unchanged; crate-map change is only the sources row" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md"]
+verified = { hash = "b3:6e1fe5ccd845a5e3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged; Dependency ARCH#threading only gained ADR-0035's planned out-of-process CLAP host paragraph; the RTMP client's threading is unaffected" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:cc3ac3fdfd1e15ee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, encode, daemon, mcp) into the ADR-0031 acceptance: re-read against both; encode's ADR-0003 links re-pointed to ADR-0031, which restates its MF encoder scope unchanged; no other content change" }
+verified = { hash = "b3:193b748b34b35ca0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73) into the ADR-0035 PR: main's server.rs not-sent wording and tests leave the contents list true; dependency ARCH#crate-map only gained ADR-0035's planned plugin rows, this crate's row unchanged" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context

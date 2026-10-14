@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:b1d042966aec3d25", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and the pure-Rust muxers link moved from ADR-0003 to ADR-0031, which restates that FLV/MP4/fMP4 muxers are written in Rust; crate-map change is only the sources row" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
+verified = { hash = "b3:6cbe587b08482964", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):

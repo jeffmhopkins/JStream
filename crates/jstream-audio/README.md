@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:f46bd645dd2e03e0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only changed the jstream-sources row (ADR-0031 source kinds); the jstream-audio row and this crate's mixer description unchanged" }
+verified = { hash = "b3:a5996da561243c33", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged; Dependency ARCH#threading only gained ADR-0035's planned out-of-process CLAP host paragraph; the mixer's first cut has no filters, so no CLAP stage exists here yet" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -89,7 +89,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:07e903a8816f33f8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 wire sentence on live values; rt/ rings, atomics for gains and meters, and R-RT-001 claims are unchanged, and atomics remain the parameter-channel form for gains" }
+verified = { hash = "b3:f09de6e0be1aa386", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained ADR-0035's planned out-of-process CLAP host paragraph; rings, atomics and R-RT-001 claims of src/rt unchanged, and the plugin rings are not built" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

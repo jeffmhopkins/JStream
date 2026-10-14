@@ -125,6 +125,8 @@ verified = { hash = "b3:51d1c8c1e9a944d4", by = "agent:claude@session_01QBbMRwRu
 - `jstream-youtube`: OAuth, broadcasts, metadata, health, chat, all exposed over MCP.
 - Direct NVENC/AMF encoders where measurements justify them; HEVC/AV1 via enhanced RTMP.
 - WASM automation plugins.
+- CLAP audio effect filters, hosted out of process
+  ([ADR-0035](docs/adr/0035-clap-plugins-out-of-process.md)).
 - macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).
   A Syphon receiver, the macOS follow-up to Spout2, is considered with it.
 - Linux: codec-path ADR first, then the platform crate (virtual camera via v4l2loopback,
