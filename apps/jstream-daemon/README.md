@@ -100,7 +100,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:60f2495d7e1b7021", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: the daemon passes ServerConfig through and says the server's Host, Origin and token checks apply unchanged, which still holds with Origin optional" }
+verified = { hash = "b3:aef7db6388528eb6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the server design's new close behaviour: the daemon still calls serve_with_shutdown on Ctrl-C and its clients still see the connection close; nothing in the daemon depends on the close waiting" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

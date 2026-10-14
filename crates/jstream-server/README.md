@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:6bbd3b1065449170", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: the Gate line (Host, Origin and token checks in gate.rs) still holds; only gate.rs's Origin handling changed" }
+verified = { hash = "b3:f862679b0332b218", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: session.rs changed only how a connection closes and gate.rs one doc line; the Server, Configuration, Gate and Session contents lines still hold" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -49,7 +49,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b124e49ba5da2b2f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after control#design's Auth rewrap: admission table (Origin absent or allowed, at most once, null refused) and settled open question 4 still match gate.rs" }
+verified = { hash = "b3:6ec17979ad7e4bb2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the shutdown paragraph: a closing connection ends its event subscription, sends what the outbox holds before the close frame, and drops a client that doesn't take them within CLOSE_TIMEOUT; matches session.rs and shutdown_drops_a_client_that_stopped_reading; admission (Origin optional) text from #109 unchanged" }
 -->
 
 ### Listening and admission

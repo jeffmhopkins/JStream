@@ -40,7 +40,7 @@ const DEFAULT_PORT: u16 = 80;
 pub(crate) enum Refusal {
     /// `Host` is missing, repeated or not one of the server's names.
     Host,
-    /// `Origin` is missing, repeated or not allowed.
+    /// `Origin` is repeated or not allowed (a missing one is left to the token).
     Origin,
     /// The control token is missing or wrong.
     Token,
