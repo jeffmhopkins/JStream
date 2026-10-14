@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:7799b3b7ef263833", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section, re-read against lib.rs, handle.rs, error.rs, rt/mixer.rs and tests/sim.rs: time line, MixerConfig defaults and ranges, add_input rate limits, poll/mix/skip semantics, controls, stats, errors, and the simulated bounds (0.05 ms settled, measured 0.014/0.004 ms) match" }
+verified = { hash = "b3:ed88e1ccda6edf33", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the sentence that continuous parameters are live values on the wire (ADR-0032); the mixer's API, time line and per-input gain description is unaffected" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -89,7 +89,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:49f61986e3ef5219", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section, re-read against src/rt/*: ring (engine-frame indexing, drop-oldest, seqlock claim check), downmix table and ±64 limit, sinc parameters (128 taps x ceil ratio, BH4, 0.94 cutoff, 256 phases), S3 continuity/fit/PI constants and the absolute error, mixer ramps/meters, and the unenforced no-alloc test all match the code" }
+verified = { hash = "b3:07e903a8816f33f8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 wire sentence on live values; rt/ rings, atomics for gains and meters, and R-RT-001 claims are unchanged, and atomics remain the parameter-channel form for gains" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
