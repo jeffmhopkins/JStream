@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:a20d6b087917a826", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "gate.rs gained extra_host_port (stricter extra-host parsing) and a reworded token doc; the Gate bullet (Host, Origin and token checks) and the module list still match src" }
+verified = { hash = "b3:46b8d4ce7747c7a6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-server row and this Purpose are unchanged and still match the crate" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:94f6c27433a386de", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Extra hosts paragraph now says one port and bracketed IPv6 (refuses name:80:80 and bare fe80::1), matching gate.rs extra_host_port; Token compare and the Authorization row now describe the BLAKE3 digest compare in config.rs Token::matches; Host-without-port and Origin text unchanged" }
+verified = { hash = "b3:7bd7c40782c561c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains ADR-0034's planned YouTube actions and stats event (not built); the server forwards Calls and events unchanged" }
 -->
 
 ### Listening and admission

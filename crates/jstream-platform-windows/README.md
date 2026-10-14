@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:34d75e42c0dbcf7d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Frames bullet rewrapped (NV12 even-dimension sentence, text unchanged); Start bullet now says NotFound except a reused window handle, matching target_gone's IsWindow doc; wgc.rs only moved the hw-tests doc comment back onto device_tests and gave tests its own, which the Tests paragraph already describes" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
+verified = { hash = "b3:65650e4a1b7fa0bc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Restored the ADR-0031 dependency a merge dropped; the MF H.264/AAC, WASAPI and WGC backends still match ADR-0031's OS-API media path" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -115,7 +115,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     6 asks.
 
 - **`MfCodecs`** (`Codecs`), Media Foundation codecs
-  ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md)): the **AAC encoder** and
+  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): the **AAC encoder** and
   the **H.264 encoder from CPU frames**. AAC:
   - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
     Windows that is Microsoft's software AAC encoder. It takes 44.1 or 48 kHz; mono or

@@ -2,7 +2,8 @@
 id = "ADR-0007"
 title = "Bus-matrix audio and scene-independent outputs"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0028-audio-model-v2.md"
 -->
 
 # ADR-0007: Bus-matrix audio and scene-independent outputs

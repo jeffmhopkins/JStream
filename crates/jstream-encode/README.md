@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:93e59723f6857e4a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Tests list adds silence that is first refused as busy (a_busy_gap_fill_still_leaves_a_gap_to_fill, BusyAudio wrapping RecordingAudio); API and the one-session-per-encoder shape unchanged by the audio.rs gap fix" }
+verified = { hash = "b3:67d0ba0e5c7733c6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-encode row and this Purpose are unchanged and still match the crate" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -25,7 +25,8 @@ number of outputs subscribe to its packets. For M1a that is one video mix into t
 H.264 encoder and one bus into the MF AAC encoder, each feeding one RTMP output
 ([ROADMAP › M1](../../ROADMAP.md#m1)); the fan-out already takes N subscribers, so
 encoder sharing in M1b ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model):
-outputs with the same mix and encoder profile share one session) needs no new shape.
+outputs with no video chain and the same mix and encoder profile share one session, and
+an output with a video chain gets its own) needs no new shape.
 
 Its only JStream dependency is `jstream-platform` (layer 1), whose `media` re-export
 supplies the frame, sample and packet types; besides that, `thiserror`. Dev-dependency:
@@ -66,8 +67,8 @@ keyframe resync; and the registry.
 ## Design
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
-depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:6a6c56417d74e425", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Audio drops bullet now says a Busy refusal of a block or of its gap-fill silence marks the next block, matching audio.rs encode setting gap on any Busy from fill_gap or encode and clearing it only on success; queue, busy-drop and subscriber bullets unchanged" }
+depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
+verified = { hash = "b3:5e2bb060404e1a32", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, encode, daemon, mcp) into the ADR-0031 acceptance: re-read against both; encode's ADR-0003 links re-pointed to ADR-0031, which restates its MF encoder scope unchanged; no other content change" }
 -->
 
 ### Threads and pacing

@@ -3,7 +3,7 @@
 //! Annex B to AVCC framing and the decoder configuration record ([`h264`]), and the AAC
 //! `AudioSpecificConfig` ([`aac`]). MP4/fMP4 and enhanced RTMP (HEVC, AV1) come later.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-mux/README.md#purpose, docs/adr/0003-media-stack-and-codecs.md, docs/adr/0009-youtube-rtmps-and-api.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-mux/README.md#purpose, docs/adr/0031-source-types-and-decoding-scope.md, docs/adr/0034-youtube-interaction-scope-v2.md
 
 #![forbid(unsafe_code)]
 
