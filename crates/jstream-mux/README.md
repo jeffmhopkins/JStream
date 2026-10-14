@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose", "docs/adr/0034-youtube-interaction-scope-v2.md"]
-verified = { hash = "b3:6cbe587b08482964", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0003-media-stack-and-codecs.md", "crates/jstream-media/README.md#purpose", "docs/adr/0034-youtube-interaction-scope-v2.md"]
+verified = { hash = "b3:a4530e01c6551703", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0035) into the ADR-0034 acceptance: mux/outputs depend on ADR-0034 only (the merge had re-added the superseded ADR-0009); other sections changed only by main's text and verified lines" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md):

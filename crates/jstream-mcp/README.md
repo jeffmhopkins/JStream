@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:193b748b34b35ca0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73) into the ADR-0035 PR: main's server.rs not-sent wording and tests leave the contents list true; dependency ARCH#crate-map only gained ADR-0035's planned plugin rows, this crate's row unchanged" }
+verified = { hash = "b3:8124111f76f4b5aa", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
