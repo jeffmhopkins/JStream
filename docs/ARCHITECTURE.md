@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b17ac8fcee8ca1cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #71: covered apps/ changed only by this PR's daemon README Serving-bullet order and test harness; the daemon and CLI rows and the diagram match main and still hold" }
+verified = { hash = "b3:90bc1ee5f80ff509", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0025: data-model depends on both; main's placement bullet (opacity, blend, reserved effects) kept and the Settings bullet follows it unchanged; other sections changed only by verified lines or the merged data-model" }
 -->
 
 ```
@@ -163,7 +163,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:a3951ed0fff748f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0023 (now a dependency): SceneItem gains opacity, blend and reserved-empty effects[]; Source gains duplicated_from; reference/clone terms, no owner, item.set_source keeps the item; cycle check on every nesting edit; transform kept until ADR-0022 lands; Built so far lists the unbuilt ADR-0023 fields under Not yet, matching jstream-graph model/" }
+verified = { hash = "b3:da4d59b1f099c5f7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0025: data-model depends on both; main's placement bullet (opacity, blend, reserved effects) kept and the Settings bullet follows it unchanged; other sections changed only by verified lines or the merged data-model" }
 -->
 
 ```
@@ -284,7 +284,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:cacfe8c85e4bcc84", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #73: covered changes are jstream-mcp's not-sent error wording/README and a server test, beside main's ADR-0032 live/history bullets; no wire change, Transport and Errors bullets hold" }
+verified = { hash = "b3:f18c5a32265b6d07", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0025: data-model depends on both; main's placement bullet (opacity, blend, reserved effects) kept and the Settings bullet follows it unchanged; other sections changed only by verified lines or the merged data-model" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
