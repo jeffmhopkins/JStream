@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:1b772cd5b6121e01", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model gains #94's override and hotkey rules and ADR-0037's preset settings, none built; Purpose lists only built behaviour" }
+verified = { hash = "b3:dc7262e94c457587", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: ARCH#data-model changed only in the hotkey re-point wording; this Purpose's model (Graph, State, Source, Scene, Item) and apply semantics don't cover hotkeys and still hold" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
