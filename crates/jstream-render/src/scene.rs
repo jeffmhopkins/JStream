@@ -106,7 +106,8 @@ impl Default for Placement {
 /// One image in the stack.
 #[derive(Clone, Copy, Debug)]
 pub struct Item<'a> {
-    /// The image it places. Must have been created by the same [`crate::Compositor`].
+    /// The image it places. It must have been made by the [`crate::Compositor`] that
+    /// renders the scene; any other is [`crate::RenderError::Invalid`].
     pub image: &'a Image,
     /// Where it sits.
     pub placement: Placement,
