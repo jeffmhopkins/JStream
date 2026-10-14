@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:33bd7713c71348b2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate vs main: QPC clock (100 ns, monotonic); WASAPI listing and streams for every trait target; f32 at device rate, AUTOCONVERTPCM for integer, unknown channel counts (stereo) and side-surround 5.1 (remapped to jstream-media's back order), never resampling; default following; error/panic reporting; buffers; hw-tests platform tests" }
+verified = { hash = "b3:1e47fbc9ab0414c9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#56 follow-ups: a zero channel mask counts as unspecified (default positions, opened as is), Format bullet rewrapped; rest of the section unchanged and holds against the code" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -50,7 +50,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     another channel count the stream is stereo, and WASAPI maps it onto the device's
     speakers. `jstream-media`'s 5.1 has its surround pair at the back, so a 5.1 device
     whose mix puts it at the side is opened through the same conversion, and WASAPI
-    maps its channels into that order. Process loopback is asked for 48 kHz stereo, since it has no mix format.
+    maps its channels into that order. Process loopback is asked for 48 kHz stereo,
+    since it has no mix format.
   - **Times and positions:** packet times are WASAPI's QPC positions, `None` when the
     device flags a timestamp error. Device positions count frames since the stream
     started.
