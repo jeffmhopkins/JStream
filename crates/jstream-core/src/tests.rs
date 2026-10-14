@@ -721,6 +721,443 @@ fn the_engine_answers_like_the_mock() {
     assert!(real_events.len() >= 5);
 }
 
+/// Backends without a publish target do not start a pipeline and leave the output
+/// stopped. The placeholder path is the engine with no backends at all.
+#[test]
+fn output_start_without_a_publish_target_fails() {
+    use jstream_media::Timebase;
+    use jstream_platform::fake::{self, FakeClock};
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let backends = fake::backends(&clock).expect("fake backends");
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends);
+    let control = connected(&engine);
+    let err = block_on(control.call(output_call("yt", true))).expect_err("start");
+    assert_eq!(code(&err), Some("action_failed"));
+    match query(
+        &control,
+        Query::OutputStatus {
+            output_id: OutputId::new("yt"),
+        },
+    )
+    .expect("status")
+    {
+        QueryResult::OutputStatus { state, .. } => assert_eq!(state, OutputState::Stopped),
+        other => panic!("not an output status: {other:?}"),
+    }
+}
+
+/// `output.start` runs capture, one composite, both encodes and the FLV publish
+/// against the platform fakes. A missing software adapter skips the test, and fails
+/// it when `CI` is set.
+#[test]
+fn output_start_publishes_fake_audio_and_video() {
+    use std::io::Write;
+    use std::thread;
+    use std::time::Duration;
+
+    use jstream_media::{ChannelLayout, FrameSize, Timebase};
+    use jstream_mux::flv::TagType;
+    use jstream_platform::Backends;
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use std::sync::Arc;
+
+    use crate::RecordingPublish;
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let size = FrameSize::new(320, 180).expect("size");
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        capture: Arc::new(FakeCapture::new(clock.clone(), size)),
+        audio: Arc::new(audio.clone()),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let publish = RecordingPublish::new();
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_publish(Box::new(publish.clone()));
+    let control = connected(&engine);
+    let mut events = control.events();
+    let started = block_on(control.call(output_call("yt", true)));
+    if let Err(err) = &started
+        && err.protocol().is_some_and(|error| {
+            matches!(error, ProtocolError::ActionFailed { reason } if reason.contains("no wgpu adapter"))
+        })
+    {
+        if std::env::var_os("CI").is_some() {
+            panic!("CI has no wgpu adapter: {err}");
+        }
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping pipeline test, no adapter: {err}"
+        );
+        return;
+    }
+    started.expect("output.start");
+    let steps: Vec<OutputState> = drain(&mut events)
+        .into_iter()
+        .map(|event| match event {
+            Event::OutputStateChanged { state, .. } => state,
+            other => panic!("unexpected event {other:?}"),
+        })
+        .collect();
+    assert_eq!(steps, vec![OutputState::Starting, OutputState::Active]);
+
+    let mut saw_media = false;
+    for _ in 0..40 {
+        audio.deliver(2048, 0.2);
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(20));
+        let tags = publish.tags();
+        let script = tags.iter().any(|tag| tag.tag_type == TagType::Script);
+        let video = tags
+            .iter()
+            .any(|tag| tag.tag_type == TagType::Video && tag.body.get(1) == Some(&1));
+        let audio_raw = tags
+            .iter()
+            .any(|tag| tag.tag_type == TagType::Audio && tag.body.get(1) == Some(&1));
+        if script && video && audio_raw {
+            saw_media = true;
+            break;
+        }
+    }
+    assert!(saw_media, "expected script, a video NAL and raw AAC");
+    let stats = engine.output_stats().expect("stats");
+    assert!(stats.video.received >= 1, "video frames accepted");
+    assert!(stats.audio.received >= 1, "audio blocks accepted");
+    assert!(stats.readbacks >= 1, "the CPU path read a frame back");
+
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    let steps: Vec<OutputState> = drain(&mut events)
+        .into_iter()
+        .map(|event| match event {
+            Event::OutputStateChanged { state, .. } => state,
+            other => panic!("unexpected event {other:?}"),
+        })
+        .collect();
+    assert_eq!(steps, vec![OutputState::Stopping, OutputState::Stopped]);
+    assert!(engine.output_stats().is_none());
+}
+
+/// `output.stop` from a second session during `starting` cancels that start.
+/// The start does not settle `active`, and nothing is left running.
+#[test]
+fn output_stop_during_start_cancels_the_pipeline() {
+    use std::sync::{Condvar, Mutex};
+    use std::thread;
+    use std::time::Duration;
+
+    use jstream_media::{ChannelLayout, FrameSize, Timebase};
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+    use jstream_platform::{Backends, Capture, CaptureTarget, PlatformError};
+
+    struct Hold {
+        ready: Mutex<bool>,
+        cv: Condvar,
+    }
+
+    impl Hold {
+        fn new() -> Arc<Self> {
+            Arc::new(Self {
+                ready: Mutex::new(false),
+                cv: Condvar::new(),
+            })
+        }
+
+        fn signal(&self) {
+            *self.ready.lock().expect("hold") = true;
+            self.cv.notify_all();
+        }
+
+        fn wait(&self) {
+            let mut ready = self.ready.lock().expect("hold");
+            while !*ready {
+                ready = self.cv.wait(ready).expect("hold");
+            }
+        }
+    }
+
+    struct HoldCapture {
+        inner: FakeCapture,
+        entered: Arc<Hold>,
+        release: Arc<Hold>,
+    }
+
+    impl Capture for HoldCapture {
+        fn targets(&self) -> Result<Vec<jstream_platform::CaptureTargetInfo>, PlatformError> {
+            self.inner.targets()
+        }
+
+        fn start(
+            &self,
+            target: &CaptureTarget,
+        ) -> Result<Box<dyn jstream_platform::CaptureStream>, PlatformError> {
+            self.entered.signal();
+            self.release.wait();
+            self.inner.start(target)
+        }
+    }
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let size = FrameSize::new(320, 180).expect("size");
+    let entered = Hold::new();
+    let release = Hold::new();
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        capture: Arc::new(HoldCapture {
+            inner: FakeCapture::new(clock, size),
+            entered: Arc::clone(&entered),
+            release: Arc::clone(&release),
+        }),
+        audio: Arc::new(audio),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_publish(Box::new(crate::RecordingPublish::new()));
+    let status = connected(&engine);
+    let starter = connected(&engine);
+    let stopper = connected(&engine);
+    let mut events = status.events();
+
+    let start_thread = thread::spawn(move || block_on(starter.call(output_call("yt", true))));
+    entered.wait();
+    let stop_thread = thread::spawn(move || block_on(stopper.call(output_call("yt", false))));
+    let mut saw_stopping = false;
+    for _ in 0..200 {
+        if output_state(&status, "yt") == OutputState::Stopping {
+            saw_stopping = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    assert!(saw_stopping, "stop did not observe the in-flight start");
+    release.signal();
+
+    let stopped = stop_thread.join().expect("stop thread");
+    let started = start_thread.join().expect("start thread");
+    stopped.expect("output.stop");
+    let start_error = started.expect_err("start lost to stop");
+    assert_eq!(code(&start_error), Some("action_failed"));
+    assert_eq!(output_state(&status, "yt"), OutputState::Stopped);
+    assert!(engine.output_stats().is_none());
+    let steps = output_steps(&mut events);
+    assert_eq!(
+        steps,
+        vec![
+            OutputState::Starting,
+            OutputState::Stopping,
+            OutputState::Stopped
+        ]
+    );
+}
+
+/// A publish failure after `active` settles `failed` and drops the pipeline.
+#[test]
+fn output_publish_failure_settles_failed() {
+    use std::io::Write;
+    use std::sync::atomic::AtomicBool;
+    use std::thread;
+    use std::time::Duration;
+
+    use jstream_media::{ChannelLayout, FrameSize, Timebase};
+    use jstream_mux::flv::FlvTag;
+    use jstream_platform::Backends;
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+
+    use crate::{LivePublish, PublishError};
+
+    struct FailPublish {
+        fail: Arc<AtomicBool>,
+    }
+
+    impl LivePublish for FailPublish {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.fail.load(Ordering::Relaxed) {
+                Err(PublishError::new("publish broken"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            if self.fail.load(Ordering::Relaxed) {
+                Err(PublishError::new("publish broken"))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+    }
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let size = FrameSize::new(320, 180).expect("size");
+    let fail = Arc::new(AtomicBool::new(false));
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        capture: Arc::new(FakeCapture::new(clock, size)),
+        audio: Arc::new(audio),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_publish(Box::new(FailPublish {
+            fail: Arc::clone(&fail),
+        }));
+    let control = connected(&engine);
+    let mut events = control.events();
+    let started = block_on(control.call(output_call("yt", true)));
+    if let Err(err) = &started
+        && err.protocol().is_some_and(|error| {
+            matches!(error, ProtocolError::ActionFailed { reason } if reason.contains("no wgpu adapter"))
+        })
+    {
+        if std::env::var_os("CI").is_some() {
+            panic!("CI has no wgpu adapter: {err}");
+        }
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping publish-failure test, no adapter: {err}"
+        );
+        return;
+    }
+    started.expect("output.start");
+    assert_eq!(
+        output_steps(&mut events),
+        vec![OutputState::Starting, OutputState::Active]
+    );
+
+    fail.store(true, Ordering::Relaxed);
+    let mut failed = false;
+    for _ in 0..100 {
+        if output_state(&control, "yt") == OutputState::Failed && engine.output_stats().is_none() {
+            failed = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert!(failed, "publish failure left the output running");
+    assert_eq!(output_steps(&mut events), vec![OutputState::Failed]);
+}
+
+/// Dropping the last engine handle stops a running pipeline. The publish watcher
+/// must not keep that handle alive.
+#[test]
+fn dropping_the_engine_stops_the_pipeline() {
+    use std::io::Write;
+    use std::sync::atomic::AtomicBool;
+
+    use jstream_media::{ChannelLayout, FrameSize, Timebase};
+    use jstream_mux::flv::FlvTag;
+    use jstream_platform::Backends;
+    use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+
+    use crate::{LivePublish, PublishError};
+
+    struct FinishFlag {
+        finished: Arc<AtomicBool>,
+    }
+
+    impl LivePublish for FinishFlag {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            self.finished.store(true, Ordering::Release);
+            Ok(())
+        }
+    }
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let size = FrameSize::new(320, 180).expect("size");
+    let finished = Arc::new(AtomicBool::new(false));
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        capture: Arc::new(FakeCapture::new(clock, size)),
+        audio: Arc::new(audio),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_publish(Box::new(FinishFlag {
+            finished: Arc::clone(&finished),
+        }));
+    let control = connected(&engine);
+    let started = block_on(control.call(output_call("yt", true)));
+    if let Err(err) = &started
+        && err.protocol().is_some_and(|error| {
+            matches!(error, ProtocolError::ActionFailed { reason } if reason.contains("no wgpu adapter"))
+        })
+    {
+        if std::env::var_os("CI").is_some() {
+            panic!("CI has no wgpu adapter: {err}");
+        }
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping engine-drop test, no adapter: {err}"
+        );
+        return;
+    }
+    started.expect("output.start");
+    assert!(engine.output_stats().is_some());
+    drop(control);
+    drop(engine);
+    assert!(
+        finished.load(Ordering::Acquire),
+        "dropping the engine left the pipeline running"
+    );
+}
+
+fn output_state(control: &dyn Control, output: &str) -> OutputState {
+    match query(
+        control,
+        Query::OutputStatus {
+            output_id: OutputId::new(output),
+        },
+    )
+    .expect("status")
+    {
+        QueryResult::OutputStatus { state, .. } => state,
+        other => panic!("not an output status: {other:?}"),
+    }
+}
+
+fn output_steps(events: &mut EventStream) -> Vec<OutputState> {
+    drain(events)
+        .into_iter()
+        .map(|event| match event {
+            Event::OutputStateChanged { state, .. } => state,
+            other => panic!("unexpected event {other:?}"),
+        })
+        .collect()
+}
+
 /// `video.snapshot` composites the first scene on lavapipe (or WARP) and returns a PNG
 /// whose longest side is 1280. With no adapter the test returns; in CI that is a failure.
 #[test]

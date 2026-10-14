@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:6e7e2d6e5176717c", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the jstream-render row against its Cargo.toml. Layer stays 2, unsafe_allowed stays false, and the summary still matches. The new dependency is jstream-protocol, layer 1. The core row is unchanged: layer 5, and its png dependency is already on main." }
+verified = { hash = "b3:1adf430595bfaedf", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the jstream-render and jstream-core rows against their Cargo.toml files. Render stays layer 2, unsafe_allowed false, and the summary still matches; its dependency on jstream-protocol is layer 1. Core stays layer 5, unsafe_allowed false, and the summary still matches; jstream-audio, jstream-encode, jstream-mux, jstream-outputs, jstream-platform and jstream-render are all lower layers. Both row texts are unchanged." }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:b3acfef215377e3b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds the Live-value handover paragraph (per-subsystem generation counter, RT threads publish with one atomic store, live values released once every reader reports the commit's generation; R-RT-001/002; not built) beside main's ADR-0028/0035 text" }
+verified = { hash = "b3:b87308bea6c5a058", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the output-pipeline paragraph against runtime/. Render, mixer, encode and output threads still do not lock the collection. The watcher still emits failed and stops the pipeline. It no longer keeps the engine alive; that detail is in the core design." }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -372,6 +372,22 @@ every mix runs at the base rate divided by an integer.
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003) |
+
+**Output pipeline** (`jstream-core` `src/runtime/`), the part that is built.
+`output.start`, once the host has injected platform backends and a publish target,
+starts it and emits `output.state_changed` from the control thread. The render
+thread calls the platform capture mailbox, composites one scene on each 1/30 s
+tick, repeats the last frame when capture is empty, and reads that frame back.
+This cut encodes that CPU readback, and the readback is counted. The mixer thread
+polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
+desktop loopback. Encode threads are the
+ones inside the encoder sessions. The output thread muxes FLV and sends tags to the
+publish target. None of those threads lock the collection. `output.stop` during
+`starting` cancels that start and emits `stopped` only after the start has dropped
+its threads. A publish failure is a channel message to a watcher the control thread
+started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
+encoder session queues. Arc-swap snapshots, the collector thread and a GPU encode
+target are still the rows above, not this cut.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered

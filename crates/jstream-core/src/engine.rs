@@ -1,25 +1,33 @@
 //! The [`Engine`]: the scene graph, the outputs' runtime state and the event subscribers,
 //! behind one lock, and the execution of every protocol call against them.
 //!
-//! Everything a call changes is changed under that lock, and its events are queued under
-//! it too, so every subscriber sees events in the order the changes happened, and
-//! `state.changed` events in `rev` order. Subscribers are woken only after the lock is
-//! released.
+//! Collection changes and the events they queue happen under that lock, so every
+//! subscriber sees them in the order they happened, and `state.changed` events in `rev`
+//! order. A pipeline start or stop holds the lock only while it changes output state.
+//! Device open and thread joins happen after it is released. Subscribers are woken only
+//! after the lock is released.
 
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
 use crate::outputs::Outputs;
+use crate::runtime::{
+    Gate, LivePublish, MediaHost, OutputStats, Pending, Running, launch, parts_from,
+};
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SourceFrameError};
 use jstream_graph::Graph;
+use jstream_platform::Backends;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, Event, IdempotencyKey, OutputId, ProtocolError,
-    Query, QueryResult, RequestId, Rev, SourceId,
+    Action, Batch, Call, CallResult, ClientId, Event, IdempotencyKey, OutputId, OutputState,
+    ProtocolError, Query, QueryResult, RequestId, Rev, SourceId,
 };
 use jstream_render::Compositor;
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::Ordering;
+use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::{Arc, Mutex, PoisonError, Weak};
 use std::task::Waker;
+use std::thread;
 
 /// The JStream engine. Every client talks to it through a session it opens with
 /// [`connect`](Engine::connect).
@@ -29,19 +37,23 @@ use std::task::Waker;
 /// long as any handle or session does; when the last one goes away, every event stream
 /// ends after what it has buffered.
 ///
-/// So far it holds the control plane, plus `video.snapshot`: the scene graph
-/// (`jstream-graph`), the outputs' runtime state (a placeholder until the media
-/// pipeline lands), the latest CPU frame of each source, per-client idempotency keys
-/// and event fan-out. It starts no threads and needs no async runtime: every call
-/// completes before its future is first polled. The snapshot compositor is opened on
-/// the first `video.snapshot`.
+/// So far it holds the control plane and `video.snapshot`: the scene graph
+/// (`jstream-graph`), the outputs' runtime state, the latest CPU frame of each source,
+/// per-client idempotency keys and event fan-out. Without
+/// [`with_backends`](Self::with_backends), an output action only steps the placeholder
+/// state machine and the call completes before its future is first polled. With
+/// backends and a publish target, `output.start` blocks the call until the pipeline
+/// is up or has failed, still without an async runtime. The snapshot compositor is
+/// opened on the first `video.snapshot`.
 #[derive(Clone)]
 pub struct Engine {
     shared: Arc<Shared>,
+    media: Option<Arc<MediaHost>>,
 }
 
 /// The collection lock and the compositor lock. They are never held together: a
 /// snapshot copies its shot, drops the collection lock, then waits on the GPU.
+/// The pipeline threads never take either lock.
 struct Shared {
     state: Mutex<State>,
     compositor: Mutex<Option<Compositor>>,
@@ -54,6 +66,7 @@ impl Default for Engine {
                 state: Mutex::new(State::default()),
                 compositor: Mutex::new(None),
             }),
+            media: None,
         }
     }
 }
@@ -97,6 +110,36 @@ impl Engine {
     pub fn with_output(self, output_id: OutputId) -> Self {
         lock(&self.shared.state).outputs.add(output_id);
         self
+    }
+
+    /// Injects platform backends. `output.start` then runs the media pipeline
+    /// instead of the placeholder state machine. Configure this before
+    /// [`connect`](Self::connect); clones made earlier do not see it.
+    ///
+    /// A start still needs a publish target ([`with_publish`](Self::with_publish)).
+    /// Without one it fails with `action_failed` and changes no output state.
+    #[must_use]
+    pub fn with_backends(mut self, backends: Backends) -> Self {
+        let host = self.host();
+        *lock(&host.backends) = Some(backends);
+        self
+    }
+
+    /// Stores the destination `output.start` publishes into. The start consumes it.
+    /// A failed launch drops it, so the host sets another before retrying. Requires
+    /// [`with_backends`](Self::with_backends) first; otherwise the target is not kept.
+    #[must_use]
+    pub fn with_publish(self, publish: Box<dyn LivePublish>) -> Self {
+        if let Some(host) = &self.media {
+            *lock(&host.publish) = Some(publish);
+        }
+        self
+    }
+
+    /// Encoder and subscriber counters for the running pipeline, if one is up.
+    pub fn output_stats(&self) -> Option<OutputStats> {
+        let host = self.media.as_ref()?;
+        lock(&host.gate).running.as_ref().map(Running::stats)
     }
 
     /// Opens a new client session. It must send `hello` before any call.
@@ -149,18 +192,29 @@ impl Engine {
             } => Some(output_id.clone()),
             _ => None,
         };
-        let mut wake = Vec::new();
-        let result = if let Call::Query {
-            query: Query::VideoSnapshot,
-        } = &call
-        {
+        let result = if self.backends_ready()
+            && matches!(
+                call,
+                Call::Action {
+                    action: Action::OutputStart { .. } | Action::OutputStop { .. }
+                }
+            ) {
+            self.run_media_action(call)
+        } else if matches!(
+            call,
+            Call::Query {
+                query: Query::VideoSnapshot
+            }
+        ) {
             self.video_snapshot()
         } else {
-            lock(&self.shared.state).execute(client_id, request_id, call, &mut wake)
+            let mut wake = Vec::new();
+            let result = lock(&self.shared.state).execute(client_id, request_id, call, &mut wake);
+            for waker in wake {
+                waker.wake();
+            }
+            result
         };
-        for waker in wake {
-            waker.wake();
-        }
         match (&result, output) {
             (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
             (Ok(_), Some(output_id)) => {
@@ -175,6 +229,280 @@ impl Engine {
         result
     }
 
+    fn host(&mut self) -> Arc<MediaHost> {
+        let host = self.media.get_or_insert_with(|| Arc::new(MediaHost::new()));
+        Arc::clone(host)
+    }
+
+    fn backends_ready(&self) -> bool {
+        self.media
+            .as_ref()
+            .is_some_and(|host| lock(&host.backends).is_some())
+    }
+
+    /// `output.start` / `output.stop` when backends are injected. Events are emitted
+    /// on this thread. The pipeline threads never take the collection lock.
+    fn run_media_action(&self, call: Call) -> Result<CallResult, ProtocolError> {
+        let Call::Action { action } = call else {
+            return Err(not_implemented("this kind of call"));
+        };
+        match action {
+            Action::OutputStart { output_id } => self.start_pipeline(output_id),
+            Action::OutputStop { output_id } => self.stop_pipeline(output_id),
+            other => Err(not_implemented(other.name())),
+        }
+    }
+
+    fn start_pipeline(&self, output_id: OutputId) -> Result<CallResult, ProtocolError> {
+        let Some(host) = &self.media else {
+            return Err(not_implemented("output.start"));
+        };
+        let mut wake = Vec::new();
+        let (parts, publish, generation) = loop {
+            // A failed pipeline may still be joining. Wait that out before opening
+            // devices, and do not hold the collection lock across the wait.
+            {
+                let mut gate = lock(&host.gate);
+                while gate.draining {
+                    gate = host
+                        .gate_cv
+                        .wait(gate)
+                        .unwrap_or_else(PoisonError::into_inner);
+                }
+            }
+            let mut state = lock(&self.shared.state);
+            let mut gate = lock(&host.gate);
+            if gate.draining {
+                continue;
+            }
+            let current = state.outputs.state(&output_id)?;
+            let idle = matches!(current, OutputState::Stopped | OutputState::Failed);
+            if !idle {
+                return Err(already_running(&output_id));
+            }
+            if gate.running.is_some() || gate.pending.is_some() {
+                return Err(ProtocolError::ActionFailed {
+                    reason: "another output is already running".into(),
+                });
+            }
+            let Some(publish) = lock(&host.publish).take() else {
+                return Err(ProtocolError::ActionFailed {
+                    reason: "output.start has no publish target".into(),
+                });
+            };
+            let parts = {
+                let backends = lock(&host.backends);
+                let Some(backends) = backends.as_ref() else {
+                    drop(backends);
+                    *lock(&host.publish) = Some(publish);
+                    return Err(not_implemented("output.start"));
+                };
+                parts_from(backends)
+            };
+            let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
+            gate.pending = Some(Pending {
+                output_id: output_id.clone(),
+                generation,
+                cancel: false,
+            });
+            match state.outputs.begin(&output_id, true) {
+                Ok(step) => emit_output(&mut state, &output_id, step, &mut wake),
+                Err(err) => {
+                    gate.pending = None;
+                    *lock(&host.publish) = Some(publish);
+                    return Err(err);
+                }
+            }
+            break (parts, publish, generation);
+        };
+        wake_all(std::mem::take(&mut wake));
+
+        // Cleared once this start settles, or on drop if the start is cancelled.
+        let mut inflight = Inflight {
+            host: Arc::clone(host),
+            generation,
+            armed: true,
+        };
+        let (fail_tx, fail_rx) = mpsc::channel();
+        let launched = launch(parts, publish, output_id.clone(), generation, fail_tx);
+        let outcome = {
+            let mut state = lock(&self.shared.state);
+            let mut gate = lock(&host.gate);
+            let cancelled = gate
+                .pending
+                .as_ref()
+                .is_some_and(|pending| pending.generation == generation && pending.cancel);
+            if cancelled {
+                StartOutcome::Cancelled(launched.ok())
+            } else {
+                match launched {
+                    Ok(running) => match fail_rx.try_recv() {
+                        Ok(reason) => {
+                            abandon_start(
+                                &mut state,
+                                &mut gate,
+                                &mut inflight,
+                                &output_id,
+                                &mut wake,
+                            );
+                            StartOutcome::Failed(Some(running), reason)
+                        }
+                        Err(TryRecvError::Disconnected) => {
+                            abandon_start(
+                                &mut state,
+                                &mut gate,
+                                &mut inflight,
+                                &output_id,
+                                &mut wake,
+                            );
+                            StartOutcome::Failed(
+                                Some(running),
+                                "the output thread ended before the pipeline was active".into(),
+                            )
+                        }
+                        Err(TryRecvError::Empty) => {
+                            let watched = output_id.clone();
+                            let host_for_watch = Arc::downgrade(host);
+                            let shared_for_watch = Arc::downgrade(&self.shared);
+                            match thread::Builder::new()
+                                .name("jstream-publish-watch".into())
+                                .spawn(move || {
+                                    watch_publish(
+                                        shared_for_watch,
+                                        host_for_watch,
+                                        watched,
+                                        generation,
+                                        fail_rx,
+                                    );
+                                }) {
+                                Ok(watcher) => {
+                                    gate.running = Some(running);
+                                    gate.watcher = Some(watcher);
+                                    gate.pending = None;
+                                    inflight.armed = false;
+                                    host.gate_cv.notify_all();
+                                    state.outputs.settle(&output_id, OutputState::Active);
+                                    emit_output(
+                                        &mut state,
+                                        &output_id,
+                                        OutputState::Active,
+                                        &mut wake,
+                                    );
+                                    StartOutcome::Active
+                                }
+                                Err(err) => {
+                                    abandon_start(
+                                        &mut state,
+                                        &mut gate,
+                                        &mut inflight,
+                                        &output_id,
+                                        &mut wake,
+                                    );
+                                    StartOutcome::Failed(
+                                        Some(running),
+                                        format!("starting the publish watcher: {err}"),
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    Err(reason) => {
+                        abandon_start(&mut state, &mut gate, &mut inflight, &output_id, &mut wake);
+                        StartOutcome::Failed(None, reason)
+                    }
+                }
+            }
+        };
+        wake_all(std::mem::take(&mut wake));
+        match outcome {
+            StartOutcome::Active => Ok(CallResult::Action {}),
+            StartOutcome::Cancelled(running) => {
+                drop(running);
+                drop(inflight);
+                Err(ProtocolError::ActionFailed {
+                    reason: format!("output `{output_id}` stopped while starting"),
+                })
+            }
+            StartOutcome::Failed(running, reason) => {
+                drop(running);
+                Err(ProtocolError::ActionFailed { reason })
+            }
+        }
+    }
+
+    fn stop_pipeline(&self, output_id: OutputId) -> Result<CallResult, ProtocolError> {
+        let Some(host) = &self.media else {
+            return Err(not_implemented("output.stop"));
+        };
+        let mut wake = Vec::new();
+        let (running, watcher, wait_for) = {
+            let mut state = lock(&self.shared.state);
+            let mut gate = lock(&host.gate);
+            if state.outputs.state(&output_id)? == OutputState::Stopping {
+                return Err(ProtocolError::ActionFailed {
+                    reason: format!("output `{output_id}` is already stopping"),
+                });
+            }
+            let step = state.outputs.begin(&output_id, false)?;
+            emit_output(&mut state, &output_id, step, &mut wake);
+            if let Some(pending) = gate.pending.as_mut()
+                && pending.output_id == output_id
+            {
+                pending.cancel = true;
+                (None, None, Some(pending.generation))
+            } else {
+                let running = match gate.running.take() {
+                    Some(running) if running.output_id() == &output_id => Some(running),
+                    Some(other) => {
+                        gate.running = Some(other);
+                        None
+                    }
+                    None => None,
+                };
+                let watcher = if running.is_some() {
+                    gate.watcher.take()
+                } else {
+                    None
+                };
+                (running, watcher, None)
+            }
+        };
+        wake_all(wake);
+        if let Some(generation) = wait_for {
+            // The start drops its threads, then clears `pending` and notifies.
+            let mut gate = lock(&host.gate);
+            while gate
+                .pending
+                .as_ref()
+                .is_some_and(|pending| pending.generation == generation)
+            {
+                gate = host
+                    .gate_cv
+                    .wait(gate)
+                    .unwrap_or_else(PoisonError::into_inner);
+            }
+        }
+        // Join outside the collection lock. `Running`'s drop stops the threads.
+        drop(running);
+        if let Some(watcher) = watcher
+            && watcher.join().is_err()
+        {
+            tracing::error!("publish watcher panicked");
+        }
+        self.settle(&output_id, OutputState::Stopped);
+        Ok(CallResult::Action {})
+    }
+
+    fn settle(&self, output_id: &OutputId, state: OutputState) {
+        let mut wake = Vec::new();
+        {
+            let mut engine = lock(&self.shared.state);
+            engine.outputs.settle(output_id, state);
+            emit_output(&mut engine, output_id, state, &mut wake);
+        }
+        wake_all(wake);
+    }
+
     /// `video.snapshot`. The shot is copied under the collection lock; readback runs
     /// after that lock is released.
     fn video_snapshot(&self) -> Result<CallResult, ProtocolError> {
@@ -184,6 +512,125 @@ impl Engine {
         };
         let result = snapshot::draw(&shot, &self.shared.compositor)?;
         Ok(CallResult::Query { result })
+    }
+}
+
+enum StartOutcome {
+    Active,
+    /// Stop won. Any threads `launch` opened are dropped before the in-flight
+    /// generation is cleared, so stop can settle `stopped`.
+    Cancelled(Option<Running>),
+    Failed(Option<Running>, String),
+}
+
+/// Clears `pending` on drop unless the start already settled.
+struct Inflight {
+    host: Arc<MediaHost>,
+    generation: u64,
+    armed: bool,
+}
+
+impl Drop for Inflight {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        let mut gate = lock(&self.host.gate);
+        if gate
+            .pending
+            .as_ref()
+            .is_some_and(|pending| pending.generation == self.generation)
+        {
+            gate.pending = None;
+            self.host.gate_cv.notify_all();
+        }
+    }
+}
+
+fn abandon_start(
+    state: &mut State,
+    gate: &mut Gate,
+    inflight: &mut Inflight,
+    output_id: &OutputId,
+    wake: &mut Vec<Waker>,
+) {
+    gate.pending = None;
+    inflight.armed = false;
+    inflight.host.gate_cv.notify_all();
+    state.outputs.settle(output_id, OutputState::Failed);
+    emit_output(state, output_id, OutputState::Failed, wake);
+}
+
+/// Blocks until the publish target fails. A disconnected channel is a clean stop.
+///
+/// The pointers are weak, so this thread does not keep the engine alive. Dropping
+/// the last [`Engine`] drops [`MediaHost`], which joins the pipeline and then this
+/// thread. A real failure upgrades the pointers only long enough to settle.
+fn watch_publish(
+    shared: Weak<Shared>,
+    host: Weak<MediaHost>,
+    output_id: OutputId,
+    generation: u64,
+    fail_rx: Receiver<String>,
+) {
+    let Ok(reason) = fail_rx.recv() else {
+        return;
+    };
+    let (Some(shared), Some(host)) = (shared.upgrade(), host.upgrade()) else {
+        return;
+    };
+    tracing::error!(output_id = %output_id, error = %reason, "publish failed");
+    let mut wake = Vec::new();
+    let running = {
+        let mut state = lock(&shared.state);
+        let mut gate = lock(&host.gate);
+        let ours = gate.running.as_ref().is_some_and(|running| {
+            running.output_id() == &output_id && running.generation() == generation
+        });
+        let active = matches!(state.outputs.state(&output_id), Ok(OutputState::Active));
+        if ours && active {
+            state.outputs.settle(&output_id, OutputState::Failed);
+            emit_output(&mut state, &output_id, OutputState::Failed, &mut wake);
+            // The join happens below, outside the locks. A new start waits until
+            // `draining` clears so it does not open devices over this teardown.
+            gate.draining = true;
+            // Detach this watcher. `JoinHandle`'s drop does not join, so the
+            // thread can go on to drop `Running` without joining itself.
+            drop(gate.watcher.take());
+            gate.running.take()
+        } else {
+            None
+        }
+    };
+    wake_all(wake);
+    let took = running.is_some();
+    drop(running);
+    if took {
+        let mut gate = lock(&host.gate);
+        gate.draining = false;
+        host.gate_cv.notify_all();
+    }
+}
+
+fn already_running(output_id: &OutputId) -> ProtocolError {
+    ProtocolError::ActionFailed {
+        reason: format!("output `{output_id}` is already running"),
+    }
+}
+
+fn emit_output(state: &mut State, output_id: &OutputId, step: OutputState, wake: &mut Vec<Waker>) {
+    state.subscribers.emit(
+        &Event::OutputStateChanged {
+            output_id: output_id.clone(),
+            state: step,
+        },
+        wake,
+    );
+}
+
+fn wake_all(wake: Vec<Waker>) {
+    for waker in wake {
+        waker.wake();
     }
 }
 

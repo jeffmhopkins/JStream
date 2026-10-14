@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:f5af83854ebfd993", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Purpose now names snapshot.rs, set_source_frame, the second compositor lock, and the lavapipe test. Capture, audio, encode and real outputs stay in Not yet. The crate-map row is unchanged." }
+verified = { hash = "b3:e0cdf4de3323d973", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the outputs and tests bullets against engine.rs. The pipeline still emits starting then active or failed, stop during starting still cancels, and a publish failure still settles failed. Pipeline threads still take neither lock. The weak watcher is described under Design." }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -24,28 +24,38 @@ the host apps may depend on it, and the clients (`jstream-server`, `jstream-mcp`
 `jstream-cli`, `jstream-ui`) never do ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)); a
 host hands them an `InProcessControl` as a `dyn Control`.
 
-This first cut is the **control plane only** (the minimal `jstream-core` of
-[ROADMAP › M1](../../ROADMAP.md#m1)). Contents:
+The control plane is the scene graph, the sessions and `video.snapshot`.
+`output.start` runs the media pipeline when the host calls
+`with_backends` and `with_publish`. Without those, an output action stays the
+placeholder state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
-  `Engine::new()` and `with_output(id)`; `connect()` opens a session; `rev()`;
-  `set_source_frame` stores the latest RGBA8 frame of a source. It holds the
+  `Engine::new()`, `with_output(id)`, `with_backends` and `with_publish`;
+  `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
+  frame of a source; `output_stats` reads the running pipeline. It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys and the
   subscribers behind one lock, and the snapshot compositor behind another, and
-  executes batches, actions and queries.
+  executes batches, actions and queries. The pipeline threads take neither lock.
 - **Snapshot** (`snapshot.rs`): `video.snapshot`, the program mix read back as a PNG.
+- **Runtime** (`runtime/`): the `output.start` pipeline. The render thread reads the
+  platform capture mailbox, composites one scene and reads the frame back. The mixer
+  thread polls the media clock. Encode threads live in the encoder sessions. The
+  output thread muxes FLV and publishes it
+  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
 - **Session** (`session.rs`): `InProcessControl`, one client session.
 - **Events** (`events.rs`): the per-subscription queues behind `Control::events`.
-- **Outputs** (`outputs.rs`): the outputs' runtime state, a placeholder state machine.
+- **Outputs** (`outputs.rs`): the outputs' runtime state. The placeholder path steps
+  `starting` to `active` at once. The pipeline path emits `starting`, then `active`
+  or `failed`. Stop emits `stopping` then `stopped`. A stop during `starting` cancels
+  that start and settles `stopped` only after its threads are gone. A publish failure
+  after `active` settles `failed`.
 - **Tests** (`tests.rs`, `tests/mcp.rs`): the protocol rules through
   `InProcessControl`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
-  `video.snapshot` on the software adapter, and an MCP agent
-  (`jstream-mcp`, a dev-dependency) driving the engine in-process.
+  `video.snapshot` on the software adapter, the pipeline against the platform fakes,
+  and an MCP agent (`jstream-mcp`, a dev-dependency) driving the engine in-process.
 
-Not here yet: capture, audio, encode and real outputs, threads and the media
-clock (`src/runtime/`, [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)),
-platform backends, per-client undo, the audit log, persistence and settings. The
-snapshot compositor is the one piece of render this cut calls. See
+Not here yet: per-client undo, the audit log, persistence, settings, arc-swap
+snapshots, a GPU encode target, and the platform's Windows devices. See
 [Design › Not yet](#design).
 
 Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
@@ -57,7 +67,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0f995309696dc1ea", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read sessions, snapshots, outputs and locking against the merged protocol design. Snapshot is still the first scene at 1920x1080, opacity 1, nearest cap 1280, lock released before the GPU wait. canvas.set_size is still not a message. The differential script still omits video.snapshot." }
+verified = { hash = "b3:c38676cf6bff86b6", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Outputs and Locking against watch_publish. The watcher holds weak pointers until a publish failure, so dropping the last engine joins the pipeline. A later start waits, without the collection lock, until that join finishes." }
 -->
 
 ### Engine and sessions
@@ -86,24 +96,40 @@ WebSocket API does, minus serialization:
 ### Dependencies
 
 `jstream-protocol` (the messages), `jstream-control` (the `Control` trait),
-`jstream-graph` (the collection and every edit rule), `jstream-media` (the canvas
-`FrameSize`), `jstream-render` (the snapshot compositor), `png` (encodes that
-readback; default features off, deflate stays pure Rust, allowed by
+`jstream-graph` (the collection and every edit rule), `jstream-media` (frames, the
+canvas `FrameSize` and the media clock's time base), `jstream-render` (the snapshot
+and the pipeline compositor), `jstream-platform` (backend traits the host injects),
+`jstream-audio` (the mixer), `jstream-encode` (the H.264 and AAC sessions),
+`jstream-mux` (FLV), `jstream-outputs` (the RTMP publisher), `png` (encodes the
+snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
-`tracing` (see *Logging*). No async runtime, and no `jstream-platform` until a backend is
-injected. Dev-dependencies: `jstream-control`'s `mock` feature and `jstream-protocol`'s
-`fixtures` feature (the differential and parity tests), `jstream-mcp` and `serde_json`
-(`tests/mcp.rs`). All of them are in lower layers
+`tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
+the pipeline is up or has failed. Dev-dependencies: `jstream-control`'s `mock`
+feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
+tests), `jstream-platform`'s `fake` feature (the pipeline test), `jstream-mcp` and
+`serde_json` (`tests/mcp.rs`). All of them are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
 
 ### Calls
 
-Batches, actions and the collection queries execute under the collection lock, so
-calls from different sessions are serialized, and their events are queued in the
-order the changes happened. `video.snapshot` copies what it needs under that lock
-and composites after releasing it (see *Snapshots*).
+Batches and the collection queries run under the collection lock, so those calls
+are serialized across sessions and their events are queued in the order the changes
+happened. Placeholder output actions do too: they only step the state machine.
+`video.snapshot` copies what it needs under that lock and composites after releasing
+it (see *Snapshots*).
+
+A pipeline `output.start` or `output.stop` holds the collection lock only while it
+changes that output's state and queues events. Opening devices, waiting for the
+compositor and joining threads happen after the lock is released, so another
+session can run during that work. The two calls still cannot leave a live pipeline
+behind a successful stop. The start records an in-flight generation before it
+unlocks, and it settles `active` only while that generation is the one in flight.
+`output.stop` in that window cancels the generation, waits until the start has
+dropped any threads it opened, then settles `stopped`. The start answers
+`action_failed` and does not settle `active`. Once the pipeline is `active`, stop
+takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locking*.
 
 - **Batches** go to `jstream_graph::Graph::apply_batch`, which owns every edit rule:
   `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
@@ -177,13 +203,13 @@ woken after the engine's lock is released. A stream ends, after what it buffered
 its session is dropped or when the engine goes away (its last handle and session);
 an ended stream stays ended.
 
-### Outputs (placeholder)
+### Outputs
 
 Outputs are runtime state, not collection state: they never change `rev`. Until the
 protocol has edits that configure outputs, the host declares them with
 `Engine::with_output(id)`; each starts `stopped`.
 
-There is no media pipeline yet, so the actions only move a state machine, as
+**Placeholder.** With no backends, the actions only move a state machine, as
 `jstream-control`'s mock does. The protocol defines an action's response as "accepted"
 and reports progress as events, so that is what the engine does:
 - `output.start` on a `stopped` or `failed` output emits `starting` then `active` and
@@ -192,20 +218,60 @@ and reports progress as events, so that is what the engine does:
 - Starting a running output, or stopping one that isn't, fails with `action_failed`
   (an accepted action that can't be carried out); an unknown output with `not_found`.
 
-Rejecting `output.start` with `action_failed` until media exists was the alternative.
-It was not chosen because clients (the CLI, MCP agents, the server's tests) already
-drive the start/stop/status flow against the mock, and this keeps them working on the
-real engine. When `jstream-outputs` lands, `active` and `failed` will come from the real
-output, asynchronously, and `reconnecting` will appear.
+The placeholder stays so clients that already drive start/stop/status against the mock
+keep working when the host has not injected media.
+
+**Pipeline.** `with_backends` plus `with_publish` makes `output.start` launch threads
+instead. The call checks the output is idle and that no other pipeline is running,
+takes the publish target, records an in-flight generation, emits `starting`, and
+drops the collection lock before it opens devices or joins anything. It then waits
+for the render thread to open the software compositor. Success emits `active`.
+Failure emits `failed` and `action_failed`, and drops the publish target so the
+host sets another before retrying. A second start while one pipeline is up, or
+while a start is still in flight, fails with `action_failed` and leaves that
+pipeline alone. `output.stop` on an `active` pipeline emits `stopping`, drops it
+outside the lock (its drop sets the stop flag and joins the threads), then emits
+`stopped`. `output.stop` during the in-flight start cancels that generation, emits
+`stopping`, waits until the start has dropped whatever it opened, then emits
+`stopped`. The start then answers `action_failed` and does not emit `active`. The
+publish target is dropped on that path too.
+
+Once the pipeline is `active`, a `send_tag` or `poll` failure is sent on a channel.
+A watcher the control thread started settles `failed`, emits `output.state_changed`,
+and drops the pipeline so the render and mixer threads stop. The watcher holds weak
+pointers until that failure arrives, so it does not keep the engine alive: dropping
+the last engine handle and its sessions joins the pipeline. `output_stats` is then
+empty. This cut does not reconnect. `failed` counts as idle, and a later start needs
+a new publish target. That start waits until the failed pipeline has finished
+joining, so the new devices do not overlap the old teardown. A `finish` error while
+a stop is tearing the session down is not a second failure.
+
+The render thread reads the platform capture mailbox, composites the primary target
+at 30 frames per second, repeats the last frame when capture is empty, and reads the
+composite back as RGBA8 because this cut has no GPU encode target. The mixer thread
+polls microphone and desktop-loopback input into 48 kHz stereo blocks. Encode
+sessions turn those into H.264 and AAC. The output thread writes FLV tags to the
+publish target. Drops on a full encoder queue are counted in `output_stats`. The
+test records tags in memory. `connect_rtmp` is the live publisher and is not called
+from the unit tests.
 
 ### Locking
 
 `std::sync::Mutex` locks, always taken in one order: a session's identity lock (held
-by `hello` while it registers the client), then the engine's collection lock, then a
-subscription queue's. The snapshot compositor's lock is separate and is taken only
-when the collection lock is not held. A stream's poll takes only its queue's lock.
-No lock is held across an `await` (there are none). The GPU wait of `video.snapshot`
-holds only the compositor lock. A poisoned lock is recovered rather than propagated:
+by `hello` while it registers the client), then the engine's collection lock, then
+the pipeline gate, then a subscription queue's. The snapshot compositor's lock is
+separate and is taken only when the collection lock is not held. A stream's poll
+takes only its queue's lock. No lock is held across an `await` (there are none).
+The GPU wait of `video.snapshot` holds only the compositor lock. `output.start`
+drops the collection lock before `Compositor::open`. The pipeline gate is not held
+across device open, that wait, or a join. `output.stop` waits for an in-flight
+start on the gate's condition variable without holding the collection lock. The
+publish watcher keeps weak pointers until a failure arrives, then takes the
+collection lock only to settle `failed` and joins the pipeline outside it. A later
+start waits on that same condition variable, still without the collection lock,
+until the join finishes. The render, mixer, encode and output threads do not take the
+collection lock or the snapshot compositor lock; session counters the host reads
+sit on their own mutex. A poisoned lock is recovered rather than propagated:
 `Graph::apply` changes a working copy and replaces the state only on success, and the
 engine's other changes are single inserts or assignments, so the data stays
 consistent. Nothing is logged while a lock is held.
@@ -236,9 +302,9 @@ revisions and error codes are logged, never a call's arguments
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
 - The audit log, persistence (the collection file) and settings.
-- Threads, the media clock and real-time hand-off
-  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)), and the subsystems that
-  feed and consume frames: capture, the render thread, audio, encode and real
-  outputs. `video.snapshot` composites from frames the host injects with
-  `set_source_frame`.
+- Arc-swap snapshots, the collector thread, live-value handover, and a GPU encode
+  target. `output.start` is the first cut of
+  [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): one scene, a CPU readback
+  into the encoder, and the platform fakes in the test. `video.snapshot` still
+  composites from frames the host injects with `set_source_frame`.
 - `R-SEC-001`'s `secrets_are_redacted` test: the engine holds no secret yet.
