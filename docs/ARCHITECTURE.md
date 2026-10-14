@@ -280,7 +280,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:9a70e815e411c6c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added Live values (live.set/live.cancel actions, live.changed/live.ended) and History (history.undo/redo, a fourth call kind) bullets citing ADR-0032; covered control/server/protocol READMEs changed only as verified in this PR; other bullets still match the code" }
+verified = { hash = "b3:cacfe8c85e4bcc84", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #73: covered changes are jstream-mcp's not-sent error wording/README and a server test, beside main's ADR-0032 live/history bullets; no wire change, Transport and Errors bullets hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -325,7 +325,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stdio proxy renamed jstream-cli mcp after the maintainer kept the binary name jstream-cli; tools, schema-size, names, access and undo bullets unchanged" }
+verified = { hash = "b3:dca7fe7e8b8a425b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "R-API-002 prose now describes noun-grouped tools with ops, matching the 'Tools are grouped by noun' and Names bullets; jstream-mcp code change only rewords disconnected errors and README adds events options, so tools, schema size, access and undo bullets hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
