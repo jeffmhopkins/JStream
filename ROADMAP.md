@@ -95,7 +95,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:120acc39fff30338", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Studio-mode bullet spelled out per ADR-0029: presets with a default, into/out-of overrides, Move pairing by source, per-item delay/easing/glide/effects; other M2 items unchanged" }
+verified = { hash = "b3:8c8ae3cb749cbac4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0024 acceptance: data-model tree joins Scene role/variant/organisation fields with transition_in/out and SceneItem.transition, studio drops transition, not-yet list names both; ROADMAP M2 keeps ADR-0029's studio bullet then ADR-0024's UI-built bullet; other sections changed only by main's text and verified lines" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
