@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:98349fa7fb37df7e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0029's planned transition preset/override edits and the optional preset on the scene-switch action, none built; engine's actions are still output.start/stop only and later variants answer internal, so the section holds" }
+verified = { hash = "b3:b124c1cb1dc4bc02", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0028 acceptance: data-model tree keeps Source audio and the scene/item transition fields, the not-yet list names both; studio no longer holds transition; other sections changed only by main's text and verified lines" }
 -->
 
 ### Engine and sessions

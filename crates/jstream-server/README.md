@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:27a755f2c95a50d5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol has ADR-0029's planned transition edits and optional preset on the switch action, none built; the server forwards any Call unchanged; main's #73 test change verified there" }
+verified = { hash = "b3:1ecc26ee5f8a583b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0028 acceptance: data-model tree keeps Source audio and the scene/item transition fields, the not-yet list names both; studio no longer holds transition; other sections changed only by main's text and verified lines" }
 -->
 
 ### Listening and admission
