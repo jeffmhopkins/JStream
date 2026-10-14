@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f3d3fccd6a8d7cc3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for this PR's whole diff plus the test fix: tests/daemon.rs now picks the restart's log file as the one that is not the first run's (both runs can share a UTC second, so names order by pid); the Tests bullet, Log files naming (<UTC time>-<pid>-<n>) and crash bullets still hold" }
+verified = { hash = "b3:1cbced154f1f983b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#126 N4/N7/N8 follow-up: crash.rs doc line moved onto fn report, logs.rs prune comment says age order to the second and expects Windows deletes to succeed via FILE_SHARE_DELETE; the Log files and Crash reports bullets and Tests list still hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -45,7 +45,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 Not here yet: serving the web UI, MCP over streamable HTTP (both wait on
 `jstream-server`, [jstream-server › Design](../../crates/jstream-server/README.md#design)),
 `--collection` (the engine has no persistence), a default port and a default token file
-location ([Design › Open questions](#design)).
+location ([Design › Open questions](#open-questions)).
 
 Why a crate: it is a host binary of its own (ADR-0020 ships `jstream-daemon.exe` next
 to the desktop app), and only an app may link both `jstream-core` and `jstream-server`
@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:9068935ff7d176db", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against this PR: Logging, rotation, data directory and crash report bullets match logs.rs/crash.rs (message redacted before truncation); argument-parsing bullet now names the five options (#126 B1); open questions 4 and 5 still hold" }
+verified = { hash = "b3:672d3c82d17f7177", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#126 N4/N6 follow-up: Open questions links now target an explicit open-questions anchor; the pruning note says the Windows delete is expected to succeed (FILE_SHARE_DELETE), untested; logging, rotation and crash bullets otherwise unchanged and match logs.rs/crash.rs" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -177,11 +177,12 @@ verified = { hash = "b3:9068935ff7d176db", by = "agent:claude@session_01QBbMRwRu
   file only ever switches between lines. Writes are synchronous, like stderr's; the
   libraries don't log on real-time threads ([R-RS-005](../../docs/RULES.md#R-RS-005)).
   Pruning skips the file being written but may delete another running daemon's (on
-  Unix it keeps writing to the unlinked file).
+  Unix it keeps writing to the unlinked file; on Windows `std` opens files with
+  `FILE_SHARE_DELETE`, so the same is expected, untested).
 - **The data directory** is found from the environment (`APPDATA`, `HOME`,
   `XDG_DATA_HOME`), not a crate: three cases don't pay for `dirs`, which adds
   `dirs-sys` and, on Windows, `windows-sys`. ADR-0020's `portable` marker is not
-  handled yet ([Open questions](#design)).
+  handled yet ([Open questions](#open-questions)).
 - **Crash reports** (`crash.rs`, [R-SEC-004](../../docs/RULES.md#R-SEC-004)). The panic
   hook, installed as soon as the log directory exists, writes the daemon and protocol
   versions, OS and architecture, the UTC time, the process ID, the thread name, the
@@ -210,6 +211,7 @@ verified = { hash = "b3:9068935ff7d176db", by = "agent:claude@session_01QBbMRwRu
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would.
 
+<a id="open-questions"></a>
 ### Open questions
 
 1. **Default port.** No port is chosen yet, so the default is a free one and the URL
