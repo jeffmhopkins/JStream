@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md", "docs/adr/0003-media-stack-and-codecs.md"]
-verified = { hash = "b3:22527e12490e1bbd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#66 RTMPS): dependency ARCH#threading only gained the 'In the engine' paragraph on jstream-audio's resampler; the outputs purpose (RTMP/RTMPS transport, OS roots, threading of the blocking client) is unaffected" }
+verified = { hash = "b3:9669db6a08ac19bf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; the RTMP/RTMPS client and its threading are unaffected" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

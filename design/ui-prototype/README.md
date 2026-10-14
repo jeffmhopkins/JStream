@@ -122,7 +122,9 @@ engine behind it.
 <!-- @section
 -->
 
-These decisions belong in the docs, through PRs:
+These decisions belong in the docs, through PRs. The
+[decision register](decision-register.md) works through all of them (and more the
+prototype implies), with options, a recommendation, a tier and an urgency for each:
 - `docs/ARCHITECTURE.md` data model: groups as scenes, keyframe scenes, reference/clone
   semantics, per-source audio switch, video/audio filter chains with scene inputs, program
   and per-output chains (with latency compensation), transition presets and overrides.
