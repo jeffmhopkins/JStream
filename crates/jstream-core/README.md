@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:b6e57f679154f0d4", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the engine, outputs, drop-count and tests bullets against the merged tree. The ledger is a third mutex and output.start still registers the stats.tick sources. The pipeline still emits starting then active or failed, and a publish failure still settles failed. The software-adapter tests still run one at a time." }
+verified = { hash = "b3:d662037e69c8cb38", by = "agent:grok@stats-tick", note = "Re-read the tests bullet against scenarios.rs on top of main. The scenario still drives the fake encoder and mixer directly and reports those drops in stats.tick. The module comment now says output.start registers the same kinds of sources. one_gpu_test_at_a_time stays as main left it. The drop-counts bullet is unchanged." }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
