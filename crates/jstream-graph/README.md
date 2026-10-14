@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:abfe33ed792416ff", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model now carries ADR-0024 scene structure plus ADR-0023/0029 fields, none built; Purpose lists only built behaviour (items with transform, crop, visible; nesting cycle check on item.add) and stays accurate" }
+verified = { hash = "b3:866a347bf715e6bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Main's ADR-0022 (#79) adds canvas, geometry and legacy placements to ARCH data-model, not built; Purpose lists only built items (transform, crop, visible) and its Not yet points at ADR-0022; this PR's change (apps-row wording) does not touch it" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -89,5 +89,8 @@ Planned, and kept possible by the private fields of the model types:
 - **Filters and effects:** `filters[]` on sources (applied wherever the source is
   placed) and `effects[]` on items (per placement), with their edits.
 - **Source settings** for builtin kinds, and `source.rename`, come with `jstream-sources`.
-- The full 3D transform, and blend modes, replacing the protocol's 2D `ItemTransform`.
+- The collection canvas and item `geometry` of
+  [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md), replacing the protocol's
+  2D `ItemTransform`, which an item keeps as a legacy placement until 1.0 unless an
+  `item.set_geometry` replaces it; and blend modes.
 - Item lookup is a linear scan over scenes. An ID index can come once collections grow.

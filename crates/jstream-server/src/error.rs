@@ -13,6 +13,14 @@ pub enum ServerError {
         /// What is wrong with it.
         reason: &'static str,
     },
+    /// A configured extra `Host` can never match a request.
+    #[error("invalid extra host `{host}`: {reason}")]
+    InvalidHost {
+        /// The entry as configured.
+        host: String,
+        /// What is wrong with it.
+        reason: &'static str,
+    },
     /// The listening socket could not be opened.
     #[error("could not listen on {addr}: {source}")]
     Bind {

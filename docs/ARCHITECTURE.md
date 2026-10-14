@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:a2d3362490054810", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
+verified = { hash = "b3:ba7e0756587bdab5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:777ebdb5f1bfe7f3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
+verified = { hash = "b3:de750db3576e872a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -154,7 +154,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -164,17 +164,17 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md"]
-verified = { hash = "b3:20e8f1ac3e22eae0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Tree joins ADR-0024 (Scene role, variant_of, overrides, folder, background, icon, color, favourite, show_in_multiview; folders, labels, hotkeys; Source labels/favourite) with ADR-0023 (opacity, blend, reserved effects, duplicated_from) and ADR-0029 (transition_in/out, SceneItem.transition, transitions); variant overrides include opacity; not-yet list names all three ADRs' unbuilt fields" }
+depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md"]
+verified = { hash = "b3:04b2b9fb9f194341", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0022 now keeps deprecated transforms as a stored legacy placement evaluated against the current source size every frame, converted only by an explicit item.set_geometry; Canvas and geometry bullet gains that, tree shows the target geometry, Filters bullet says geometry, Built-so-far unchanged and consistent" }
 -->
 
 ```
-Collection (JSON on disk, schema_version, rev: u64)
+Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ├── sources        Source { id, kind, settings, filters[], duplicated_from?, labels, favourite }   video and/or audio; independent of scenes
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
 │                          items[] }   flat display order
-│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, opacity, blend,
+│                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (reserved, empty in v1), transition }
 ├── folders        Folder { id, name }   ordered, one level; organising only
 ├── labels         Label { id, name, icon, color }   ordered
@@ -203,6 +203,16 @@ Collection (JSON on disk, schema_version, rev: u64)
   source is placed rather than marking one placement as the original.
   `item.set_source` switches an item between reference and clone and keeps its id,
   placement and stacking position ([ADR-0023](adr/0023-placements-references-and-clones.md)).
+- **Canvas and geometry** ([ADR-0022](adr/0022-item-transform-and-canvas.md)): the
+  collection's `canvas` is every scene's coordinate space, in pixels, and a `VideoMix`
+  scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
+  canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
+  and 3D tilt, turn, depth and per-item perspective, drawn in stacking order with no
+  depth buffer. `crop` is in source pixels. A source's current size is runtime state,
+  not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,
+  protocol 0.3's transform as written, which the compositor evaluates against the
+  source's current size every frame. Only an explicit `item.set_geometry` turns it into
+  a geometry.
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
   scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
   that would close a cycle (`item.add`, and `item.set_source`).
@@ -232,7 +242,7 @@ Collection (JSON on disk, schema_version, rev: u64)
   decision. `Scene.background` (absent means transparent) is scene model, not metadata,
   because the compositor draws it wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
-  is used. A placement owns its transform, `crop`, `visible`, `opacity` (an alpha
+  is used. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.
@@ -256,12 +266,13 @@ Collection (JSON on disk, schema_version, rev: u64)
   undo stacks live in `jstream-core`.
 - **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind name or a nested
   scene; no settings or filters yet), scenes in display order, and items in stacking
-  order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
-  they never copy them. Deleting a source an item still places, or a scene a source
-  still shows, is rejected. Not yet: settings, filters, `opacity`, `blend`, the reserved
-  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the 3D
-  transform, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
-  variants and overrides, folders, labels, favourites and other organisation metadata,
+  order with `source_id`, protocol 0.3's 2D transform (top-left corner and scale, which
+  ADR-0022 replaces), `crop` and `visible`. Items refer to sources; they never copy them.
+  Deleting a source an item still places, or a scene a source still shows, is rejected.
+  Not yet: settings, filters, `opacity`, `blend`, the reserved `effects[]`,
+  `duplicated_from`, `item.set_source`, the transition fields, the canvas, `geometry`,
+  scene `role` and `item.move`, the `scene_id` addressing of placement edits, variants
+  and overrides, folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, and everything outside `sources` and `scenes`. Nothing is
   persisted yet.
 
@@ -338,7 +349,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:647c5c73a67e9f36", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds the Edits-bullet sentence on ADR-0024's item.move and optional scene_id addressing (not built); main added ADR-0029's planned transition edits; covered READMEs changed only by re-verified lines; other bullets unchanged and match protocol 0.3 as built" }
+verified = { hash = "b3:5d3dce913572ce52", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -389,7 +400,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:1eaf80cd00e97d1b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73): jstream-mcp's not-sent error wording and README additions per main's own verification, plus this PR's verified-line refresh; tools, schema-size, names (R-API-002 grouped by noun), access and undo bullets hold" }
+verified = { hash = "b3:1db3236cc57f9619", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
