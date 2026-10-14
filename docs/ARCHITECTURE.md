@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b17ac8fcee8ca1cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #71: covered apps/ changed only by this PR's daemon README Serving-bullet order and test harness; the daemon and CLI rows and the diagram match main and still hold" }
+verified = { hash = "b3:a2d3362490054810", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:b3e8d07c9f7c0919", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #74: new crates/jstream-encode/Cargo.toml at layer 3 (dep jstream-platform L1) beside main's jstream-audio (L2), core, daemon and outputs rows; all edges point strictly down (lint-deps ok)" }
+verified = { hash = "b3:777ebdb5f1bfe7f3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -305,7 +305,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:883e8fef96b575d0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73: server test and README verified lines, no wire change) with ADR-0029's planned Transitions bullet; covered READMEs changed only by verified lines; body matches the code" }
+verified = { hash = "b3:8fdc6e0f1b48a4de", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, ADR-0029, encode, daemon) into the ADR-0035 acceptance: the planned CLAP crate-map rows, threading and packaging text sit beside main's new rows unchanged; other sections changed only by verified lines" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
