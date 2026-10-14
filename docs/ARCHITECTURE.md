@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b88009c4d3bb7cc0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed only by the daemon README's re-verified Design line (ADR-0025 persistence dependency); the layer diagram and app roles are unchanged" }
+verified = { hash = "b3:e706591283751343", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by their re-verified Purpose lines (crate-map's jstream-sources row moved to ADR-0031); layer diagram and app roles unchanged" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:de750db3576e872a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:477a5e1a4581d82a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR rewrites the jstream-sources row for ADR-0031 (kinds by milestone, images and fonts via pure-Rust crates) beside main's ADR-0035 plugin rows; other rows match main; checked against each crate's [package.metadata.jstream]" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -384,7 +384,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5eab8da6b4065f76", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's binary-streams bullet (meter fields, subscribed-only loudness, audio.reset_loudness) sits beside main's ADR-0022/0024/0025 planned additions; covered control/core/server READMEs changed only by their re-verified lines; bullets match protocol 0.3 as built" }
+verified = { hash = "b3:8cbe42013fc01956", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered control/core/server/protocol READMEs changed only by re-verified Purpose lines after the ADR-0031 crate-map row; no protocol text changes in this PR; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -439,7 +439,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:1db3236cc57f9619", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:e0616afe224f0007", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp and CLI READMEs changed only by re-verified Purpose lines after the ADR-0031 crate-map row; MCP grouping, schema size and naming bullets unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

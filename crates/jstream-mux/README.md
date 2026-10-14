@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0009-youtube-rtmps-and-api.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:405720f499199607", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:73dd3d747e7191e3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-mux row and this Purpose are unchanged and still match the crate" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):

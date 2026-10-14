@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:fa4f168cd07b98aa", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0028 adds a master bus that new outputs use; a session still takes one bus's sample blocks, and sharing by (mix, profile) as stated still matches ARCH" }
+verified = { hash = "b3:820e84e4173c54d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-encode row and this Purpose are unchanged and still match the crate" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

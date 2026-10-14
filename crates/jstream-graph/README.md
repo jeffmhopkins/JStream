@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:1add66f6c132d986", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model gains ADR-0028 source audio and master bus beside ADR-0022/0024/0025 fields, none built; Purpose lists only built behaviour and stays accurate" }
+verified = { hash = "b3:6db64aba1cdc77e9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-graph row and this Purpose are unchanged and still match the crate" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

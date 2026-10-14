@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md"]
-verified = { hash = "b3:15bbbdd94eb1954c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading carries this PR's mixer row (activity gains, keyed filters, latency compensation) and Audio timestamps paragraph beside main's ADR-0035 CLAP host paragraph, none built; outputs consume encoded packets and are untouched by the audio model or ADR-0022/0024/0025, so Purpose holds" }
+verified = { hash = "b3:d3be2b7ac7d4109a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-sources row (ADR-0031 kinds by milestone; pure-Rust image and font crates) and the ADR-0003 to ADR-0031 citation; the jstream-outputs row and this Purpose are unchanged and still match the crate" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
