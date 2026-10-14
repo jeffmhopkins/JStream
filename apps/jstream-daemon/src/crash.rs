@@ -358,8 +358,12 @@ mod tests {
             "{report}"
         );
         assert!(report.contains("thread: crash-test-worker\n"), "{report}");
+        // Panic locations use the platform's separator (`apps\jstream-daemon\…` on
+        // Windows).
         assert!(
-            report.contains("location: apps/jstream-daemon/src/crash.rs:"),
+            report
+                .replace('\\', "/")
+                .contains("location: apps/jstream-daemon/src/crash.rs:"),
             "{report}"
         );
         assert!(

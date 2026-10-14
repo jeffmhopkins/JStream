@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:a773e72dee4fae13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the host table and diagram against the daemon's new logs.rs and crash.rs: the daemon stays the headless host serving the WebSocket API only; local log files and crash reports add no client, interface or engine link" }
+verified = { hash = "b3:4727f90bda1896b8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: only a daemon test changed (Windows path separators); the host table and diagram are unaffected" }
 -->
 
 ```

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:3a2b7776827a51c0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: Startup bullet now creates the log dir and installs the crash hook and the stderr+file subscriber (--log-level or RUST_LOG); added logs.rs and crash.rs bullets and their unit tests (crash hook run in a child process); crate-map apps/* row unchanged (layer 6, links core and server)" }
+verified = { hash = "b3:1a0fcbb783009f7e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after a test-only change in crash.rs (the redacted-report test now accepts Windows path separators in the panic location); the logs.rs and crash.rs bullets still hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:22a945d2ac5f5d07", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: Logging bullet (two fmt layers, stderr and files, one Targets filter; files get what stderr gets so R-SEC-001 redaction holds, e2e test checks the file); new bullets on size rotation (vs tracing-appender), the env-derived data dir (vs dirs), crash reports (contents, digest-only redaction, replaces default hook); Dependencies adds tracing and blake3; open question 4 now native dumps (unsafe => platform-windows), 5 the data dir/portable marker; still consistent with ARCH persistence (logs and crash data in the data dir, local only)" }
+verified = { hash = "b3:5b75c7995517ed4f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after a test-only change in crash.rs (location check accepts backslashes on Windows); crash report contents, redaction, retention and rotation text unchanged and still match" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
