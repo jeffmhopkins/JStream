@@ -162,15 +162,15 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md"]
-verified = { hash = "b3:92b0462b389879d4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read merged section: shared-source/duplicate, scenes-as-sources (merged with main's Nesting bullet, no duplicate), filters vs effects, and main's Built-so-far graph paragraph all consistent" }
+depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md"]
+verified = { hash = "b3:7bea84db34a35b13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against ADR-0022: tree now has Collection.canvas and SceneItem.geometry; new Canvas-and-geometry bullet matches decisions 1-4 (canvas as scene space, mix scales it, centre/size/fit/rotation/3D, painter's order, crop in source px, sizes runtime); Built-so-far still true of model/ (0.3 top-left+scale transform), canvas and geometry listed as not yet" }
 -->
 
 ```
-Collection (JSON on disk, schema_version, rev: u64)
+Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ├── sources        Source { id, kind, settings, filters[] }   video and/or audio; independent of scenes
 ├── scenes         Scene { id, name, items[] }
-│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, blend, effects[] }
+│                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, blend, effects[] }
 ├── studio         { program_scene, preview_scene, transition }   (studio-mode state)
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
 ├── audio          sends: (source_id, bus_id) → gain_db
@@ -187,6 +187,13 @@ Collection (JSON on disk, schema_version, rev: u64)
   Adding an *existing* source to a scene adds a `SceneItem` that references it. Changing
   the source or its `filters[]` changes it everywhere. **Duplicate** creates a new
   `Source` with its own id.
+- **Canvas and geometry** ([ADR-0022](adr/0022-item-transform-and-canvas.md)): the
+  collection's `canvas` is every scene's coordinate space, in pixels, and a `VideoMix`
+  scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
+  canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
+  and 3D tilt, turn, depth and per-item perspective, drawn in stacking order with no
+  depth buffer. `crop` is in source pixels. A source's current size is runtime state,
+  not part of the collection.
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
   scenes nest. A scene never contains itself at any depth, so the graph rejects the edit
   that would close a cycle.
@@ -202,10 +209,11 @@ Collection (JSON on disk, schema_version, rev: u64)
   undo stacks live in `jstream-core`.
 - **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind name or a nested
   scene; no settings or filters yet), scenes in display order, and items in stacking
-  order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
-  they never copy them. Deleting a source an item still places, or a scene a source
-  still shows, is rejected. Not yet: settings, filters, effects, blend, the 3D
-  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
+  order with `source_id`, protocol 0.3's 2D transform (top-left corner and scale, which
+  ADR-0022 replaces), `crop` and `visible`. Items refer to sources; they never copy them.
+  Deleting a source an item still places, or a scene a source still shows, is rejected.
+  Not yet: settings, filters, effects, blend, the canvas, `geometry`, and everything
+  outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync

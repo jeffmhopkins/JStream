@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:f78c10be7991b250", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Tests line now names the parity cases from jstream_protocol::parity (reads and rejected batches) that read.rs runs; Reading paragraph unchanged and still matches Graph::query; graph() helper now builds the shared collection; apply.rs untouched" }
+verified = { hash = "b3:a654f68ae73c5929", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only via ARCH#data-model: Model list still matches model/ (Item has transform, crop, visible; no canvas yet); nothing in apply.rs or tests changed; canvas/geometry are listed under Not yet with ADR-0022" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -89,5 +89,7 @@ Planned, and kept possible by the private fields of the model types:
 - **Filters and effects:** `filters[]` on sources (applied wherever the source is
   placed) and `effects[]` on items (per placement), with their edits.
 - **Source settings** for builtin kinds, and `source.rename`, come with `jstream-sources`.
-- The full 3D transform, and blend modes, replacing the protocol's 2D `ItemTransform`.
+- The collection canvas and item `geometry` of
+  [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md), replacing the protocol's
+  2D `ItemTransform`; and blend modes.
 - Item lookup is a linear scan over scenes. An ID index can come once collections grow.
