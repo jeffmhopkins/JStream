@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:3209f6acc31fb5a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ READMEs changed only by re-verified Purpose lines after this PR's jstream-youtube and jstream-sources crate-map rows; layer diagram and app roles unchanged" }
+verified = { hash = "b3:fd655f813b30c6cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed by this PR's CLI README mcp bullet (events tool) and main's re-verified Purpose lines; layer diagram and app roles unchanged" }
 -->
 
 ```
@@ -486,7 +486,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:d5ba2ff9794ff37f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered jstream-mcp and CLI READMEs changed only by re-verified Purpose lines; the youtube tool noun named in the grouping bullet is planned, matching ADR-0034's MCP exposure" }
+verified = { hash = "b3:d8baf8e7ca51e1f4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Events bullet (polling events tool, bounded buffer of 1000, explicit dropped count, ADR-0036) sits beside main's planned youtube tool noun; grouping, schema size and naming bullets unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
