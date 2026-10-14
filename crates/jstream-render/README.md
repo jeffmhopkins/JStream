@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:660502e7e30ef2a8", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the API bullet against place.rs after the rebase. Public types stay Placement and Crop, and place calls legacy_quad. Readback is the RGBA8 buffer jstream-core encodes as the video.snapshot PNG. Opened is test-only. Fit modes and 3D are still not drawn." }
+verified = { hash = "b3:8b039c7bd68d0f9f", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the API bullet against place.rs. place still calls legacy_quad. The only code change is that GeometryError::NotFinite stays the non-finite message and any other variant keeps its own. Fit modes and 3D are still not drawn. Readback is still the video.snapshot PNG." }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -88,7 +88,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:10e5f1361edcb835", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the placement subsection against legacy_quad and the pass list against compositor.rs. Clip space stays in this crate. Opened is test-only. R-RT-002 still holds: no control-plane wait, no file or network I/O. Negative scale still draws because there is no cull." }
+verified = { hash = "b3:3bd4488bcd79701c", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the placement subsection against legacy_quad. The error mapping does not change the quad. Clip space stays in this crate. R-RT-002 still holds: no control-plane wait, no file or network I/O." }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O

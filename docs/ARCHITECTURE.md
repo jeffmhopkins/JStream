@@ -577,7 +577,7 @@ verified = { hash = "b3:25e99f8ec6765b2f", by = "agent:grok@bc-49a8266d-f517-52b
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:0bd26d2fddcf17ce", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against place.rs calling legacy_quad. Crop, scale, top-left and clockwise rotation are unchanged. The resolve target is still RGBA8. Opened is not a pipeline step. Steps 1-2 and 4-6, fit modes, 3D and the ADR-0027 output path are unchanged." }
+verified = { hash = "b3:fc7f04c2f78b2546", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the one-scene paragraph against place.rs. Placement is still legacy_quad. The NotFinite match is not a pipeline step. Steps 1-2 and 4-6, fit modes, 3D and the ADR-0027 output path are unchanged." }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

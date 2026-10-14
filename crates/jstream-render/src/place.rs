@@ -1,6 +1,8 @@
 //! Legacy 0.3 placement, evaluated by [`jstream_protocol::legacy_quad`].
 
-use jstream_protocol::{Crop as ProtocolCrop, Finite32, ItemTransform, Vec2, legacy_quad};
+use jstream_protocol::{
+    Crop as ProtocolCrop, Finite32, GeometryError, ItemTransform, Vec2, legacy_quad,
+};
 
 use crate::error::RenderError;
 use crate::scene::{Crop, Placement};
@@ -37,7 +39,7 @@ pub(crate) fn quad(
         bottom: crop.bottom,
     };
     let placed =
-        legacy_quad(transform, crop, source_width, source_height).map_err(|_| not_finite())?;
+        legacy_quad(transform, crop, source_width, source_height).map_err(placement_error)?;
     Ok(placed.map(|quad| Quad {
         corners: quad.corners.map(|point| [point.x, point.y]),
         uvs: quad.uvs,
@@ -52,6 +54,18 @@ fn not_finite() -> RenderError {
     RenderError::Invalid {
         what: "placement",
         detail: "a component is not finite".into(),
+    }
+}
+
+/// `legacy_quad` only returns [`GeometryError::NotFinite`] today. A later variant keeps
+/// its own message instead of being reported as non-finite.
+fn placement_error(err: GeometryError) -> RenderError {
+    match err {
+        GeometryError::NotFinite => not_finite(),
+        other => RenderError::Invalid {
+            what: "placement",
+            detail: other.to_string(),
+        },
     }
 }
 
