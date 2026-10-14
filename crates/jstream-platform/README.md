@@ -96,7 +96,7 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:29dedab6f2a2885a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Types now built in this crate; #59 review folded in: N1 driver lifetime (raw holders keep a Device clone; hold drops before texture in GpuFrame), N2 unstaged slots free at once and a full ring drops+counts, N3 no-interop fallback to an engine device (software adapter headless) and Cpu paths; N5 wording; rest unchanged" }
+verified = { hash = "b3:e760f7f5bf5b32e0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1 on #60: the Equality bullet now matches GpuFrame::eq in gpu.rs (texture identity, hold by ptr::addr_eq, full VideoFrameInfo; FrameSync has no PartialEq, only Debug); rest of the section re-read against gpu.rs and unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
@@ -147,8 +147,11 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
 - **Encoders and the virtual camera** accept `VideoSurface::Gpu` from the same platform.
   They wait on the D3D11 side for the release value before reading (ARCH step 5). A
   `GpuFrame` from another platform, or from another `GpuContext`, is `Unsupported`.
-- **Equality and `Debug`:** `GpuFrame` compares by texture identity and `pts`, and
-  `FrameSync` by `Arc::ptr_eq`, so `VideoSurface` keeps its derives.
+- **Equality and `Debug`:** two `GpuFrame`s are equal when they have the same texture
+  (wgpu's resource identity), the same `FrameSync` hold (the same allocation, compared by
+  data pointer with `ptr::addr_eq`, so two vtables for one hold don't matter) and equal
+  `VideoFrameInfo`. `FrameSync` itself has no equality; it only needs `Debug`. So
+  `VideoSurface` keeps its derives.
 
 **When there is no interop.** If `open_device` fails (no platform interop, no adapter
 with NV12, or a test run), the engine opens a device of its own and uses the CPU frame
