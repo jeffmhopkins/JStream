@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:a356d168d6f85bf5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained the ADR-0032 live-values sentence; R-RT-001..006 still hold, and R-RT-003's parameter channels are exactly what live values use" }
+verified = { hash = "b3:6915cfa07bd1bbf9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading gained ADR-0035's planned CLAP host paragraph, which keeps the mixer free of syscalls and locks for plugins; R-RT-001..006 text unchanged and still hold (R-RT-001's applies_to update for the host is deferred as a governance change)" }
 -->
 
 <a id="R-RT-001"></a>

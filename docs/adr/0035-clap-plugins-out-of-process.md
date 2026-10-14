@@ -2,7 +2,7 @@
 id = "ADR-0035"
 title = "CLAP audio plugins, out of process"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
