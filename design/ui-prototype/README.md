@@ -65,8 +65,10 @@ To keep working on them, publish them back to the artifact (or a copy of it).
 - **Keyframe scenes:** a variant of a scene, nested under it, that may change only
   placement and visibility; everything else follows the parent. It stores only what differs.
 - **References vs clones:** a reference shares everything with its source except its
-  placement (position, size, rotation, crop); a clone is independent. References show in
-  italics; right-click toggles between the two.
+  placement (position, size, rotation, crop), opacity and blend; a clone is independent.
+  Each placement of a shared source shows how often the source is placed ("shared ×3");
+  right-click toggles between reference and clone
+  ([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)).
 - Labels and favourites with custom icons and colours; filtering by them.
 - Properties dialog per source type and per scene (double-click).
 

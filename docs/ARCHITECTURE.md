@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:86a303e69b7ff4c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon/README.md only had its design verified line refreshed (ADR-0032 dependency re-check); shape diagram, per-client undo in the engine box and host table unchanged and still hold" }
+verified = { hash = "b3:b17ac8fcee8ca1cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #71: covered apps/ changed only by this PR's daemon README Serving-bullet order and test harness; the daemon and CLI rows and the diagram match main and still hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:89b8da3eb137ab44", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#66, #69, #70): new crates/jstream-audio/Cargo.toml at layer 2 (deps jstream-media, jstream-platform L1, no unsafe) matches the L2 audio row; other rows and edges as on main" }
+verified = { hash = "b3:b3e8d07c9f7c0919", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #74: new crates/jstream-encode/Cargo.toml at layer 3 (dep jstream-platform L1) beside main's jstream-audio (L2), core, daemon and outputs rows; all edges point strictly down (lint-deps ok)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -162,16 +162,19 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md"]
-verified = { hash = "b3:429b14deb8d59429", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0022 dependency changed only its 0.4 migration details (omitted placement keeps the 0.3 meaning until 1.0; deprecated transforms stay pending until the source size is known, never refused); the Canvas and geometry bullet states neither, so it still holds" }
+depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md"]
+verified = { hash = "b3:74b07b9301d43227", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #79: tree keeps ADR-0023's opacity, blend, reserved effects[] and duplicated_from and ADR-0029's transition fields and transitions collection, with ADR-0022's canvas and geometry replacing Transform3D; bullets joined (reference/clone plus Canvas and geometry); Built-so-far Not yet lists every merged ADR's fields; depends_on gains ADR-0023 beside ADR-0022" }
 -->
 
 ```
 Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
-├── sources        Source { id, kind, settings, filters[] }   video and/or audio; independent of scenes
-├── scenes         Scene { id, name, items[] }
-│                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, blend, effects[] }
-├── studio         { program_scene, preview_scene, transition }   (studio-mode state)
+├── sources        Source { id, kind, settings, filters[], duplicated_from? }   video and/or audio; independent of scenes
+├── scenes         Scene { id, name, items[], transition_in?, transition_out? }
+│                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
+│                              effects[] (reserved, empty in v1), transition }
+├── studio         { program_scene, preview_scene }   (studio-mode state)
+├── transitions    { presets: [TransitionPreset], default }
+│                  TransitionPreset { id, name, kind: Cut | Fade | Move, duration_ms, easing, unmatched, stagger_ms }
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
 ├── audio          sends: (source_id, bus_id) → gain_db
 │                  Bus { id, name, filters[], monitor_device? }
@@ -184,9 +187,15 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `program_scene`, including any transition in progress. A `VideoMix` with input
   `Program` follows it.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
-  Adding an *existing* source to a scene adds a `SceneItem` that references it. Changing
-  the source or its `filters[]` changes it everywhere. **Duplicate** creates a new
-  `Source` with its own id.
+  Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
+  shares everything with the other placements of that source except its own placement,
+  opacity and blend. Changing the source or its `filters[]` changes it everywhere.
+  **Duplicate** creates a new `Source` with its own id and `duplicated_from` set to the
+  original; an item placing it is a **clone** and changes independently. Sources have no
+  owner: every placement of a shared source is equal, and a client shows how often a
+  source is placed rather than marking one placement as the original.
+  `item.set_source` switches an item between reference and clone and keeps its id,
+  placement and stacking position ([ADR-0023](adr/0023-placements-references-and-clones.md)).
 - **Canvas and geometry** ([ADR-0022](adr/0022-item-transform-and-canvas.md)): the
   collection's `canvas` is every scene's coordinate space, in pixels, and a `VideoMix`
   scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
@@ -195,10 +204,23 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   depth buffer. `crop` is in source pixels. A source's current size is runtime state,
   not part of the collection.
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
-  scenes nest. A scene never contains itself at any depth, so the graph rejects the edit
-  that would close a cycle.
+  scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
+  that would close a cycle (`item.add`, and `item.set_source`).
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
-  is used. `SceneItem.effects[]` and `crop` belong to that one placement.
+  is used. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
+  multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
+  compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
+  stays empty in v1, so adding them later needs no collection migration.
+- **Transitions** ([ADR-0029](adr/0029-transitions.md)): exactly one preset is the
+  default, and it can't be deleted. Deleting a preset clears the overrides that use it in
+  the same edit. The engine picks a switch's preset: the one the switch action names, else
+  the destination scene's `transition_in`, else the current scene's `transition_out`, else
+  the default. `SceneItem.transition { delay_ms, easing, glide, appear, disappear }`
+  belongs to the placement, keyed by item ID. **Move** pairs outgoing and incoming items
+  that place the same source (the k-th placement with the k-th, in stacking order) and
+  interpolates each pair; **Fade** pairs nothing; **Cut** switches on the next tick.
+  Unpaired items appear or disappear with their effect. The fields are reserved with
+  neutral defaults while M1b builds the model; the behaviour comes before or during M2.
 - The preview shown in the UI is a protocol stream, not an `Output`.
 - **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
   encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
@@ -212,8 +234,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   order with `source_id`, protocol 0.3's 2D transform (top-left corner and scale, which
   ADR-0022 replaces), `crop` and `visible`. Items refer to sources; they never copy them.
   Deleting a source an item still places, or a scene a source still shows, is rejected.
-  Not yet: settings, filters, effects, blend, the canvas, `geometry`, and everything
-  outside `sources` and `scenes`. Nothing is persisted yet.
+  Not yet: settings, filters, `opacity`, `blend`, the reserved `effects[]`,
+  `duplicated_from`, `item.set_source`, the transition fields, the canvas, `geometry`,
+  and everything outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -277,7 +300,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:9a70e815e411c6c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added Live values (live.set/live.cancel actions, live.changed/live.ended) and History (history.undo/redo, a fourth call kind) bullets citing ADR-0032; covered control/server/protocol READMEs changed only as verified in this PR; other bullets still match the code" }
+verified = { hash = "b3:883e8fef96b575d0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73: server test and README verified lines, no wire change) with ADR-0029's planned Transitions bullet; covered READMEs changed only by verified lines; body matches the code" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -293,6 +316,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
+- **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update
+  and delete presets, set the default, and set a scene's `transition_in` and
+  `transition_out` and an item's transition settings. The scene-switch action takes an
+  optional preset.
 - **Live values** (`live.set`, `live.cancel`; events `live.changed`, `live.ended`):
   actions that override live-adjustable parameters during a drag or a live dialog, with
   no `rev` bump or undo step; one batch commits the gesture
@@ -322,7 +349,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stdio proxy renamed jstream-cli mcp after the maintainer kept the binary name jstream-cli; tools, schema-size, names, access and undo bullets unchanged" }
+verified = { hash = "b3:dca7fe7e8b8a425b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "R-API-002 prose now describes noun-grouped tools with ops, matching the 'Tools are grouped by noun' and Names bullets; jstream-mcp code change only rewords disconnected errors and README adds events options, so tools, schema size, access and undo bullets hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -353,7 +380,7 @@ verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:890531688bbbe6e4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered code: gpu/mod.rs only re-exports adapter_drives_monitor for WGC capture's own device; steps 1-6 unchanged, and the new CPU capture path is step 6's fallback, on the display's adapter as the hybrid-GPU note asks" }
+verified = { hash = "b3:a2d3a8425cd5572d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0029: added the not-built transition node (synthetic item list, control-thread pairing plan, render-thread interpolation and retargeting, shortest-way rotation, shared easing, compositor clamping); S1 steps and results unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -378,6 +405,17 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 6. **Fallbacks:** CPU readback/upload, counted in stats with a stated budget. On
    hybrid-GPU laptops, capture and render must use the same adapter, or the engine falls
    back and reports it.
+
+**Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
+texture blend: during it, the program mix is a synthetic item list whose transforms and
+opacity come from the transition state, drawn by a transition node that reads both
+scenes' source textures. The control thread pairs the items when the switch starts and
+sends the render thread a plan; the render thread only interpolates, and owns the live
+interpolated state, so a switch mid-transition starts from what is on screen. Rotation,
+tilt and turn take the shortest way round. The easing curves are one shared function
+with golden tests. After easing, the compositor clamps values with a hard range: opacity
+to `[0, 1]`, crop to `[0, source size]`, size to `≥ 0` and perspective to `> 0`; the
+spring may overshoot everything else.
 
 **S1 result**, on a Ryzen 9 8945HS with Radeon 780M (driver 32.0.22029.9039), a
 3840x2160 display at 29 Hz and the async `AMDh264Encoder` MFT. The pipeline holds 60
