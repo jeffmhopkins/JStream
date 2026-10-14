@@ -1,0 +1,54 @@
+[package]
+name = "jstream-platform-windows"
+version = "0.0.0"
+description = "Windows platform backends: the QPC media clock and WASAPI audio I/O (WGC capture and Media Foundation codecs to follow)."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side, CEF browser backend (ADR-0021)"
+unsafe_allowed = true
+
+# Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
+# one of the crates R-UNSAFE-001 allows to use it. Every other workspace lint is copied
+# unchanged; keep the two tables in step.
+[lints.rust]
+missing_docs = "warn"    # R-RS-006 (blocking under -D warnings)
+
+[lints.clippy]
+unwrap_used = "deny"                      # R-RS-004
+print_stdout = "deny"                     # R-RS-005
+print_stderr = "deny"                     # R-RS-005
+allow_attributes_without_reason = "deny"  # R-RS-009
+undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
+
+[features]
+# Platform tests against real audio devices (docs/RULES.md#testing): additive, off by
+# default, and the tests are also `#[ignore]`d. Run them on a Windows machine with a
+# microphone and speakers:
+# `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
+hw-tests = []
+
+[dependencies]
+jstream-platform.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "std",
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_KernelStreaming",
+    "Win32_Media_Multimedia",
+    "Win32_Security",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Performance",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_Shell_PropertiesSystem",
+] }
+windows-core = { workspace = true, features = ["std"] }
