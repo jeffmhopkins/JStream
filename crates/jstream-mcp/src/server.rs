@@ -70,7 +70,7 @@ enum Era {
 ///
 /// Logging (R-RS-005): each server has an `mcp_session` span, every request runs in an
 /// `mcp_request` span under it naming the method, and each tool call in a `tool_call`
-/// span naming the tool. Tool arguments and results are never logged (R-SEC-001), only
+/// span naming the tool, also directly under `mcp_session`. Tool arguments and results are never logged (R-SEC-001), only
 /// names, codes and whether the call failed.
 pub struct Server {
     control: Arc<dyn Control>,
@@ -263,7 +263,9 @@ impl Server {
         client_name: Option<String>,
     ) -> Result<Value, RpcError> {
         let tool = params.get("name").and_then(Value::as_str).unwrap_or("");
-        let span = tracing::info_span!("tool_call", tool = %tool);
+        // A child of the session, not of `mcp_request`: that span is `debug`, so at the
+        // default `info` level it is disabled and would cut `tool_call` off from it.
+        let span = tracing::info_span!(parent: &self.span, "tool_call", tool = %tool);
         let result = self
             .call_tool(params, client_name)
             .instrument(span.clone())
