@@ -34,7 +34,7 @@ and how to take outside contributions.
 ## How changes land
 <!-- @section
 depends_on = ["docs/RULES.md#R-GIT-001", "docs/RULES.md#R-GIT-002", "docs/RULES.md#R-GOV-003", "docs/RULES.md#R-GOV-005"]
-verified = { hash = "b3:2dac504db676844d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section; checked against R-GIT-001 (protected main, squash), R-GIT-002 (Conventional Commit titles), R-GOV-003 (reviewer agent gates merges), R-GOV-005 (Tier-1 decisions are the maintainer's) and the PR template path" }
+verified = { hash = "b3:6ae1ffd1144e50b4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-GIT-001 (protected main, squash), R-GIT-002 (Conventional Commit titles), R-GOV-003 (reviewer gate, auto-merge) and R-GOV-005 (Tier-1 is the maintainer's); every bullet matches" }
 -->
 
 This is how the maintainer and the agents work. It also tells an issue reporter what

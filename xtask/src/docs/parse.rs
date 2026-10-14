@@ -36,6 +36,9 @@ pub(crate) struct Rule {
     pub(crate) meta: Option<toml::Table>,
     /// 0-based line indices of the `<!-- @rule` and closing `-->` lines.
     pub(crate) block: Option<(usize, usize)>,
+    /// 0-based line range of the rule text: after its heading or metadata block, up to (not
+    /// including) the next rule's or section's anchor line, or the end of the file.
+    pub(crate) body: (usize, usize),
 }
 
 /// A Markdown link destination, outside code.
@@ -258,11 +261,13 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
                     format!("rule `{id}` must be followed by a `<!-- @rule` block"),
                 );
             }
+            let body_start = block.map_or(i + 1, |(_, end)| end + 1);
             d.rules.push(Rule {
                 id,
                 line: n,
                 meta,
                 block,
+                body: (body_start, lines.len()),
             });
         }
         i += 1;
@@ -276,6 +281,19 @@ pub(crate) fn parse(path: &str, text: &str, diags: &mut Vec<Diag>) -> Doc {
         let next_anchor = d.sections[k].line.saturating_sub(2);
         let prev = &mut d.sections[k - 1];
         prev.body.1 = next_anchor.max(prev.body.0);
+    }
+
+    // A rule's text ends where the next rule's or section's anchor line begins (#100).
+    let anchors: Vec<usize> = d
+        .sections
+        .iter()
+        .map(|s| s.line)
+        .chain(d.rules.iter().map(|r| r.line))
+        .map(|line| line.saturating_sub(2))
+        .collect();
+    for r in &mut d.rules {
+        let next = anchors.iter().copied().filter(|&a| a >= r.body.0).min();
+        r.body.1 = next.unwrap_or(r.body.1).max(r.body.0);
     }
 
     scan_inline(text, &mut d);

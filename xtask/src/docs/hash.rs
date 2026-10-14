@@ -58,7 +58,7 @@ fn normalize(lines: &[&str]) -> String {
     trimmed[start..end].join("\n")
 }
 
-/// The normalized body of a section (by anchor) or, with `anchor = None`, of the whole doc
+/// The normalized body of a section or rule (by anchor) or, with `anchor = None`, of the whole doc
 /// after its `@doc` block, without metadata blocks. A whole ADR's body also leaves out its
 /// generated `adr-status` banner, which is not ADR content (ADR-0038), so a status change
 /// doesn't stale its dependents.
@@ -72,7 +72,13 @@ fn body_by(doc: &Doc, anchor: Option<&str>, strip: bool) -> Option<String> {
     let lines: Vec<&str> = doc.text.lines().collect();
     let (start, end) = match anchor {
         None => (doc.content_start, lines.len()),
-        Some(a) => doc.sections.iter().find(|s| s.anchor == a)?.body,
+        // A rule anchor (`R-…`) is not a section; its text is the rule's body (#100).
+        Some(a) => doc
+            .sections
+            .iter()
+            .find(|s| s.anchor == a)
+            .map(|s| s.body)
+            .or_else(|| doc.rules.iter().find(|r| r.id == a).map(|r| r.body))?,
     };
     let (start, end) = (start.min(lines.len()), end.min(lines.len()));
     let meta = doc.metadata_lines();
@@ -328,6 +334,17 @@ mod tests {
         assert_eq!(body(&doc, Some("a")).as_deref(), Some("Alpha text."));
         assert_eq!(body(&doc, Some("b")).as_deref(), Some("Beta."));
         assert!(body(&doc, Some("nope")).is_none());
+    }
+
+    /// #100: a rule anchor's body is its text, without its `@rule` block, up to the next
+    /// rule's or section's anchor.
+    #[test]
+    fn rule_body_runs_to_the_next_anchor() {
+        let text = "<!-- @doc\nid = \"T\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\n-->\nIntro.\n\n<a id=\"R-X-001\"></a>\n### R-X-001: One\n<!-- @rule\nstatus = \"active\"\n-->\nFirst.\n\n<a id=\"R-X-002\"></a>\n### R-X-002: Two\n<!-- @rule\nstatus = \"active\"\n-->\nSecond.\n\n<a id=\"b\"></a>\n## B\n<!-- @section\n-->\nBeta.\n";
+        let doc = parse(text);
+        assert_eq!(body(&doc, Some("R-X-001")).as_deref(), Some("First."));
+        assert_eq!(body(&doc, Some("R-X-002")).as_deref(), Some("Second."));
+        assert!(body(&doc, Some("R-X-003")).is_none());
     }
 
     const MD: &str = "<!-- @doc\nid = \"T\"\nreviewed = { by = \"human:x\", note = \"one\" }\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"src/**\"]\nverified = { hash = \"b3:1\", by = \"agent:a\", note = \"first\" }\n-->\nAlpha.\n\n<a id=\"R-X-001\"></a>\n### R-X-001: Rule\n<!-- @rule\nstatus = \"active\"\n-->\nRule text.\n";

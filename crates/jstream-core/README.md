@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f5ae46b573596a85", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol gains decided-but-unbuilt Origin, slow-client, MCP-HTTP and transition-preset text; Engine still applies only built edits and OutputStart/OutputStop; main's #98 Logging subsection kept" }
+verified = { hash = "b3:df0a0a263c638e3e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read the batch and idempotency-key bullets against R-API-004 (optional expected_rev, optional idempotency key, per-client undo); they match" }
 -->
 
 ### Engine and sessions

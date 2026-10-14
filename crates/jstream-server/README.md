@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:701c9540a7f347fb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Extra hosts paragraph (name:port, one port, bracketed IPv6, refused at bind) already matches; this change brings the extra_hosts rustdoc in line with it and gate.rs check_extra_hosts" }
+verified = { hash = "b3:034a4650f90cc3c5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read the admission table against R-SEC-002 (token on every upgrade, Origin and Host checked, 127.0.0.1 by default); today a missing Origin is refused, which the rule's wording still requires" }
 -->
 
 ### Listening and admission

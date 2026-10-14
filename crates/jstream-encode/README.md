@@ -68,7 +68,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:8e5cc0afca8f97bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Audio drop bullet now says encoded silence counts as sent, so a fill after a Busy block resumes where it ended; matches fill_gap setting next and the new a_busy_block_after_a_gap_fill_does_not_repeat_the_silence test" }
+verified = { hash = "b3:462c470579934664", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-RT-002 (encode thread never waits on the control plane, no per-frame allocation, no I/O) and R-RT-004 (drops counted in SessionStats, never stalling); wiring into stats.tick is the engine's" }
 -->
 
 ### Threads and pacing

@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:991cc79c6dc2ecb5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against xtask/src/docs after rebasing ADR-0038 onto ADR-0039: hash.rs strips metadata then the adr-status banner for whole-ADR bodies, generate.rs writes banners and docs/adr/README.md, mod.rs has generate and rehash; the hash-bound and Generated content bullets both match" }
+verified = { hash = "b3:159065a894722bd5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #100's xtask change (parse.rs gives rules a body range; hash.rs resolves rule anchors to it): the hash-bound bullet still holds, and Hash-bound verification now names rule-anchor targets" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -223,6 +223,7 @@ It lists:
    ([ADR-0018](adr/0018-ci-supply-chain-policy.md));
 3. for each `depends_on` target: its reference plus a hash of its normalized body
    (metadata blocks removed), or of its one row for a `path#anchor/<key>` reference. A
+   rule anchor (`RULES.md#R-…`) names the rule's text, up to the next rule or section. A
    whole-ADR target's body also leaves out its generated `adr-status` banner, so a status
    change alone doesn't make its dependents stale ([Generated content](#generated)).
 
@@ -530,7 +531,7 @@ disables the check, only review and the weekly audit stand behind it.
 <!-- @section
 covers = ["xtask/src/lint_deps.rs"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003", "docs/RULES.md#R-ARCH-005", "docs/RULES.md#R-UNSAFE-001", "docs/RULES.md#R-DEP-002", "docs/RULES.md#R-DEP-003"]
-verified = { hash = "b3:3ef30cac7a3da33d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Native-code bullet's link moved from ADR-0003 to ADR-0031, which restates the codec ban and lint-deps allowlist unchanged; lint behaviour described is unchanged" }
+verified = { hash = "b3:2c9f8f14815edcce", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read each bullet against its rule: R-ARCH-005 metadata, R-ARCH-002 layering, R-ARCH-003 clients, R-UNSAFE-001 allowlist and forbid, R-DEP-002 native-code allowlist, R-DEP-003 workspace deps; all match" }
 -->
 
 `cargo xtask lint-deps` (CI check `lint-deps`) checks the rules whose `enforced_by` names
