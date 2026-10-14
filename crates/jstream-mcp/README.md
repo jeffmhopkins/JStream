@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:07c33b9da8dfd09a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Contents gained events.rs (Feed pump thread and bounded numbered Buffer); still layer 3 over dyn Control with no async runtime: the pump is a std thread parked on the stream's waker, not an executor" }
+verified = { hash = "b3:36349a961e161b81", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-mcp row and this Purpose are unchanged and still match the crate" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
