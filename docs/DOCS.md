@@ -122,7 +122,9 @@ verified = { hash = "b3:4f1c9a0e7d2b8c61", by = "agent:claude@<session-url>", no
   text, so the heading can be renamed freely.
 - `covers`: code globs, relative to the repo root, that this section describes. Optional.
 - `depends_on`: the **sections** this one relies on, as `path#anchor` or
-  `path` for a whole ADR. These are section-level edges only. Docs never depend on whole
+  `path` for a whole ADR. A `path#anchor` may also name a rule (`docs/RULES.md#R-…`),
+  whose text up to the next rule or section is what is hashed
+  ([Hash-bound verification](#verification)). These are section-level edges only. Docs never depend on whole
   docs, because coarse edges create re-verification storms.
   A section that relies on one row of a table can name just that row as
   `path#anchor/<key>`: the single table row in that section with a cell that is exactly

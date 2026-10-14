@@ -165,7 +165,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:2f12d08a378c4e73", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR adds #94's rules (orphaned overrides dropped in the same edit and restored by its inverse; an override follows a group to every placement; a hotkey with a deleted target stays, broken, re-pointable) and ADR-0037 (transition presets carry kind plus settings, CLAP plugin kinds with an opaque state parameter, non-exhaustive cycle-check list); depends_on adds 0037; all marked not built" }
+verified = { hash = "b3:6c79e1f6a3e80df1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#102 N2: the stale-hotkey sentence now re-points through a hotkey.clear + hotkey.set batch, matching ADR-0024 §5 (set on a bound chord is already_exists); nothing else in the section changed" }
 -->
 
 ```
@@ -257,7 +257,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   binds only an action, never an edit; which client listens for the keys is a client
   decision. Deleting the scene, source or output a binding's action names succeeds: the
   binding stays, is reported as broken, does nothing when pressed, and can be re-pointed
-  with `hotkey.set`; undoing the delete makes it work again. `Scene.background` (absent
+  (a batch of `hotkey.clear` and `hotkey.set`, as ADR-0024 §5 rebinds); undoing the delete makes it work again. `Scene.background` (absent
   means transparent) is scene model, not metadata, because the compositor draws it
   wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it

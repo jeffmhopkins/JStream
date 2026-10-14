@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:f6bc22f1559f0838", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for #97: the audio.rs fix only moves the silence-fill resume point; session/encode-thread/fan-out description and dependencies unchanged" }
+verified = { hash = "b3:fe7b063aa9a3acbf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: ARCH#data-model changed only in the hotkey re-point wording; the encoder-sharing rule this Purpose restates is unchanged" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
