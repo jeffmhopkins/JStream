@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:0288f441497ff857", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon changed only in token.rs (directory at the token path refused on Windows too); the daemon row (first cut serves the WebSocket API) and diagram still hold" }
+verified = { hash = "b3:f19442e2200d764a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon changed only its README Serving bullet order and the e2e test's stdout deadline; daemon row and diagram unchanged" }
 -->
 
 ```

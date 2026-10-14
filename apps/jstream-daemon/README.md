@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:d593b312e436e9a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "token.rs: a create_new failure other than AlreadyExists now still goes to read_existing when something is at the path (Windows reports a directory as AccessDenied), so 'is not a regular file' refusal holds on Windows too, as the text already says; nothing else changed" }
+verified = { hash = "b3:020254e87be7003d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #70 N1: Serving bullet now says the signal handlers are installed before the bind, as main.rs/serve.rs do and Design says; tests/daemon.rs reads stdout through a reader thread with 10 s deadlines (N2), which the Tests bullet still describes correctly" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -30,8 +30,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
-- **Serving** (`serve.rs`): builds the engine (with its placeholder outputs), binds the
-  server and installs the signal handlers that stop it.
+- **Serving** (`serve.rs`): builds the engine (with its placeholder outputs), installs
+  the signal handlers that stop it, then binds the server.
 - **Tests** (`serve.rs`, `token.rs`, `args.rs` unit tests; `tests/daemon.rs`, the
   built binary driven by `jstream-control`'s WebSocket client and stopped with SIGINT).
 
