@@ -21,12 +21,13 @@ use crate::{
     AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget, AudioPacket,
     AudioPacketFlags, AudioRenderBuffer, AudioStream, Backends, Capture, CaptureStats,
     CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo, CodecRole, Codecs, DeviceId,
-    HardwarePreference, MediaClock, PlatformError, VcamFormat, VcamSink, VideoDecoder,
-    VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    GpuContext, GpuFrame, GpuInterop, HardwarePreference, MediaClock, PlatformError, VcamFormat,
+    VcamSink, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 
 /// A full set of fake backends on `clock`: a 320x180 display, a stereo 48 kHz
-/// microphone and speakers, the fake codecs and a fake virtual camera.
+/// microphone and speakers, the fake codecs, no GPU interop ([`FakeGpuInterop`]) and a
+/// fake virtual camera.
 ///
 /// # Errors
 /// None in practice; the `Result` carries the media-type constructors' errors.
@@ -41,6 +42,7 @@ pub fn backends(clock: &FakeClock) -> Result<Backends, PlatformError> {
             ChannelLayout::Stereo,
         )?),
         codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
         vcam: Some(Box::new(FakeVcamSink::new())),
     })
 }
@@ -48,6 +50,33 @@ pub fn backends(clock: &FakeClock) -> Result<Backends, PlatformError> {
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     // A panic in another test thread must not cascade; the fake's state stays usable.
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+// ---------------------------------------------------------------------------------------
+// GPU
+
+/// GPU interop that has none: CI machines have no GPU (R-TEST-004), so the engine under
+/// test takes its fallback, its own device and the CPU frame paths.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct FakeGpuInterop;
+
+impl GpuInterop for FakeGpuInterop {
+    fn open_device(&self) -> Result<GpuContext, PlatformError> {
+        Err(PlatformError::Unsupported {
+            what: "GPU interop (the fake backends have none)".into(),
+        })
+    }
+
+    fn encode_target(
+        &self,
+        _context: &GpuContext,
+        _size: FrameSize,
+    ) -> Result<GpuFrame, PlatformError> {
+        Err(PlatformError::InvalidState {
+            what: "encode_target",
+            state: "the fake backends open no GPU contexts",
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------------------

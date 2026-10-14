@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:290aaf0a1167e830", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#threading only renamed audio threads to one per stream; src/audio.rs doc now says the same; purpose text (handlers on the backend's RT audio thread) unchanged and holds" }
+verified = { hash = "b3:5dca687e3f60c542", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Adds wgpu (pinned, re-exported) to the dependency list, VideoSurface::Gpu, the GPU interop bullet (GpuInterop/GpuContext/AdapterId/GpuFrame/FrameSync), Backends.gpu, FakeGpuInterop; Not-yet now names only the platform implementation; checked against src/{gpu,surface,backends,fake,lib}.rs" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -21,8 +21,10 @@ Layer-1 backend traits: the seam between the engine and the OS. Platform crates
 holds the backends as injected trait objects, so no engine crate names a platform API.
 This crate is the **single owner** of the encoder and decoder traits
 ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). It depends only on
-[`jstream-media`](../jstream-media/README.md#purpose) and `thiserror`, and has no
-`unsafe`.
+[`jstream-media`](../jstream-media/README.md#purpose), `thiserror` and `wgpu` (for the
+GPU-frame types, pinned exactly per
+[ADR-0004](../../docs/adr/0004-wgpu-with-native-interop.md) and re-exported as
+`jstream_platform::wgpu`), and has no `unsafe`.
 
 The shapes follow what spikes S1 (GPU and encode), S2 (virtual camera) and S3 (clock)
 do on Windows. This is a first cut: the traits will change once `jstream-platform-windows`
@@ -33,9 +35,15 @@ Contents:
   is the one monotonic media clock of [ADR-0014](../../docs/adr/0014-media-clock.md)
   (QPC on Windows). Every timestamp a backend hands over (capture frames, audio packets,
   decoded frames) is already on it.
-- **Frames:** `VideoSurface`, the frame type that crosses the seam. Today it has one
-  variant, a CPU `VideoFrame`. It is `#[non_exhaustive]` so a GPU variant can be added
-  with `GpuInterop` (see [Open questions](#open-questions)).
+- **Frames:** `VideoSurface`, the frame type that crosses the seam: `Cpu`, a
+  `VideoFrame` in system memory, or `Gpu`, a `GpuFrame` in a texture shared with the
+  platform. It is `#[non_exhaustive]`.
+- **GPU interop** ([GPU frames](#gpu-frames)): `GpuInterop` (`Send + Sync`) opens the
+  engine's `GpuContext` (adapter, device, queue, `AdapterId`, and the platform's own
+  state, which drops first) and allocates NV12 `encode_target`s. A `GpuFrame` holds a
+  `wgpu::Texture`, its `VideoFrameInfo` and an `Arc<dyn FrameSync>`; `GpuFrame::stage`
+  stages its fence wait and signal around the engine's next submit. Frames compare by
+  texture, hold and info.
 - **Capture:** `Capture` (`Send + Sync`) lists displays and windows and starts a
   `CaptureStream` (`Send`). The backend's capture thread fills a single-slot
   "latest frame" mailbox, as in
@@ -65,8 +73,8 @@ Contents:
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
   ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)), not this trait's.
-- **Injection:** `Backends`, a plain struct holding one platform's clock, capture, audio
-  and codec backends and its optional virtual-camera sink.
+- **Injection:** `Backends`, a plain struct holding one platform's clock, capture, audio,
+  codec and GPU-interop backends and its optional virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
   (`HRESULT`, `OSStatus`, `errno`).
@@ -76,24 +84,24 @@ Contents:
   keyframe pattern, placeholder payloads; the decoder returns frames in presentation
   order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
   (dropping it stops it; a test watches it through a `FakeVcamProbe`), plus
+  `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 
-**Not yet:** `GpuInterop` and GPU frames, webcam capture (an MJPEG `Codec` variant and a
+**Not yet:** a platform implementation of `GpuInterop`, webcam capture (an MJPEG `Codec` variant and a
 camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
-## GPU frames (design)
+## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:903a3d7ad01cf812", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New design section, checked against ARCH#crate-map (GpuInterop uses wgpu types), ARCH#gpu-pipeline steps 2/5/6 (hal import in jstream-platform-windows, shared fence, CPU fallback), ADR-0004 (platform crates use wgpu-hal, exact pin) and R-UNSAFE-001 (render can't use unsafe); S1's stage_fences/import_texture/Gpu::new code" }
+verified = { hash = "b3:e760f7f5bf5b32e0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review B1 on #60: the Equality bullet now matches GpuFrame::eq in gpu.rs (texture identity, hold by ptr::addr_eq, full VideoFrameInfo; FrameSync has no PartialEq, only Debug); rest of the section re-read against gpu.rs and unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
-→ NV12 → encoder with no CPU copy). It is not built yet; the next PRs build it in this
-order: these types, then the Windows implementation with WGC capture, then
-`jstream-render`.
+→ NV12 → encoder with no CPU copy). The types below are built in this crate. The Windows
+implementation (with WGC capture) and `jstream-render` come next.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -139,8 +147,25 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
 - **Encoders and the virtual camera** accept `VideoSurface::Gpu` from the same platform.
   They wait on the D3D11 side for the release value before reading (ARCH step 5). A
   `GpuFrame` from another platform, or from another `GpuContext`, is `Unsupported`.
-- **Equality and `Debug`:** `GpuFrame` compares by texture identity and `pts`, and
-  `FrameSync` by `Arc::ptr_eq`, so `VideoSurface` keeps its derives.
+- **Equality and `Debug`:** two `GpuFrame`s are equal when they have the same texture
+  (wgpu's resource identity), the same `FrameSync` hold (the same allocation, compared by
+  data pointer with `ptr::addr_eq`, so two vtables for one hold don't matter) and equal
+  `VideoFrameInfo`. `FrameSync` itself has no equality; it only needs `Debug`. So
+  `VideoSurface` keeps its derives.
+
+**When there is no interop.** If `open_device` fails (no platform interop, no adapter
+with NV12, or a test run), the engine opens a device of its own and uses the CPU frame
+paths. On CI and headless machines that device is on a software adapter, as ARCH
+principle 7 says, and capture, encode and the virtual camera exchange `Cpu` frames
+(ARCH step 6).
+
+**Driver lifetime.** Raw driver objects can outlive the `GpuContext`, because
+`VideoSurface` is `Clone` and a frame can sit in an encoder queue or the virtual camera.
+So every platform object that holds a raw driver interface (a `FrameSync` hold, a
+capture ring slot, an encode target) also holds a `wgpu::Device` clone, dropped after
+its raw fields. The driver (`d3d12.dll`) then can't be unloaded before them, which is
+how spike S1 crashed at exit. Inside `GpuFrame`, the hold drops before the texture for
+the same reason.
 
 **What stays CPU.** `VideoSurface::Cpu` remains for readback, tests and the fallbacks
 (ARCH step 6), and every trait keeps accepting it. The fakes stay CPU-only.
@@ -151,9 +176,16 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
   (S1). The Windows implementation will match by the adapter's vendor ID when the LUID
   is missing, and take the first hardware MFT when only one adapter has an encoder.
   `AdapterId` carries both the LUID and the vendor ID for that.
-- **Frame lifetime.** Capture uses a small ring of shared textures. A slot is reused only
-  after the fence has passed the value that render's signal released it with. If render
-  holds a frame across ticks, capture skips that slot. It never blocks
+- **Frame lifetime.** Capture uses a small ring of shared textures. A slot comes free
+  in one of two ways:
+  - **Staged:** once the fence has passed the value that render's signal released it
+    with.
+  - **Not staged:** as soon as every hold on it is dropped. This is the common case
+    when capture outruns the mix and render skips frames; no GPU work references the
+    slot, so it frees at once.
+
+  If render holds a frame across ticks, capture skips that slot. When every slot is
+  held, the new frame is dropped and counted in `CaptureStats`. Capture never blocks
   ([R-RT-004](../../docs/RULES.md#R-RT-004)).
 
 <a id="open-questions"></a>
@@ -161,7 +193,8 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
 <!-- @section
 -->
 
-- **GPU frames.** Designed in [GPU frames](#gpu-frames) below; not built yet.
+- **GPU frames.** Designed and typed in [GPU frames](#gpu-frames) above; the platform
+  implementations are not built yet.
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.
   **Proposed default:** backends downmix any other layout to stereo, and new layouts
   (e.g. 7.1) are added only when a real device needs them. The Windows backend already

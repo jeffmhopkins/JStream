@@ -1,8 +1,9 @@
 //! H.264 encoding through Media Foundation encoder MFTs, from CPU NV12 frames.
 //!
 //! This is the CPU path: frames are copied into a Media Foundation memory buffer. ARCH's
-//! GPU pipeline feeds the encoder D3D11 textures instead; that arrives with the GPU
-//! frame type, and the CPU path stays as the fallback (ARCH › GPU pipeline, step 6).
+//! GPU pipeline feeds the encoder D3D11 textures instead; that arrives with the Windows
+//! `GpuInterop` implementation, and the CPU path stays as the fallback (ARCH › GPU
+//! pipeline, step 6).
 //!
 //! Hardware encoders are tried first and the OS software encoder after them, as
 //! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0003).

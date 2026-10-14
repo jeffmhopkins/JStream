@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:d2a0d3a28b7a17d3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main (#61 review follow-ups): async MFTs get one ProcessOutput per HaveOutput event (PullMode::Once); stream changes re-apply size/rate/bitrate/profile via Retype, falling back to the offered type, then re-read the buffer size; Tests paragraph names the GPU-encoder need; checked against codec/{mf,h264,aac}.rs" }
+verified = { hash = "b3:92b71bfcc31fde1f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main (with #62's one-ProcessOutput-per-event and stream-change retype): this PR's change is the H.264 bullet tying the D3D11 path to the Windows GpuInterop implementation (review B2); upstream jstream-platform#purpose gained the GPU-frame types; Not-yet still holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -88,7 +88,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     activation object, as Microsoft asks. One output sample is reused for every pull.
   - **H.264 encoder (CPU path):** this takes NV12 `VideoSurface::Cpu` frames and copies
     them into Media Foundation memory buffers. It is ARCH's fallback path; the zero-copy
-    D3D11 path arrives with the GPU frame type
+    D3D11 path arrives with the Windows `GpuInterop` implementation
     ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 6).
     - **Choosing an encoder:** hardware encoder MFTs come first, then the OS software
       encoder, following `HardwarePreference`. The first one that accepts the media

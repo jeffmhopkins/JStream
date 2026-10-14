@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:509152d8bef66985", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main: jstream-platform-windows (L2, unsafe yes) gains the H.264 encoder, matching its row's 'MF encode/decode, MF hardware encoders'; still depends only on jstream-platform (L1); only the Win32_System_Ole API feature added to windows; table text unchanged" }
+verified = { hash = "b3:ed6cf2d4550d0b8a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main: jstream-platform (L1) now depends on wgpu, matching its row (GpuInterop uses wgpu types); jstream-platform-windows unchanged by this PR; no new internal edges; lint-deps ok; table text unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
