@@ -12,7 +12,7 @@ use std::io;
 
 /// The command succeeded.
 pub const OK: u8 = 0;
-/// Writing the output failed (other than a closed pipe).
+/// Writing the output failed (other than a closed pipe), or `mcp` could not read its input.
 pub const IO: u8 = 1;
 /// The command line could not be parsed.
 pub const USAGE: u8 = 2;
@@ -46,6 +46,8 @@ pub enum CliError {
     Control(ControlError),
     /// Writing the output failed.
     Io(io::Error),
+    /// Reading the input failed (only `mcp` reads it).
+    Read(io::Error),
 }
 
 impl CliError {
@@ -53,7 +55,7 @@ impl CliError {
     pub fn exit_code(&self) -> u8 {
         match self {
             CliError::Usage(_) => USAGE,
-            CliError::Io(_) => IO,
+            CliError::Io(_) | CliError::Read(_) => IO,
             CliError::Control(ControlError::Protocol(wire)) => for_protocol(&wire.error),
             CliError::Control(_) => DISCONNECTED,
         }
@@ -72,6 +74,7 @@ impl fmt::Display for CliError {
             }
             CliError::Control(other) => other.fmt(f),
             CliError::Io(error) => write!(f, "could not write the output: {error}"),
+            CliError::Read(error) => write!(f, "could not read the input: {error}"),
         }
     }
 }

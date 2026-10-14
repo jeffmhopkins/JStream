@@ -17,6 +17,9 @@ workspace = true
 
 [dependencies]
 axum.workspace = true
+# The token compare hashes both sides to a fixed length (#44); already in the tree for
+# xtask, with the `pure` feature, so it compiles no C.
+blake3.workspace = true
 futures-util.workspace = true
 jstream-control.workspace = true
 jstream-protocol.workspace = true

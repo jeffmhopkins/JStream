@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2aeadbc292c1b31b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions) into the ADR-0028 acceptance: data-model tree keeps Source audio and the scene/item transition fields, the not-yet list names both; studio no longer holds transition; other sections changed only by main's text and verified lines" }
+verified = { hash = "b3:2e713a39f858cc99", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025's kind versions migrate separately from PROTOCOL_VERSION and schema_version with fixture tests (R-API-003); the merged ADR-0022/0024 additions are minor-release changes too, and ADR-0022's 1.0 removal follows R-API-001" }
 -->
 
 <a id="R-API-001"></a>

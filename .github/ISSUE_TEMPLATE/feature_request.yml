@@ -1,0 +1,27 @@
+name: Idea or feature request
+description: Suggest something JStream should do.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas are welcome. The maintainer decides scope and timing, and product decisions are recorded as ADRs (docs/adr/).
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you're trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: The behaviour you want. Mention whether a human, an agent over MCP, or both would use it.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and prior art
+      description: Workarounds you use now, or how other tools (OBS, for example) handle it.

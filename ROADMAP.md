@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:28f61eb03c553fa2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: M1b keeps ADR-0023's filters/effects bullet (opacity, blend, reserved effects) and ADR-0028's mixer bullet; rest unchanged" }
+verified = { hash = "b3:89d596d731107192", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b gains ADR-0024's groups-as-scenes bullet (role = group, item.move keeping the item id, optional scene_id addressing, own scene only until variants land in M2) beside ADR-0023's shared-sources and per-placement opacity/blend text; M1a, M1c and M1d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -68,6 +68,10 @@ verified = { hash = "b3:28f61eb03c553fa2", by = "agent:claude@session_01QBbMRwRu
   - Scene graph and sources: window, webcam (incl. MJPEG decode), image, color, text, and
     **browser** ([ADR-0021](docs/adr/0021-browser-source.md); after spike S4).
   - **Scenes as sources**: a scene placed inside another scene, with cycles rejected.
+  - **Groups as scenes** ([ADR-0024](docs/adr/0024-scene-structure.md)): a scene `role`
+    (`scene` or `group`), `item.move` between scenes keeping the item's id, and the
+    optional `scene_id` addressing of placement edits (own scene only until keyframe
+    scenes are built).
   - **Shared sources:** adding an existing source places the *same* instance (one capture,
     one set of source filters) in another scene. **Duplicate** makes an independent copy.
     An item converts between reference and clone and keeps its id
@@ -93,7 +97,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:120acc39fff30338", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Studio-mode bullet spelled out per ADR-0029: presets with a default, into/out-of overrides, Move pairing by source, per-item delay/easing/glide/effects; other M2 items unchanged" }
+verified = { hash = "b3:8c8ae3cb749cbac4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M2 keeps ADR-0029's spelled-out studio/transitions bullet followed by ADR-0024's bullet (keyframe scenes, folders, organisation metadata, hotkeys built with the UI that uses them); other M2 bullets unchanged" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
@@ -108,6 +112,10 @@ verified = { hash = "b3:120acc39fff30338", by = "agent:claude@session_01QBbMRwRu
   ([ADR-0029](docs/adr/0029-transitions.md)): transition presets (Cut, Fade, Move) with a
   default, per-scene "into" and "out of" overrides, Move pairing items by source, and
   per-item delay, easing, glide and appear and disappear effects.
+- Built with the UI that uses them ([ADR-0024](docs/adr/0024-scene-structure.md)):
+  keyframe scenes (variants with per-item overrides), scene folders, organisation
+  metadata (labels, favourites, scene icons and colours, show in multiview, scene
+  background colour) and hotkey bindings.
 
 **Demo:** everything from M1, done by hand in the desktop app and in a browser.
 
