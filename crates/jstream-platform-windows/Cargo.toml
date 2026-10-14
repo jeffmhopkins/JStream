@@ -26,9 +26,10 @@ allow_attributes_without_reason = "deny"  # R-RS-009
 undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
 [features]
-# Platform tests against real audio devices (docs/RULES.md#testing): additive, off by
-# default, and the tests are also `#[ignore]`d. Run them on a Windows machine with a
-# microphone and speakers:
+# Platform tests against real hardware (docs/RULES.md#testing): audio devices, the OS
+# encoders and the GPU. Additive, off by default, and the tests are also `#[ignore]`d.
+# Run them on a Windows machine with a microphone, speakers and a DX12 GPU with a
+# hardware H.264 encoder:
 # `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 hw-tests = []
 

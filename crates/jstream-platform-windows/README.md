@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:d5dee049eefe09f0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Adds WindowsGpu: DX12 device on the display's adapter with NV12, D3D11 device and shared fence beside it, NV12 encode targets shared and imported via hal in PRESENT, fence values from one counter, raw objects before the Device clone; Not-yet names the D3D11 side; Tests paragraph names the GPU test; checked against gpu/{mod,d3d}.rs" }
+verified = { hash = "b3:aa9916d1472cfd16", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #63: WindowsGpu labelled as step 2 plus the D3D11 device steps 1/5 will use (N3); stage rejects a queue of another device (B1, Shared keeps a queue clone); rest unchanged vs gpu/{mod,d3d}.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -112,7 +112,7 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Not yet:** video decoders, which report `Unsupported` until then.
 
 - **`WindowsGpu`** (`GpuInterop`, [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)
-  steps 1, 2 and 5, ported from spike S1):
+  step 2, plus the D3D11 device that steps 1 and 5 will use; ported from spike S1):
   - **`open_device`** opens the DX12 wgpu device on the media adapter. That is the
     hardware adapter that drives the primary display, else the first hardware adapter
     with NV12 textures. It also creates a multithread-protected D3D11 device on the same
@@ -123,7 +123,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     `COMMON` state, which wgpu calls `PRESENT`).
   - **Fence values:** each `FrameSync::stage` waits for the value that last released
     the texture and signals the next value of one counter per device, so values only
-    increase.
+    increase. A queue of another device (or backend) is `InvalidState`.
   - **Driver lifetime:** the raw D3D11 and D3D12 objects live in platform state that
     also holds a `wgpu::Device` clone, declared last, so `d3d12.dll` stays loaded until
     they are released.

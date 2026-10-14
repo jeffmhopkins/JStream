@@ -60,6 +60,8 @@ pub(crate) struct Shared {
     d3d12: ID3D12Device,
     /// The last fence value handed out.
     last_value: AtomicU64,
+    /// The device's queue, to recognise it in `FrameSync::stage`.
+    queue: wgpu::Queue,
     /// Held, not used: keeps the driver loaded until the fields above are released.
     _device: wgpu::Device,
 }
@@ -180,6 +182,7 @@ impl GpuInterop for WindowsGpu {
             d3d11,
             d3d12,
             last_value: AtomicU64::new(0),
+            queue: queue.clone(),
             _device: device.clone(),
         });
         Ok(GpuContext::new(
@@ -302,6 +305,12 @@ impl fmt::Debug for SlotSync {
 
 impl FrameSync for SlotSync {
     fn stage(&self, queue: &wgpu::Queue) -> Result<(), PlatformError> {
+        if *queue != self.shared.queue {
+            return Err(PlatformError::InvalidState {
+                what: "FrameSync::stage",
+                state: "the queue belongs to another device than the frame's context",
+            });
+        }
         let wait = self.released.load(Ordering::Acquire);
         let signal = self.shared.next_value();
         // SAFETY: the hal queue is used only to stage fence operations that wgpu applies
