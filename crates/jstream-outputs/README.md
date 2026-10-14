@@ -12,13 +12,13 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0034-youtube-interaction-scope-v2.md"]
-verified = { hash = "b3:8d44938a9e4b9a84", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0035) into the ADR-0034 acceptance: mux/outputs depend on ADR-0034 only (the merge had re-added the superseded ADR-0009); other sections changed only by main's text and verified lines" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
+verified = { hash = "b3:b41dc748c7de496b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading now holds this PR's privacy flag on the parameter channels (not built) beside main's ADR-0028 mixer row and pts paragraph and ADR-0035 CLAP host; outputs consume packets; per-output chains run before the encoder, not in this crate, so Purpose holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
 first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, written in Rust
-as [ADR-0003](../../docs/adr/0003-media-stack-and-codecs.md) requires and needed for the
+as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) requires and needed for the
 generic RTMP/RTMPS output of [ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md). The
 `Output` trait, recording and the virtual-camera output come later. Its JStream
 dependencies are `jstream-media` (for `MediaTime`) and the layer-2 `jstream-mux`, whose

@@ -1,0 +1,67 @@
+name: Bug report
+description: Something in JStream doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Security problems go through a private advisory instead (see SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what happened, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start `jstream-daemon --token-file …`
+        2. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: The output of `jstream-daemon --version`, or the commit you built.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and hardware
+      description: For example "Windows 11 24H2 (build 26100), NVIDIA RTX 4070".
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Capture and sources
+        - Compositing and scenes
+        - Audio
+        - Encoding and outputs (RTMP, YouTube, recording)
+        - Virtual camera
+        - Control API, MCP or CLI
+        - UI
+        - Build, docs or CI
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant log lines or a backtrace. Remove stream keys, OAuth tokens and the control token first.
+      render: text
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Before you submit
+      options:
+        - label: This report contains no stream keys, OAuth tokens or control tokens.
+          required: true

@@ -429,6 +429,10 @@ fn report(error: &CliError, json: bool, err: &mut dyn Write) {
             }
             CliError::Usage(message) => json!({"error": {"code": "usage", "message": message}}),
             CliError::Io(e) => json!({"error": {"code": "io", "message": e.to_string()}}),
+            // Says which side failed, as `io` covers both.
+            CliError::Read(_) => {
+                json!({"error": {"code": "io", "message": error.to_string()}})
+            }
         };
         writeln!(err, "{body}")
     } else {

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:948ed1b89e3ea107", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:86945651f89e935c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Purpose's sharing sentence matches ADR-0027 (only outputs with no video chain share by mix and profile; a chained output gets its own session); main's ADR-0028 master bus doesn't change it" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -25,7 +25,8 @@ number of outputs subscribe to its packets. For M1a that is one video mix into t
 H.264 encoder and one bus into the MF AAC encoder, each feeding one RTMP output
 ([ROADMAP › M1](../../ROADMAP.md#m1)); the fan-out already takes N subscribers, so
 encoder sharing in M1b ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model):
-outputs with the same mix and encoder profile share one session) needs no new shape.
+outputs with no video chain and the same mix and encoder profile share one session, and
+an output with a video chain gets its own) needs no new shape.
 
 Its only JStream dependency is `jstream-platform` (layer 1), whose `media` re-export
 supplies the frame, sample and packet types; besides that, `thiserror`. Dev-dependency:
@@ -65,8 +66,8 @@ keyframe resync; and the registry.
 ## Design
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
-depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:cbab9c6628116bcf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section, checked against session.rs/fanout.rs/audio.rs/video.rs/registry.rs: can_accept-gated recv and park+poll every poll_interval, try_send drop-newest input queue, silence fill only after a marked drop up to max_audio_gap, busy and finish_timeout drops, per-subscriber try_send with keyframe resync and Joining skip uncounted, end recorded before queues drop, catch_unwind, abort-and-join on drop, defaults 8/512/4ms/2s/1s match SessionOptions::default" }
+depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
+verified = { hash = "b3:5e2bb060404e1a32", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, encode, daemon, mcp) into the ADR-0031 acceptance: re-read against both; encode's ADR-0003 links re-pointed to ADR-0031, which restates its MF encoder scope unchanged; no other content change" }
 -->
 
 ### Threads and pacing
