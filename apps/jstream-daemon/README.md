@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:1a0fcbb783009f7e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after a test-only change in crash.rs (the redacted-report test now accepts Windows path separators in the panic location); the logs.rs and crash.rs bullets still hold" }
+verified = { hash = "b3:15db85a1927d1886", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the whole section against this PR: startup (log dir before token), logs.rs (size rotation, retention 10, user-only files) and crash.rs (panic hook, redaction by length+BLAKE3 digest, message redacted before the 16 KiB cut, retention 10) bullets all match the code" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -55,7 +55,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:58b0a22d4fd9e61d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: --log-dir and --log-level rows; Logs bullet (stderr and files, --log-level over RUST_LOG, parse error exit 2 before anything is created); new Log files bullet (per-run files, 10 MiB / 10 files, platform data dir, exit 1 before the token file, 0700/0600) and Crash reports bullet; exit-code rows 1 and 2; matched against args.rs, main.rs log_filter/log_dir/init_logging and logs.rs constants" }
+verified = { hash = "b3:55f76fc36aafb8b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against this PR: --log-dir and --log-level rows, Log files bullet (now 'at info and above the first line names the file'), Crash reports bullet and exit codes 1/2 match args.rs and main.rs" }
 -->
 
 ```sh
@@ -97,7 +97,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   are kept and older ones deleted, so the logs stay under about 100 MiB. The default
   directory is `logs` in the data directory: `%APPDATA%\JStream` on Windows,
   `~/Library/Application Support/JStream` on macOS, `$XDG_DATA_HOME/jstream` (else
-  `~/.local/share/jstream`) elsewhere. The first line logged names the file. A log
+  `~/.local/share/jstream`) elsewhere. At `info` and above, the first line logged names the file. A log
   directory that can't be created, or a data directory that can't be found (no `HOME`
   or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
   file is touched. On Unix the directories it creates are mode `0700` and the files
@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:5b75c7995517ed4f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after a test-only change in crash.rs (location check accepts backslashes on Windows); crash report contents, redaction, retention and rotation text unchanged and still match" }
+verified = { hash = "b3:9068935ff7d176db", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against this PR: Logging, rotation, data directory and crash report bullets match logs.rs/crash.rs (message redacted before truncation); argument-parsing bullet now names the five options (#126 B1); open questions 4 and 5 still hold" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -195,8 +195,9 @@ verified = { hash = "b3:5b75c7995517ed4f", by = "agent:claude@session_01QBbMRwRu
   a report too, even though the daemon carries on. The oldest reports beyond 10 are
   deleted before each new one.
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
-  ([jstream-cli › Design](../jstream-cli/README.md#design)): three options don't pay
-  for a parser crate.
+  ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
+  (`--token-file`, `--port`, `--output`, `--log-dir`, `--log-level`) don't pay for a
+  parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
   `jstream-protocol` (`OutputId`), `anyhow`, `tracing` (the startup line) and `blake3`
   (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,

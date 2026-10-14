@@ -79,19 +79,13 @@ fn on_panic(dir: &Path, info: &PanicHookInfo<'_>) {
     let backtrace = Backtrace::force_capture();
     let (report, summary) = match SECRETS.try_lock() {
         Ok(secrets) => (
-            redact(
-                &report(now, thread, &location, &message, &backtrace),
-                &secrets,
-            ),
+            redacted_report(now, thread, &location, &message, &backtrace, &secrets),
             redact(&message, &secrets),
         ),
         Err(TryLockError::Poisoned(secrets)) => {
             let secrets = secrets.into_inner();
             (
-                redact(
-                    &report(now, thread, &location, &message, &backtrace),
-                    &secrets,
-                ),
+                redacted_report(now, thread, &location, &message, &backtrace, &secrets),
                 redact(&message, &secrets),
             )
         }
@@ -137,6 +131,22 @@ fn payload_text(payload: &(dyn std::any::Any + Send)) -> String {
 }
 
 /// The report's text, before redaction.
+/// The report with every registered secret redacted. The message is redacted before
+/// [`report`] cuts it to [`MAX_MESSAGE_BYTES`], so a secret straddling the cut can't
+/// leave its prefix behind (#126 review N2); the whole report is redacted again for the
+/// location and backtrace.
+fn redacted_report(
+    now: SystemTime,
+    thread: &str,
+    location: &str,
+    message: &str,
+    backtrace: &Backtrace,
+    secrets: &[Secret],
+) -> String {
+    let message = redact(message, secrets);
+    redact(&report(now, thread, location, &message, backtrace), secrets)
+}
+
 fn report(
     now: SystemTime,
     thread: &str,
@@ -238,7 +248,11 @@ fn write_report(dir: &Path, now: SystemTime, report: &str) -> io::Result<PathBuf
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_REPORTS, REPORT_PREFIX, Secret, redact, register_secret, write_report};
+    use super::{
+        MAX_MESSAGE_BYTES, MAX_REPORTS, REPORT_PREFIX, Secret, redact, redacted_report,
+        register_secret, write_report,
+    };
+    use std::backtrace::Backtrace;
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use std::time::SystemTime;
@@ -283,6 +297,24 @@ mod tests {
         assert_eq!(redact("nothing here", &secrets), "nothing here");
         assert_eq!(redact("s3cre", &secrets), "s3cre");
         assert_eq!(redact("", &secrets), "");
+    }
+
+    /// A secret that straddles the message cut is redacted whole, not left as a prefix
+    /// (#126 review N2).
+    #[test]
+    fn a_secret_at_the_message_cut_is_redacted_first() {
+        let secrets = [secret("s3cretKEY")];
+        let mut message = "x".repeat(MAX_MESSAGE_BYTES - 4);
+        message.push_str("s3cretKEY and more");
+        let report = redacted_report(
+            SystemTime::now(),
+            "t",
+            "here",
+            &message,
+            &Backtrace::disabled(),
+            &secrets,
+        );
+        assert!(!report.contains("s3cr"), "a prefix of the secret leaked");
     }
 
     #[test]
