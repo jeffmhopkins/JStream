@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:5e2c8540ecdce4b7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited open question 1: server-side bounded buffer and events.dropped are decided (not built) and WsControl will have to pass the notice on so subscribers re-read state; ARCH#protocol's new Origin and slow-client text needs no other change to the client" }
+verified = { hash = "b3:69b2638e6d2613f6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#protocol now also says planned preset edits carry a kind and settings (ADR-0037); the client forwards any Call unchanged, and open question 1's note on the server-side bounded buffer still holds" }
 -->
 
 ### The trait

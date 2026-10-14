@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fb1f4909825bda03", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed: ARCH#protocol gains the decided per-connection bounded buffer in jstream-server, control q1 notes it; core's own subscriptions stay unbounded with no drops, so the Events paragraph still holds; the rest re-read unchanged" }
+verified = { hash = "b3:747b7013b64882cc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#protocol now also says planned preset edits carry a kind and settings (ADR-0037), not built; core executes no transition edits yet, and its Events paragraph (unbounded per-subscription queues) still holds" }
 -->
 
 ### Engine and sessions

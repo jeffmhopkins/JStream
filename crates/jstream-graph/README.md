@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:cc0b2fd9681362d2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model gains #94's rules (orphaned overrides dropped with a restoring inverse, overrides follow a group to every placement, broken hotkeys kept) for variants and hotkeys, none built; the graph still holds only sources, scenes and items and only item.add adds nesting, so this Purpose holds; crate-map graph row unchanged" }
+verified = { hash = "b3:e972548237a639e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model gains ADR-0037's transition kinds with settings, plugin kinds, the state type and the full cycle-checked edit list, none built; the graph still holds only sources, scenes and items and only item.add adds nesting today, so this Purpose holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

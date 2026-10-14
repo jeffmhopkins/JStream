@@ -164,8 +164,8 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:e446ee6e49bcb75d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #94: groups bullet says scene.set_role, removing or set_source-retargeting a group's placing item and set_role on a variant drop orphaned overrides in the same edit with an inverse that restores them, and that an override follows a group to every placement in the variant's tree; organisation bullet says a hotkey whose target is deleted stays, reported broken and inert, re-pointable, healed by undo. Clarifies ADR-0024 without contradicting it" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
+verified = { hash = "b3:9ee630879201e456", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for ADR-0037: TransitionPreset is { id, name, kind, duration_ms, easing, settings } with cut/fade/move as the first transition kinds and unmatched/stagger_ms as fade and move settings, missing kind cuts; Settings bullet adds transition and CLAP plugin kinds, the opaque state type and the full cycle-checked edit list; depends_on adds ADR-0037; ADR-0029's default, resolution and per-item fields kept" }
 -->
 
 ```
@@ -182,7 +182,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
 ├── studio         { program_scene, preview_scene }   (studio-mode state)
 ├── transitions    { presets: [TransitionPreset], default }
-│                  TransitionPreset { id, name, kind: Cut | Fade | Move, duration_ms, easing, unmatched, stagger_ms }
+│                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
 ├── audio          master_bus: bus_id   (created with the collection, never deleted)
 │                  sends: (source_id, bus_id) → gain_db   (post-fader)
@@ -264,11 +264,23 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.
-- **Settings:** a source's `settings`, and each filter's, are a map of values described by
-  its kind's descriptor, which the engine reports and validates against. References to
-  scenes, sources and asset files inside settings are typed, so the graph tracks them in
-  cycle checks and delete rejection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
-- **Transitions** ([ADR-0029](adr/0029-transitions.md)): exactly one preset is the
+- **Settings:** a source's `settings`, each filter's, and each transition preset's are a
+  map of values described by its kind's descriptor, which the engine reports and
+  validates against. References to scenes, sources and asset files inside settings are
+  typed, so the graph tracks them in cycle checks and delete rejection
+  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Every edit that can add a
+  dependency edge runs the cycle check, including `item.set_source`, `item.move` and
+  creating a variant. Kinds are built in, come from an effect pack, or, for audio
+  filters from M3, come from a CLAP plugin (`clap/<plugin id>`): its descriptor is built
+  from the plugin's parameters, and its saved state is a parameter of the opaque `state`
+  type, bytes stored as base64 in the settings
+  ([ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)).
+- **Transitions** ([ADR-0029](adr/0029-transitions.md),
+  [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)): a preset's kind
+  is a transition kind with a descriptor. `cut`, `fade` and `move` are the first, so a
+  new kind (a stinger, a WGSL wipe) needs no protocol change. `duration_ms` and `easing`
+  stay preset fields; `unmatched` and `stagger_ms` are settings of `fade` and `move`. A
+  switch to a preset whose kind is missing cuts. Exactly one preset is the
   default, and it can't be deleted. Deleting a preset clears the overrides that use it in
   the same edit. The engine picks a switch's preset: the one the switch action names, else
   the destination scene's `transition_in`, else the current scene's `transition_out`, else
@@ -436,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:64593ae2976f503d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #44 N3: transport bullet records the decided, unbuilt Origin rule (missing allowed with the token, present must be on the allow list) and MCP streamable HTTP on the control port; new slow-clients bullet records the bounded per-connection buffer, events.dropped notice and state.get re-read, not built; covered server and control READMEs now record the same decisions as open questions" }
+verified = { hash = "b3:3fd239078788f2ea", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for ADR-0037: the planned transitions bullet says preset edits carry a kind and a settings map or patch; covered control and server READMEs changed only in re-verified lines; the Origin and slow-client decisions, live values, history and privacy unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -455,7 +467,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update
-  and delete presets, set the default, and set a scene's `transition_in` and
+  and delete presets (each with a kind and a settings map or patch,
+  [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default, and set a scene's `transition_in` and
   `transition_out` and an item's transition settings. The scene-switch action takes an
   optional preset.
 - **Live values** (`live.set`, `live.cancel`; events `live.changed`, `live.ended`):

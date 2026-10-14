@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:f1bb9190a7e489c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Protocol gains decided, unbuilt items: an events.dropped notice (an additive event under R-API-001) and admission of upgrades without Origin (a server gate change, not a protocol shape); MCP over HTTP adds no protocol change" }
+verified = { hash = "b3:2a7b14c51f0912aa", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#protocol's planned preset edits now carry a kind and settings per ADR-0037; presets are not on the wire yet, so the new shape is additive under R-API-001 and the state parameter type is additive through ADR-0025's unknown fallback" }
 -->
 
 <a id="R-API-001"></a>

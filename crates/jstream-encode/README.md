@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:4f0321fe71cbc1c7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Crate-map jstream-encode row now states the same ADR-0027 sharing key this Purpose gives (no video chain shares per mix and profile, a chained output gets its own session); Threads' new live-value handover and Data model's override and hotkey clarifications touch neither the encode thread nor encoder sharing" }
+verified = { hash = "b3:42b1c7196cb103a7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model now changes only transition presets (kinds with settings, ADR-0037) and the settings bullet; encoder sharing and the encode thread this Purpose describes are unchanged, and the crate-map encode row matches it" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

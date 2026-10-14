@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:581e2c8d46641a75", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per #44 N3 and #37 N1: open questions 3, 4 and 7 now record the decisions (MCP HTTP here behind the gate; missing Origin allowed with token, present Origin checked; bounded buffer with events.dropped and state re-read), each marked not built; admission text says missing Origin is refused today and will change; code unchanged" }
+verified = { hash = "b3:46136c115fc21589", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#protocol now also says planned preset edits carry a kind and settings (ADR-0037); the server forwards Calls unchanged, and the open questions recording the Origin, MCP-over-HTTP and backpressure decisions still hold" }
 -->
 
 ### Listening and admission
