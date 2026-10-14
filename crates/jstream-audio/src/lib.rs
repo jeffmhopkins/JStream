@@ -1,0 +1,40 @@
+//! The JStream real-time audio mixer. Each input (a microphone, desktop loopback) is
+//! downmixed to stereo and adaptively resampled from its device's rate and clock onto
+//! the engine's time line on its own audio thread; the [`Mixer`] sums the inputs, each
+//! with its gain, into one stereo bus in fixed-size blocks stamped on the engine clock,
+//! and meters inputs and bus. Layer 2: no I/O, no platform code; inputs plug into the
+//! `jstream-platform` audio handler.
+//!
+//! ```
+//! use jstream_audio::{Mixer, MixerConfig};
+//! use jstream_media::{AudioFormat, ChannelLayout, MediaTime, SampleFormat, Timebase};
+//!
+//! let mut mixer = Mixer::new(MixerConfig::default())?;
+//! let mic = AudioFormat::new(44_100, ChannelLayout::Mono, SampleFormat::F32Interleaved)
+//!     .expect("valid format");
+//! // `producer` goes to `AudioIo::open_input` as the stream's handler.
+//! let (producer, mic_control) = mixer.add_input(mic)?;
+//! mic_control.set_gain_db(-6.0);
+//! # drop(producer);
+//! let mut block = vec![0.0; 2 * mixer.config().block_frames];
+//! let now = MediaTime::new(1_000_000, Timebase::MICROS);
+//! while let Some(b) = mixer.poll(now, &mut block)? {
+//!     // Hand `block` (interleaved stereo at `b.pts`) to the encoder.
+//!     # let _ = b;
+//! }
+//! # Ok::<(), jstream_audio::AudioError>(())
+//! ```
+//!
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-audio/README.md#purpose, crates/jstream-audio/README.md#realtime, docs/adr/0007-bus-matrix-audio.md, docs/adr/0014-media-clock.md
+
+#![forbid(unsafe_code)]
+
+mod error;
+mod handle;
+mod rt;
+
+pub use error::AudioError;
+pub use handle::{BusControl, BusStats, InputControl, InputStats};
+pub use rt::input::InputProducer;
+pub use rt::mixer::{Block, Mixer, MixerConfig};
+pub use rt::shared::MeterReading;

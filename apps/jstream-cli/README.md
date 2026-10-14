@@ -169,7 +169,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6601bec42edd69a7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only open question 5 edited: still no default --url or token file; now says the daemon listens on a free port unless --port and creates/reuses the file at the path given via the same JSTREAM_TOKEN_FILE, linking the daemon's open questions 1-2; CLI code and Cargo.toml unchanged, control#design dependency unchanged" }
+verified = { hash = "b3:914b532263a77847", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#70) into the RTMPS PR: main's open question 5 (daemon exists) kept; the dependency control#design changed only its wss:// open question (ring allowlisted); CLI still plain ws:// via WsControl" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -1,15 +1,14 @@
 //! The publish session: connect, create a stream, publish, then send media.
 
 use std::io::{self, Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use jstream_media::MediaTime;
 use jstream_mux::amf0::Amf0Value;
 use jstream_mux::flv;
 
 use super::chunk::{ChunkDecoder, ChunkEncoder, Message, msg_type};
-use super::{RtmpError, RtmpUrl, Scheme, StreamKey, handshake};
+use super::{RtmpError, RtmpUrl, StreamKey, handshake};
 
 /// Chunk stream for protocol control messages (fixed by the RTMP specification).
 const CSID_CONTROL: u32 = 2;
@@ -53,41 +52,6 @@ impl Default for PublishOptions {
             flash_ver: "FMLE/3.0 (compatible; JStream)".to_owned(),
         }
     }
-}
-
-/// Opens a TCP connection to `url`'s host and port, with Nagle's algorithm off.
-///
-/// `timeout` bounds each connection attempt (one per resolved address). Set read and
-/// write timeouts on the returned stream before handing it to [`RtmpPublisher`] if the
-/// session must not block indefinitely on a stalled server.
-///
-/// # Errors
-/// [`RtmpError::TlsUnsupported`] for `rtmps://` URLs: TLS is not implemented yet (see
-/// crates/jstream-outputs/README.md#purpose). [`RtmpError::Io`] when name resolution
-/// or every connection attempt fails.
-pub fn connect_tcp(url: &RtmpUrl, timeout: Option<Duration>) -> Result<TcpStream, RtmpError> {
-    // TODO(TLS): rtmps:// needs a TLS stream here: rustls with `ring` (R-DEP-006). `ring`
-    // compiles C and assembly, so adding it needs a native-code allowlist entry, which is
-    // a declared governance change.
-    if url.scheme() == Scheme::Rtmps {
-        return Err(RtmpError::TlsUnsupported);
-    }
-    let io = |e| RtmpError::io("connecting", e);
-    let mut last = io::Error::new(io::ErrorKind::NotFound, "host resolved to no address");
-    for addr in (url.host(), url.port()).to_socket_addrs().map_err(io)? {
-        let attempt = match timeout {
-            Some(t) => TcpStream::connect_timeout(&addr, t),
-            None => TcpStream::connect(addr),
-        };
-        match attempt {
-            Ok(stream) => {
-                stream.set_nodelay(true).map_err(io)?;
-                return Ok(stream);
-            }
-            Err(e) => last = e,
-        }
-    }
-    Err(io(last))
 }
 
 /// Converts a media timestamp to RTMP milliseconds, wrapping at 2^32 as RTMP timestamps
@@ -357,7 +321,8 @@ impl<S: Read + Write> RtmpPublisher<S> {
     }
 
     /// Publishes `key` on `url`'s application over `stream`, an already connected
-    /// transport (TCP for `rtmp://`, TLS for `rtmps://`).
+    /// transport (TCP for `rtmp://`, TLS for `rtmps://`), such as the one
+    /// [`connect`](super::connect) opens.
     ///
     /// # Errors
     /// [`RtmpError::InvalidChunkSize`] for a bad `options.chunk_size`;

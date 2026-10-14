@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:0ecefc53d4af7919", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section, checked against src: one encode thread per session as ARCH#threading's Encode row says, N-subscriber fan-out for ARCH#data-model's encoder sharing, deps match Cargo.toml (jstream-platform, thiserror; fake feature in dev), API list and test list match lib.rs re-exports and tests.rs" }
+verified = { hash = "b3:00bac63191efb980", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map changed only through main's new rows (audio, core, daemon); the encode row and this crate's purpose (sessions, fan-out, registry, stats) still match lib.rs" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

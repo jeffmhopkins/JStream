@@ -1,13 +1,19 @@
-//! Publish-session tests against in-memory fake servers (docs/RULES.md#R-TEST-004).
+//! Publish-session tests against fake servers, over in-memory pipes and over TLS on
+//! loopback TCP (docs/RULES.md#R-TEST-004).
 
+use std::sync::Arc;
+use std::sync::mpsc::channel;
 use std::thread;
+use std::time::Duration;
 
 use jstream_media::Timebase;
 use jstream_mux::flv::{FlvConfig, FlvTagger, MetadataStyle, TagType, VideoTrack};
+use rustls::version::TLS13;
 
 use super::*;
 use crate::rtmp::handshake::{HANDSHAKE_SIZE, RTMP_VERSION};
-use crate::rtmp::test_util::{Duplex, Scripted, duplex};
+use crate::rtmp::test_util::{Duplex, Scripted, TestPki, duplex, tls_server};
+use crate::rtmp::transport::{client_config, connect_tls};
 
 const KEY: &str = "abcd-1234-efgh-5678";
 
@@ -91,9 +97,15 @@ enum Mode {
     BadKey,
 }
 
-/// A fake ingest server on the far end of a [`Duplex`]. It answers the publish
-/// sequence and returns a log of every message the client sent, in order.
-fn fake_server(mut io: Duplex, mode: Mode) -> Vec<String> {
+/// A fake ingest server on the far end of a [`Duplex`] for [`url`]. It answers the
+/// publish sequence and returns a log of every message the client sent, in order.
+fn fake_server(io: Duplex, mode: Mode) -> Vec<String> {
+    fake_server_at(io, mode, url().tc_url())
+}
+
+/// [`fake_server`] over any transport, for a client that sends `tc_url`. It returns once
+/// the client closes the connection (end of stream, or a TLS session cut short).
+fn fake_server_at(mut io: impl Read + Write, mode: Mode, tc_url: &str) -> Vec<String> {
     // Handshake.
     let mut c0c1 = vec![0; 1 + HANDSHAKE_SIZE];
     io.read_exact(&mut c0c1).unwrap();
@@ -115,10 +127,11 @@ fn fake_server(mut io: Duplex, mode: Mode) -> Vec<String> {
         let m = match dec.next_message().unwrap() {
             Some(m) => m,
             None => {
-                let got = io.read(&mut buf).unwrap();
-                if got == 0 {
-                    return log;
-                }
+                let got = match io.read(&mut buf) {
+                    Ok(0) => return log,
+                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => return log,
+                    got => got.unwrap(),
+                };
                 dec.push(&buf[..got]);
                 continue;
             }
@@ -164,10 +177,7 @@ fn fake_server(mut io: Duplex, mode: Mode) -> Vec<String> {
                 match name.as_str() {
                     "connect" => {
                         assert_eq!(v[2].property("app"), Some(&s("live2")));
-                        assert_eq!(
-                            v[2].property("tcUrl"),
-                            Some(&s("rtmp://ingest.example.invalid/live2"))
-                        );
+                        assert_eq!(v[2].property("tcUrl"), Some(&s(tc_url)));
                         if mode == Mode::RejectConnect {
                             wire.command(
                                 0,
@@ -612,15 +622,6 @@ fn server_hangup_is_connection_closed() {
 }
 
 #[test]
-fn rtmps_is_refused_until_tls_lands() {
-    let url = RtmpUrl::parse("rtmps://a.rtmps.youtube.com/live2").unwrap();
-    assert!(matches!(
-        connect_tcp(&url, None),
-        Err(RtmpError::TlsUnsupported)
-    ));
-}
-
-#[test]
 fn media_time_to_rtmp_milliseconds() {
     let t = |ticks, tb| timestamp_ms(MediaTime::new(ticks, tb));
     // The same rounding as the FLV muxer's tag timestamps.
@@ -635,4 +636,131 @@ fn media_time_to_rtmp_milliseconds() {
         t(-1, Timebase::MILLIS),
         Err(RtmpError::NegativeTimestamp { ms: -1 })
     ));
+}
+
+/// An `rtmps://` URL for a loopback test server, and a client configuration that trusts
+/// `pki`'s CA.
+fn tls_client(pki: &TestPki, port: u16) -> (RtmpUrl, Arc<rustls::ClientConfig>) {
+    let url = RtmpUrl::parse(&format!("rtmps://localhost:{port}/live2")).unwrap();
+    (url, client_config(pki.roots.clone()).unwrap())
+}
+
+#[test]
+fn full_publish_session_over_tls() {
+    let pki = TestPki::new(&["localhost"]);
+    let (port, server) = tls_server(pki.server_config(&[&TLS13]), |s| {
+        let port = s.sock.local_addr().unwrap().port();
+        fake_server_at(s, Mode::Accept, &format!("rtmps://localhost:{port}/live2"))
+    });
+    let (url, config) = tls_client(&pki, port);
+    let transport = connect_tls(&url, Some(Duration::from_secs(10)), config).unwrap();
+    assert!(transport.is_tls());
+
+    let mut p = RtmpPublisher::publish(transport, &url, &key()).unwrap();
+    assert_eq!(p.stream_id(), 1);
+    p.send_metadata(&mux_metadata_tag_body()).unwrap();
+    // Larger than a TLS record (16 KiB), so it spans several.
+    p.send_video(0, &[0x17; 100_000]).unwrap();
+    p.send_audio(0, &[0xAF, 0x00, 0x12, 0x10]).unwrap();
+    // With a short read timeout, polling an idle TLS session returns.
+    p.get_ref()
+        .set_read_timeout(Some(Duration::from_millis(50)))
+        .unwrap();
+    p.poll_incoming().unwrap();
+    p.send_video(33, &[0x27; 500]).unwrap();
+    let mut transport = p.finish().unwrap();
+    transport.shutdown().unwrap();
+
+    let log = server.join().unwrap().unwrap();
+    assert_eq!(
+        log,
+        [
+            "set-chunk-size 4096",
+            "connect txn=1 stream=0",
+            "window-ack 2500000",
+            "releaseStream txn=2 stream=0",
+            "FCPublish txn=3 stream=0",
+            "createStream txn=4 stream=0",
+            "publish txn=5 stream=1",
+            "pong 1234",
+            "data @setDataFrame onMetaData",
+            "video t=0 len=100000 first=0x17",
+            "audio t=0 len=4 first=0xaf",
+            "video t=33 len=500 first=0x27",
+            "FCUnpublish txn=6 stream=0",
+            "deleteStream txn=7 stream=0",
+        ]
+    );
+}
+
+/// A read timeout that strikes in the middle of a TLS record must not lose the part
+/// already read: the next poll completes the record and handles its messages.
+#[test]
+fn poll_resumes_a_tls_record_split_by_a_read_timeout() {
+    let pki = TestPki::new(&["localhost"]);
+    let (go_half, wait_half) = channel::<()>();
+    let (half_sent, wait_half_sent) = channel::<()>();
+    let (go_rest, wait_rest) = channel::<()>();
+    let (port, server) = tls_server(pki.server_config(&[&TLS13]), move |mut io| {
+        io.write_all(&accepting_script(|_| {})).unwrap();
+        io.flush().unwrap();
+
+        // A ping, then an error status, sealed as TLS records and sent in two halves.
+        wait_half.recv().unwrap();
+        let mut wire = Wire::new();
+        wire.control(msg_type::USER_CONTROL, &[0, 6, 0, 0, 0, 99]);
+        let idle = status("error", "NetStream.Publish.Idle");
+        wire.command(1, &[s("onStatus"), n(0.0), Amf0Value::Null, idle]);
+        io.conn.writer().write_all(&wire.take()).unwrap();
+        let mut sealed = Vec::new();
+        while io.conn.wants_write() {
+            io.conn.write_tls(&mut sealed).unwrap();
+        }
+        let (first, rest) = sealed.split_at(sealed.len() / 2);
+        io.sock.write_all(first).unwrap();
+        half_sent.send(()).unwrap();
+        wait_rest.recv().unwrap();
+        io.sock.write_all(rest).unwrap();
+
+        // Everything the client sent, until it hangs up.
+        let mut received = Vec::new();
+        let mut buf = [0u8; 4096];
+        while let Ok(got @ 1..) = io.read(&mut buf) {
+            received.extend_from_slice(&buf[..got]);
+        }
+        received
+    });
+    let (url, config) = tls_client(&pki, port);
+    let transport = connect_tls(&url, Some(Duration::from_secs(10)), config).unwrap();
+    let mut p = RtmpPublisher::publish(transport, &url, &key()).unwrap();
+    p.get_ref()
+        .set_read_timeout(Some(Duration::from_millis(50)))
+        .unwrap();
+
+    p.poll_incoming().unwrap(); // nothing pending
+    go_half.send(()).unwrap();
+    wait_half_sent.recv().unwrap();
+    let before = p.bytes_received();
+    p.poll_incoming().unwrap(); // half a record, then the timeout
+    assert_eq!(
+        p.bytes_received(),
+        before,
+        "no plaintext from half a record"
+    );
+    go_rest.send(()).unwrap();
+
+    let err = (0..200)
+        .find_map(|_| p.poll_incoming().err())
+        .expect("the error status arrives");
+    assert!(
+        matches!(&err, RtmpError::Rejected { code, .. } if code == "NetStream.Publish.Idle"),
+        "{err:?}"
+    );
+    drop(p);
+
+    // The ping in the same record was answered before the error was reported.
+    let received = server.join().unwrap().unwrap();
+    let last = client_messages(&received).pop().unwrap();
+    assert_eq!(last.type_id, msg_type::USER_CONTROL);
+    assert_eq!(last.payload, [0, 7, 0, 0, 0, 99]);
 }

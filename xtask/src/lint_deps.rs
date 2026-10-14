@@ -47,6 +47,12 @@ const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
         "build-depends on `cc` for SIMD code; with the `pure` feature its build script compiles no C",
     ),
     (
+        "ring",
+        None,
+        "R-DEP-006 names it as rustls' crypto provider: its build script compiles BoringSSL-derived \
+         C and assembly for the primitives (no media code). Used by jstream-outputs for rtmps://",
+    ),
+    (
         "wasm-bindgen-shared",
         None,
         "`links = \"wasm_bindgen\"` only enforces one version per graph; its build script sets \
