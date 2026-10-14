@@ -10,7 +10,7 @@ review_every = "90d"
 
 An interactive mock-up of the JStream editor UI, built to work out layout and interaction
 before the real UI is written. It is a **design reference**, not shipping code and not a
-normative doc: the decisions it embodies still need to be written into
+normative doc: what it proposes still needs to be decided and written into
 `docs/ARCHITECTURE.md` and ADRs (see [Follow-ups](#follow-ups)).
 
 The live version is a [claude.ai Design canvas artifact](https://claude.ai/artifact/JtfdfPAbhubDN5tEcspTvN)
@@ -35,7 +35,7 @@ Each `.dc.html` is a Design Component: HTML markup with `{{…}}` bindings and
 To keep working on them, publish them back to the artifact (or a copy of it).
 
 <a id="settles"></a>
-## What the prototype settles
+## What the prototype proposes
 <!-- @section
 -->
 
@@ -84,8 +84,11 @@ from the Mixer.
   another scene**: alpha mask, luma matte, clip to, displacement. The referenced scene shows
   nested under the object; scenes that would create a loop are not offered.
 - Audio: gain, compressor (with ducking input), limiter, noise gate, noise suppression,
-  invert polarity, EQ, audio delay, CLAP plugin, and mastering filters (loudness target,
-  true-peak limiter, ducking).
+  invert polarity, EQ, audio delay, and mastering filters (loudness target, true-peak
+  limiter, ducking). The prototype also shows a **CLAP plugin** filter: that is *not
+  settled*, because hosting CLAP plugins means loading native dynamic libraries, which
+  [ADR-0005](../../docs/adr/0005-plugins-wgsl-and-wasm.md) rules out for v1. It needs an
+  ADR superseding ADR-0005 first (see [Follow-ups](#follow-ups)).
 - Filters panel: a reorderable list; filters with three settings or fewer expand in place,
   busier ones open a settings dialog (double-click always does). Adding is a dialog.
 - **Program output** has a master chain for everything leaving JStream, and each output
@@ -125,3 +128,6 @@ These decisions belong in the docs, through PRs:
   and per-output chains (with latency compensation), transition presets and overrides.
 - An ADR for the source type list (product scope: maintainer tier).
 - An ADR for the Move transition and per-item transition settings.
+- If CLAP plugin hosting is wanted: an ADR superseding
+  [ADR-0005](../../docs/adr/0005-plugins-wgsl-and-wasm.md) (maintainer tier), since it
+  loads native dynamic libraries. Until then the CLAP filter stays out of scope.

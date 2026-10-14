@@ -83,7 +83,7 @@ verified = { hash = "b3:4c21fdca01d95b25", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:fa786f1fcb4dcfc6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Removed installer/ line (ADR-0020: no MSI); tree otherwise matches repo and xtask command set" }
+verified = { hash = "b3:c7717535ca16d975", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "PR #54 B1: added design/ (UI design references, prototype source; not normative); rest of the tree unchanged and still matches the repo and xtask command set" }
 -->
 
 ```
@@ -99,6 +99,7 @@ JStream/
 ├── assets/                 # icons, fonts, test media
 ├── tests/                  # cross-crate scenario + golden tests
 ├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
+├── design/                 # UI design references (prototype source); not normative
 ├── xtask/                  # docs, lint-deps, governance, gen-schema, golden, release
 ├── docs/
 │   ├── ARCHITECTURE.md  RULES.md  DOCS.md
