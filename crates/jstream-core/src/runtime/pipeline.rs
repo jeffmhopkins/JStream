@@ -7,9 +7,10 @@
 //! FLV and publishes it. None of those threads lock the engine's collection.
 //!
 //! The render and mixer threads catch a panic at their thread boundary, and every
-//! fatal error on the render, mixer and output threads goes to the same failure
-//! channel, so the publish watcher settles `failed` instead of leaving an output
-//! `active` with a dead stage (R-RT-006).
+//! fatal error on the render, mixer and output threads goes to the same channel, so
+//! the publish watcher settles `failed` instead of leaving an output `active` with a
+//! dead stage (R-RT-006). The output thread also reports there when the publish link
+//! goes down and comes back, which the watcher turns into `reconnecting` and `active`.
 
 use std::any::Any;
 use std::panic::{self, AssertUnwindSafe};
@@ -44,7 +45,7 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
-use crate::runtime::LivePublish;
+use crate::runtime::{LinkState, LivePublish};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
 const FRAME_NUM: u32 = 1;
@@ -200,6 +201,8 @@ pub(crate) struct Running {
     bus: BusControl,
     /// Packets the muxer rejected. Distinct from the encode subscriber queues.
     mux_drops: Arc<AtomicU64>,
+    /// Tags the publish target dropped while its link was down, as it last reported.
+    link_drops: Arc<AtomicU64>,
     drop_guard: Option<DropGuard>,
     ticker: Option<JoinHandle<()>>,
     /// Emits one last `stats.tick` once the threads have stopped and the sources are
@@ -232,6 +235,7 @@ impl Running {
     /// the sampler.
     pub(crate) fn arm_stats(&mut self, engine: &Engine) {
         let mux = Arc::clone(&self.mux_drops);
+        let link = Arc::clone(&self.link_drops);
         let ids = vec![
             engine.add_drop_source(self.capture_drops.clone()),
             engine.add_drop_source(VideoEncodeDrops::new(Arc::clone(&self.video))),
@@ -240,7 +244,10 @@ impl Running {
             engine.add_drop_source(AudioInputDrops::new(self.desktop.clone())),
             engine.add_drop_source(AudioBusDrops::new(self.bus.clone())),
             engine.add_drop_source(FnDropSource::new(move || {
-                output_packet_drops(mux.load(Ordering::Relaxed))
+                output_packet_drops(
+                    mux.load(Ordering::Relaxed)
+                        .saturating_add(link.load(Ordering::Relaxed)),
+                )
             })),
         ];
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
@@ -323,11 +330,22 @@ pub(crate) fn gpu_draw() -> OpenDraw {
     })
 }
 
+/// What the pipeline threads tell the publish watcher.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum PipelineEvent {
+    /// A fatal error: the watcher settles `failed`.
+    Failed(String),
+    /// The publish link went down and is being re-established: `reconnecting`.
+    LinkDown,
+    /// The publish link is up again: `active`.
+    LinkUp,
+}
+
 /// Sends a fatal pipeline error to the publish watcher, which settles `failed`.
-fn report(fail: &Sender<String>, reason: String) {
+fn report(fail: &Sender<PipelineEvent>, reason: String) {
     tracing::error!(error = %reason, "pipeline failed");
     // The receiver is gone once the pipeline is being torn down; nothing to tell.
-    let _ = fail.send(reason);
+    let _ = fail.send(PipelineEvent::Failed(reason));
 }
 
 fn panic_message(panic: &(dyn Any + Send)) -> &str {
@@ -347,7 +365,7 @@ pub(crate) fn launch(
     publish: Box<dyn LivePublish>,
     output_id: OutputId,
     generation: u64,
-    fail_tx: Sender<String>,
+    fail_tx: Sender<PipelineEvent>,
 ) -> Result<Running, String> {
     let (size, capture) = open_capture(&parts)?;
     let format = engine_format()?;
@@ -366,6 +384,7 @@ pub(crate) fn launch(
     let audio = Arc::new(open_audio_encoder(&parts, format)?);
     let capture_drops = DropSnapshot::new();
     let mux_drops = Arc::new(AtomicU64::new(0));
+    let link_drops = Arc::new(AtomicU64::new(0));
     // The mixer timestamps its first block `latency` before the clock, so the FLV
     // origin sits that far back. Later blocks and frames stay at or after it.
     let origin = stream_origin(parts.clock.as_ref(), &mixer)?;
@@ -410,6 +429,7 @@ pub(crate) fn launch(
     let output = match spawn("jstream-output", {
         let stats = Arc::clone(&stats);
         let mux = Arc::clone(&mux_drops);
+        let link = Arc::clone(&link_drops);
         let stop = Arc::clone(&stop);
         move || {
             output_loop(OutputJob {
@@ -419,6 +439,7 @@ pub(crate) fn launch(
                 audio: audio_sub,
                 stats,
                 mux_drops: mux,
+                link_drops: link,
                 stop,
                 fail: fail_tx,
             });
@@ -447,6 +468,7 @@ pub(crate) fn launch(
         desktop,
         bus,
         mux_drops,
+        link_drops,
         drop_guard: None,
         ticker: None,
         final_tick: None,
@@ -632,7 +654,7 @@ struct RenderJob {
     ready: mpsc::Sender<Result<(), String>>,
     stats: Arc<PipelineStats>,
     drops: DropSnapshot,
-    fail: Sender<String>,
+    fail: Sender<PipelineEvent>,
 }
 
 /// The render thread's boundary: a panic outside a tick (opening the compositor,
@@ -946,7 +968,7 @@ fn mixer_thread(
     input: AudioInput,
     format: AudioFormat,
     stop: Arc<AtomicBool>,
-    fail: Sender<String>,
+    fail: Sender<PipelineEvent>,
 ) {
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
         mixer_loop(mixer, clock.as_ref(), &input, format, &stop, &fail);
@@ -967,7 +989,7 @@ fn mixer_loop(
     input: &AudioInput,
     format: AudioFormat,
     stop: &AtomicBool,
-    fail: &Sender<String>,
+    fail: &Sender<PipelineEvent>,
 ) {
     let samples_len = mixer.config().block_frames.saturating_mul(2);
     let mut samples = vec![0.0f32; samples_len];
@@ -1006,13 +1028,16 @@ struct OutputJob {
     audio: Subscription,
     stats: Arc<PipelineStats>,
     mux_drops: Arc<AtomicU64>,
+    link_drops: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
-    fail: Sender<String>,
+    fail: Sender<PipelineEvent>,
 }
 
 /// Muxes both encoder streams and publishes them. A publish error, or an encoder
 /// stream that ends before the pipeline was told to stop (the encoder failed, or its
-/// session closed), is fatal and goes to the failure channel.
+/// session closed), is fatal and goes to the failure channel. A lost link is not an
+/// error: the publish target drops and counts tags while it reconnects, and this
+/// loop reports each change of its [`LinkState`] on the same channel.
 fn output_loop(job: OutputJob) {
     let OutputJob {
         mut publish,
@@ -1021,6 +1046,7 @@ fn output_loop(job: OutputJob) {
         audio,
         stats,
         mux_drops,
+        link_drops,
         stop,
         fail: fail_tx,
     } = job;
@@ -1038,6 +1064,7 @@ fn output_loop(job: OutputJob) {
     let mut video_done = false;
     let mut audio_done = false;
     let mut failed: Option<String> = None;
+    let mut link = LinkState::Active;
     // An end after `stop` is our own teardown; any other end is a failure.
     let ended = |kind: &str, end: StreamEnd| -> Option<String> {
         if stop.load(Ordering::Acquire) {
@@ -1083,13 +1110,38 @@ fn output_loop(job: OutputJob) {
         {
             failed = Some(format!("publish poll failed: {err}"));
         }
+        if failed.is_none() {
+            link = report_link(publish.as_ref(), link, &fail_tx);
+        }
+        link_drops.store(publish.dropped(), Ordering::Relaxed);
     }
     if let Some(err) = failed {
         report(&fail_tx, err);
     }
+    link_drops.store(publish.dropped(), Ordering::Relaxed);
     if let Err(err) = publish.finish() {
         tracing::error!(error = %err, "publish finish failed");
     }
+}
+
+/// Tells the watcher when the publish link has changed from `last`, and returns
+/// the link's state now. Giving up (`Failed`) is not reported here: the next send
+/// or poll fails with it, and that error settles the output `failed`.
+fn report_link(
+    publish: &dyn LivePublish,
+    last: LinkState,
+    fail: &Sender<PipelineEvent>,
+) -> LinkState {
+    let now = publish.link_state();
+    let event = match (last, now) {
+        (LinkState::Active, LinkState::Reconnecting) => PipelineEvent::LinkDown,
+        (LinkState::Reconnecting, LinkState::Active) => PipelineEvent::LinkUp,
+        _ => return now,
+    };
+    tracing::info!(link = ?now, "publish link changed");
+    // The receiver is gone once the pipeline is being torn down; nothing to tell.
+    let _ = fail.send(event);
+    now
 }
 
 /// Muxes one packet and sends its tags. A packet the muxer rejects is dropped. A

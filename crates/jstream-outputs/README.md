@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:00f1097fc1cac728", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#127 reconnect) into #128: re-read Purpose with both changes; the Reconnect bullet (backoff, resync incl. cached AVC header, connect timeout kept until publish) matches reconnect.rs, and 'jstream-core does not use ReconnectingPublisher yet' still holds since #128's connect_rtmp keeps the 10 s timeout through publish then 1 ms, without reconnect" }
+verified = { hash = "b3:c5017b1845ef233b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Purpose: replaced 'jstream-core does not use ReconnectingPublisher yet' with core's RtmpPublish wrapping it via rtmp_connector and the default policy (publish.rs connect_rtmp_with); the rest of the Reconnect bullet and Not yet list unchanged and match reconnect.rs" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -109,6 +109,9 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   the connect timeout until publishing has started and only then shortens the read
   timeout for polling, so the publish replies aren't cut off by the polling timeout.
   Logs carry only `RtmpError` text, never the key ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+  `jstream-core`'s `RtmpPublish` wraps it, with `rtmp_connector` and the default
+  policy, so a live output goes `reconnecting` on a lost connection and fails only
+  when it gives up.
 - **AMF0:** commands are encoded and server replies decoded with `jstream-mux`'s
   `amf0::Amf0Value`, the same codec that writes FLV script tags. Its decoder treats
   server input as untrusted (nesting limit, no allocation from claimed counts). Its
@@ -138,8 +141,7 @@ root no Windows program has needed yet may be missing (see
 [Open questions](#open-questions)).
 
 **Not yet:** enhanced RTMP (HEVC/AV1), AMF3 payloads, and the signed ("complex")
-handshake. `jstream-core`'s output thread does not use `ReconnectingPublisher` yet,
-so a live output still fails on the first lost connection.
+handshake.
 
 **Tests** are hermetic ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): exact handshake
 and chunk bytes, chunking across chunk-size boundaries, extended timestamps, and full

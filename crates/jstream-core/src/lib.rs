@@ -32,7 +32,7 @@ pub use drops::{
 };
 pub use engine::Engine;
 pub use runtime::{
-    LivePublish, OutputStats, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
+    LinkState, LivePublish, OutputStats, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
 };
 pub use session::InProcessControl;
 pub use snapshot::SourceFrameError;

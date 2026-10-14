@@ -1,12 +1,16 @@
 //! Where an output's FLV tags go. Tests record them in memory. A host that is
-//! actually live uses [`connect_rtmp`].
+//! actually live uses [`connect_rtmp`], which reconnects when the connection drops.
 
 use std::fmt;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use jstream_mux::flv::{FlvTag, TagType};
-use jstream_outputs::rtmp::{RtmpError, RtmpPublisher, RtmpUrl, StreamKey, Transport, connect};
+pub use jstream_outputs::rtmp::LinkState;
+use jstream_outputs::rtmp::{
+    Clock, ReconnectPolicy, ReconnectingPublisher, RtmpError, RtmpUrl, SessionTimeouts, StreamKey,
+    Transport, connect_publisher, rtmp_connector,
+};
 
 use crate::lock;
 
@@ -44,14 +48,17 @@ fn rtmp_err(err: RtmpError) -> PublishError {
 
 /// Accepts the FLV tags of one live output. Called on the output thread only.
 pub trait LivePublish: Send {
-    /// Sends one tag.
+    /// Sends one tag. While the link is [`Reconnecting`](LinkState::Reconnecting) a
+    /// destination drops the tag and counts it in [`dropped`](Self::dropped) instead
+    /// of waiting.
     ///
     /// # Errors
-    /// When the destination refuses or drops the tag.
+    /// When the destination refuses or drops the tag for good (for RTMP: it gave up
+    /// reconnecting).
     fn send_tag(&mut self, tag: &FlvTag) -> Result<(), PublishError>;
 
-    /// Reads anything the destination has sent since the last tag. Recording
-    /// destinations do nothing.
+    /// Reads anything the destination has sent since the last tag, and moves a
+    /// reconnect along. Recording destinations do nothing.
     ///
     /// # Errors
     /// When the destination reports a failure.
@@ -62,6 +69,19 @@ pub trait LivePublish: Send {
     /// # Errors
     /// When the destination does not close cleanly.
     fn finish(&mut self) -> Result<(), PublishError>;
+
+    /// Whether the link is up or being re-established, after the last call. The
+    /// output reports `reconnecting` while it is not [`Active`](LinkState::Active).
+    /// A destination that cannot lose its link keeps the default, `Active`.
+    fn link_state(&self) -> LinkState {
+        LinkState::Active
+    }
+
+    /// Media tags dropped because the link was down, as a running total. They count
+    /// in `stats.tick`'s `output_packets`. Default 0.
+    fn dropped(&self) -> u64 {
+        0
+    }
 }
 
 /// Keeps every tag in memory, in send order. Clones share the buffer, so a test
@@ -98,14 +118,16 @@ impl LivePublish for RecordingPublish {
     }
 }
 
-/// An RTMP or RTMPS publish session. `send_metadata` on the publisher adds
-/// `@setDataFrame` itself, so script tags are the file-style `onMetaData` body.
+/// An RTMP or RTMPS publish session that reconnects with backoff when its
+/// connection drops ([`ReconnectingPublisher`], with the default
+/// [`ReconnectPolicy`]). `send_metadata` on the publisher adds `@setDataFrame`
+/// itself, so script tags are the file-style `onMetaData` body.
 pub struct RtmpPublish {
-    inner: Option<RtmpPublisher<Transport>>,
+    inner: Option<ReconnectingPublisher<Transport>>,
 }
 
 impl RtmpPublish {
-    fn publisher(&mut self) -> Result<&mut RtmpPublisher<Transport>, PublishError> {
+    fn publisher(&mut self) -> Result<&mut ReconnectingPublisher<Transport>, PublishError> {
         self.inner
             .as_mut()
             .ok_or_else(|| PublishError::new("the RTMP session has finished"))
@@ -124,7 +146,7 @@ impl LivePublish for RtmpPublish {
     }
 
     fn poll(&mut self) -> Result<(), PublishError> {
-        self.publisher()?.poll_incoming().map_err(rtmp_err)
+        self.publisher()?.poll().map_err(rtmp_err)
     }
 
     fn finish(&mut self) -> Result<(), PublishError> {
@@ -132,6 +154,18 @@ impl LivePublish for RtmpPublish {
             Some(publisher) => publisher.finish().map(|_| ()).map_err(rtmp_err),
             None => Ok(()),
         }
+    }
+
+    fn link_state(&self) -> LinkState {
+        self.inner
+            .as_ref()
+            .map_or(LinkState::Active, ReconnectingPublisher::state)
+    }
+
+    fn dropped(&self) -> u64 {
+        self.inner
+            .as_ref()
+            .map_or(0, |publisher| publisher.stats().dropped())
     }
 }
 
@@ -142,42 +176,59 @@ const RTMP_IO_TIMEOUT: Duration = Duration::from_secs(10);
 /// once when the server has sent nothing.
 const RTMP_POLL_TIMEOUT: Duration = Duration::from_millis(1);
 
+/// The timeouts of the first session and of every reconnect attempt.
+const RTMP_TIMEOUTS: SessionTimeouts = SessionTimeouts {
+    connect: RTMP_IO_TIMEOUT,
+    write: RTMP_IO_TIMEOUT,
+    poll: RTMP_POLL_TIMEOUT,
+};
+
 /// Connects to `url` (`rtmp://` or `rtmps://`) and publishes `key`.
 ///
 /// The handshake and the `connect` … `publish` exchange read with a 10 s timeout:
 /// the publisher retries only an interrupted read, so a shorter one would fail on
 /// any server slower than that to answer. Once publishing has started, the read
 /// timeout drops to 1 ms so the output thread can poll server messages without
-/// blocking the pipeline. Tests reach it only through a fake server on loopback.
+/// blocking the pipeline. The first session is opened here, on the caller's thread.
+/// When it drops later, each reconnect attempt opens a new one the same way, with
+/// the same timeouts, on a thread of its own. Tests reach it only through a fake
+/// server on loopback.
 ///
 /// # Errors
 /// When the URL or key is rejected, or the server does not accept the publish.
 pub fn connect_rtmp(url: &str, key: &str) -> Result<RtmpPublish, PublishError> {
+    connect_rtmp_with(url, key, ReconnectPolicy::default())
+}
+
+/// [`connect_rtmp`] with another reconnect policy, so tests need not wait out the
+/// default backoff.
+fn connect_rtmp_with(
+    url: &str,
+    key: &str,
+    policy: ReconnectPolicy,
+) -> Result<RtmpPublish, PublishError> {
     let url = RtmpUrl::parse(url).map_err(rtmp_err)?;
     let key = StreamKey::new(key).map_err(rtmp_err)?;
-    let transport = connect(&url, Some(RTMP_IO_TIMEOUT)).map_err(rtmp_err)?;
-    transport
-        .set_read_timeout(Some(RTMP_IO_TIMEOUT))
-        .map_err(|err| PublishError::new(format!("setting the RTMP read timeout: {err}")))?;
-    transport
-        .set_write_timeout(Some(RTMP_IO_TIMEOUT))
-        .map_err(|err| PublishError::new(format!("setting the RTMP write timeout: {err}")))?;
-    let publisher = RtmpPublisher::publish(transport, &url, &key).map_err(rtmp_err)?;
-    publisher
-        .get_ref()
-        .set_read_timeout(Some(RTMP_POLL_TIMEOUT))
-        .map_err(|err| PublishError::new(format!("setting the RTMP poll timeout: {err}")))?;
+    let publisher = connect_publisher(&url, &key, &RTMP_TIMEOUTS).map_err(rtmp_err)?;
+    let connector = rtmp_connector(url, key, RTMP_TIMEOUTS);
     Ok(RtmpPublish {
-        inner: Some(publisher),
+        inner: Some(ReconnectingPublisher::new(
+            publisher,
+            connector,
+            policy,
+            Clock::system(),
+        )),
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{LivePublish, connect_rtmp};
+    use super::{LinkState, LivePublish, connect_rtmp, connect_rtmp_with};
     use jstream_mux::amf0::Amf0Value;
+    use jstream_mux::flv::{FlvTag, TagType};
+    use jstream_outputs::rtmp::ReconnectPolicy;
     use std::io::{Read, Write};
-    use std::net::{TcpListener, TcpStream};
+    use std::net::{Shutdown, TcpListener, TcpStream};
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -214,12 +265,13 @@ mod tests {
         }
     }
 
-    /// A server that answers the handshake and then `connect` only after [`DELAY`],
-    /// then accepts the stream. It drains what the client sends until it hangs up.
-    fn slow_server(mut io: TcpStream) {
+    /// A server that answers the handshake and then `connect` only after `delay`,
+    /// then accepts the stream. A thread drains what the client sends until it hangs
+    /// up; it is returned, so the caller can wait for it or hang up first.
+    fn serve(mut io: TcpStream, delay: Duration) -> thread::JoinHandle<()> {
         let mut c0c1 = vec![0; 1 + HANDSHAKE];
         io.read_exact(&mut c0c1).expect("C0C1");
-        thread::sleep(DELAY);
+        thread::sleep(delay);
         let mut reply = vec![3];
         reply.extend((0..HANDSHAKE).map(|i| (i % 251) as u8));
         reply.extend_from_slice(&c0c1[1..]);
@@ -235,7 +287,7 @@ mod tests {
             })
         };
         // The client has sent Set Chunk Size and `connect` by now; answer it late.
-        thread::sleep(DELAY);
+        thread::sleep(delay);
         let mut out = Vec::new();
         command(
             0,
@@ -248,7 +300,7 @@ mod tests {
             &mut out,
         );
         io.write_all(&out).expect("connect reply");
-        thread::sleep(DELAY);
+        thread::sleep(delay);
         out.clear();
         command(
             0,
@@ -271,7 +323,12 @@ mod tests {
             &mut out,
         );
         io.write_all(&out).expect("publish replies");
-        let _ = drain.join();
+        drain
+    }
+
+    /// [`serve`] with [`DELAY`], until the client hangs up.
+    fn slow_server(io: TcpStream) {
+        let _ = serve(io, DELAY).join();
     }
 
     /// A server that takes 50 ms to answer the handshake and `connect` is still
@@ -294,6 +351,79 @@ mod tests {
             "poll waited {:?} for a quiet server",
             started.elapsed()
         );
+        publish.finish().expect("finish");
+        drop(publish);
+        server.join().expect("server");
+    }
+
+    /// A keyframe VIDEODATA body (AVC NALU), small enough for one chunk.
+    fn keyframe(timestamp: u32) -> FlvTag {
+        FlvTag {
+            tag_type: TagType::Video,
+            timestamp,
+            body: vec![0x17, 1, 0, 0, 0, 0, 0, 0, 1, 0x65],
+        }
+    }
+
+    /// Sends a keyframe and polls every 5 ms until `done`, for at most five seconds.
+    fn send_until(
+        publish: &mut dyn LivePublish,
+        timestamp: &mut u32,
+        mut done: impl FnMut(&dyn LivePublish) -> bool,
+    ) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline {
+            if done(publish) {
+                return true;
+            }
+            *timestamp += 33;
+            publish.send_tag(&keyframe(*timestamp)).expect("send");
+            publish.poll().expect("poll");
+            thread::sleep(Duration::from_millis(5));
+        }
+        done(publish)
+    }
+
+    /// A server that hangs up mid-stream is reconnected to with the same publish
+    /// sequence: the link goes `Reconnecting`, tags sent meanwhile are dropped and
+    /// counted instead of failing the send, and it is `Active` again on the second
+    /// connection.
+    #[test]
+    fn connect_rtmp_reconnects_after_the_server_hangs_up() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let port = listener.local_addr().expect("addr").port();
+        let server = thread::spawn(move || {
+            let (first, _) = listener.accept().expect("accept");
+            let drain = serve(first.try_clone().expect("clone"), Duration::ZERO);
+            // Let some media arrive, then hang up.
+            thread::sleep(Duration::from_millis(100));
+            first.shutdown(Shutdown::Both).expect("hang up");
+            let _ = drain.join();
+            let (second, _) = listener.accept().expect("accept the reconnect");
+            let _ = serve(second, Duration::ZERO).join();
+        });
+
+        let policy = ReconnectPolicy {
+            initial_delay: Duration::from_millis(20),
+            max_delay: Duration::from_millis(50),
+            ..ReconnectPolicy::default()
+        };
+        let mut publish =
+            connect_rtmp_with(&format!("rtmp://127.0.0.1:{port}/live"), "test-key", policy)
+                .expect("publishing");
+        let mut timestamp = 0;
+        assert_eq!(publish.link_state(), LinkState::Active);
+        assert!(
+            send_until(&mut publish, &mut timestamp, |p| p.link_state()
+                == LinkState::Reconnecting),
+            "the hang-up was not noticed"
+        );
+        assert!(
+            send_until(&mut publish, &mut timestamp, |p| p.link_state()
+                == LinkState::Active),
+            "never reconnected"
+        );
+        assert!(publish.dropped() > 0, "nothing was counted while down");
         publish.finish().expect("finish");
         drop(publish);
         server.join().expect("server");
