@@ -202,7 +202,8 @@ so nothing is logged there, and `tracing` never writes to the stdout that carrie
 Each `Server` has an `info` span `mcp_session`. Every request runs in a `debug` span
 `mcp_request` under it with the JSON-RPC method, and a request answered with a JSON-RPC
 error logs its code at `debug`. Each `tools/call` runs in an `info` span `tool_call`
-with the tool's name, and logs at `debug` whether it succeeded or, for a result with
+with the tool's name, directly under `mcp_session` so it keeps its session when the
+`debug` request span is off, and logs at `debug` whether it succeeded or, for a result with
 `isError`, its error code. `initialize` (client name and settled revision) and the
 engine session's `hello` (its `client_id`) log at `info`; a failed `hello` and a
 connection lost during a call log at `warn`. Tool arguments and results are never

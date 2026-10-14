@@ -108,7 +108,9 @@ crate.
   positive and at most `max_audio_gap` (1 s by default). Gaps without a drop are left
   alone, so rounding in upstream timestamps never inserts samples. A block the encoder
   refuses as `Busy`, or the silence before it, marks the next block the same way, so
-  that block's silence covers both holes. Filled frames are counted (`silence_frames`).
+  that block's silence covers both holes. Silence that was encoded counts as encoded
+  even when the block after it is refused, so the next fill starts where it ended.
+  Filled frames are counted (`silence_frames`).
 - **Encoder busy.** An encoder that returns `Busy` despite `can_accept` drops the input
   (`dropped_encoder_busy`). At `finish`, queued inputs the encoder can't take within
   `finish_timeout` (2 s) are dropped the same way.

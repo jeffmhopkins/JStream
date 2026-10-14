@@ -58,9 +58,11 @@ pub struct ServerConfig {
     pub token: Token,
     /// `Host` values (`name:port`) accepted besides the loopback names
     /// (`127.0.0.1`, `localhost`, `[::1]`) and the bound address, each with the bound
-    /// port. Compared without regard to ASCII case. Each must name its port:
-    /// [`Server::bind`](crate::Server::bind) refuses an entry without one
-    /// ([`ServerError::InvalidHost`]), which would never match. A request's `Host`
+    /// port. Compared without regard to ASCII case. Each entry is `name:port` with
+    /// exactly one port, and an IPv6 address goes in brackets (`[fd00::1]:4455`), as a
+    /// request's `Host` writes it. [`Server::bind`](crate::Server::bind) refuses an entry
+    /// without a port, with more than one, or with an unbracketed IPv6 address
+    /// ([`ServerError::InvalidHost`]), since none would ever match. A request's `Host`
     /// without a port means port 80, so it matches `name:80` when the server listens on
     /// port 80, and nothing otherwise.
     pub extra_hosts: Vec<String>,
