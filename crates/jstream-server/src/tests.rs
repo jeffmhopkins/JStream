@@ -245,7 +245,6 @@ pub(crate) fn check_rejects_foreign_origin() {
     let bearer = format!("Bearer {TOKEN}");
     let host = harness.authority.clone();
     for origin in [
-        None,
         Some("http://evil.example"),
         Some("null"),
         Some("https://127.0.0.1"),
@@ -274,6 +273,12 @@ pub(crate) fn check_rejects_foreign_origin() {
         0,
         "no session opened"
     );
+    // No `Origin` at all is a native client (#44): the token decides.
+    assert_eq!(
+        harness.raw(None, Some(&host), None).err(),
+        Some(StatusCode::UNAUTHORIZED)
+    );
+    assert!(harness.raw(None, Some(&host), Some(&bearer)).is_ok());
 }
 
 #[test]
