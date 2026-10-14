@@ -1,0 +1,33 @@
+[package]
+name = "jstream-daemon"
+version = "0.0.0"
+description = "The headless JStream engine host: runs an engine and serves its WebSocket API on localhost."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 6
+summary = "`jstream-daemon` (links core and server)"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+# The control token's random bytes, from the OS.
+getrandom.workspace = true
+jstream-core.workspace = true
+# `OutputId`, for `--output`.
+jstream-protocol.workspace = true
+jstream-server.workspace = true
+# The runtime the server runs on; `signal` for Ctrl-C (and SIGTERM on Unix).
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal"] }
+
+[dev-dependencies]
+# The tests drive the daemon through the WebSocket client, as the CLI does.
+futures-util.workspace = true
+jstream-control = { workspace = true, features = ["ws"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "time"] }
