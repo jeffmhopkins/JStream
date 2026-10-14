@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:851ca74202b647ca", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model changed to ADR-0023 target state; Purpose describes only what is built (Item: transform, crop, visible; source.duplicate copies under a new ID) and still matches src; ADR-0023 fields are not built" }
+verified = { hash = "b3:e1917e22e3f18add", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, encode, daemon, mcp) into the ADR-0031 acceptance: re-read against both; encode's ADR-0003 links re-pointed to ADR-0031, which restates its MF encoder scope unchanged; no other content change" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

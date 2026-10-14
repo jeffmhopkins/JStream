@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:60e969ccc349d391", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model changed only through ADR-0023 (opacity, blend, effects, duplicated_from); outputs keyed by mix and encoder profile still share one session, as stated" }
+verified = { hash = "b3:2175f558a99b5f7e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, encode, daemon, mcp) into the ADR-0031 acceptance: re-read against both; encode's ADR-0003 links re-pointed to ADR-0031, which restates its MF encoder scope unchanged; no other content change" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -65,8 +65,8 @@ keyframe resync; and the registry.
 ## Design
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
-depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:cbab9c6628116bcf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New section, checked against session.rs/fanout.rs/audio.rs/video.rs/registry.rs: can_accept-gated recv and park+poll every poll_interval, try_send drop-newest input queue, silence fill only after a marked drop up to max_audio_gap, busy and finish_timeout drops, per-subscriber try_send with keyframe resync and Joining skip uncounted, end recorded before queues drop, catch_unwind, abort-and-join on drop, defaults 8/512/4ms/2s/1s match SessionOptions::default" }
+depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
+verified = { hash = "b3:5e2bb060404e1a32", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, encode, daemon, mcp) into the ADR-0031 acceptance: re-read against both; encode's ADR-0003 links re-pointed to ADR-0031, which restates its MF encoder scope unchanged; no other content change" }
 -->
 
 ### Threads and pacing

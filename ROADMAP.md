@@ -58,7 +58,7 @@ must have a written result before the browser source is built.
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:3adddd348843494a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited for ADR-0031: depends_on moved to it; M1b source kinds now display, window, video capture device (MJPEG, paired audio), image formats, color, text, audio input, desktop and application audio, browser, matching its table; M1a/c/d unchanged" }
+verified = { hash = "b3:ad7be83b43cf1ca7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, encode, daemon, mcp) into the ADR-0031 acceptance: re-read against both; encode's ADR-0003 links re-pointed to ADR-0031, which restates its MF encoder scope unchanged; no other content change" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
