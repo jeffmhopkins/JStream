@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:7b5adb35e904a207", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model gained ADR-0029's transition fields; the encoder-sharing bullet this section relies on is unchanged" }
+verified = { hash = "b3:9b3b9dcfb64b307f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions: data-model presets, planned protocol bullet, GPU transition node) into the ADR-0034 acceptance; the planned YouTube bullet sits beside the transitions bullet; no built API changed, so control/core/server/graph/encode/platform text still holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

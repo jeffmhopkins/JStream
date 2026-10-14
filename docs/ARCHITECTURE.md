@@ -292,7 +292,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:883e8fef96b575d0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73: server test and README verified lines, no wire change) with ADR-0029's planned Transitions bullet; covered READMEs changed only by verified lines; body matches the code" }
+verified = { hash = "b3:f5d31e194f98fd44", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions: data-model presets, planned protocol bullet, GPU transition node) into the ADR-0034 acceptance; the planned YouTube bullet sits beside the transitions bullet; no built API changed, so control/core/server/graph/encode/platform text still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

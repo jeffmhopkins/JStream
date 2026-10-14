@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d456320db2215082", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol has ADR-0029's planned transition edits and optional preset on the switch action, none built; planned minor additions under R-API-001, preset edits are ordinary edits under R-API-004; main's R-API-002 rewording as verified there" }
+verified = { hash = "b3:9cf91309b7e2b2f0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029 transitions: data-model presets, planned protocol bullet, GPU transition node) into the ADR-0034 acceptance; the planned YouTube bullet sits beside the transitions bullet; no built API changed, so control/core/server/graph/encode/platform text still holds" }
 -->
 
 <a id="R-API-001"></a>
