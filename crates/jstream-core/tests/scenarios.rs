@@ -1,6 +1,6 @@
 //! R-RT-004: under overload the stages drop and count, and `stats.tick` reports the
-//! totals. The media pipeline is not wired yet, so this drives the stages and fakes
-//! that already exist and publishes the counts the way that pipeline will.
+//! totals. This drives the stages and fakes directly. `output.start` registers the
+//! same kinds of sources on the live pipeline.
 
 use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
@@ -60,7 +60,7 @@ fn frame(index: i64) -> VideoSurface {
 
 /// A subscriber that never reads, so the encoder's fan-out drops packets, plus a mixer
 /// jumped far enough ahead that it skips frames. Both totals show up in `stats.tick`,
-/// summed with the capture, render and output counts the pipeline will publish, and a
+/// summed with the capture, render and output counts published beside them, and a
 /// command issued afterwards still runs.
 #[test]
 fn overload_drops_and_counts() {
