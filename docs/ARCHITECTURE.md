@@ -163,7 +163,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0022-item-transform-and-canvas.md"]
-verified = { hash = "b3:7bea84db34a35b13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against ADR-0022: tree now has Collection.canvas and SceneItem.geometry; new Canvas-and-geometry bullet matches decisions 1-4 (canvas as scene space, mix scales it, centre/size/fit/rotation/3D, painter's order, crop in source px, sizes runtime); Built-so-far still true of model/ (0.3 top-left+scale transform), canvas and geometry listed as not yet" }
+verified = { hash = "b3:429b14deb8d59429", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0022 dependency changed only its 0.4 migration details (omitted placement keeps the 0.3 meaning until 1.0; deprecated transforms stay pending until the source size is known, never refused); the Canvas and geometry bullet states neither, so it still holds" }
 -->
 
 ```

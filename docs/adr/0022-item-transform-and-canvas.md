@@ -113,10 +113,13 @@ these wire fields (all numbers are `Finite32`):
   and the UI converts for its handles using the source's size (decision 4).
 - **No flip** for now. Flips can come later as additive boolean fields defaulting to
   `false`. A negative `size` is rejected, not read as a flip.
-- **Default placement:** `item.add` without a geometry places the item centred on the
-  canvas, with `size` equal to the canvas and `fit_mode = fit`. Clients that want the
-  source's native size send it explicitly. The graph never needs runtime sizes to apply
-  an edit.
+- **Default placement (from 1.0):** `item.add` without a geometry places the item
+  centred on the canvas, with `size` equal to the canvas and `fit_mode = fit`. Clients
+  that want the source's native size send it explicitly. The graph never needs runtime
+  sizes to apply an edit. During the 0.4 deprecation window an `item.add` with neither
+  `geometry` nor `transform` keeps its 0.3 meaning instead (native size, top-left at
+  (0, 0)), through the shim below, because a minor release can't change what an
+  omitted field means ([R-API-001](../RULES.md#R-API-001)).
 
 **3. The formula, defined once.** A point (u, v) in the box's local frame (origin at the
 box centre, y down, z toward the viewer) is placed as follows:
@@ -166,11 +169,19 @@ protocol README's versioning rules:
   It deprecates `ItemTransform`, `item.set_transform`, `item.add`'s `transform` and
   `ItemInfo.transform`. Their old meaning keeps working through a shim in the engine,
   which knows source sizes:
-  - a deprecated write is converted to the new geometry using the source's current
-    size, and is rejected with `invalid_argument` while that size is unknown;
-  - `ItemInfo.transform` is computed from the geometry and the current size. While the
-    size is unknown, it is computed as if the cropped source were exactly the box's
-    size (scale 1);
+  - a deprecated write (an `item.add` with `transform` or with neither field, or an
+    `item.set_transform`) is never refused for want of a size, so every batch that 0.3
+    accepts is still accepted. The item keeps the deprecated transform as given, as its
+    *pending* placement. The engine converts it to a geometry with the source's size as
+    soon as that size is known: at once if it already is, otherwise on the source's
+    first `source.size_changed`. Until then the item draws nothing, which is what a
+    source with no frame draws anyway. The conversion is not an edit: it changes no
+    `rev` and leaves no undo step, and the undo inverse of the deprecated write restores
+    the previous placement, pending or converted;
+  - `ItemInfo.transform` returns a pending transform exactly as given. For a converted
+    one it is computed from the geometry and the current size, and while that size is
+    unknown, as if the cropped source were exactly the box's size (scale 1);
+  - `ItemInfo.geometry` is absent while the placement is pending;
   - sending both `transform` and `geometry` is `invalid_argument`.
 - **The next major release (1.0) removes them.** That follows `can_serve`: a 0.4 server
   still serves 0.3 clients, and 1.0 doesn't. Other breaking changes from the decision
