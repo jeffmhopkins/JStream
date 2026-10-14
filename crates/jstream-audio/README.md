@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:d9703acda9a591ef", by = "agent:grok@stats-tick", note = "Re-read the mixer API against the threading edit. Mixer::poll still skips and counts frames when it falls more than half a ring behind. InputStats still counts overrun and late frames. The core pipeline still calls Mixer::poll. Send matrix and loudness stay later." }
+verified = { hash = "b3:977191839c2f49ee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading edit: the core mixer thread still calls Mixer::poll on the media clock and pushes blocks; catching its panic is in core. Mixer API, counters and tests unchanged." }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -92,7 +92,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:28dfda46f56cd349", by = "agent:grok@stats-tick", note = "Re-read against the threading edit and R-RT-001. InputProducer::push_packet and Mixer::poll still do not allocate after setup. jstream-stats is a control-side sampler, not one of these threads. Rings and atomics are unchanged." }
+verified = { hash = "b3:23faab52b0086dd9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading edit: the Not yet bullet still holds, since catching a panic at the thread boundary is the engine job and core now does it for the mixer thread. Rings, poll and allocation notes unchanged." }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

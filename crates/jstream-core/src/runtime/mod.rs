@@ -10,5 +10,7 @@ mod pipeline;
 mod publish;
 
 pub use pipeline::OutputStats;
+#[cfg(test)]
+pub(crate) use pipeline::{DrawFn, OpenDraw};
 pub(crate) use pipeline::{Gate, MediaHost, Pending, Running, launch, parts_from};
 pub use publish::{LivePublish, PublishError, RecordingPublish, RtmpPublish, connect_rtmp};

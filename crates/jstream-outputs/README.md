@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:5198a25a76357a94", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#127 B1: the video resync now also arms when an AVC header is cached but no frame was sent yet; re-read the Reconnect bullet: 'after a reconnect, video and audio are dropped until the next keyframe, with onMetaData and the AVC header just before it' now holds for that case too; no API or dependency change" }
+verified = { hash = "b3:00f1097fc1cac728", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#127 reconnect) into #128: re-read Purpose with both changes; the Reconnect bullet (backoff, resync incl. cached AVC header, connect timeout kept until publish) matches reconnect.rs, and 'jstream-core does not use ReconnectingPublisher yet' still holds since #128's connect_rtmp keeps the 10 s timeout through publish then 1 ms, without reconnect" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

@@ -305,7 +305,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "render_ticks": {
           "default": 0,
-          "description": "Render ticks that produced no new composite because the previous one had not\nfinished.",
+          "description": "Render ticks the render loop skipped to catch up with the media clock.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"

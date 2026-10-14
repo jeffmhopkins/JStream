@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:9068935ff7d176db", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against this PR: Logging, rotation, data directory and crash report bullets match logs.rs/crash.rs (message redacted before truncation); argument-parsing bullet now names the five options (#126 B1); open questions 4 and 5 still hold" }
+verified = { hash = "b3:1fbff923e7d8fa64", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#126 logs/crash reports) into #128: re-read Design with both changes; logging, rotation, crash report and five-option bullets match logs.rs/crash.rs/args.rs, and the daemon still builds one Engine with with_output only and never starts the pipeline itself, so the core compositor-open bound needs no mention" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

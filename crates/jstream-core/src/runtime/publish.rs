@@ -135,26 +135,167 @@ impl LivePublish for RtmpPublish {
     }
 }
 
+/// How long the handshake and the publish sequence may wait on one read or write,
+/// and the bound on one write once publishing (a stalled peer, see the README).
+const RTMP_IO_TIMEOUT: Duration = Duration::from_secs(10);
+/// The read timeout once publishing: short, so the output thread's `poll` returns at
+/// once when the server has sent nothing.
+const RTMP_POLL_TIMEOUT: Duration = Duration::from_millis(1);
+
 /// Connects to `url` (`rtmp://` or `rtmps://`) and publishes `key`.
 ///
-/// The socket's read timeout is short so the output thread can poll server
-/// messages without blocking the pipeline. This opens a network connection;
-/// unit tests do not call it (R-TEST-004).
+/// The handshake and the `connect` … `publish` exchange read with a 10 s timeout:
+/// the publisher retries only an interrupted read, so a shorter one would fail on
+/// any server slower than that to answer. Once publishing has started, the read
+/// timeout drops to 1 ms so the output thread can poll server messages without
+/// blocking the pipeline. Tests reach it only through a fake server on loopback.
 ///
 /// # Errors
 /// When the URL or key is rejected, or the server does not accept the publish.
 pub fn connect_rtmp(url: &str, key: &str) -> Result<RtmpPublish, PublishError> {
     let url = RtmpUrl::parse(url).map_err(rtmp_err)?;
     let key = StreamKey::new(key).map_err(rtmp_err)?;
-    let transport = connect(&url, Some(Duration::from_secs(10))).map_err(rtmp_err)?;
+    let transport = connect(&url, Some(RTMP_IO_TIMEOUT)).map_err(rtmp_err)?;
     transport
-        .set_read_timeout(Some(Duration::from_millis(1)))
+        .set_read_timeout(Some(RTMP_IO_TIMEOUT))
         .map_err(|err| PublishError::new(format!("setting the RTMP read timeout: {err}")))?;
     transport
-        .set_write_timeout(Some(Duration::from_secs(10)))
+        .set_write_timeout(Some(RTMP_IO_TIMEOUT))
         .map_err(|err| PublishError::new(format!("setting the RTMP write timeout: {err}")))?;
     let publisher = RtmpPublisher::publish(transport, &url, &key).map_err(rtmp_err)?;
+    publisher
+        .get_ref()
+        .set_read_timeout(Some(RTMP_POLL_TIMEOUT))
+        .map_err(|err| PublishError::new(format!("setting the RTMP poll timeout: {err}")))?;
     Ok(RtmpPublish {
         inner: Some(publisher),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LivePublish, connect_rtmp};
+    use jstream_mux::amf0::Amf0Value;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    const HANDSHAKE: usize = 1536;
+    /// Longer than the 1 ms poll timeout the publisher used to have during the handshake.
+    const DELAY: Duration = Duration::from_millis(50);
+
+    fn s(v: &str) -> Amf0Value {
+        Amf0Value::String(v.into())
+    }
+
+    fn status(code: &str) -> Amf0Value {
+        Amf0Value::Object(vec![
+            ("level".into(), s("status")),
+            ("code".into(), s(code)),
+            ("description".into(), s("test")),
+        ])
+    }
+
+    /// One AMF0 command message on chunk stream 3, at the default 128-byte chunk size.
+    fn command(stream_id: u32, values: &[Amf0Value], out: &mut Vec<u8>) {
+        let body = Amf0Value::encode_all(values).expect("amf0");
+        let len = u32::try_from(body.len()).expect("small");
+        out.push(0x03); // fmt 0, chunk stream 3
+        out.extend_from_slice(&[0, 0, 0]); // timestamp
+        out.extend_from_slice(&len.to_be_bytes()[1..]);
+        out.push(0x14); // AMF0 command
+        out.extend_from_slice(&stream_id.to_le_bytes());
+        for (i, chunk) in body.chunks(128).enumerate() {
+            if i > 0 {
+                out.push(0xC3); // fmt 3 continuation on chunk stream 3
+            }
+            out.extend_from_slice(chunk);
+        }
+    }
+
+    /// A server that answers the handshake and then `connect` only after [`DELAY`],
+    /// then accepts the stream. It drains what the client sends until it hangs up.
+    fn slow_server(mut io: TcpStream) {
+        let mut c0c1 = vec![0; 1 + HANDSHAKE];
+        io.read_exact(&mut c0c1).expect("C0C1");
+        thread::sleep(DELAY);
+        let mut reply = vec![3];
+        reply.extend((0..HANDSHAKE).map(|i| (i % 251) as u8));
+        reply.extend_from_slice(&c0c1[1..]);
+        io.write_all(&reply).expect("S0S1S2");
+        let mut c2 = vec![0; HANDSHAKE];
+        io.read_exact(&mut c2).expect("C2");
+
+        let drain = {
+            let mut io = io.try_clone().expect("clone");
+            thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                while matches!(io.read(&mut buf), Ok(n) if n > 0) {}
+            })
+        };
+        // The client has sent Set Chunk Size and `connect` by now; answer it late.
+        thread::sleep(DELAY);
+        let mut out = Vec::new();
+        command(
+            0,
+            &[
+                s("_result"),
+                Amf0Value::Number(1.0),
+                Amf0Value::Object(vec![("fmsVer".into(), s("FMS/3,0,1,123"))]),
+                status("NetConnection.Connect.Success"),
+            ],
+            &mut out,
+        );
+        io.write_all(&out).expect("connect reply");
+        thread::sleep(DELAY);
+        out.clear();
+        command(
+            0,
+            &[
+                s("_result"),
+                Amf0Value::Number(4.0),
+                Amf0Value::Null,
+                Amf0Value::Number(1.0),
+            ],
+            &mut out,
+        );
+        command(
+            1,
+            &[
+                s("onStatus"),
+                Amf0Value::Number(0.0),
+                Amf0Value::Null,
+                status("NetStream.Publish.Start"),
+            ],
+            &mut out,
+        );
+        io.write_all(&out).expect("publish replies");
+        let _ = drain.join();
+    }
+
+    /// A server that takes 50 ms to answer the handshake and `connect` is still
+    /// published to, and once publishing a poll returns at once.
+    #[test]
+    fn connect_rtmp_waits_for_a_slow_server() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let port = listener.local_addr().expect("addr").port();
+        let server = thread::spawn(move || {
+            let (io, _) = listener.accept().expect("accept");
+            slow_server(io);
+        });
+
+        let mut publish = connect_rtmp(&format!("rtmp://127.0.0.1:{port}/live"), "test-key")
+            .expect("publishing to a slow server");
+        let started = Instant::now();
+        publish.poll().expect("poll");
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "poll waited {:?} for a quiet server",
+            started.elapsed()
+        );
+        publish.finish().expect("finish");
+        drop(publish);
+        server.join().expect("server");
+    }
 }

@@ -1,11 +1,20 @@
 //! `video.snapshot`: composite the program scene and encode the readback as a PNG.
 //!
-//! The compositor lives on its own mutex. Building the shot copies what it needs out of
-//! the collection, then readback runs without that lock, so a GPU wait does not stall
-//! other sessions. This is a control-plane query, not the render thread (R-RT-002).
+//! Building the shot copies what it needs out of the collection under its lock. The
+//! compositor lives on its own thread, `jstream-snapshot`, which opens it, renders,
+//! reads back and encodes the PNG. The call's future completes when that thread
+//! answers, so the GPU wait and the encode never block the caller's executor thread
+//! or other sessions. This is control-plane work, not the render thread (R-RT-002).
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::future::Future;
+use std::panic::{self, AssertUnwindSafe};
+use std::pin::Pin;
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
+use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use jstream_graph::{Graph, State};
 use jstream_media::FrameSize;
@@ -186,20 +195,232 @@ fn crop(crop: &ProtocolCrop) -> Crop {
     }
 }
 
-/// Renders `shot` and encodes the capped PNG.
-pub(crate) fn draw(
-    shot: &Shot,
-    gpu: &Mutex<Option<Compositor>>,
-) -> Result<QueryResult, ProtocolError> {
-    let mut guard = compositor(gpu)?;
-    let compositor = match guard.as_mut() {
-        Some(compositor) => compositor,
-        None => {
-            return Err(ProtocolError::Internal {
-                reason: "the snapshot compositor is not open".into(),
-            });
+/// How long the snapshot thread waits before it tries an adapter again after an open
+/// failed. Each failure in a row doubles it, up to [`MAX_RETRY`]. Until then a snapshot
+/// answers with the cached error at once, so a machine without an adapter does not
+/// pay for a full adapter probe on every call.
+const FIRST_RETRY: Duration = Duration::from_secs(5);
+const MAX_RETRY: Duration = Duration::from_secs(300);
+
+/// The last failed compositor open, and when the next attempt is allowed.
+#[derive(Default)]
+pub(crate) struct OpenBackoff {
+    failed: Option<(ProtocolError, Instant, Duration)>,
+}
+
+impl OpenBackoff {
+    /// The cached error while `now` is still inside the wait after a failure.
+    pub(crate) fn cached(&self, now: Instant) -> Option<ProtocolError> {
+        match &self.failed {
+            Some((error, at, wait)) if now.saturating_duration_since(*at) < *wait => {
+                Some(error.clone())
+            }
+            _ => None,
         }
+    }
+
+    /// Records a failed open at `now`. The wait doubles from [`FIRST_RETRY`].
+    pub(crate) fn failed(&mut self, error: ProtocolError, now: Instant) {
+        let wait = match &self.failed {
+            Some((_, _, wait)) => (*wait * 2).min(MAX_RETRY),
+            None => FIRST_RETRY,
+        };
+        self.failed = Some((error, now, wait));
+    }
+
+    pub(crate) fn opened(&mut self) {
+        self.failed = None;
+    }
+}
+
+/// One snapshot request: the shot, and where to send the answer.
+struct Job {
+    shot: Shot,
+    reply: ReplyTx,
+}
+
+/// The `jstream-snapshot` thread, started on the first `video.snapshot`. It owns the
+/// compositor. Dropping this closes the queue and joins the thread.
+#[derive(Default)]
+pub(crate) struct SnapshotWorker {
+    queue: Mutex<Option<(Sender<Job>, JoinHandle<()>)>>,
+}
+
+impl SnapshotWorker {
+    /// Queues `shot`. The returned future resolves when the thread has drawn it.
+    pub(crate) fn request(&self, shot: Shot) -> SnapshotReply {
+        let (reply, answer) = reply_pair();
+        let mut queue = lock(&self.queue);
+        if queue.is_none() {
+            let (tx, rx) = mpsc::channel();
+            match thread::Builder::new()
+                .name("jstream-snapshot".into())
+                .spawn(move || worker(rx))
+            {
+                Ok(handle) => *queue = Some((tx, handle)),
+                Err(err) => {
+                    reply.send(Err(ProtocolError::Internal {
+                        reason: format!("starting the snapshot thread: {err}"),
+                    }));
+                    return answer;
+                }
+            }
+        }
+        if let Some((tx, _)) = queue.as_ref()
+            && let Err(mpsc::SendError(job)) = tx.send(Job { shot, reply })
+        {
+            // The thread is gone; dropping the job answers `internal`.
+            drop(job);
+            *queue = None;
+        }
+        answer
+    }
+}
+
+impl Drop for SnapshotWorker {
+    fn drop(&mut self) {
+        let queue = self
+            .queue
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .take();
+        if let Some((tx, handle)) = queue {
+            drop(tx);
+            if handle.thread().id() != thread::current().id() && handle.join().is_err() {
+                tracing::error!("snapshot thread panicked");
+            }
+        }
+    }
+}
+
+/// Serves snapshot jobs in order until the queue closes. A panic while drawing is
+/// caught per job: that job answers `internal` and the compositor is reopened next time.
+fn worker(jobs: Receiver<Job>) {
+    let mut gpu: Option<Compositor> = None;
+    let mut backoff = OpenBackoff::default();
+    for Job { shot, reply } in jobs {
+        let result = panic::catch_unwind(AssertUnwindSafe(|| {
+            let compositor = open(&mut gpu, &mut backoff)?;
+            draw(&shot, compositor)
+        }));
+        let result = result.unwrap_or_else(|_| {
+            gpu = None;
+            Err(ProtocolError::Internal {
+                reason: "the snapshot compositor panicked".into(),
+            })
+        });
+        reply.send(result);
+    }
+}
+
+fn open<'a>(
+    gpu: &'a mut Option<Compositor>,
+    backoff: &mut OpenBackoff,
+) -> Result<&'a mut Compositor, ProtocolError> {
+    if gpu.is_none() {
+        let now = Instant::now();
+        if let Some(error) = backoff.cached(now) {
+            return Err(error);
+        }
+        match Compositor::open(OpenOptions::headless()) {
+            Ok(compositor) => {
+                tracing::info!(
+                    adapter = %compositor.adapter_description(),
+                    "snapshot compositor opened"
+                );
+                backoff.opened();
+                *gpu = Some(compositor);
+            }
+            Err(err) => {
+                let error = from_render(err);
+                backoff.failed(error.clone(), now);
+                return Err(error);
+            }
+        }
+    }
+    gpu.as_mut().ok_or_else(|| ProtocolError::Internal {
+        reason: "the snapshot compositor is not open".into(),
+    })
+}
+
+type Answer = Result<QueryResult, ProtocolError>;
+
+#[derive(Default)]
+struct Slot {
+    answer: Option<Answer>,
+    waker: Option<Waker>,
+}
+
+/// The sending half of a snapshot answer. Dropped without sending, it answers
+/// `internal`, so a caller never waits on a job the thread lost.
+struct ReplyTx {
+    slot: Option<Arc<Mutex<Slot>>>,
+}
+
+impl ReplyTx {
+    fn send(mut self, answer: Answer) {
+        if let Some(slot) = self.slot.take() {
+            fill(&slot, answer);
+        }
+    }
+}
+
+impl Drop for ReplyTx {
+    fn drop(&mut self) {
+        if let Some(slot) = self.slot.take() {
+            fill(
+                &slot,
+                Err(ProtocolError::Internal {
+                    reason: "the snapshot thread stopped before answering".into(),
+                }),
+            );
+        }
+    }
+}
+
+fn fill(slot: &Mutex<Slot>, answer: Answer) {
+    let waker = {
+        let mut slot = lock(slot);
+        slot.answer = Some(answer);
+        slot.waker.take()
     };
+    if let Some(waker) = waker {
+        waker.wake();
+    }
+}
+
+/// The answer to one `video.snapshot`, ready once the snapshot thread has drawn it.
+pub(crate) struct SnapshotReply {
+    slot: Arc<Mutex<Slot>>,
+}
+
+impl Future for SnapshotReply {
+    type Output = Answer;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Answer> {
+        let mut slot = lock(&self.slot);
+        match slot.answer.take() {
+            Some(answer) => Poll::Ready(answer),
+            None => {
+                slot.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    }
+}
+
+fn reply_pair() -> (ReplyTx, SnapshotReply) {
+    let slot = Arc::new(Mutex::new(Slot::default()));
+    (
+        ReplyTx {
+            slot: Some(Arc::clone(&slot)),
+        },
+        SnapshotReply { slot },
+    )
+}
+
+/// Renders `shot` and encodes the capped PNG.
+fn draw(shot: &Shot, compositor: &mut Compositor) -> Result<QueryResult, ProtocolError> {
     let mut stack = BTreeSet::new();
     let full = match &shot.program {
         Some(id) => render_scene(compositor, shot, id, &mut stack)?,
@@ -215,25 +436,6 @@ pub(crate) fn draw(
         height,
         png: base64(&png),
     })
-}
-
-fn compositor(
-    gpu: &Mutex<Option<Compositor>>,
-) -> Result<MutexGuard<'_, Option<Compositor>>, ProtocolError> {
-    let mut guard = lock(gpu);
-    if guard.is_none() {
-        match Compositor::open(OpenOptions::headless()) {
-            Ok(compositor) => {
-                tracing::info!(
-                    adapter = %compositor.adapter_description(),
-                    "snapshot compositor opened"
-                );
-                *guard = Some(compositor);
-            }
-            Err(err) => return Err(from_render(err)),
-        }
-    }
-    Ok(guard)
 }
 
 fn render_scene(
@@ -458,7 +660,43 @@ pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Frame, SourceFrameError, base64, decode_base64, decode_png, encode_png, fit};
+    use super::{
+        FIRST_RETRY, Frame, MAX_RETRY, OpenBackoff, SourceFrameError, base64, decode_base64,
+        decode_png, encode_png, fit,
+    };
+    use jstream_protocol::ProtocolError;
+    use std::time::{Duration, Instant};
+
+    /// A failed adapter open is answered from the cache until its wait is over, and
+    /// the wait doubles with each failure in a row, up to the cap.
+    #[test]
+    fn a_failed_open_is_cached_with_backoff() {
+        let error = ProtocolError::Internal {
+            reason: "no wgpu adapter".into(),
+        };
+        let start = Instant::now();
+        let mut backoff = OpenBackoff::default();
+        assert!(backoff.cached(start).is_none(), "nothing failed yet");
+        backoff.failed(error.clone(), start);
+        assert_eq!(backoff.cached(start), Some(error.clone()));
+        assert_eq!(
+            backoff.cached(start + FIRST_RETRY - Duration::from_millis(1)),
+            Some(error.clone())
+        );
+        let retry = start + FIRST_RETRY;
+        assert!(backoff.cached(retry).is_none(), "the wait is over");
+        backoff.failed(error.clone(), retry);
+        assert!(backoff.cached(retry + FIRST_RETRY).is_some(), "doubled");
+        assert!(backoff.cached(retry + FIRST_RETRY * 2).is_none());
+        let mut at = retry;
+        for _ in 0..20 {
+            at += MAX_RETRY;
+            backoff.failed(error.clone(), at);
+        }
+        assert!(backoff.cached(at + MAX_RETRY).is_none(), "capped");
+        backoff.opened();
+        assert!(backoff.cached(at).is_none(), "an open clears it");
+    }
 
     #[test]
     fn canvas_is_capped_on_its_longest_side() {

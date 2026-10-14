@@ -1,6 +1,6 @@
 //! [`InProcessControl`]: one client session with an [`Engine`], in the same process.
 
-use crate::engine::Engine;
+use crate::engine::{Engine, Executed};
 use crate::events;
 use crate::events::QueueRef;
 use crate::lock;
@@ -11,6 +11,7 @@ use jstream_protocol::{
 use std::future;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use tracing::Instrument;
 use tracing::field;
 
 /// One client session with an [`Engine`], opened by [`Engine::connect`]: the
@@ -20,8 +21,11 @@ use tracing::field;
 /// applies too, since a host may hand the session to a client built against another
 /// protocol version), then calls. Its `client_id` keys its idempotency keys. Request IDs
 /// are `req_1`, `req_2`, … per session, as `WsControl` numbers them. Every future it
-/// returns is already complete, so any executor, or a plain poll loop, drives it, and it
-/// never fails with [`ControlError::Disconnected`].
+/// returns is already complete, except a `video.snapshot` call's: that one completes,
+/// and wakes its waker, when the engine's snapshot thread has drawn the frame, so the
+/// GPU wait never blocks the polling thread. Any executor drives it, and so does a
+/// poll loop that parks until woken. It never fails with
+/// [`ControlError::Disconnected`].
 ///
 /// Dropping the session ends the event streams it opened, after what they buffered.
 ///
@@ -100,18 +104,36 @@ impl Control for InProcessControl {
             "req_{}",
             self.next_request.fetch_add(1, Ordering::Relaxed)
         ));
-        let result = match self.client_id() {
+        let executed = match self.client_id() {
             None => {
                 tracing::debug!("call refused: no hello yet");
-                Err(ProtocolError::HandshakeRequired)
+                Executed::Ready(Err(ProtocolError::HandshakeRequired))
             }
             Some(client_id) => self.engine.execute(&client_id, &id, call),
         };
-        Box::pin(future::ready(
-            result
-                .map(|result| Response { id, result })
-                .map_err(ControlError::from),
-        ))
+        match executed {
+            Executed::Ready(result) => Box::pin(future::ready(
+                result
+                    .map(|result| Response { id, result })
+                    .map_err(ControlError::from),
+            )),
+            Executed::Pending(reply, span) => Box::pin(
+                async move {
+                    let result = reply.await;
+                    match &result {
+                        Ok(_) => tracing::debug!("call done"),
+                        Err(error) => tracing::debug!(code = error.code(), "call failed"),
+                    }
+                    result
+                        .map(|result| Response {
+                            id,
+                            result: jstream_protocol::CallResult::Query { result },
+                        })
+                        .map_err(ControlError::from)
+                }
+                .instrument(span),
+            ),
+        }
     }
 
     fn events(&self) -> EventStream {

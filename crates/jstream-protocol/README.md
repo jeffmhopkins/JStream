@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:50b1ee83ef0e1782", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the module list against event.rs: DropCounts gained #[serde(default)] only, so the Events bullet and PROTOCOL_VERSION 0.6 still hold; no message was added or renamed; schema.rs and query.rs unchanged" }
+verified = { hash = "b3:0696ded807993477", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against event.rs: only the DropCounts::render_ticks doc comment changed (schema description regenerated in protocol.snap); no message added or renamed, 0.6 holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -73,7 +73,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:2a473fb1b016849a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the video.snapshot bullet (added the Size paragraph: RGBA8 1280x720 from the fixed 1920x1080 canvas in core snapshot.rs, ~4.9 MB base64 worst case; jstream-server's 4 MiB MAX_MESSAGE_BYTES is set via max_message_size on the upgrade and bounds inbound only; WsControl uses connect_async defaults), the stats.tick paragraph (missing counters parse as 0), and the compatibility bullets: DropCounts' fields leaving 'required' in protocol.snap relaxes parsing only, the wire output is unchanged, so no version bump" }
+verified = { hash = "b3:ae9c8a3dd9de1fb4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#128 B2: stats.tick now says the render loop skips a tick a whole period behind and counts it in render_ticks (pipeline.rs catch_up), replacing 'render_ticks stays 0'; the render_ticks field gloss matches the core README drop table" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -277,17 +277,17 @@ After `welcome`, the server pushes every event to every client.
   it did see. The fields are `capture_frames` (frames a capture mailbox replaced
   before they were read), `audio_frames` (input-ring overruns, audio that arrived
   after the mixer had passed it, and frames the mixer skipped because it fell behind
-  the clock), `render_ticks` (composites skipped because the previous one had not
-  finished), `encode_frames` and `encode_blocks` (video frames and audio blocks
+  the clock), `render_ticks` (ticks the render loop skipped to catch up with the media
+  clock), `encode_frames` and `encode_blocks` (video frames and audio blocks
   dropped before an encoder accepted them) and `output_packets` (encoded packets
   dropped handing a stream to an output). Silence inserted to cover a gap is not a
   drop. A counter missing from `drops` parses as 0 (`DropCounts` is
   `#[serde(default)]`), so a counter added later is an optional field (minor). `seq`
   starts at 1 and increases by one each sample. While an output is
   running, the pipeline's `jstream-stats` thread emits a tick about once a second;
-  an idle engine emits none. This cut's render loop does not skip a late tick, so
-  `render_ticks` stays 0. Until [open question 7](#open-questions) every client
-  receives it. Added in 0.6. A late plugin block is an audio drop in
+  an idle engine emits none. A render tick that falls a whole period or more behind
+  the clock is skipped rather than drawn late, and counted in `render_ticks`. Until
+  [open question 7](#open-questions) every client receives it. Added in 0.6. A late plugin block is an audio drop in
   `audio_frames` once the mixer counts it
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
   built. Per-output bitrate, render and encode times, and CPU and GPU load wait until

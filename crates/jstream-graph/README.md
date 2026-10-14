@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:5430a7f06c61e7f4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only via its dependency on jstream-protocol › Design, whose edits are the video.snapshot size note and the DropCounts default; re-read Purpose: Graph::query still returns None for video.snapshot and output.status, and the graph never reads stats.tick or DropCounts, so it holds" }
+verified = { hash = "b3:2d87a6e5f078eab3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only via jstream-protocol › Design, whose edit is the render_ticks wording; the graph never reads stats.tick or DropCounts, so Purpose holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
