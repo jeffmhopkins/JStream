@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:89609b30b85507ee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only changed the jstream-sources row (ADR-0031 source kinds); mcp's L3 row and purpose unchanged" }
+verified = { hash = "b3:30c23eaa579e0a13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "server.rs gained the disconnected/control_error helpers and a not-sent message when hello fails; tests.rs a closed-session mock and test; contents list (server, tools, jsonrpc, stdio, error) and deferred HTTP still hold" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -41,7 +41,7 @@ Not here yet: the streamable-HTTP transport ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:fafd8c83591ecc47", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Upstream ARCH#mcp now names the stdio proxy jstream-cli mcp; design text (generated tools, dual-era revisions, stdio, HTTP deferred to jstream-server) unaffected" }
+verified = { hash = "b3:49c0763d39419a32", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: errors table splits lost-during-call from hello-failed (call not sent, restart for a new session with its own undo history); Session and identity explains why re-hello never splits undo (Control contract, InProcessControl never disconnects, WsControl never reconnects); tools, revisions, async/transports re-read against server.rs" }
 -->
 
 ### Tools
@@ -104,7 +104,8 @@ batches (MCP removed them in 2025-06-18).
 | The engine answered | a result: `structuredContent` is the protocol `Response` (`{"id", "result"}`), repeated as JSON in a text block |
 | The engine refused (`ControlError::Protocol`) | a result with `isError: true` and `{"error": <WireError>}`: the stable `code`, its details and the message |
 | The arguments don't fit the tool | the same, with the protocol's `malformed` code and serde's reason |
-| The connection to the engine was lost | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again. |
+| The connection to the engine was lost during the call | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again ([Session and identity](#design)). |
+| `hello` failed with a lost connection | the same `disconnected` code, saying the call was not sent and that the MCP server must be restarted for a new session, with its own undo history |
 | Unknown tool, or a `tools/call` without `name` or with non-object `arguments` | JSON-RPC `-32602` |
 | Unparseable JSON / not a valid request / unknown method | `-32700` / `-32600` / `-32601` |
 
@@ -122,6 +123,17 @@ engine: one undo history and one name in the audit log
 tool call that needs the engine, with the MCP client's name (`clientInfo.name` from
 `initialize`, or from the request's `_meta`; `jstream-mcp` if none). Later names don't
 change the session. `describe_api` and argument errors never reach the engine.
+
+After a call fails with a lost connection, the next call sends `hello` again on the same
+`Control`. That never splits the undo history: the `Control` contract says a second
+`hello` on an open session returns the same `client_id`, `InProcessControl` never loses
+its connection, and `WsControl` never reconnects, so once its socket has closed every
+`hello` fails with `Disconnected` too (tested in `jstream-server`). The server then
+reports that the call was not sent and that the MCP server must be restarted. The new
+session that gives is a new client of the engine, so edits made through the old one
+can't be undone from it. The contract doesn't cover a `Control` that reconnects by
+itself (none exists): one that answered the second `hello` with a new `client_id` would
+split the history without the agent noticing, and this server doesn't check for that.
 
 Authentication happens below this crate: the session the host passes in already holds
 the control token ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)). The stdio
@@ -175,9 +187,30 @@ official Rust SDK (`rmcp`):
 2. **`disconnected`.** A lost engine connection is reported with an MCP-layer error code
    that the protocol doesn't define. Should the protocol define it, or should it be a
    JSON-RPC error instead?
-3. **Events.** Engine events (`state.changed`, `output.state_changed`) don't reach agents.
-   Candidates: 2026-07-28 subscriptions, or a query tool that returns events since a
-   `rev`.
+3. **Events.** Engine events (`state.changed`, `output.state_changed`) don't reach agents,
+   though [ADR-0006](../../docs/adr/0006-mcp-full-access.md) makes every protocol
+   capability available over MCP. Options:
+   - **A polling tool** (say `events`, taking an optional `after` cursor): the server
+     opens one `Control::events()` subscription after `hello`, buffers what it yields,
+     and the tool returns the events after the cursor, without waiting, plus the next
+     cursor. It needs no protocol change and works in both eras and over stdio as it is.
+     It still needs decisions: the buffer must be bounded, because an agent that never
+     polls would grow it without limit, so what to drop and how to report the gap (the
+     same question as [protocol open question 7](../jstream-protocol/README.md#open-questions)
+     and [jstream-control open question 1](../jstream-control/README.md#design)); the
+     cursor is a server-local sequence number, since only `state.changed` carries a
+     `rev`; every MCP client of one server shares the buffer (question 6); and whether
+     the tool may wait for the next event, which would hold up the in-order stdio loop.
+   - **MCP notifications** (2026-07-28 subscriptions, or notifications on the
+     handshake-based era): the server would write messages that answer no request.
+     `Server::handle` returns at most one reply per message, and `serve_stdio` writes
+     only replies, so both would need an outgoing channel. Many MCP clients also don't
+     show notifications to the model.
+   - **Nothing new:** agents poll `state.get` and `output.status` and compare `rev`.
+     That covers the state, but not who changed it (the event's `client_id` and
+     `request_id`), and misses an output that started and stopped between two polls.
+
+   The polling tool is the smallest step, once the buffer policy is settled.
 4. **Streamable HTTP.** Mounted by `jstream-server` (planned above), or a feature of this
    crate on a small HTTP stack?
 5. **Legacy support.** How long to keep the handshake-based era once clients move to
