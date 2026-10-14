@@ -18,4 +18,9 @@ workspace = true
 [dependencies]
 jstream-media.workspace = true
 jstream-mux.workspace = true
+rustls.workspace = true
+rustls-native-certs.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+rcgen.workspace = true

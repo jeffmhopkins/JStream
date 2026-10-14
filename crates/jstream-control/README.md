@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:4c98be2b3741b9b2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Only the mock.rs module doc and the mock feature comment in Cargo.toml were reworded (without the engine, instead of before it exists); trait, async shape, mock behaviour, WebSocket client and open questions unchanged" }
+verified = { hash = "b3:24998181bc72639b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #66 B1: open question 4 (wss://) now says ring is already allowlisted for jstream-outputs RTMPS, so only the tokio-tungstenite TLS feature and wiring remain; the 'no rustls or ring in this crate's tree' line still holds (cargo tree -i ring shows only jstream-outputs); rest unchanged" }
 -->
 
 ### The trait
@@ -188,8 +188,9 @@ server on a loopback port and drives it with this client.
    ([jstream-server › Design](../jstream-server/README.md#design)).
 3. **Browser client.** The `wasm32` implementation over `gloo-net`, with the token in
    `Sec-WebSocket-Protocol`, comes with the web UI.
-4. **TLS.** `wss://` needs a TLS feature of `tokio-tungstenite` (rustls with ring), whose
-   `ring` dependency needs a lint-deps native-code allowlist entry, a governance change.
+4. **TLS.** `wss://` needs a TLS feature of `tokio-tungstenite` (rustls with ring) and
+   its wiring. `ring` is already on the lint-deps native-code allowlist, for
+   `jstream-outputs`' RTMPS, so that part needs no further governance change.
 5. **Timeouts.** `connect` and calls have no timeout of their own; a caller that needs
    one wraps the future. A connect timeout and keep-alive pings may belong here once
    remote (non-loopback) use exists.

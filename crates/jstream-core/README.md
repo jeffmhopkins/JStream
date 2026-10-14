@@ -52,7 +52,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:64eef218aa687472", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "New crate, checked against code: hello/handshake_required/client_N ids, events() allowed before hello (as the mock), req_N per session, idempotency key check before Graph::apply_batch and only applied batches remembered, queries via Graph::query plus output.status, placeholder output state machine (action_failed/not_found), events queued under the engine lock and wakers woken after release, lock order session->engine->queue, deps match Cargo.toml, no undo since the protocol has no undo request" }
+verified = { hash = "b3:00ab8d333895c344", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-control#design changed only its wss:// open question; InProcessControl has no transport, so nothing in core's design changes" }
 -->
 
 ### Engine and sessions

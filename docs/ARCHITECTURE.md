@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:0288f441497ff857", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/jstream-daemon changed only in token.rs (directory at the token path refused on Windows too); the daemon row (first cut serves the WebSocket API) and diagram still hold" }
+verified = { hash = "b3:e8ae47c79a1a16c2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main: covered apps/ READMEs only had verified lines refreshed (cli, daemon design) for the TLS open-question rewording; shape diagram and daemon/cli rows unchanged" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:5f6fbb149a0ef9d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main with #68: new apps/jstream-daemon/Cargo.toml at layer 6 (deps core L5, server L4, protocol, control-ws dev) and jstream-platform-windows' WGC features; daemon row says the first cut serves the WebSocket API only; all edges point strictly down (lint-deps ok)" }
+verified = { hash = "b3:4bd638cff811ed8a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#68, #70): rows for jstream-core, jstream-daemon and platform-windows' WGC features plus this PR's jstream-outputs rustls/rustls-native-certs/rcgen deps; no member edges change, all edges strictly down" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -260,7 +260,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:76f774d80b9243fd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only through jstream-server/README.md (open question 5 reworded for the daemon); transport bullet (WsControl, /api/v1/ws, 127.0.0.1 default, token and Origin/Host checks, plain ws://) still matches, and the daemon serves exactly that" }
+verified = { hash = "b3:ead9d8ac84b9aaa2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged: covered server README now has both the RTMPS PR's TLS open-question wording and main's daemon open question 5; Transport bullet (plain ws://, TLS open question in the server README) still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
