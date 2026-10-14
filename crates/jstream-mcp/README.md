@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:30c23eaa579e0a13", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "server.rs gained the disconnected/control_error helpers and a not-sent message when hello fails; tests.rs a closed-session mock and test; contents list (server, tools, jsonrpc, stdio, error) and deferred HTTP still hold" }
+verified = { hash = "b3:37ea764127af1f53", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029, daemon, mcp, encode) into the #44/#48 follow-ups: this PR's server gate/config and cli changes are untouched by main; sections changed only by main's text and verified lines, re-read and still hold" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:020254e87be7003d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #70 N1: Serving bullet now says the signal handlers are installed before the bind, as main.rs/serve.rs do and Design says; tests/daemon.rs reads stdout through a reader thread with 10 s deadlines (N2), which the Tests bullet still describes correctly" }
+verified = { hash = "b3:806ff1ef22a4e3ce", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029, daemon, mcp, encode) into the #44/#48 follow-ups: this PR's server gate/config and cli changes are untouched by main; sections changed only by main's text and verified lines, re-read and still hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a

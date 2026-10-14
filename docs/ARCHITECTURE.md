@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b17ac8fcee8ca1cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #71: covered apps/ changed only by this PR's daemon README Serving-bullet order and test harness; the daemon and CLI rows and the diagram match main and still hold" }
+verified = { hash = "b3:a54dbbe5a749e3de", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029, daemon, mcp, encode) into the #44/#48 follow-ups: this PR's server gate/config and cli changes are untouched by main; sections changed only by main's text and verified lines, re-read and still hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:b3e8d07c9f7c0919", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #74: new crates/jstream-encode/Cargo.toml at layer 3 (dep jstream-platform L1) beside main's jstream-audio (L2), core, daemon and outputs rows; all edges point strictly down (lint-deps ok)" }
+verified = { hash = "b3:87a434b559f0e930", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029, daemon, mcp, encode) into the #44/#48 follow-ups: this PR's server gate/config and cli changes are untouched by main; sections changed only by main's text and verified lines, re-read and still hold" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -292,7 +292,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:883e8fef96b575d0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (#73: server test and README verified lines, no wire change) with ADR-0029's planned Transitions bullet; covered READMEs changed only by verified lines; body matches the code" }
+verified = { hash = "b3:4ea8407ba291fe86", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029, daemon, mcp, encode) into the #44/#48 follow-ups: this PR's server gate/config and cli changes are untouched by main; sections changed only by main's text and verified lines, re-read and still hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -341,7 +341,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:dca7fe7e8b8a425b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "R-API-002 prose now describes noun-grouped tools with ops, matching the 'Tools are grouped by noun' and Names bullets; jstream-mcp code change only rewords disconnected errors and README adds events options, so tools, schema size, access and undo bullets hold" }
+verified = { hash = "b3:3c04f9f1bf6915c9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0029, daemon, mcp, encode) into the #44/#48 follow-ups: this PR's server gate/config and cli changes are untouched by main; sections changed only by main's text and verified lines, re-read and still hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
