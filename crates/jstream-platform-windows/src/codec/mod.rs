@@ -1,11 +1,13 @@
 //! Media Foundation codecs: the [`Codecs`](jstream_platform::Codecs) backend.
 //!
-//! This first cut has the AAC encoder (`aac`). Video encoders and decoders follow; until
-//! then they report `Unsupported`.
+//! It has the AAC encoder (`aac`) and the H.264 encoder from CPU NV12 frames (`h264`).
+//! Video decoders follow; until then they report `Unsupported`.
 
 // Its platform-independent parts are tested on every platform.
 #[cfg(any(windows, test))]
 mod aac;
+#[cfg(any(windows, test))]
+mod h264;
 #[cfg(windows)]
 mod mf;
 
@@ -20,11 +22,14 @@ mod backend {
         VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
     };
     use windows::Win32::Media::MediaFoundation::{
-        MFAudioFormat_AAC, MFAudioFormat_PCM, MFMediaType_Audio, MFT_CATEGORY_AUDIO_ENCODER,
+        MFAudioFormat_AAC, MFAudioFormat_PCM, MFMediaType_Audio, MFMediaType_Video,
+        MFT_CATEGORY_AUDIO_ENCODER, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE,
         MFT_ENUM_FLAG_LOCALMFT, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
+        MFVideoFormat_H264, MFVideoFormat_NV12,
     };
 
     use super::aac::MfAacEncoder;
+    use super::h264::MfH264Encoder;
     use super::mf::{self, MfRuntime};
 
     /// Codecs through Media Foundation, the OS codecs ADR-0003 chooses.
@@ -48,32 +53,48 @@ mod backend {
     impl Codecs for MfCodecs {
         fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
             let _rt = MfRuntime::start()?;
+            let sync = MFT_ENUM_FLAG_SYNCMFT | MFT_ENUM_FLAG_LOCALMFT | MFT_ENUM_FLAG_SORTANDFILTER;
+            let info = |found: mf::Found, codec, role, hardware| CodecInfo {
+                name: found.name,
+                codec,
+                role,
+                hardware,
+            };
+            let mut out = Vec::new();
             let aac = mf::enumerate(
                 MFT_CATEGORY_AUDIO_ENCODER,
-                MFT_ENUM_FLAG_SYNCMFT | MFT_ENUM_FLAG_LOCALMFT | MFT_ENUM_FLAG_SORTANDFILTER,
+                sync,
                 (MFMediaType_Audio, MFAudioFormat_PCM),
                 (MFMediaType_Audio, MFAudioFormat_AAC),
             )?;
             // Only the first is listed: it is the one `audio_encoder` opens.
-            Ok(aac
-                .into_iter()
-                .take(1)
-                .map(|found| CodecInfo {
-                    name: found.name,
-                    codec: Codec::Aac,
-                    role: CodecRole::AudioEncoder,
-                    hardware: false,
-                })
-                .collect())
+            out.extend(
+                aac.into_iter()
+                    .take(1)
+                    .map(|f| info(f, Codec::Aac, CodecRole::AudioEncoder, false)),
+            );
+            let h264 = (
+                (MFMediaType_Video, MFVideoFormat_NV12),
+                (MFMediaType_Video, MFVideoFormat_H264),
+            );
+            for (flags, hardware) in [
+                (MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SORTANDFILTER, true),
+                (sync, false),
+            ] {
+                out.extend(
+                    mf::enumerate(MFT_CATEGORY_VIDEO_ENCODER, flags, h264.0, h264.1)?
+                        .into_iter()
+                        .map(|f| info(f, Codec::H264, CodecRole::VideoEncoder, hardware)),
+                );
+            }
+            Ok(out)
         }
 
         fn video_encoder(
             &self,
             config: &VideoEncoderConfig,
         ) -> Result<Box<dyn VideoEncoder>, PlatformError> {
-            Err(PlatformError::Unsupported {
-                what: format!("{:?} video encoding (not implemented yet)", config.codec),
-            })
+            Ok(Box::new(MfH264Encoder::open(config)?))
         }
 
         fn audio_encoder(
@@ -94,8 +115,8 @@ mod backend {
     }
 }
 
-/// Platform tests against the OS AAC encoder (R-TEST-004): behind `hw-tests` and
-/// `#[ignore]`d, because a CI runner may lack Media Foundation. Run them on a Windows
+/// Platform tests against the OS encoders (R-TEST-004): behind `hw-tests` and
+/// `#[ignore]`d, because a CI runner may lack Media Foundation or a GPU encoder. Run them on a Windows
 /// machine: `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 #[cfg(all(test, windows, feature = "hw-tests"))]
 mod device_tests {
@@ -154,5 +175,99 @@ mod device_tests {
             )
             .is_err()
         );
+    }
+
+    fn encode_two_seconds(hardware: jstream_platform::HardwarePreference) {
+        use jstream_platform::media::{
+            ColorInfo, FrameSize, PixelFormat, VideoFrame, VideoFrameInfo,
+        };
+        use jstream_platform::{RateControl, VideoEncoderConfig, VideoSurface};
+
+        let codecs = MfCodecs::new();
+        let size = FrameSize::new(1280, 720).expect("size");
+        let mut enc = codecs
+            .video_encoder(&VideoEncoderConfig {
+                codec: Codec::H264,
+                size,
+                input_format: PixelFormat::Nv12,
+                frame_period: Timebase::new(1, 30).expect("30 fps"),
+                rate_control: RateControl::Cbr { kbps: 3000 },
+                keyframe_interval: 30,
+                hardware,
+            })
+            .expect("open H.264 encoder");
+        assert_eq!(
+            enc.info().hardware,
+            hardware == jstream_platform::HardwarePreference::Require
+        );
+        let tb = Timebase::MPEG_90K;
+        let mut out = Vec::new();
+        let mut sent = 0;
+        for i in 0..60i64 {
+            let info = VideoFrameInfo {
+                size,
+                format: PixelFormat::Nv12,
+                color: ColorInfo::default(),
+                pts: MediaTime::new(i * 3000, tb),
+            };
+            let mut frame = VideoFrame::zeroed(info).expect("frame");
+            // A moving gradient, so the encoder has something to code.
+            for y in 0..720u32 {
+                if let Some(row) = frame.row_mut(0, y) {
+                    for (x, p) in row.iter_mut().enumerate() {
+                        *p = (x as i64 + y as i64 + i * 4) as u8;
+                    }
+                }
+            }
+            for y in 0..360u32 {
+                if let Some(row) = frame.row_mut(1, y) {
+                    row.fill(128);
+                }
+            }
+            // An asynchronous encoder may not want input yet: poll until it does.
+            for _ in 0..1000 {
+                enc.poll(&mut out).expect("poll");
+                if enc.can_accept() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+            enc.encode(VideoSurface::Cpu(frame)).expect("encode");
+            sent += 1;
+            enc.poll(&mut out).expect("poll");
+        }
+        enc.finish(&mut out).expect("finish");
+        assert!(
+            out.len() >= sent - 2,
+            "{} packets for {sent} frames",
+            out.len()
+        );
+        assert!(out[0].is_keyframe(), "the first packet is a keyframe");
+        assert_eq!(out[0].pts(), MediaTime::new(0, tb));
+        for w in out.windows(2) {
+            assert!(w[0].pts().ticks() < w[1].pts().ticks(), "pts increase");
+        }
+        for p in &out {
+            assert_eq!(p.codec(), Codec::H264);
+            assert_eq!(p.pts(), p.dts());
+            // Annex B: a start code first.
+            assert!(p.data().starts_with(&[0, 0, 1]) || p.data().starts_with(&[0, 0, 0, 1]));
+        }
+        assert!(
+            out.iter().filter(|p| p.is_keyframe()).count() >= 2,
+            "keyframe every 30"
+        );
+    }
+
+    #[test]
+    #[ignore = "needs Media Foundation's software H.264 encoder"]
+    fn encodes_h264_in_software() {
+        encode_two_seconds(jstream_platform::HardwarePreference::Avoid);
+    }
+
+    #[test]
+    #[ignore = "needs a GPU with a hardware H.264 encoder"]
+    fn encodes_h264_in_hardware() {
+        encode_two_seconds(jstream_platform::HardwarePreference::Require);
     }
 }
