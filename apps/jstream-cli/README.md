@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map"]
-verified = { hash = "b3:dc31c79746fdeaae", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#70): main's 'a host exists' paragraph kept; #48 changes (read vs write errors, per-process token name in tests/mcp.rs) don't touch purpose text; dependencies re-read" }
+verified = { hash = "b3:be47f2bdee64d7b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only gained ADR-0035's planned M3 rows (jstream-plugin-proto L0, jstream-plugin-clap L2 unsafe) and jstream-plugin-host on the apps row; this crate's own row and layer and the section's claims are unchanged" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
