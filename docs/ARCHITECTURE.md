@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:129b576374739338", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:b88009c4d3bb7cc0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed only by the daemon README's re-verified Design line (ADR-0025 persistence dependency); the layer diagram and app roles are unchanged" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:a69d2549a126f0a5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:de750db3576e872a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -154,7 +154,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -164,22 +164,31 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md"]
-verified = { hash = "b3:3b95c26bd0517a59", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main's ADR-0023 tree and bullets with ADR-0029's: SceneItem keeps opacity, blend and reserved effects[] and gains transition, Scene gains transition_in/out, studio drops transition for the transitions collection; Built-so-far now also lists the transition fields as not yet" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0028-audio-model-v2.md"]
+verified = { hash = "b3:e45efcf5eba44a05", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Joined ADR-0028 (Source.audio and SourceAudio, master bus, bus fader/mute/monitor, Audio and Shown-on-program bullets; 'independent of scenes' dropped) with main's ADR-0022 canvas/geometry, ADR-0024 scene structure and ADR-0025 Settings; depends_on lists 0022-0025 and 0028, not the superseded 0007; not-yet list adds source audio settings" }
 -->
 
 ```
-Collection (JSON on disk, schema_version, rev: u64)
-├── sources        Source { id, kind, settings, filters[], duplicated_from? }   video and/or audio; independent of scenes
-├── scenes         Scene { id, name, items[], transition_in?, transition_out? }
-│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, opacity, blend,
+Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
+├── sources        Source { id, kind, settings, filters[], duplicated_from?, labels, favourite, audio? }   video and/or audio
+│                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted, filters[] }
+├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
+│                          icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
+│                          items[] }   flat display order
+│                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (reserved, empty in v1), transition }
+├── folders        Folder { id, name }   ordered, one level; organising only
+├── labels         Label { id, name, icon, color }   ordered
+├── hotkeys        [{ chord, action }]   chord → protocol action request
 ├── studio         { program_scene, preview_scene }   (studio-mode state)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind: Cut | Fade | Move, duration_ms, easing, unmatched, stagger_ms }
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
-├── audio          sends: (source_id, bus_id) → gain_db
-│                  Bus { id, name, filters[], monitor_device? }
+├── audio          master_bus: bus_id   (created with the collection, never deleted)
+│                  sends: (source_id, bus_id) → gain_db   (post-fader)
+│                  Bus { id, name, filters[], gain_db, muted, monitor? }
+│                  monitor { device, tap: PreFilters | PostFilters }
+│                  an audio filter may name a key source (sidechain)
 ├── encoders       EncoderProfile { id, codec, rate_control, … }
 └── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile }
                    kind: Rtmp { target: Generic { url } | YouTube { broadcast_binding } } | Record { path, container } | VirtualCam
@@ -198,14 +207,53 @@ Collection (JSON on disk, schema_version, rev: u64)
   source is placed rather than marking one placement as the original.
   `item.set_source` switches an item between reference and clone and keeps its id,
   placement and stacking position ([ADR-0023](adr/0023-placements-references-and-clones.md)).
+- **Canvas and geometry** ([ADR-0022](adr/0022-item-transform-and-canvas.md)): the
+  collection's `canvas` is every scene's coordinate space, in pixels, and a `VideoMix`
+  scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
+  canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
+  and 3D tilt, turn, depth and per-item perspective, drawn in stacking order with no
+  depth buffer. `crop` is in source pixels. A source's current size is runtime state,
+  not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,
+  protocol 0.3's transform as written, which the compositor evaluates against the
+  source's current size every frame. Only an explicit `item.set_geometry` turns it into
+  a geometry.
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
   scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
   that would close a cycle (`item.add`, and `item.set_source`).
+- **Groups and keyframe scenes** ([ADR-0024](adr/0024-scene-structure.md)):
+  - A **group** is a scene with `role = group`. The role changes no engine behaviour: a
+    group renders, nests and takes filters like any scene, and clients hide groups from
+    the scene list. A group shares its parent's coordinate space, so its children keep
+    their coordinates and a client can edit them inline. `item.move` moves an item
+    to another scene and keeps its id; grouping and ungrouping are client-built batches
+    of `scene.create`, `source.create`, `item.add` and `item.move`.
+  - A **keyframe scene** (variant) is a real scene with `variant_of` naming its parent,
+    which is not itself a variant. It has no items of its own: it shows the parent's
+    items with per-item `overrides` of placement, visibility and opacity (an absent
+    field follows the parent); everything else, including the background, follows the
+    parent. A variant can be on program, nested and hotkeyed. The cycle check counts the
+    variant → parent edge. Deleting a parent is rejected while it has variants.
+  - Placement edits take an optional `scene_id`: absent or the item's own scene changes
+    the item; a variant writes that variant's override; `item.clear_override` removes one.
+- **Folders and organisation are collection state:** folders, labels, favourites, scene
+  icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable
+  edits and saved with the collection, so every client and agent sees the same thing
+  ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not
+  per person). Folders change no rendering, switching or nesting; scenes keep their flat
+  display order, and a variant sits under its parent, never in a folder. Labels and
+  favourites on a source belong to the source, so every placement shares them. A hotkey
+  binds only an action, never an edit; which client listens for the keys is a client
+  decision. `Scene.background` (absent means transparent) is scene model, not metadata,
+  because the compositor draws it wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
-  is used. A placement owns its transform, `crop`, `visible`, `opacity` (an alpha
+  is used. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.
+- **Settings:** a source's `settings`, and each filter's, are a map of values described by
+  its kind's descriptor, which the engine reports and validates against. References to
+  scenes, sources and asset files inside settings are typed, so the graph tracks them in
+  cycle checks and delete rejection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
 - **Transitions** ([ADR-0029](adr/0029-transitions.md)): exactly one preset is the
   default, and it can't be deleted. Deleting a preset clears the overrides that use it in
   the same edit. The engine picks a switch's preset: the one the switch action names, else
@@ -217,6 +265,25 @@ Collection (JSON on disk, schema_version, rev: u64)
   Unpaired items appear or disappear with their effect. The fields are reserved with
   neutral defaults while M1b builds the model; the behaviour comes before or during M2.
 - The preview shown in the UI is a protocol stream, not an `Output`.
+- **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
+  matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
+  send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
+  fader and mute → activity gain → sends. Per bus: sum → filters → fader and mute.
+  `audio.enabled = false` closes the source's audio stream and removes its mixer channel
+  but keeps its sends; mute keeps it open and metered. A nested scene source has
+  `enabled` and `follow` only; its contents keep their own channels. A filter's key is the
+  key source after its fader, mute and activity gain. Sources and buses, with sends and
+  keys as edges, form an audio graph: an edit that closes a cycle is rejected, as is a
+  keyed filter on a bus its key sends to, a source keyed on itself, or deleting a source
+  that is still a key.
+- **Shown and on program** (D29): "shown" is relative to the Program mix only. Its roots
+  are `program_scene`, or both scenes of a running transition, weighted by the
+  transition's audio curve (weights sum to 1). A source is reachable from a scene through
+  `visible` items, following nested scene sources whose `audio.enabled` is on, to any
+  depth. A nested scene source set to `follow = always` is an extra root of weight 1. A
+  `when_shown` source's activity gain is `min(1, Σ w(r))` over the roots that reach it;
+  an `always` source's is 1. The activity gain is runtime state, never an edit. Preview,
+  other video mixes, projectors and editor previews never make a source shown.
 - **Encoder sharing:** outputs with the same `(video_mix, encoder_profile)` share one
   encoder session. Hardware session caps differ by GPU vendor, so the engine reports the
   count.
@@ -226,18 +293,22 @@ Collection (JSON on disk, schema_version, rev: u64)
   undo stacks live in `jstream-core`.
 - **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind name or a nested
   scene; no settings or filters yet), scenes in display order, and items in stacking
-  order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
-  they never copy them. Deleting a source an item still places, or a scene a source
-  still shows, is rejected. Not yet: settings, filters, `opacity`, `blend`, the reserved
-  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the 3D
-  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
+  order with `source_id`, protocol 0.3's 2D transform (top-left corner and scale, which
+  ADR-0022 replaces), `crop` and `visible`. Items refer to sources; they never copy them.
+  Deleting a source an item still places, or a scene a source still shows, is rejected.
+  Not yet: settings, filters, source audio settings, `opacity`, `blend`, the reserved
+  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
+  `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
+  variants and overrides, folders, labels, favourites and other organisation metadata,
+  `background`, hotkeys, and everything outside `sources` and `scenes`. Nothing is
+  persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
-depends_on = ["docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:ea8a6633ba07af4e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0035: added the planned, unbuilt CLAP host paragraph (per-instance process, MMCSS thread on the shared media clock, non-waiting rings with depth d, bypass and stats.tick count, latency, restart); clock, thread table, S3 result and snapshot text unchanged" }
+depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
+verified = { hash = "b3:eede437e183b3eb5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR edits the Mixer row (activity gains, keys in audio-graph order, latency compensation), adds the Audio timestamps paragraph (a block's pts is its input's media time; delay filter is a stamped shift) and ADR-0028 to depends_on; main's ADR-0035 CLAP host paragraph (latency d plus the plugin's own, compensated) agrees with it; none built beyond the first-cut mixer" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -251,7 +322,7 @@ every mix runs at the base rate divided by an integer.
 |---|---|---|
 | Control (tokio) | Commands, server, MCP, YouTube API, network outputs | May allocate and await. Talks to RT threads only through lock-free channels. |
 | Audio (one per stream) | Device I/O, resampling into the engine's ring | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio". |
-| Mixer | Sends, buses, filters, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
+| Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
@@ -293,6 +364,14 @@ what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, a
 timing error is absolute, so inputs line up with each other. That combination has been
 simulated (within 0.05 ms after settling), not yet measured on hardware.
 
+**Audio timestamps** ([ADR-0028](adr/0028-audio-model-v2.md)): every audio filter reports
+its latency in frames, and the mixer delays the shorter paths before each sum so all inputs
+line up. Every output block is stamped with `pts` = the media time of the input it was
+computed from, not the time it was produced, and muxers interleave by `pts` with a bounded
+wait. Filter latency therefore never shifts A/V sync and video is never delayed to match
+it. An audio delay filter is a deliberate shift: its output is stamped later by its delay,
+and its ring is allocated at its maximum on the control thread.
+
 **State to RT threads:** each subsystem (render, audio, outputs) gets its own immutable
 snapshot through `arc-swap`, rebuilt only when that subsystem's state changes.
 Continuous parameters (fader moves, transform drags) bypass snapshots and go through
@@ -305,7 +384,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:d2d9206e664e635b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:5eab8da6b4065f76", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's binary-streams bullet (meter fields, subscribed-only loudness, audio.reset_loudness) sits beside main's ADR-0022/0024/0025 planned additions; covered control/core/server READMEs changed only by their re-verified lines; bullets match protocol 0.3 as built" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -317,7 +396,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Edits** (`scene.create`, `item.set_transform`, `audio.set_send`, …): typed, undoable,
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
-  batch increments `rev` by one.
+  batch increments `rev` by one. `item.move` moves an item between scenes keeping its
+  id, and placement edits take an optional `scene_id` so they can write a keyframe
+  scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
@@ -337,7 +418,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Events** (`state.changed{rev}`, `output.state_changed`, `stats.tick`, …).
 - **Errors** carry a stable machine-readable `code`, detail fields and a message.
 - **Binary streams** (WebSocket binary frames): snapshots (PNG/JPEG), preview video,
-  meters. Not designed yet.
+  meters. Not designed yet, except the meter frame's fields
+  ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
+  (4× oversampled, BS.1770); per bus, also momentary, short-term and integrated loudness
+  (LUFS). Loudness is computed only for the master bus and for subscribed buses and
+  sources. Integrated loudness is reset by the action `audio.reset_loudness`.
 - **Schema:** the JSON Schema is generated from the Rust types, and its snapshot is
   the API review ([R-TEST-002](RULES.md#R-TEST-002)).
 - **Transport:** the `Control` trait is implemented in-process by core
@@ -354,7 +439,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:a8c9160b6b67d944", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:1db3236cc57f9619", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -446,12 +531,16 @@ plus an `effect.toml` manifest.
 ## Persistence, config and secrets
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
-depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001"]
-verified = { hash = "b3:233514b2be0b9df3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: collections+migrations, jstream.toml, OS credential store, token file and local minidumps match R-API-003, R-SEC-001 and R-SEC-004" }
+depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
+verified = { hash = "b3:0e05e58970c4134c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ADR-0025 dependency now links ADR-0032 for live hints (review N2); data-model Settings bullet and persistence Asset files bullet unaffected" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
   `jstream-graph`.
+- **Asset files** named in settings are stored relative to the collection folder or the
+  app asset folder when they are under one, so a moved or portable setup still finds them.
+  Each stored source and filter records its kind's descriptor version, migrated on load
+  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
 - **Control token:** a random token in a user-only file in the config directory

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:b5424bae192213e3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:6a8de1a517c51cc6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,

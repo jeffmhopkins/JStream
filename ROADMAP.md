@@ -57,8 +57,8 @@ must have a written result before the browser source is built.
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
-depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:ad7be83b43cf1ca7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (ADR-0023, encode, daemon, mcp) into the ADR-0031 acceptance: re-read against both; encode's ADR-0003 links re-pointed to ADR-0031, which restates its MF encoder scope unchanged; no other content change" }
+depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
+verified = { hash = "b3:219eb11af9244359", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M1b keeps this PR's mixer bullet (master bus, faders and mute, when_shown, peak/true-peak/loudness meters) beside main's ADR-0023 filters/effects and ADR-0024 groups-as-scenes bullets; M1a/c/d unchanged" }
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -72,6 +72,10 @@ verified = { hash = "b3:ad7be83b43cf1ca7", by = "agent:claude@session_01QBbMRwRu
     application audio, and **browser** ([ADR-0021](docs/adr/0021-browser-source.md);
     after spike S4).
   - **Scenes as sources**: a scene placed inside another scene, with cycles rejected.
+  - **Groups as scenes** ([ADR-0024](docs/adr/0024-scene-structure.md)): a scene `role`
+    (`scene` or `group`), `item.move` between scenes keeping the item's id, and the
+    optional `scene_id` addressing of placement edits (own scene only until keyframe
+    scenes are built).
   - **Shared sources:** adding an existing source places the *same* instance (one capture,
     one set of source filters) in another scene. **Duplicate** makes an independent copy.
     An item converts between reference and clone and keeps its id
@@ -81,7 +85,9 @@ verified = { hash = "b3:ad7be83b43cf1ca7", by = "agent:claude@session_01QBbMRwRu
   - **Filters and effects:** source filters apply everywhere the source appears. Each
     placement has its own opacity and blend; per-placement effects are not in v1, and the
     model reserves a slot for them.
-  - Bus-matrix mixer with filters and meters.
+  - Bus-matrix mixer ([ADR-0028](docs/adr/0028-audio-model-v2.md)): a master bus,
+    per-source and per-bus faders and mute, audio that follows the program
+    (`when_shown`), filters, and peak, true-peak and loudness meters.
   - Per-client undo, `expected_rev`, audit log, recording to fMP4, and encoder sharing.
 - **M1c Virtual camera:** `jstream-vcam-windows` with in-app registration, shipped in the
   portable zip ([ADR-0020](docs/adr/0020-portable-windows-distribution.md); from spike S2).
@@ -95,7 +101,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:5259255f8bf87513", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:8c8ae3cb749cbac4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M2 keeps ADR-0029's spelled-out studio/transitions bullet followed by ADR-0024's bullet (keyframe scenes, folders, organisation metadata, hotkeys built with the UI that uses them); other M2 bullets unchanged" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
@@ -113,6 +119,10 @@ verified = { hash = "b3:5259255f8bf87513", by = "agent:claude@session_01QBbMRwRu
 - Source kinds ([ADR-0031](docs/adr/0031-source-types-and-decoding-scope.md)): **media
   file** (video or audio, looping; OS demux and decode, A/V sync on the media clock),
   **audio waveform** and **audio spectrum**.
+- Built with the UI that uses them ([ADR-0024](docs/adr/0024-scene-structure.md)):
+  keyframe scenes (variants with per-item overrides), scene folders, organisation
+  metadata (labels, favourites, scene icons and colours, show in multiview, scene
+  background colour) and hotkey bindings.
 
 **Demo:** everything from M1, done by hand in the desktop app and in a browser.
 

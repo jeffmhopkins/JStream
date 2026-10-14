@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:83910c5391c3fc45", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:412ab3e36e0dd3c1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading carries this PR's mixer row (activity gains, keyed filters, latency compensation) and Audio timestamps paragraph beside main's ADR-0035 CLAP host paragraph, none built; Purpose maps the first cut (input gain/mute, one stereo bus as master) onto ADR-0028 and its Not yet lists the rest; still matches src" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -22,8 +22,11 @@ on [`jstream-media`](../jstream-media/README.md) for formats and timestamps, and
 it implements. This first cut covers what [ROADMAP M1a](../../ROADMAP.md#m1) needs
 (a WASAPI microphone and desktop loopback mixed for the AAC encoder): adaptive
 resampling of each input onto the engine time line, one stereo bus with a gain per input,
-and metering. The send matrix, several buses and filters
-([ADR-0007](../../docs/adr/0007-bus-matrix-audio.md)) come later.
+and metering. In [ADR-0028](../../docs/adr/0028-audio-model-v2.md)'s model each input
+is a source's audio stream with its fader and mute, and the stereo bus is the master bus,
+which every input implicitly sends to at 0 dB. The send matrix, further buses, activity
+gains (audio that follows the program), filters with keys and latency compensation,
+loudness and true-peak meters, and monitor taps come later.
 
 **Time line.** Engine frame `n` is media time `n / rate` on the media clock
 ([ADR-0014](../../docs/adr/0014-media-clock.md)), with `rate` the engine rate (48 kHz by
@@ -89,7 +92,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:f09de6e0be1aa386", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#threading only gained ADR-0035's planned out-of-process CLAP host paragraph; rings, atomics and R-RT-001 claims of src/rt unchanged, and the plugin rings are not built" }
+verified = { hash = "b3:94c7e7084c68cae4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Body unchanged by ADR-0028; its dependency ARCH#threading now has this PR's mixer row and pts paragraph plus main's CLAP host paragraph; the rt code still allocates nothing and takes no locks on the audio thread, and Block::pts already follows the stated rule" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -196,9 +199,10 @@ non-negative floats.
   must know the device format before opening the stream.
 - **Adding and removing inputs while the mixer runs,** through a lock-free command queue,
   with dropped rings going to the collector thread.
-- **The send matrix, several buses, filters and monitor outputs**
-  ([ADR-0007](../../docs/adr/0007-bus-matrix-audio.md)), and render-side resampling
-  for output devices.
+- **The rest of the audio model** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
+  the activity gain per source, the send matrix and further buses, filters with keys and
+  latency reporting, true peak and BS.1770 loudness, and monitor taps; and render-side
+  resampling for output devices.
 - **A no-allocation test** with `assert_no_alloc`, and a CPU measurement on hardware.
 - **Feeding the fitted drift forward** into the controller, which would shorten the
   start-up transient (about 0.46 · drift / (2π · 0.02 Hz): 0.55 ms at 150 ppm).

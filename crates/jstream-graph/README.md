@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:74057a88452e89ef", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:1add66f6c132d986", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Data model gains ADR-0028 source audio and master bus beside ADR-0022/0024/0025 fields, none built; Purpose lists only built behaviour and stays accurate" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -89,5 +89,8 @@ Planned, and kept possible by the private fields of the model types:
 - **Filters and effects:** `filters[]` on sources (applied wherever the source is
   placed) and `effects[]` on items (per placement), with their edits.
 - **Source settings** for builtin kinds, and `source.rename`, come with `jstream-sources`.
-- The full 3D transform, and blend modes, replacing the protocol's 2D `ItemTransform`.
+- The collection canvas and item `geometry` of
+  [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md), replacing the protocol's
+  2D `ItemTransform`, which an item keeps as a legacy placement until 1.0 unless an
+  `item.set_geometry` replaces it; and blend modes.
 - Item lookup is a linear scan over scenes. An ID index can come once collections grow.

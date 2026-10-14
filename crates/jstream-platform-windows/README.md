@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:2c02cb1d1721a9bd", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:a60a10687ad23e68", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading carries this PR's mixer row (activity gains, keyed filters, latency compensation) and Audio timestamps paragraph beside main's ADR-0035 CLAP host paragraph, none built; WASAPI/MF/WGC implementations are unchanged by ADR-0028's mixer model, so Purpose holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

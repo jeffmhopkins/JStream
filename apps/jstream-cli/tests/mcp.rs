@@ -51,7 +51,8 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
         let _ = stopped.await;
     }));
 
-    let token = std::path::Path::new(env!("CARGO_TARGET_TMPDIR")).join("mcp-e2e-token");
+    let token = std::path::Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("mcp-e2e-token-{}", std::process::id()));
     std::fs::write(&token, format!("{TOKEN}\n")).expect("the token file is written");
     let mut child = Command::new(env!("CARGO_BIN_EXE_jstream-cli"))
         .args(["--url", &url, "--token-file"])

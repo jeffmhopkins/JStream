@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0009-youtube-rtmps-and-api.md"]
-verified = { hash = "b3:5759675d4fb2dc12", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main (docs(adr): ADR-0035 CLAP plugins out of process, superseding ADR-0005 (accepted)): sections changed only by main's text and verified lines; re-read against this PR's change and still hold" }
+verified = { hash = "b3:15bbbdd94eb1954c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#threading carries this PR's mixer row (activity gains, keyed filters, latency compensation) and Audio timestamps paragraph beside main's ADR-0035 CLAP host paragraph, none built; outputs consume encoded packets and are untouched by the audio model or ADR-0022/0024/0025, so Purpose holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

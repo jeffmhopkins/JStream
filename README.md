@@ -47,6 +47,9 @@ verified = { hash = "b3:174bb43ca018529b", by = "agent:claude@session_01QBbMRwRu
 - [ROADMAP.md](ROADMAP.md): milestones
 - [CLAUDE.md](CLAUDE.md): the entry point for builder agents
 - [REVIEW.md](REVIEW.md): the reviewer agent's instructions; its verdict gates merges
+- [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and
+  [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): who works on JStream, how to report bugs and
+  vulnerabilities, and the conduct expected in its spaces
 
 <a id="license"></a>
 ## License
