@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:f6dcac13cf3af484", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0024: data-model tree joins both (duplicated_from, opacity and reserved effects with role, variants, folders, labels, hotkeys); variant overrides include opacity as ADR-0024 says; both not-yet lists kept; other sections changed only by verified lines or the merged data-model" }
+verified = { hash = "b3:d456320db2215082", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol has ADR-0029's planned transition edits and optional preset on the switch action, none built; planned minor additions under R-API-001, preset edits are ordinary edits under R-API-004; main's R-API-002 rewording as verified there" }
 -->
 
 <a id="R-API-001"></a>

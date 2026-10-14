@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:2e2cf0734aad7033", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged ADR-0023 (main) with ADR-0024: data-model tree joins both (duplicated_from, opacity and reserved effects with role, variants, folders, labels, hotkeys); variant overrides include opacity as ADR-0024 says; both not-yet lists kept; other sections changed only by verified lines or the merged data-model" }
+verified = { hash = "b3:27a755f2c95a50d5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol has ADR-0029's planned transition edits and optional preset on the switch action, none built; the server forwards any Call unchanged; main's #73 test change verified there" }
 -->
 
 ### Listening and admission

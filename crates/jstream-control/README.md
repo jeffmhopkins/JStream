@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:43fd784e7a4daba3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0024's item.move and scene_id addressing, marked not built; this section describes protocol 0.3 as built, which has neither, so it still holds" }
+verified = { hash = "b3:a06fb127a5526d26", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#protocol only gained ADR-0029's planned transition preset/override edits and the optional preset on the scene-switch action, none built; call() still takes one batch, action or query and the mock answers unknown variants with internal, true of the code" }
 -->
 
 ### The trait
