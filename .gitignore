@@ -6,3 +6,4 @@
 /tests/golden/**/*.actual.png
 /tests/golden/**/*.diff.png
 /spike-results
+/.claude/worktrees
