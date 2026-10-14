@@ -5,7 +5,7 @@ use std::mem::ManuallyDrop;
 
 use jstream_platform::PlatformError;
 use windows::Win32::Media::MediaFoundation::{
-    IMFActivate, IMFSample, IMFTransform, MF_E_TRANSFORM_NEED_MORE_INPUT,
+    IMFActivate, IMFMediaType, IMFSample, IMFTransform, MF_E_TRANSFORM_NEED_MORE_INPUT,
     MF_E_TRANSFORM_STREAM_CHANGE, MF_VERSION, MFCreateMemoryBuffer, MFCreateSample,
     MFSTARTUP_NOSOCKET, MFSampleExtension_CleanPoint, MFShutdown, MFStartup, MFT_ENUM_FLAG,
     MFT_FRIENDLY_NAME_Attribute, MFT_MESSAGE_NOTIFY_END_STREAMING, MFT_OUTPUT_DATA_BUFFER,
@@ -207,6 +207,34 @@ pub(crate) struct Output {
     /// The output sample handed to the MFT when it doesn't allocate its own: created
     /// once and reused, so a pull that finds no output allocates nothing.
     reusable: Option<IMFSample>,
+    retype_args: Option<RetypeArgs>,
+    /// Re-applies the session's configured attributes to a new output type after a
+    /// stream change (an encoder's offered type may not carry its bit rate or size).
+    retype: Option<Retype>,
+}
+
+/// Sets a session's configured attributes on an offered output type.
+pub(crate) type Retype = fn(&IMFMediaType, &RetypeArgs) -> windows::core::Result<()>;
+
+/// What a [`Retype`] needs: the session's configured output attributes.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct RetypeArgs {
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+    pub(crate) fps: (u32, u32),
+    pub(crate) bitrate: u32,
+    pub(crate) profile: u32,
+}
+
+/// How a pull treats the MFT's event model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PullMode {
+    /// A synchronous MFT: call `ProcessOutput` until it has something or needs input.
+    Drain,
+    /// An asynchronous MFT, after one `METransformHaveOutput`: call `ProcessOutput`
+    /// exactly once. A stream change or an empty sample uses up the event, and the next
+    /// output comes with the next event (calling again without one is `E_UNEXPECTED`).
+    Once,
 }
 
 impl Output {
@@ -224,26 +252,67 @@ impl Output {
             buffer_size: info.cbSize.max(min_size),
             min_size,
             reusable: None,
+            retype_args: None,
+            retype: None,
         })
     }
 
-    /// Takes the next output sample, or `None` when the MFT needs more input.
+    /// The same, re-applying `args` with `retype` after a stream change.
+    pub(crate) fn with_retype(mut self, retype: Retype, args: RetypeArgs) -> Self {
+        self.retype = Some(retype);
+        self.retype_args = Some(args);
+        self
+    }
+
+    /// Accepts a stream change: sets the first offered output type (with the session's
+    /// attributes re-applied, if it has a [`Retype`] and the MFT takes them), then reads
+    /// the stream's requirements again, since a new type can need a larger buffer.
+    fn accept_stream_change(&mut self, transform: &IMFTransform) -> Result<(), PlatformError> {
+        // SAFETY: plain COM calls on a live transform and the type it offered.
+        unsafe {
+            let t = transform
+                .GetOutputAvailableType(0, 0)
+                .os("IMFTransform::GetOutputAvailableType")?;
+            let mut set = false;
+            if let (Some(retype), Some(args)) = (self.retype, self.retype_args) {
+                set = retype(&t, &args).is_ok() && transform.SetOutputType(0, &t, 0).is_ok();
+            }
+            if !set {
+                let t = transform
+                    .GetOutputAvailableType(0, 0)
+                    .os("IMFTransform::GetOutputAvailableType")?;
+                transform
+                    .SetOutputType(0, &t, 0)
+                    .os("IMFTransform::SetOutputType (stream change)")?;
+            }
+        }
+        let (retype, args) = (self.retype, self.retype_args);
+        *self = Self::new(transform, self.min_size)?;
+        self.retype = retype;
+        self.retype_args = args;
+        Ok(())
+    }
+
+    /// Takes the next output sample, or `None` when the MFT needs more input (or, in
+    /// [`PullMode::Once`], when this event produced none).
     ///
-    /// A format change on the output (`MF_E_TRANSFORM_STREAM_CHANGE`) is accepted: the
-    /// first offered type is set, the stream's requirements are read again (a new type
-    /// can need a larger buffer, so the reused sample is replaced), and the call retried.
-    /// Empty output samples are skipped. Each has its own bound, so a misbehaving MFT
-    /// can't loop forever.
+    /// A format change on the output (`MF_E_TRANSFORM_STREAM_CHANGE`) is accepted (see
+    /// `accept_stream_change`). Empty output samples are skipped. In
+    /// [`PullMode::Drain`] the call then retries, with separate bounds for changes and
+    /// empty samples so a misbehaving MFT can't loop forever.
     pub(crate) fn pull(
         &mut self,
         transform: &IMFTransform,
+        mode: PullMode,
     ) -> Result<Option<OutSample>, PlatformError> {
         const MAX_CHANGES: u32 = 2;
         const MAX_EMPTY: u32 = 64;
         let (mut changes, mut empty) = (0, 0);
         loop {
             match self.pull_once(transform)? {
-                Pulled::Sample(s) if s.data.is_empty() => {
+                Pulled::Sample(s) if !s.data.is_empty() => return Ok(Some(s)),
+                Pulled::NeedInput => return Ok(None),
+                Pulled::Sample(_) => {
                     empty += 1;
                     if empty > MAX_EMPTY {
                         return Err(PlatformError::Os {
@@ -253,8 +322,6 @@ impl Output {
                         });
                     }
                 }
-                Pulled::Sample(s) => return Ok(Some(s)),
-                Pulled::NeedInput => return Ok(None),
                 Pulled::StreamChange => {
                     changes += 1;
                     if changes > MAX_CHANGES {
@@ -264,17 +331,11 @@ impl Output {
                             message: "the output format kept changing".into(),
                         });
                     }
-                    // SAFETY: plain COM calls on a live transform.
-                    unsafe {
-                        let t = transform
-                            .GetOutputAvailableType(0, 0)
-                            .os("IMFTransform::GetOutputAvailableType")?;
-                        transform
-                            .SetOutputType(0, &t, 0)
-                            .os("IMFTransform::SetOutputType (stream change)")?;
-                    }
-                    *self = Self::new(transform, self.min_size)?;
+                    self.accept_stream_change(transform)?;
                 }
+            }
+            if mode == PullMode::Once {
+                return Ok(None);
             }
         }
     }
