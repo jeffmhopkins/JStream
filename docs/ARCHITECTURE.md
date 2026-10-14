@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:23907fecabd77c90", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed only by the daemon README's re-verified Design line (server dependency's extra-hosts and token text); layer diagram and app roles unchanged" }
+verified = { hash = "b3:e226c507cfa5aa7b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered apps/ changed by this PR's CLI README mcp bullet (events tool) and main's #95 daemon README re-verify (extra-hosts and token-compare dependency); layer diagram and app roles unchanged" }
 -->
 
 ```
