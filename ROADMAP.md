@@ -103,7 +103,7 @@ virtual camera, then goes live on YouTube, all without a GUI.
 ## M2: UI
 <!-- @section
 depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:3a2c3ebbe214c9ef", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "M2 keeps this PR's master chain, per-output chains and privacy screen bullet beside main's ADR-0029 transitions, ADR-0031 media-file/waveform/spectrum and ADR-0024 UI-built bullets" }
+verified = { hash = "b3:b0200407002e63d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Transitions bullet now says Cut, Fade and Move are the first transition kinds with descriptors and settings (ADR-0037); M2 scope otherwise unchanged and still consistent with ADR-0002's web UI" }
 -->
 
 - Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
@@ -115,7 +115,9 @@ verified = { hash = "b3:3a2c3ebbe214c9ef", by = "agent:claude@session_01QBbMRwRu
 - `jstream-desktop` (Tauri) and `jstream-daemon` serving the same UI. Token pairing for
   remote browsers.
 - Studio mode (Preview/Program) and transitions
-  ([ADR-0029](docs/adr/0029-transitions.md)): transition presets (Cut, Fade, Move) with a
+  ([ADR-0029](docs/adr/0029-transitions.md)): transition presets (Cut, Fade, Move, the
+  first transition kinds with descriptors and settings,
+  [ADR-0037](docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)) with a
   default, per-scene "into" and "out of" overrides, Move pairing items by source, and
   per-item delay, easing, glide and appear and disappear effects.
 - The program master chain, per-output chains with their cost shown, and the privacy
@@ -142,7 +144,9 @@ verified = { hash = "b3:3a2c3ebbe214c9ef", by = "agent:claude@session_01QBbMRwRu
 - Direct NVENC/AMF encoders where measurements justify them; HEVC/AV1 via enhanced RTMP.
 - WASM automation plugins.
 - CLAP audio effect filters, hosted out of process
-  ([ADR-0035](docs/adr/0035-clap-plugins-out-of-process.md)).
+  ([ADR-0035](docs/adr/0035-clap-plugins-out-of-process.md)), as plugin kinds whose
+  parameters and opaque saved state are the filter's settings
+  ([ADR-0037](docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)).
 - macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).
   A Syphon receiver, the macOS follow-up to Spout2, is considered with it.
 - Linux: codec-path ADR first, then the platform crate (virtual camera via v4l2loopback,

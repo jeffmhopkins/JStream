@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:db89f9d220a74f80", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the apps row and the CLI's Purpose are unchanged" }
+verified = { hash = "b3:db89f9d220a74f80", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-cli row is unchanged and this Purpose still matches it" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:517e0d94907a7192", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #48 N1: a failed stdin read in mcp now prints 'could not read the input: ...' (JSON code io, message with that prefix); exit row 1 ('output could not be written, or mcp could not read stdin'), the MCP Exit bullet (1 if stdin or stdout fails) and the io code in the Errors bullet still hold" }
+verified = { hash = "b3:9847908e5df0513a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited only the mcp 'lost engine' bullet: events now also answers after the loss (buffered events, ended set) and a restart gives a new client with its own undo history, as tests/mcp.rs now asserts; covered src files unchanged" }
 -->
 
 ```sh
@@ -137,9 +137,10 @@ for example:
   with one undo history; `hello` is sent before the first call that needs the engine,
   with the MCP client's name (`clientInfo.name`) instead of `jstream-cli`.
 - **A lost engine doesn't stop the proxy.** Each tool call that needs the engine is then
-  answered with the `disconnected` tool error, and `describe_api` still works. The proxy
-  doesn't reconnect: the MCP client restarts it to get a new session
-  ([open question 6](#design)).
+  answered with the `disconnected` tool error, and `describe_api` still works, as does
+  `events`, which returns what was buffered and says the feed ended. The proxy doesn't
+  reconnect: the MCP client restarts it to get a new session, a new client of the
+  engine with its own undo history ([open question 6](#design)).
 - **Exit:** 0 when stdin ends, whatever the engine did meanwhile; 1 if stdin or stdout
   fails (a closed stdout exits silently).
 
@@ -169,7 +170,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:85eb691d94ff7805", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #72: #48's read-vs-write error text (CliError::Read) and per-process token file sit beside main's open question 5 (daemon exists) and wss:// wording; re-read against run.rs/mcp.rs/exit.rs" }
+verified = { hash = "b3:79c5a5f12d14ad80", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency jstream-control#design gains only open question 1's note on the decided server-side bounded buffer and events.dropped; the CLI subscribes to no event stream of its own and its mcp proxy stays stdio, so the design still holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

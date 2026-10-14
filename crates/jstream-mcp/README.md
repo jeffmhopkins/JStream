@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:f9a1452ad887d62a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-youtube row (ADR-0034 chat sending and audience stats) and the jstream-sources row (ADR-0031 kinds plus ADR-0034's chat message kind, M3); the jstream-mcp row and this Purpose are unchanged and still match the crate" }
+verified = { hash = "b3:69176dea08d1ef98", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Purpose says MCP streamable HTTP is served by jstream-server, not this crate (#37 N1), beside main's #96 events tool; matches the crate" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -29,19 +29,22 @@ Contents (a first cut; [Design](#design) explains the choices):
   serves.
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
   and the decoding of tool arguments into protocol calls.
+- **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
+  a bounded, numbered buffer.
 - **JSON-RPC** (`jsonrpc.rs`): parsing one message and building replies.
 - **stdio transport** (`stdio.rs`): `serve_stdio`, newline-delimited messages over any
   `BufRead`/`Write` pair.
 - **Errors** (`error.rs`): `McpError`, a `thiserror` enum for a transport that stops.
 
-Not here yet: the streamable-HTTP transport ([Design](#design)).
+The streamable-HTTP transport is not in this crate: `jstream-server` serves it, and it is
+not built yet ([Design](#design)).
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:49c0763d39419a32", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: errors table splits lost-during-call from hello-failed (call not sent, restart for a new session with its own undo history); Session and identity explains why re-hello never splits undo (Control contract, InProcessControl never disconnects, WsControl never reconnects); tools, revisions, async/transports re-read against server.rs" }
+depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
+verified = { hash = "b3:5d13c0dbd0ec49eb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Async and transports now say streamable HTTP is served by jstream-server (not built); open question 3 stays settled by ADR-0036 (main's #96) and question 4 records #37's decision; main's #98 Logging subsection kept; depends_on keeps ADR-0036" }
 -->
 
 ### Tools
@@ -58,6 +61,7 @@ below; its shape is:
 | one per noun (`item`, `output`, `scene`, `source`, `state` today) | `op`: one edit, action or query of that noun | an edit: a batch of one; an action: an action; a query: a query |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
+| `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
 
 A group tool's arguments are `{"op": {...}, "expected_rev"?, "idempotency_key"?}`. `op`
 is the protocol's own object, tagged by `type`, and its schema is the protocol's variant
@@ -93,7 +97,9 @@ to move forward, so the server is dual-era, which 2026-07-28 allows:
 - Any other request with neither gets `-32602`, naming both ways in.
 
 Not implemented: resources, prompts, subscriptions (`subscriptions/listen`, list-changed
-notifications), progress, logging, cancellation (requests are answered in order, so there
+notifications; engine events come through the `events` tool instead), progress, MCP logging
+(`logging/setLevel` and log notifications; the server logs through `tracing` instead, see
+*Logging*), cancellation (requests are answered in order, so there
 is nothing in flight to cancel), pagination (one page), `outputSchema`, and JSON-RPC
 batches (MCP removed them in 2025-06-18).
 
@@ -103,7 +109,7 @@ batches (MCP removed them in 2025-06-18).
 |---|---|
 | The engine answered | a result: `structuredContent` is the protocol `Response` (`{"id", "result"}`), repeated as JSON in a text block |
 | The engine refused (`ControlError::Protocol`) | a result with `isError: true` and `{"error": <WireError>}`: the stable `code`, its details and the message |
-| The arguments don't fit the tool | the same, with the protocol's `malformed` code and serde's reason |
+| The arguments don't fit the tool, or an `events` cursor is past the newest event | the same, with the protocol's `malformed` code and the reason |
 | The connection to the engine was lost during the call | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again ([Session and identity](#design)). |
 | `hello` failed with a lost connection | the same `disconnected` code, saying the call was not sent and that the MCP server must be restarted for a new session, with its own undo history |
 | Unknown tool, or a `tools/call` without `name` or with non-object `arguments` | JSON-RPC `-32602` |
@@ -122,23 +128,55 @@ engine: one undo history and one name in the audit log
 ([ADR-0013](../../docs/adr/0013-command-model.md)). `hello` is sent before the first
 tool call that needs the engine, with the MCP client's name (`clientInfo.name` from
 `initialize`, or from the request's `_meta`; `jstream-mcp` if none). Later names don't
-change the session. `describe_api` and argument errors never reach the engine.
+change the session. `describe_api`, argument errors and `events` reads never call the
+engine ([Events](#design)).
 
 After a call fails with a lost connection, the next call sends `hello` again on the same
-`Control`. That never splits the undo history: the `Control` contract says a second
-`hello` on an open session returns the same `client_id`, `InProcessControl` never loses
-its connection, and `WsControl` never reconnects, so once its socket has closed every
-`hello` fails with `Disconnected` too (tested in `jstream-server`). The server then
-reports that the call was not sent and that the MCP server must be restarted. The new
-session that gives is a new client of the engine, so edits made through the old one
-can't be undone from it. The contract doesn't cover a `Control` that reconnects by
-itself (none exists): one that answered the second `hello` with a new `client_id` would
-split the history without the agent noticing, and this server doesn't check for that.
+`Control`. That never yields a new `client_id`, so it never splits the undo history
+([ADR-0013](../../docs/adr/0013-command-model.md),
+[ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): the `Control` contract says a
+second `hello` on an open session returns the same `client_id`, `InProcessControl` never
+loses its connection, and `WsControl` never reconnects, so once its socket has closed
+every `hello` fails with `Disconnected` too (tested in `jstream-server`, and end to end
+through `jstream-cli mcp` in its `tests/mcp.rs`). The server then reports that the call
+was not sent and that the MCP server must be restarted. The new session that gives is a
+new client of the engine, with a new `client_id` and its own undo history, so edits
+made through the old one can't be undone from it; the error says so. The contract
+doesn't cover a `Control` that reconnects by itself (none exists): one that answered the
+second `hello` with a new `client_id` would split the history without the agent
+noticing, and this server doesn't check for that.
 
 Authentication happens below this crate: the session the host passes in already holds
 the control token ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)). The stdio
 transport is not a listener; the streamable-HTTP transport will be, so it must check the
 token, `Origin` and `Host` ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
+
+### Events
+
+The `events` tool exposes the engine's events
+([ADR-0036](../../docs/adr/0036-mcp-events-polling-tool.md)). Just before its first
+`hello`, the server subscribes once to `Control::events()`. A thread drains that
+subscription into a buffer of the newest `BUFFER_CAPACITY` events (in `events.rs`),
+numbering them from 1 (`seq`), and parks until the subscription wakes it, so neither
+the buffer nor the `Control`'s own stream grows while the agent is idle. A read drains
+the subscription first, under the same lock, so it sees every event already delivered,
+then returns at most `PAGE_SIZE` events after `after`:
+
+| Field | Meaning |
+|---|---|
+| `events` | `{"seq", "event"}` pairs, oldest first; `event` is the protocol `Event` |
+| `next` | the cursor to pass as `after`: the last `seq` returned, else `after` |
+| `dropped` | events after `after` that the full buffer dropped before this read; not 0 means re-read the state |
+| `more` | further events are buffered after `next` |
+| `ended` | the subscription has ended with the session; no more events will come |
+
+A read sends no call to the engine. Only when no tool call has opened the session yet
+does it send `hello`, which starts the subscription, so that first read holds at most
+what arrived since. Once the subscription exists it sends nothing, so after the session
+is lost it still answers from the buffer. Every MCP client of one server reads the same
+buffer, each with its own cursor (question 6). The tool returns at once; waiting for the
+next event would hold up the in-order stdio loop. The tool's description states the
+buffer and page sizes, so agents don't need this page.
 
 ### Async and transports
 
@@ -154,8 +192,24 @@ one at a time, in order. Blank lines are skipped, a line that isn't UTF-8 gets a
 error, and end of input ends the transport. Nothing else may write to the stdout it is
 given.
 
-Streamable HTTP is deferred to `jstream-server`, which owns the HTTP stack and the token
-and `Origin` checks: it will feed request bodies to `Server::handle`.
+Streamable HTTP is served by `jstream-server` on the control port, behind the same token
+and `Origin` checks as the WebSocket API (decided, not built yet): it owns the HTTP stack
+and will feed request bodies to `Server::handle`. stdio stays in the CLI
+(`jstream-cli mcp`).
+
+### Logging
+
+The server logs through `tracing` ([R-RS-005](../../docs/RULES.md#R-RS-005)) and
+installs no subscriber; the host decides where logs go. `jstream-cli mcp` installs none,
+so nothing is logged there, and `tracing` never writes to the stdout that carries MCP.
+Each `Server` has an `info` span `mcp_session`. Every request runs in a `debug` span
+`mcp_request` under it with the JSON-RPC method, and a request answered with a JSON-RPC
+error logs its code at `debug`. Each `tools/call` runs in an `info` span `tool_call`
+with the tool's name, and logs at `debug` whether it succeeded or, for a result with
+`isError`, its error code. `initialize` (client name and settled revision) and the
+engine session's `hello` (its `client_id`) log at `info`; a failed `hello` and a
+connection lost during a call log at `warn`. Tool arguments and results are never
+logged ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 ### No MCP SDK
 
@@ -167,7 +221,8 @@ official Rust SDK (`rmcp`):
   `futures`, `tracing`, `indexmap` and `pin-project-lite`, and its default `server`
   feature adds `schemars` with `chrono`, `uuid` and proc-macro crates. That would force a
   runtime on every client of this crate. This crate needs only crates the workspace
-  already has (`serde`, `serde_json`, `thiserror`) plus the two JStream crates.
+  already has (`serde`, `serde_json`, `thiserror`, `tracing`) plus the two JStream
+  crates.
 - **Fit.** The SDK's main help is deriving tool schemas from Rust types with its macros.
   Here the tools are generated from the protocol's schema at runtime, so that help
   doesn't apply; the table-driven code is short.
@@ -187,32 +242,13 @@ official Rust SDK (`rmcp`):
 2. **`disconnected`.** A lost engine connection is reported with an MCP-layer error code
    that the protocol doesn't define. Should the protocol define it, or should it be a
    JSON-RPC error instead?
-3. **Events.** Engine events (`state.changed`, `output.state_changed`) don't reach agents,
-   though [ADR-0006](../../docs/adr/0006-mcp-full-access.md) makes every protocol
-   capability available over MCP. Options:
-   - **A polling tool** (say `events`, taking an optional `after` cursor): the server
-     opens one `Control::events()` subscription after `hello`, buffers what it yields,
-     and the tool returns the events after the cursor, without waiting, plus the next
-     cursor. It needs no protocol change and works in both eras and over stdio as it is.
-     It still needs decisions: the buffer must be bounded, because an agent that never
-     polls would grow it without limit, so what to drop and how to report the gap (the
-     same question as [protocol open question 7](../jstream-protocol/README.md#open-questions)
-     and [jstream-control open question 1](../jstream-control/README.md#design)); the
-     cursor is a server-local sequence number, since only `state.changed` carries a
-     `rev`; every MCP client of one server shares the buffer (question 6); and whether
-     the tool may wait for the next event, which would hold up the in-order stdio loop.
-   - **MCP notifications** (2026-07-28 subscriptions, or notifications on the
-     handshake-based era): the server would write messages that answer no request.
-     `Server::handle` returns at most one reply per message, and `serve_stdio` writes
-     only replies, so both would need an outgoing channel. Many MCP clients also don't
-     show notifications to the model.
-   - **Nothing new:** agents poll `state.get` and `output.status` and compare `rev`.
-     That covers the state, but not who changed it (the event's `client_id` and
-     `request_id`), and misses an output that started and stopped between two polls.
-
-   The polling tool is the smallest step, once the buffer policy is settled.
-4. **Streamable HTTP.** Mounted by `jstream-server` (planned above), or a feature of this
-   crate on a small HTTP stack?
+3. **Events.** Settled by [ADR-0036](../../docs/adr/0036-mcp-events-polling-tool.md):
+   the `events` polling tool with a server-local cursor and a bounded buffer that
+   reports dropped events ([Design](#design)). MCP notifications may be added beside
+   it once the server has an outgoing channel.
+4. **Streamable HTTP.** Decided: `jstream-server` serves it on the control port, behind
+   the same token and `Origin` checks, and stdio stays in the CLI
+   ([Async and transports](#design)). Not built yet; question 6 is still open for it.
 5. **Legacy support.** How long to keep the handshake-based era once clients move to
    2026-07-28.
 6. **One session per server.** Every MCP client of one server shares an undo history.

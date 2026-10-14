@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 3
-summary = "MCP server over `dyn Control`: generated grouped tools, stdio and streamable-HTTP transports"
+summary = "MCP server over `dyn Control`: generated grouped tools and the stdio transport; jstream-server serves its streamable-HTTP transport (not built)"
 unsafe_allowed = false
 
 [lints]
@@ -21,6 +21,8 @@ jstream-protocol.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+# Spans around the session and each tool call (R-RS-005).
+tracing.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

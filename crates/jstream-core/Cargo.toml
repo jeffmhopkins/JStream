@@ -20,6 +20,8 @@ futures-core.workspace = true
 jstream-control.workspace = true
 jstream-graph.workspace = true
 jstream-protocol.workspace = true
+# Spans around commands, outputs and sessions (R-RS-005).
+tracing.workspace = true
 
 [dev-dependencies]
 # The mock engine, for a differential test: the same calls must get the same answers.

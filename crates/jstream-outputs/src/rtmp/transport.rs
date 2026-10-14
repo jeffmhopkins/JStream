@@ -163,10 +163,25 @@ pub(crate) fn client_config(roots: RootCertStore) -> Result<Arc<ClientConfig>, R
 
 /// The roots in the operating system's trust store. Certificates that fail to parse are
 /// skipped, as are files the store couldn't read, as long as at least one root remains.
+///
+/// Both are logged at `warn` (#67): each load error, and how many certificates could not
+/// be parsed. An incomplete store otherwise shows up only later, as an `UnknownIssuer`
+/// handshake failure with no hint why.
 fn native_roots() -> Result<RootCertStore, RtmpError> {
     let loaded = rustls_native_certs::load_native_certs();
+    for error in &loaded.errors {
+        tracing::warn!(error = %error, "could not load OS root certificates");
+    }
     let mut roots = RootCertStore::empty();
-    roots.add_parsable_certificates(loaded.certs);
+    let (added, ignored) = roots.add_parsable_certificates(loaded.certs);
+    if ignored > 0 {
+        tracing::warn!(
+            ignored,
+            added,
+            "skipped OS root certificates that could not be parsed"
+        );
+    }
+    tracing::debug!(added, "loaded OS root certificates");
     if roots.is_empty() {
         return Err(RtmpError::NoRootCertificates);
     }

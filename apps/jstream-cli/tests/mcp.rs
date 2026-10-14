@@ -29,6 +29,26 @@ fn call(id: u64, tool: &str, arguments: Value) -> Value {
     })
 }
 
+/// Calls the `events` tool until `done` holds for its result, for up to five seconds:
+/// events reach the proxy on the WebSocket client's own thread.
+fn events_until(
+    stdin: &mut impl Write,
+    stdout: &mut impl BufRead,
+    id: u64,
+    done: impl Fn(&Value) -> bool,
+) -> Value {
+    for _ in 0..100 {
+        let reply = exchange(stdin, stdout, &call(id, "events", json!({})));
+        assert_eq!(reply["result"]["isError"], false, "{reply}");
+        let page = reply["result"]["structuredContent"].clone();
+        if done(&page) {
+            return page;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    panic!("the events never arrived");
+}
+
 #[test]
 fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -94,6 +114,18 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
     );
     assert_eq!(created["result"]["isError"], false, "{created}");
     assert_eq!(engine.rev(), Rev(1), "the edit reached the engine");
+    // The edit's `state.changed` event comes back through the `events` tool, with the
+    // session's client ID and the request ID of the call.
+    let page = events_until(&mut stdin, &mut stdout, 10, |page| {
+        page["events"].as_array().is_some_and(|e| !e.is_empty())
+    });
+    let event = &page["events"][0];
+    assert_eq!(event["seq"], 1, "{page}");
+    assert_eq!(event["event"]["type"], "state.changed", "{page}");
+    assert_eq!(event["event"]["rev"], 1, "{page}");
+    assert_eq!(event["event"]["request_id"], "req_1", "{page}");
+    let client_id = event["event"]["client_id"].clone();
+    assert!(client_id.is_string(), "{page}");
 
     // The engine goes away: the proxy answers with the `disconnected` tool error and
     // keeps serving.
@@ -111,6 +143,24 @@ fn mcp_proxies_to_a_running_server_and_survives_its_loss() {
     );
     let described = exchange(&mut stdin, &mut stdout, &call(4, "describe_api", json!({})));
     assert_eq!(described["result"]["isError"], false);
+    // The next call says `hello` again on the same `WsControl`. That never yields a new
+    // `client_id` (which would split the agent's undo history): a closed `WsControl`
+    // fails every `hello`, so the call is not sent and the agent is told to restart.
+    let reopened = exchange(
+        &mut stdin,
+        &mut stdout,
+        &call(5, "scene", json!({"op": {"type": "scene.list"}})),
+    );
+    let error = &reopened["result"]["structuredContent"]["error"];
+    assert_eq!(error["code"], "disconnected", "{reopened}");
+    let message = error["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("not sent") && message.contains("undo history"),
+        "{reopened}"
+    );
+    // The events read before the loss are still there, and the feed says it ended.
+    let page = events_until(&mut stdin, &mut stdout, 6, |page| page["ended"] == true);
+    assert_eq!(page["events"][0]["event"]["client_id"], client_id, "{page}");
 
     // End of input ends the proxy, successfully, with nothing on stderr.
     drop(stdin);

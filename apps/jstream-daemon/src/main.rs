@@ -19,6 +19,9 @@ use jstream_protocol::PROTOCOL_VERSION;
 use std::io::{Write, stderr, stdout};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use tracing_subscriber::filter::{LevelFilter, Targets};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
 
 /// Stopped by a signal, or printed the help or version.
 const OK: u8 = 0;
@@ -30,6 +33,9 @@ const USAGE: u8 = 2;
 /// The environment variable naming the token file when `--token-file` is not given,
 /// the same one `jstream-cli` reads.
 const TOKEN_FILE_ENV: &str = "JSTREAM_TOKEN_FILE";
+
+/// The environment variable that filters the log on stderr.
+const LOG_ENV: &str = "RUST_LOG";
 
 /// Why the daemon did not run.
 enum Failure {
@@ -94,6 +100,26 @@ fn print(text: &str) -> Result<(), Failure> {
     Ok(())
 }
 
+/// Installs the process's log subscriber: the libraries' `tracing` spans and events, as
+/// text lines on stderr (stdout carries only the banner lines). `RUST_LOG` filters them,
+/// as `target=level` directives and an optional bare default level, such as
+/// `jstream_server=debug,warn`; unset or empty means `info`. A value that doesn't parse
+/// is a usage error.
+fn init_logging() -> Result<(), Failure> {
+    let filter = match std::env::var(LOG_ENV) {
+        Ok(spec) if !spec.trim().is_empty() => spec
+            .parse::<Targets>()
+            .map_err(|error| Failure::Usage(format!("{LOG_ENV}: {error}")))?,
+        _ => Targets::new().with_default(LevelFilter::INFO),
+    };
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_writer(stderr))
+        .with(filter)
+        .try_init()
+        .context("could not install the log subscriber")?;
+    Ok(())
+}
+
 /// Loads or creates the token, then serves until a signal arrives.
 fn run(options: Options) -> Result<(), Failure> {
     let path = match options.token_file.clone() {
@@ -107,6 +133,7 @@ fn run(options: Options) -> Result<(), Failure> {
             }
         },
     };
+    init_logging()?;
     let (token, provenance) = token::load_or_create(&path)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

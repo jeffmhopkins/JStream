@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:12874f109ba82b91", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's Busy-from-fill_gap gap fix doesn't change the Purpose; main's ADR-0027 sharing sentence (no video chain shares by mix and profile) kept as merged" }
+verified = { hash = "b3:181f19097381e818", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "The crate-map encode row now states ADR-0027's sharing rule, matching this Purpose's sentence; main's #95 gap fix doesn't change the Purpose" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -68,7 +68,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:5e24f5dbbb915cce", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's design bullet now says a Busy from fill_gap still records the gap and gap clears only after silence and block both succeed; matches audio.rs; main's dependency changes (ADR-0027/0028 text) don't affect the encode thread design" }
+verified = { hash = "b3:424cf8d0e4e184b7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "This PR's note that tracing is now a workspace dependency but encode doesn't use it yet; main's #95 Busy-gap design bullet kept; matches audio.rs" }
 -->
 
 ### Threads and pacing
@@ -185,8 +185,10 @@ counters read without stopping the thread; reporting them in `stats.tick`
   them.
 - **GPU frames**: sessions pass `VideoSurface`s through untouched, so they work once the
   encoders take GPU input; nothing here depends on the CPU path.
-- `tracing` spans ([R-RS-005](../../docs/RULES.md#R-RS-005)): `tracing` is not a
-  workspace dependency yet; the crate reports through its counters and `StreamEnd`.
+- `tracing` spans ([R-RS-005](../../docs/RULES.md#R-RS-005)): `tracing` is a workspace
+  dependency now, but this crate doesn't use it yet; it reports through its counters
+  and `StreamEnd`. Spans would go on the control side (session start and end), not in
+  the encode thread's per-frame loop ([R-RT-002](../../docs/RULES.md#R-RT-002)).
 - Performance: not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 
 <a id="open-questions"></a>
