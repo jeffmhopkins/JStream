@@ -470,7 +470,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1e2782d17e59b818", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #80: dependencies ARCH#protocol and #persistence changed only by ADR-0025 (additive settings, per-kind versions with migrations) and main's ADR-0032 bullets; R-API-001..004 hold" }
+verified = { hash = "b3:dce523f0b1c2ca35", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #73: R-API-002 prose describes noun-grouped MCP tools (regex, enforced_by, applies_to unchanged); dependency ARCH#protocol changed only via main's ADR-0032 bullets, which R-API-001..004 already govern" }
 -->
 
 <a id="R-API-001"></a>
@@ -492,7 +492,10 @@ applies_to = ["crates/jstream-protocol/**", "crates/jstream-mcp/**"]
 -->
 Protocol commands are named `noun.verb` in snake_case (`scene.create`). MCP tool names must
 match `^[a-zA-Z0-9_-]{1,128}$` ([Anthropic tool use](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use)),
-so they are generated from the protocol names with `.` replaced by `_`. IDs are opaque strings.
+which rules out the protocol's `.`. So the tools are generated from the protocol and grouped
+by noun ([ARCH › MCP](ARCHITECTURE.md#mcp)): each command or query `noun.verb` is an `op` of
+the tool named after its noun (`scene`), and reaches exactly one tool. Tool names are
+unique. IDs are opaque strings.
 
 <a id="R-API-003"></a>
 ### R-API-003: Versioned collections with migrations

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:a771d8b103fb0ff8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #80: covered apps/ changed only by the daemon README's verified line (its persistence dependency gained ADR-0025's Asset files bullet); shape diagram and rows unchanged" }
+verified = { hash = "b3:b17ac8fcee8ca1cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #71: covered apps/ changed only by this PR's daemon README Serving-bullet order and test harness; the daemon and CLI rows and the diagram match main and still hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:89b8da3eb137ab44", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#66, #69, #70): new crates/jstream-audio/Cargo.toml at layer 2 (deps jstream-media, jstream-platform L1, no unsafe) matches the L2 audio row; other rows and edges as on main" }
+verified = { hash = "b3:b3e8d07c9f7c0919", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #74: new crates/jstream-encode/Cargo.toml at layer 3 (dep jstream-platform L1) beside main's jstream-audio (L2), core, daemon and outputs rows; all edges point strictly down (lint-deps ok)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -162,15 +162,16 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:f3613c94b3524758", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added Settings bullet (descriptor-described settings maps, typed scene/source/asset references tracked in cycle checks and delete rejection) pointing to ADR-0025, and the ADR in depends_on; it states target design like the other bullets, and Built-so-far still says no settings or filters, which matches jstream-graph today" }
+depends_on = ["docs/adr/0007-bus-matrix-audio.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
+verified = { hash = "b3:a3951ed0fff748f2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Applied ADR-0023 (now a dependency): SceneItem gains opacity, blend and reserved-empty effects[]; Source gains duplicated_from; reference/clone terms, no owner, item.set_source keeps the item; cycle check on every nesting edit; transform kept until ADR-0022 lands; Built so far lists the unbuilt ADR-0023 fields under Not yet, matching jstream-graph model/" }
 -->
 
 ```
 Collection (JSON on disk, schema_version, rev: u64)
-├── sources        Source { id, kind, settings, filters[] }   video and/or audio; independent of scenes
+├── sources        Source { id, kind, settings, filters[], duplicated_from? }   video and/or audio; independent of scenes
 ├── scenes         Scene { id, name, items[] }
-│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, blend, effects[] }
+│                  SceneItem { id, source_id, transform: Transform3D, crop, visible, opacity, blend,
+│                              effects[] (reserved, empty in v1) }
 ├── studio         { program_scene, preview_scene, transition }   (studio-mode state)
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
 ├── audio          sends: (source_id, bus_id) → gain_db
@@ -184,14 +185,23 @@ Collection (JSON on disk, schema_version, rev: u64)
   `program_scene`, including any transition in progress. A `VideoMix` with input
   `Program` follows it.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
-  Adding an *existing* source to a scene adds a `SceneItem` that references it. Changing
-  the source or its `filters[]` changes it everywhere. **Duplicate** creates a new
-  `Source` with its own id.
+  Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
+  shares everything with the other placements of that source except its own placement,
+  opacity and blend. Changing the source or its `filters[]` changes it everywhere.
+  **Duplicate** creates a new `Source` with its own id and `duplicated_from` set to the
+  original; an item placing it is a **clone** and changes independently. Sources have no
+  owner: every placement of a shared source is equal, and a client shows how often a
+  source is placed rather than marking one placement as the original.
+  `item.set_source` switches an item between reference and clone and keeps its id,
+  placement and stacking position ([ADR-0023](adr/0023-placements-references-and-clones.md)).
 - **Scenes as sources:** a `Source` of kind `Scene(scene_id)` renders that scene, so
-  scenes nest. A scene never contains itself at any depth, so the graph rejects the edit
-  that would close a cycle.
+  scenes nest. A scene never contains itself at any depth, so the graph rejects any edit
+  that would close a cycle (`item.add`, and `item.set_source`).
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
-  is used. `SceneItem.effects[]` and `crop` belong to that one placement.
+  is used. A placement owns its transform, `crop`, `visible`, `opacity` (an alpha
+  multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
+  compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
+  stays empty in v1, so adding them later needs no collection migration.
 - **Settings:** a source's `settings`, and each filter's, are a map of values described by
   its kind's descriptor, which the engine reports and validates against. References to
   scenes, sources and asset files inside settings are typed, so the graph tracks them in
@@ -208,8 +218,9 @@ Collection (JSON on disk, schema_version, rev: u64)
   scene; no settings or filters yet), scenes in display order, and items in stacking
   order with `source_id`, a 2D transform, `crop` and `visible`. Items refer to sources;
   they never copy them. Deleting a source an item still places, or a scene a source
-  still shows, is rejected. Not yet: settings, filters, effects, blend, the 3D
-  transform, and everything outside `sources` and `scenes`. Nothing is persisted yet.
+  still shows, is rejected. Not yet: settings, filters, `opacity`, `blend`, the reserved
+  `effects[]`, `duplicated_from`, `item.set_source`, the 3D transform, and everything
+  outside `sources` and `scenes`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -273,7 +284,7 @@ when a snapshot references them and destroyed after the frame fence that last us
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:b9b9297f018b2067", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #80: covered protocol README marks open questions 11 and 12 settled by ADR-0025 beside main's ADR-0032 settlement of question 4; Transport/Errors bullets unchanged" }
+verified = { hash = "b3:cacfe8c85e4bcc84", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #73: covered changes are jstream-mcp's not-sent error wording/README and a server test, beside main's ADR-0032 live/history bullets; no wire change, Transport and Errors bullets hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -318,7 +329,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002"]
-verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stdio proxy renamed jstream-cli mcp after the maintainer kept the binary name jstream-cli; tools, schema-size, names, access and undo bullets unchanged" }
+verified = { hash = "b3:dca7fe7e8b8a425b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "R-API-002 prose now describes noun-grouped tools with ops, matching the 'Tools are grouped by noun' and Names bullets; jstream-mcp code change only rewords disconnected errors and README adds events options, so tools, schema size, access and undo bullets hold" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

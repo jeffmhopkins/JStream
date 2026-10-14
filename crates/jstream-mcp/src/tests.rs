@@ -10,11 +10,23 @@ use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-/// A mock session that records every `hello` and can be made to lose its connection.
+/// A mock session that records every `hello` and can be made to lose its connection:
+/// for calls only (`lost`), or for good, as `WsControl` does once its socket closes
+/// (`closed`: `hello` fails too).
 struct Recording {
     inner: MockControl,
     hellos: Mutex<Vec<Hello>>,
     lost: AtomicBool,
+    closed: AtomicBool,
+}
+
+fn socket_closed<T>() -> BoxFuture<'static, Result<T, ControlError>>
+where
+    T: Send + 'static,
+{
+    Box::pin(std::future::ready(Err(ControlError::Disconnected {
+        reason: "socket closed".into(),
+    })))
 }
 
 impl Control for Recording {
@@ -23,14 +35,15 @@ impl Control for Recording {
             .lock()
             .expect("not poisoned")
             .push(hello.clone());
+        if self.closed.load(Ordering::Relaxed) {
+            return socket_closed();
+        }
         self.inner.hello(hello)
     }
 
     fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
-        if self.lost.load(Ordering::Relaxed) {
-            return Box::pin(std::future::ready(Err(ControlError::Disconnected {
-                reason: "socket closed".into(),
-            })));
+        if self.lost.load(Ordering::Relaxed) || self.closed.load(Ordering::Relaxed) {
+            return socket_closed();
         }
         self.inner.call(call)
     }
@@ -52,6 +65,7 @@ fn fixture() -> Fixture {
         inner: engine.connect(),
         hellos: Mutex::new(Vec::new()),
         lost: AtomicBool::new(false),
+        closed: AtomicBool::new(false),
     });
     let server = Server::new(Arc::clone(&control) as Arc<dyn Control>);
     Fixture {
@@ -456,6 +470,40 @@ fn a_lost_connection_is_a_tool_error_and_reopens_the_session() {
     f.control.lost.store(false, Ordering::Relaxed);
     ok(&f.call_tool("scene", op));
     assert_eq!(f.hello_names(), ["agent-x", "agent-x"]);
+}
+
+#[test]
+fn a_session_that_cannot_reopen_says_the_call_was_not_sent() {
+    let f = fixture();
+    f.initialize();
+    let op = json!({"op": {"type": "scene.list"}});
+    ok(&f.call_tool("scene", op.clone()));
+    // As over `WsControl`: once the socket closes, `hello` fails too.
+    f.control.closed.store(true, Ordering::Relaxed);
+    let error = tool_error(&f.call_tool("scene", op.clone())).clone();
+    assert_eq!(error["code"], "disconnected");
+    assert!(
+        error["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("unknown") && m.contains("reopen")),
+        "{error}"
+    );
+    for _ in 0..2 {
+        let error = tool_error(&f.call_tool("scene", op.clone())).clone();
+        assert_eq!(error["code"], "disconnected");
+        assert!(
+            error["message"]
+                .as_str()
+                .is_some_and(|m| m.contains("socket closed")
+                    && m.contains("not sent")
+                    && m.contains("Restart the MCP server")
+                    && m.contains("undo history")),
+            "{error}"
+        );
+    }
+    // `hello` is tried again before each later call; none of them reached the engine.
+    assert_eq!(f.hello_names(), ["agent-x", "agent-x", "agent-x"]);
+    assert_eq!(f.engine.rev().0, 0);
 }
 
 #[test]
