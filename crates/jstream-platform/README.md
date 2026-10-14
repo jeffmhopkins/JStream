@@ -104,10 +104,12 @@ camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapt
   settle where the import lives; that is decided when `GpuInterop` is designed. Raw
   D3D12 objects must be released before the wgpu device either way, as ARCH step 2 says.
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.
-  A device with another channel count is refused as `Unsupported` for now. **Proposed
-  default:** backends downmix any other layout to stereo and log it, and new layouts
-  (e.g. 7.1) are added only when a real device needs them.
+  **Proposed default:** backends downmix any other layout to stereo, and new layouts
+  (e.g. 7.1) are added only when a real device needs them. The Windows backend already
+  does this: it asks WASAPI to downmix
+  ([jstream-platform-windows](../jstream-platform-windows/README.md#purpose)).
 - **Clock unit.** `MediaClock::timebase` lets each platform choose its unit (spike S3
   uses 100 ns ticks, WASAPI's unit). **Proposed default:** the engine fixes one unit,
   100 ns ticks, and other platforms convert at their edge, so engine timestamps compare
-  without per-platform conversions. Settled with S3's result and `jstream-core`.
+  without per-platform conversions. The Windows backend uses 100 ns ticks. Settled with
+  `jstream-core`.
