@@ -72,7 +72,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:114ad7181bd98bb0", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read Locking, Drop counts and Outputs against the merge. The ledger is released before the collection lock, the sampler is jstream-stats and is not real-time, and a later start still waits until a failed pipeline has joined, including when that teardown panics." }
+verified = { hash = "b3:8ff4b1391428b84e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only via its dependency on jstream-protocol › Design (snapshot size note, DropCounts default). Re-read Snapshots and Drop counts: the fixed 1920x1080 canvas scaled to longest side 1280 and RGBA8 PNG match the new size note; the sampler sums DropCounts and still sends every field; nothing here changes" }
 -->
 
 ### Engine and sessions

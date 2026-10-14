@@ -7,8 +7,8 @@ use crate::stdio::block_on;
 use crate::{LEGACY_VERSIONS, MODERN_VERSION, serve_stdio};
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
 use jstream_protocol::{
-    Call, CallResult, ClientId, Event, Hello, OutputId, Query, QueryResult, RequestId, Response,
-    Rev, Welcome, json_schema,
+    Call, CallResult, ClientId, DropCounts, Event, Hello, OutputId, Query, QueryResult, RequestId,
+    Response, Rev, Welcome, json_schema,
 };
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -613,6 +613,48 @@ fn events_are_bounded_and_report_what_was_dropped() {
     assert_eq!((next, seen), (total, total - 5));
 }
 
+/// `stats.tick` comes once a second per running pipeline. If it were buffered, a few
+/// minutes of ticks would evict the `state.changed` an agent needs (ADR-0036); if it
+/// were dropped, agents would never see the drop counts (ADR-0006). Only the newest is
+/// kept, as `stats`.
+#[test]
+fn stats_ticks_are_not_buffered_and_evict_nothing() {
+    let f = fixture();
+    f.initialize();
+    read_events(&f, None);
+    let tick = |seq| Event::StatsTick {
+        seq,
+        drops: DropCounts::default(),
+    };
+    let ticks = 2 * crate::events::BUFFER_CAPACITY as u64;
+    for seq in 1..=ticks {
+        f.engine.emit(tick(seq));
+    }
+    f.engine.emit(Event::StateChanged {
+        rev: Rev(9),
+        client_id: ClientId::new("ui_1"),
+        request_id: None,
+    });
+    for seq in ticks + 1..=2 * ticks {
+        f.engine.emit(tick(seq));
+    }
+    let page = read_events(&f, None);
+    assert_eq!(
+        page["events"],
+        json!([{"seq": 1, "event": {"type": "state.changed", "rev": 9, "client_id": "ui_1"}}])
+    );
+    assert_eq!(
+        (
+            page["next"].clone(),
+            page["dropped"].clone(),
+            page["more"].clone()
+        ),
+        (json!(1), json!(0), json!(false))
+    );
+    assert_eq!(page["stats"]["type"], "stats.tick");
+    assert_eq!(page["stats"]["seq"], json!(2 * ticks));
+}
+
 #[test]
 fn an_events_cursor_from_elsewhere_is_malformed() {
     let f = fixture();
@@ -727,10 +769,11 @@ fn video_snapshot_on_the_mock_is_an_engine_error() {
     assert_eq!(tool_error(&result)["code"], "internal");
 }
 
-/// A session that answers `video.snapshot` with a fixed PNG and delegates the rest.
+/// A session that answers `video.snapshot` with a given base64 PNG and delegates the rest.
 struct PngSession {
     inner: MockControl,
     engine: MockEngine,
+    png: String,
 }
 
 impl Control for PngSession {
@@ -750,7 +793,7 @@ impl Control for PngSession {
                         rev: Rev(3),
                         width: 1,
                         height: 1,
-                        png: "iVBORw0KGgo=".into(),
+                        png: self.png.clone(),
                     },
                 },
             };
@@ -766,12 +809,14 @@ impl Control for PngSession {
     }
 }
 
-#[test]
-fn video_snapshot_result_leads_with_an_image_block() {
+/// Runs `video.snapshot` through a server whose engine answers with `png`, after an
+/// `initialize`, and returns the reply's `result`.
+fn snapshot_result(png: &str) -> Value {
     let engine = MockEngine::new();
     let control = Arc::new(PngSession {
         inner: engine.connect(),
         engine,
+        png: png.to_owned(),
     });
     let server = Server::new(Arc::clone(&control) as Arc<dyn Control>);
     let init = json!({
@@ -792,10 +837,15 @@ fn video_snapshot_result_leads_with_an_image_block() {
         "method": "tools/call",
         "params": {"name": "video", "arguments": {"op": {"type": "video.snapshot"}}}
     });
-    let reply: Value =
+    let mut reply: Value =
         serde_json::from_str(&block_on(server.handle(&call.to_string())).expect("call"))
             .expect("json");
-    let result = &reply["result"];
+    reply["result"].take()
+}
+
+#[test]
+fn video_snapshot_result_leads_with_an_image_block() {
+    let result = snapshot_result("iVBORw0KGgo=");
     assert_eq!(result["isError"], false, "{result}");
     assert_eq!(result["content"][0]["type"], "image");
     assert_eq!(result["content"][0]["mimeType"], "image/png");
@@ -804,11 +854,52 @@ fn video_snapshot_result_leads_with_an_image_block() {
     let text: Value = serde_json::from_str(result["content"][1]["text"].as_str().expect("text"))
         .expect("text is json");
     assert_eq!(&text, &result["structuredContent"]);
+    // The PNG is only in the image block; the JSON names it and its size.
     assert_eq!(
         result["structuredContent"]["result"]["result"]["png"],
-        "iVBORw0KGgo="
+        "<in the image content block: 12 bytes of base64>"
     );
     assert_eq!(result["structuredContent"]["result"]["result"]["rev"], 3);
+    assert_eq!(
+        result["structuredContent"]["result"]["result"]["type"],
+        "video.snapshot"
+    );
+}
+
+/// A noise-like frame compresses badly, so its base64 is large. It must reach the agent
+/// once, as the image, and not again in the text block and `structuredContent`.
+#[test]
+fn a_large_snapshot_is_not_repeated_as_text() {
+    const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut state: u64 = 0x9e37_79b9_7f4a_7c15;
+    let png: String = (0..600_000)
+        .map(|_| {
+            // xorshift64: hermetic noise.
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            char::from(ALPHABET[(state % 64) as usize])
+        })
+        .collect();
+    let result = snapshot_result(&png);
+    assert_eq!(result["isError"], false);
+    let content = result["content"].as_array().expect("content");
+    assert_eq!(content.len(), 2);
+    assert_eq!(content[0]["data"].as_str(), Some(png.as_str()));
+    let text = content[1]["text"].as_str().expect("text");
+    assert!(text.len() < 1024, "text block is {} bytes", text.len());
+    let structured = result["structuredContent"].to_string();
+    assert!(
+        structured.len() < 1024,
+        "structuredContent is {} bytes",
+        structured.len()
+    );
+    assert_eq!(
+        result["structuredContent"]["result"]["result"]["png"],
+        "<in the image content block: 600000 bytes of base64>"
+    );
+    // The whole reply carries the base64 once.
+    assert!(result.to_string().len() < png.len() + 2048);
 }
 
 #[test]

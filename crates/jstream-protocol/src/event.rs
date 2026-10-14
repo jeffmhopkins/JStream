@@ -88,7 +88,11 @@ impl Event {
 ///
 /// Silence a stage inserts to cover a gap (an audio underrun, a device gap, encoder
 /// gap-fill) is not a drop and is not included.
+///
+/// A missing field parses as 0, so a counter added in a later minor version can be left
+/// out by an older sender (R-API-001). Unknown fields are ignored.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
 pub struct DropCounts {
     /// Video frames a capture mailbox replaced before the reader took them.
     pub capture_frames: u64,
@@ -186,5 +190,27 @@ mod tests {
         );
         let parsed = serde_json::from_value::<Event>(value).expect("parses");
         assert_eq!(parsed, event);
+    }
+
+    /// A tick from a peer with fewer (or more) counters than this version still parses:
+    /// missing ones read as 0 and unknown ones are ignored (R-API-001).
+    #[test]
+    fn stats_tick_with_missing_or_extra_counters_parses() {
+        let parsed = serde_json::from_value::<Event>(json!({
+            "type": "stats.tick",
+            "seq": 4,
+            "drops": {"capture_frames": 2, "future_frames": 9}
+        }))
+        .expect("parses");
+        assert_eq!(
+            parsed,
+            Event::StatsTick {
+                seq: 4,
+                drops: super::DropCounts {
+                    capture_frames: 2,
+                    ..super::DropCounts::default()
+                },
+            }
+        );
     }
 }

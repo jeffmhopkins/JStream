@@ -266,53 +266,51 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "DropCounts": {
-      "description": "Running totals of frames and packets the pipeline has dropped since the engine\nstarted (R-RT-004).\n\nEach field sums one kind of drop across every stage that counts it. A stage that\ndoes not count that kind contributes nothing. Totals only grow: a client computes\nan interval by subtracting the previous tick.\n\nSilence a stage inserts to cover a gap (an audio underrun, a device gap, encoder\ngap-fill) is not a drop and is not included.",
+      "description": "Running totals of frames and packets the pipeline has dropped since the engine\nstarted (R-RT-004).\n\nEach field sums one kind of drop across every stage that counts it. A stage that\ndoes not count that kind contributes nothing. Totals only grow: a client computes\nan interval by subtracting the previous tick.\n\nSilence a stage inserts to cover a gap (an audio underrun, a device gap, encoder\ngap-fill) is not a drop and is not included.\n\nA missing field parses as 0, so a counter added in a later minor version can be left\nout by an older sender (R-API-001). Unknown fields are ignored.",
       "properties": {
         "audio_frames": {
+          "default": 0,
           "description": "Audio frames dropped before the mixer consumed them: a device ring that\noverwrote unread frames, frames that arrived after the mixer had passed them,\nand frames the mixer skipped because it fell behind the clock.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         "capture_frames": {
+          "default": 0,
           "description": "Video frames a capture mailbox replaced before the reader took them.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         "encode_blocks": {
+          "default": 0,
           "description": "Audio blocks dropped before an encoder accepted them (its input queue was full,\nor the encoder was busy).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         "encode_frames": {
+          "default": 0,
           "description": "Video frames dropped before an encoder accepted them (its input queue was full,\nor the encoder was busy).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         "output_packets": {
+          "default": 0,
           "description": "Encoded packets dropped handing a stream to an output: a subscriber that fell\nbehind, or the output's own queue.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         "render_ticks": {
+          "default": 0,
           "description": "Render ticks that produced no new composite because the previous one had not\nfinished.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         }
       },
-      "required": [
-        "capture_frames",
-        "audio_frames",
-        "render_ticks",
-        "encode_frames",
-        "encode_blocks",
-        "output_packets"
-      ],
       "type": "object"
     },
     "Edit": {
