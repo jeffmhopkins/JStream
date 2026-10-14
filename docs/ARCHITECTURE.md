@@ -328,7 +328,7 @@ verified = { hash = "b3:d2016bd8f32dd9dc", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:6e580dcb0d3aa68d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered code changed only by the same-device queue check in FrameSync::stage and a queue clone in Shared (dropped with the raw objects, before the Device clone); steps 2 holds as before, text unchanged" }
+verified = { hash = "b3:0577bcfebb1a2d36", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Covered code: Shared keeps the raw command queue (dropped with the raw objects before the Device clone) and stage compares it; step 2 text unchanged and holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

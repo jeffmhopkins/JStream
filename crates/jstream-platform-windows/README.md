@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:aa9916d1472cfd16", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #63: WindowsGpu labelled as step 2 plus the D3D11 device steps 1/5 will use (N3); stage rejects a queue of another device (B1, Shared keeps a queue clone); rest unchanged vs gpu/{mod,d3d}.rs" }
+verified = { hash = "b3:4ff9dbecb9ab5690", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Review #63 round 2 B1: stage now compares the raw ID3D12CommandQueue (COM identity, cloned at open_device) instead of wgpu::Queue, whose wgpu-core ids repeat across Instances; so 'a queue of another device (or backend) is InvalidState' holds; rest unchanged" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

@@ -26,7 +26,7 @@ use jstream_platform::{AdapterId, FrameSync, GpuContext, GpuFrame, GpuInterop, P
 use wgpu::hal::api::Dx12;
 use windows::Win32::Foundation::POINT;
 use windows::Win32::Graphics::Direct3D11::{D3D11_BIND_RENDER_TARGET, D3D11_BIND_SHADER_RESOURCE};
-use windows::Win32::Graphics::Direct3D12::ID3D12Device;
+use windows::Win32::Graphics::Direct3D12::{ID3D12CommandQueue, ID3D12Device};
 use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_NV12;
 use windows::Win32::Graphics::Dxgi::{IDXGIAdapter, IDXGIAdapter1};
 use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTOPRIMARY, MonitorFromPoint};
@@ -60,8 +60,10 @@ pub(crate) struct Shared {
     d3d12: ID3D12Device,
     /// The last fence value handed out.
     last_value: AtomicU64,
-    /// The device's queue, to recognise it in `FrameSync::stage`.
-    queue: wgpu::Queue,
+    /// The device's raw command queue, to recognise it in `FrameSync::stage`. (Comparing
+    /// `wgpu::Queue`s doesn't work: wgpu-core ids restart in every `Instance`, so the
+    /// first queue of two instances compares equal.)
+    raw_queue: ID3D12CommandQueue,
     /// Held, not used: keeps the driver loaded until the fields above are released.
     _device: wgpu::Device,
 }
@@ -175,6 +177,15 @@ impl GpuInterop for WindowsGpu {
                 code: None,
                 message: "the device is not DX12".into(),
             })?;
+        // SAFETY: only the raw command queue is cloned (an AddRef), to compare queues by
+        // COM identity; it is never used to submit.
+        let raw_queue = unsafe { queue.as_hal::<Dx12>() }
+            .map(|q| q.as_raw().clone())
+            .ok_or(PlatformError::Os {
+                call: "wgpu::Queue::as_hal",
+                code: None,
+                message: "the queue is not DX12".into(),
+            })?;
         let d3d11 = d3d::create_d3d11(&dxgi)?;
         let fence = SharedFence::new(&d3d11.device, &d3d12)?;
         let shared = Arc::new(Shared {
@@ -182,7 +193,7 @@ impl GpuInterop for WindowsGpu {
             d3d11,
             d3d12,
             last_value: AtomicU64::new(0),
-            queue: queue.clone(),
+            raw_queue,
             _device: device.clone(),
         });
         Ok(GpuContext::new(
@@ -305,7 +316,14 @@ impl fmt::Debug for SlotSync {
 
 impl FrameSync for SlotSync {
     fn stage(&self, queue: &wgpu::Queue) -> Result<(), PlatformError> {
-        if *queue != self.shared.queue {
+        // SAFETY: the hal queue is used only to compare its raw queue's identity and to
+        // stage fence operations that wgpu applies around its next submit; the raw queue
+        // is not used to submit.
+        let hal_queue = unsafe { queue.as_hal::<Dx12>() }.ok_or(PlatformError::InvalidState {
+            what: "FrameSync::stage",
+            state: "the queue is not a DX12 queue",
+        })?;
+        if hal_queue.as_raw().as_raw() != self.shared.raw_queue.as_raw() {
             return Err(PlatformError::InvalidState {
                 what: "FrameSync::stage",
                 state: "the queue belongs to another device than the frame's context",
@@ -313,12 +331,6 @@ impl FrameSync for SlotSync {
         }
         let wait = self.released.load(Ordering::Acquire);
         let signal = self.shared.next_value();
-        // SAFETY: the hal queue is used only to stage fence operations that wgpu applies
-        // around its next submit; the raw queue is not touched.
-        let hal_queue = unsafe { queue.as_hal::<Dx12>() }.ok_or(PlatformError::InvalidState {
-            what: "FrameSync::stage",
-            state: "the queue is not a DX12 queue",
-        })?;
         hal_queue.add_wait_fence(self.shared.fence.d3d12.clone(), wait);
         hal_queue.add_signal_fence(self.shared.fence.d3d12.clone(), signal);
         self.written.store(signal, Ordering::Release);
@@ -351,6 +363,13 @@ mod device_tests {
             .encode_target(&ctx, FrameSize::new(64, 32).expect("size"))
             .expect("encode target");
         assert_eq!(frame.info().size.width(), 64);
+        // A queue of another device is refused, even though wgpu's own ids would match.
+        let other = gpu.open_device().expect("a second context");
+        assert!(matches!(
+            frame.stage(other.queue()),
+            Err(jstream_platform::PlatformError::InvalidState { .. })
+        ));
+        drop(other);
         let device = ctx.device();
         let plane = |aspect, format| {
             frame.texture().create_view(&wgpu::TextureViewDescriptor {
