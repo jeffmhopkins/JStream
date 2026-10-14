@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:b2de198c374dcb08", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main (AAC from #58): adds the CPU-path H.264 encoder (hardware then software MFTs, CBR/VBR, GOP, no B-frames, High, BT.709 limited, exact pts round trip, CleanPoint keyframes, async event pumping, 5 s drain) and its hardware/system-memory open question; Not-yet and Tests updated; checked against codec/{mod,mf,h264}.rs" }
+verified = { hash = "b3:d2a0d3a28b7a17d3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Vs main (#61 review follow-ups): async MFTs get one ProcessOutput per HaveOutput event (PullMode::Once); stream changes re-apply size/rate/bitrate/profile via Retype, falling back to the offered type, then re-read the buffer size; Tests paragraph names the GPU-encoder need; checked against codec/{mf,h264,aac}.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -102,8 +102,13 @@ The code is ported from spikes S1 to S3. This first cut has:
       `MFSampleExtension_CleanPoint`.
     - **Asynchronous MFTs** (most hardware encoders) ask for input and announce output
       through events. `encode` and `poll` pump those events, so `can_accept` reflects the
-      last pump, and the encode thread polls every tick. `finish` waits up to 5 s for the
-      drain to complete.
+      last pump, and the encode thread polls every tick. Each output event gets exactly
+      one `ProcessOutput` call, as Microsoft's asynchronous-MFT model requires. `finish`
+      waits up to 5 s for the drain to complete.
+    - **Stream changes:** when an encoder changes its output type mid-stream, the
+      configured frame size, frame rate, bit rate and profile are re-applied to the type
+      it offers. If it refuses them, the offered type is taken as is. The output buffer
+      size is then read again.
   - **Not yet:** video decoders, which report `Unsupported` until then.
 
 **Not yet:** Windows.Graphics.Capture, Media Foundation video decoders, the GPU interop
@@ -115,9 +120,10 @@ packet flags, positions across a device move), the AAC helpers (configuration ch
 PCM conversion, packet timing and padding) and the H.264 helpers (configuration check,
 NV12 packing, `pts` mapping) run on every platform, and the QPC clock test
 runs on Windows. Tests against real devices and the OS encoder are platform tests: behind
-the `hw-tests` feature and `#[ignore]`d, because CI machines may have no audio devices
-or Media Foundation ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). Run them on a Windows
-machine with a microphone and speakers:
+the `hw-tests` feature and `#[ignore]`d, because CI machines may have no audio devices,
+no Media Foundation or no GPU encoder ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). Run
+them on a Windows machine with a microphone, speakers and a GPU with a hardware H.264
+encoder (the hardware encode test needs one):
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`.
 
 <a id="open-questions"></a>
