@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:cf5b8b9fa1c6b9cb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rule text unchanged; Threads gains this PR's live-value handover (one atomic store per RT thread, nothing waits), consistent with R-RT-001/002" }
+verified = { hash = "b3:7eccdcfa81224324", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read R-RT-001, R-RT-002 and R-RT-003 against the output-pipeline paragraph. The rules still bind the audio callback, render and encode threads. The core pipeline counts readbacks and does not move file or network I/O onto those threads." }
 -->
 
 <a id="R-RT-001"></a>

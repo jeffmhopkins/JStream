@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:fe7b063aa9a3acbf", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: ARCH#data-model changed only in the hotkey re-point wording; the encoder-sharing rule this Purpose restates is unchanged" }
+verified = { hash = "b3:deeb613ea691b81f", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read against the output-pipeline paragraph. A session still owns one encoder on its encode thread. The core pipeline pushes frames and blocks and subscribes once. Encoder sharing in M1b is unchanged." }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

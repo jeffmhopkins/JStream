@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:2459474fc48a48c8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependencies changed by the crate-map rows and the Threads handover paragraph; platform traits unchanged" }
+verified = { hash = "b3:0096d5d637f4a379", by = "agent:grok@bc-49a8266d-f517-52bc-954b-ecc4a965f828", note = "Re-read the capture and audio bullets against the output-pipeline paragraph. The capture mailbox is still latest-frame, and None still means repeat. Audio handlers still run on the backend thread. Traits are unchanged." }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
