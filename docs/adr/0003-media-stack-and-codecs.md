@@ -8,6 +8,10 @@ superseded_by = "docs/adr/0031-source-types-and-decoding-scope.md"
 
 # ADR-0003: Rust media stack on OS codecs, no FFmpeg
 
+<!-- @generated begin adr-status -->
+> **Superseded** by [ADR-0031: Source types for v1 and decoding scope](0031-source-types-and-decoding-scope.md). This decision no longer applies.
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 The project is "fully Rust". FFmpeg would give broad codec coverage, but it brings a large C

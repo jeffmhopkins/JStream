@@ -8,6 +8,10 @@ tier = "agent"
 
 # ADR-0036: Engine events over MCP through a polling tool
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 [ADR-0006](0006-mcp-full-access.md) makes every protocol capability available over MCP.

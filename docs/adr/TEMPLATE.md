@@ -9,6 +9,10 @@ tier = "maintainer"        # maintainer (product/platforms, process/governance, 
 
 # ADR-NNNN: Title
 
+<!-- @generated begin adr-status -->
+> **Status:** proposed
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 What forces are at play, and what problem are we solving? Link external sources (each must be
@@ -22,5 +26,6 @@ What we decided, stated plainly.
 ## Consequences
 What gets easier, what gets harder, and what we must now do.
 
-<!-- Once accepted, only `status` and `superseded_by` may change (R-DOC-009).
+<!-- Once accepted, only `status` and `superseded_by` may change (R-DOC-009), and the
+     generated `adr-status` banner, which only `cargo xtask docs generate` writes (ADR-0038).
      A changed decision is a new ADR that supersedes this one. Not a tracked doc. -->

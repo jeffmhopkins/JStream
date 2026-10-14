@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0021: Browser (web page) source
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 The maintainer requires web pages as sources. These are used for overlays, alerts, chat

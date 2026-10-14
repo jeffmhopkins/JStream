@@ -2,8 +2,9 @@
 //! 1. its own body text, normalized (metadata blocks removed, LF endings, trailing
 //!    whitespace stripped, surrounding blank lines trimmed);
 //! 2. every tracked file its `covers` globs match, in sorted order: path plus content hash;
-//! 3. every `depends_on` target: the reference plus a hash of the target's normalized body,
-//!    or of one table row for a `path#anchor/<key>` reference.
+//! 3. every `depends_on` target: the reference plus a hash of the target's normalized body
+//!    (for a whole ADR, without its generated `adr-status` banner), or of one table row for
+//!    a `path#anchor/<key>` reference.
 //!
 //! Wherever Markdown is hashed, well-formed `@doc`, `@section` and `@rule` blocks are
 //! removed first, so recording a verification never stales another section (ADR-0039).
@@ -17,6 +18,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use globset::{Glob, GlobSet, GlobSetBuilder};
 
+use super::generate::strip_status;
 use super::parse::Doc;
 
 /// Prefix of real hashes. Anything else (e.g. the old `"bootstrap"` placeholder) is stale.
@@ -57,7 +59,9 @@ fn normalize(lines: &[&str]) -> String {
 }
 
 /// The normalized body of a section (by anchor) or, with `anchor = None`, of the whole doc
-/// after its `@doc` block, without metadata blocks.
+/// after its `@doc` block, without metadata blocks. A whole ADR's body also leaves out its
+/// generated `adr-status` banner, which is not ADR content (ADR-0038), so a status change
+/// doesn't stale its dependents.
 pub(crate) fn body(doc: &Doc, anchor: Option<&str>) -> Option<String> {
     body_by(doc, anchor, true)
 }
@@ -71,14 +75,16 @@ fn body_by(doc: &Doc, anchor: Option<&str>, strip: bool) -> Option<String> {
         Some(a) => doc.sections.iter().find(|s| s.anchor == a)?.body,
     };
     let (start, end) = (start.min(lines.len()), end.min(lines.len()));
-    if !strip {
-        return Some(normalize(&lines[start..end]));
-    }
     let meta = doc.metadata_lines();
     let kept: Vec<&str> = (start..end)
-        .filter(|&k| !meta[k])
+        .filter(|&k| !strip || !meta[k])
         .map(|k| lines[k])
         .collect();
+    if anchor.is_none() && doc.is_adr() {
+        // The banner is never a metadata block, so stripping it after them is the same.
+        let text = strip_status(&kept.join("\n"));
+        return Some(normalize(&text.lines().collect::<Vec<_>>()));
+    }
     Some(normalize(&kept))
 }
 
@@ -404,6 +410,27 @@ mod tests {
         );
         assert_eq!(split_dep("docs/A.md#x"), ("docs/A.md", Some("x"), None));
         assert_eq!(split_dep("docs/A.md"), ("docs/A.md", None, None));
+    }
+
+    /// A whole ADR hashes the same with or without its generated banner (ADR-0038); a
+    /// section body never drops text.
+    #[test]
+    fn whole_adr_body_ignores_the_status_banner() {
+        let head = "<!-- @doc\nid = \"ADR-0001\"\nkind = \"adr\"\nstatus = \"accepted\"\n-->\n\n# ADR-0001: T\n\n";
+        let banner = "<!-- @generated begin adr-status -->\n> **Status:** accepted\n<!-- @generated end adr-status -->\n\n";
+        let rest = "<a id=\"context\"></a>\n## Context\nWhy.\n";
+        let parse = |t: &str| super::super::parse::parse("a.md", t, &mut Vec::new());
+        let (bare, with) = (
+            parse(&format!("{head}{rest}")),
+            parse(&format!("{head}{banner}{rest}")),
+        );
+        assert_eq!(body(&bare, None), body(&with, None));
+        assert_eq!(body(&with, Some("context")).as_deref(), Some("Why."));
+        let note = parse(&format!(
+            "{}{banner}{rest}",
+            head.replace("\"adr\"", "\"normative\"")
+        ));
+        assert!(body(&note, None).is_some_and(|b| b.contains("@generated")));
     }
 
     #[test]

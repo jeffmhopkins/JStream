@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0039: Doc hashes ignore metadata blocks; row-level crate-map dependencies
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 Refines [ADR-0016](0016-docs-as-checked-graph-v2.md)'s point 2 (what a section's hash is
 over). It does not supersede it: every other point of ADR-0016 stands.
 

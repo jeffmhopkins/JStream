@@ -8,6 +8,10 @@ tier = "agent"
 
 # ADR-0022: Item transform and canvas coordinates
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 M1b builds "place, move, resize, rotate and crop scene items, with golden tests"

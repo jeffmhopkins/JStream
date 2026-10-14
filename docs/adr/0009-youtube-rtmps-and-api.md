@@ -8,6 +8,10 @@ superseded_by = "docs/adr/0034-youtube-interaction-scope-v2.md"
 
 # ADR-0009: YouTube via RTMPS plus optional Live API
 
+<!-- @generated begin adr-status -->
+> **Superseded** by [ADR-0034: YouTube interaction scope v2](0034-youtube-interaction-scope-v2.md). This decision no longer applies.
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Streaming should work with just a stream key. Agents also benefit from managing the

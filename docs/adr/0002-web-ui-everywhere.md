@@ -7,6 +7,10 @@ status = "accepted"
 
 # ADR-0002: One web UI for desktop and browser
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 We want a desktop app and remote control from a browser, without maintaining two UIs.

@@ -8,6 +8,10 @@ superseded_by = "docs/adr/0035-clap-plugins-out-of-process.md"
 
 # ADR-0005: Extensibility through WGSL effects and WASM plugins
 
+<!-- @generated begin adr-status -->
+> **Superseded** by [ADR-0035: CLAP audio plugins, out of process](0035-clap-plugins-out-of-process.md). This decision no longer applies.
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Native dynamic plugins (OBS-style) need a stable ABI and can crash the process.

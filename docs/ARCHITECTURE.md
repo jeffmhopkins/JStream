@@ -83,7 +83,7 @@ verified = { hash = "b3:67a80aa8d2b1bb42", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:c7717535ca16d975", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "PR #54 B1: added design/ (UI design references, prototype source; not normative); rest of the tree unchanged and still matches the repo and xtask command set" }
+verified = { hash = "b3:0e48ba2d422db8da", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs gained the 'docs generate' usage entry (xtask/ line still lists docs); the docs/adr/ line now mentions the generated README.md index next to TEMPLATE.md; rest of the tree unchanged" }
 -->
 
 ```
@@ -105,7 +105,7 @@ JStream/
 │   ├── ARCHITECTURE.md  RULES.md  DOCS.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
 │   ├── facts.toml          # pinned facts, one source each
-│   ├── adr/                # NNNN-title.md (+ TEMPLATE.md)
+│   ├── adr/                # NNNN-title.md (+ TEMPLATE.md, generated README.md index)
 │   └── guides/
 └── .github/                # workflows (CI, governance, review-gate), Dependabot config, PR template
 ```

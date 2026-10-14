@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0028: Audio model v2: bus matrix with faders, scene-following audio, keys, meters
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 Supersedes [ADR-0007](0007-bus-matrix-audio.md).
 
 <a id="context"></a>

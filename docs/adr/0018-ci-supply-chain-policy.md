@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0018: CI supply-chain policy: pinned actions, Dependabot, current runtimes
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Required checks, including the `review-gate` merge gate, run third-party GitHub Actions.

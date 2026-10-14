@@ -8,6 +8,10 @@ superseded_by = "docs/adr/0028-audio-model-v2.md"
 
 # ADR-0007: Bus-matrix audio and scene-independent outputs
 
+<!-- @generated begin adr-status -->
+> **Superseded** by [ADR-0028: Audio model v2: bus matrix with faders, scene-following audio, keys, meters](0028-audio-model-v2.md). This decision no longer applies.
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Video and audio routing must be independent: for example, music on the stream but not in

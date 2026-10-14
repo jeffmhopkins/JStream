@@ -8,6 +8,10 @@ superseded_by = "docs/adr/0020-portable-windows-distribution.md"
 
 # ADR-0012: Windows virtual camera as a COM media source
 
+<!-- @generated begin adr-status -->
+> **Superseded** by [ADR-0020: Portable Windows distribution: run the exe, no installer](0020-portable-windows-distribution.md). This decision no longer applies.
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 `MFCreateVirtualCamera` takes the CLSID of a **custom media source**

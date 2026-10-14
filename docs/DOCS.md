@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:43197b2f41c47f6e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against ADR-0039's xtask change (metadata-stripped hashing in hash.rs, block ranges in parse.rs, row-reference checks in check.rs, docs rehash in mod.rs): the hash-bound bullet now names the rule and the migration; check, references, back-reference and docs-for bullets still match" }
+verified = { hash = "b3:991cc79c6dc2ecb5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against xtask/src/docs after rebasing ADR-0038 onto ADR-0039: hash.rs strips metadata then the adr-status banner for whole-ADR bodies, generate.rs writes banners and docs/adr/README.md, mod.rs has generate and rehash; the hash-bound and Generated content bullets both match" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -46,6 +46,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   docs such as ADRs; superseded and retired docs fail).
 - **`cargo xtask docs for <path>`** ([Code back-references](#back-references)): prints
   what governs a file.
+- **Generated content** ([Generated content](#generated)): `cargo xtask docs generate`
+  writes the ADR status banners and the ADR index, and `docs check` fails on their drift.
+  The crate map and the other generated references are not generated yet.
 - **Reports (warnings):** crates no section covers, and `applies_to` globs naming an
   unknown crate ([PR gate](#gate)).
 - **Not yet:** the `review` and `log` commands.
@@ -164,7 +167,8 @@ Checks:
 - A link to a missing file or anchor fails.
 - A link to a **retired anchor** fails, with a hint naming its replacements.
 - A link from a normative doc or from code to a **superseded ADR** fails. ADRs may cite
-  anything, since history is legitimate there.
+  anything, since history is legitimate there, and so may generated docs, since the ADR
+  index lists every ADR ([Generated content](#generated)).
 - An external URL that isn't registered in `external.toml` fails.
 - Examples inside code spans and fenced blocks are not checked.
 
@@ -218,7 +222,9 @@ It lists:
    ignored, so Dependabot pin bumps don't make the specifying doc stale
    ([ADR-0018](adr/0018-ci-supply-chain-policy.md));
 3. for each `depends_on` target: its reference plus a hash of its normalized body
-   (metadata blocks removed), or of its one row for a `path#anchor/<key>` reference.
+   (metadata blocks removed), or of its one row for a `path#anchor/<key>` reference. A
+   whole-ADR target's body also leaves out its generated `adr-status` banner, so a status
+   change alone doesn't make its dependents stale ([Generated content](#generated)).
 
 **Metadata blocks** are exactly the blocks the parser reads as metadata: the `@doc` block
 at the start of the file, an `@section` block right after an anchored `##` heading (not
@@ -293,11 +299,12 @@ so it never causes merge conflicts.
    ([R-DOC-012](RULES.md#R-DOC-012)).
 3. **Broken references:** see [References](#references).
 4. **Back-reference mismatches:** see [Code back-references](#back-references).
-5. **Generated drift:** regenerated content differs from what is committed.
+5. **Generated drift:** regenerated content differs from what is committed, or can't be
+   generated (a `superseded_by` that names no tracked ADR). See [Generated content](#generated).
 6. **Fact mismatches** for file-sourced facts.
 7. **Accepted-ADR edits:** content changes to an accepted ADR. Only `status` and
-   `superseded_by` may change, plus `@doc` delimiter changes made under a repo-wide
-   format ADR ([R-DOC-009](RULES.md#R-DOC-009)).
+   `superseded_by` may change, plus the generated `adr-status` banner and `@doc`
+   delimiter changes made under a repo-wide format ADR ([R-DOC-009](RULES.md#R-DOC-009)).
 8. **Identity violations:** a rule or section anchor that existed on `main` is missing
    and has no tombstone. See [Lifecycle](#lifecycle).
 9. **Rule metadata:** see [Rules](#rules).
@@ -421,17 +428,33 @@ covered by the TTLs of their external resources.
 -->
 
 Anything derivable is generated, never hand-written: the crate map (from
-`[package.metadata.jstream]`), the protocol reference, the MCP tool list, and the
-index. Generated blocks in committed docs are fenced as
+`[package.metadata.jstream]`), the protocol reference, the MCP tool list, the index, and
+the ADR status banners and ADR index. Generated blocks in committed docs are fenced as
 `<!-- @generated begin <name> -->` … `<!-- @generated end <name> -->` and are
 drift-checked.
+
+`cargo xtask docs generate` writes them; running it again changes nothing. `docs check`
+regenerates them in memory and fails, naming that command, when the committed text
+differs. Today it generates two things, both from ADR `@doc` metadata
+([ADR-0038](adr/0038-adr-status-banner-and-index.md)):
+
+- **The `adr-status` banner** in every ADR: directly under the `# ADR-NNNN: …` line, after
+  one blank line, the begin marker, one blockquote line and the end marker, then a blank
+  line. A superseded ADR reads `> **Superseded** by [ADR-NNNN: Title](NNNN-….md). This
+  decision no longer applies.`, with the successor named by `superseded_by` (a repo path);
+  any other reads `> **Status:** <status>`. `docs/adr/TEMPLATE.md` carries the block with
+  `proposed`. The banner is not ADR content: it may change in an accepted ADR, through the
+  generator only ([R-DOC-009](RULES.md#R-DOC-009)).
+- **The ADR index** `docs/adr/README.md`: a tracked doc with `kind = "generated"`, written
+  whole, whose `adr-index` block is a table of every ADR under `docs/adr/` in number
+  order: number, title, status, tier, and the successor of a superseded one.
 
 <a id="governance"></a>
 ## Governance: protecting the checks themselves
 <!-- @section
 covers = ["xtask/src/governance.rs", ".github/workflows/governance.yml"]
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:accc09351f668ffc", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: protected list adds xtask/src/main.rs and rewords lint_deps.rs; manifests without workspace lints (new crates too), cfg_attr suppressions, unparseable ADR block as container change, and a new 'what the workflow guarantees' paragraph matching the base-built governance.yml" }
+verified = { hash = "b3:7ca174a635f9f963", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for ADR-0038 renumbered from 0036: governance.rs strips only one-'> '-line adr-status blocks from accepted ADRs before comparing; accepted-ADR and Status banner bullets match, protected list unchanged" }
 -->
 
 An agent could pass the gate by weakening it. These changes are **governance changes**,
@@ -440,7 +463,8 @@ and the `governance` check fails on them unless the PR carries the label
 section saying what is loosened or tightened, and why:
 
 - edits to `covers`, `applies_to`, `enforced_by` or `status` in any metadata block;
-- any edit to an accepted ADR, including a metadata-container change under R-DOC-009's exception;
+- any edit to an accepted ADR, including a metadata-container change under R-DOC-009's
+  exception, but not a change confined to its generated `adr-status` banner;
 - retiring a rule; deleting or retiring a doc or section;
 - edits to `deny.toml`, `clippy.toml`, `rustfmt.toml`, `rust-toolchain.toml`,
   `[workspace.lints]` or the root manifest's `[lints]`, `.github/**`, `xtask/src/docs/**`,
@@ -484,6 +508,12 @@ description and author from the event payload. Then:
   that is a container change: its "Governance change" section must also cite, as
   `ADR-NNNN`, an ADR that is accepted at `HEAD`. A content change is reported separately.
   Whether the cited ADR really is a repo-wide format ADR is judged in review.
+- **Status banner** ([R-DOC-009](RULES.md#R-DOC-009)): before comparing an accepted ADR,
+  each `adr-status` block whose inside is exactly one `> ` line is removed from both
+  sides, so a change confined to it is not listed. A block of any other shape stays, and
+  counts as content. The banner's text is left to `docs check`, which fails unless it is
+  exactly the generator's output for the ADR's metadata, and an edit to that metadata
+  (`status` when superseding) is itself listed.
 
 **What the workflow guarantees.** It builds the checker from the PR's base commit, with
 the base's toolchain file and lockfile and no build cache, then checks out the PR head

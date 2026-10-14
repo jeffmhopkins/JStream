@@ -7,6 +7,10 @@ status = "accepted"
 
 # ADR-0016: Documentation as a hash-checked graph (v2: metadata in comments)
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 Supersedes [ADR-0011](0011-docs-as-checked-graph.md).
 
 <a id="context"></a>

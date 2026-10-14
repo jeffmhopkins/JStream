@@ -8,6 +8,10 @@ superseded_by = "docs/adr/0016-docs-as-checked-graph-v2.md"
 
 # ADR-0011: Documentation as a hash-checked graph
 
+<!-- @generated begin adr-status -->
+> **Superseded** by [ADR-0016: Documentation as a hash-checked graph (v2: metadata in comments)](0016-docs-as-checked-graph-v2.md). This decision no longer applies.
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Most code will be written by AI agents directed by one maintainer. Agents follow docs

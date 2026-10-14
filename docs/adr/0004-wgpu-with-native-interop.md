@@ -7,6 +7,10 @@ status = "accepted"
 
 # ADR-0004: wgpu compositor with native interop
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Capture → composite → encode must avoid CPU copies at 1080p60 and above, across three OSes.

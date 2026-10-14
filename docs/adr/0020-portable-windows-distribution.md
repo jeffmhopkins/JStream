@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0020: Portable Windows distribution: run the exe, no installer
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 Supersedes [ADR-0012](0012-virtual-camera-windows.md). It keeps ADR-0012's virtual-camera
 design and replaces its installer decision.
 

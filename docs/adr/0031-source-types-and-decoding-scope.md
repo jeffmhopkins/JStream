@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0031: Source types for v1 and decoding scope
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 Supersedes [ADR-0003](0003-media-stack-and-codecs.md).
 
 <a id="context"></a>

@@ -48,6 +48,10 @@ fn main() -> ExitCode {
             for (name, what) in [
                 ("docs check", "check the documentation graph (docs/DOCS.md)"),
                 (
+                    "docs generate",
+                    "write generated content: ADR status banners and docs/adr/README.md",
+                ),
+                (
                     "docs verify",
                     "record a re-read section: <DOC#anchor> --by <who> --note <text>",
                 ),
@@ -61,7 +65,7 @@ fn main() -> ExitCode {
                     "crate layering, unsafe declarations, links= allowlist, workspace deps",
                 ),
             ] {
-                eprintln!("  {name:<12} {what}");
+                eprintln!("  {name:<14} {what}");
             }
             ExitCode::from(2)
         }

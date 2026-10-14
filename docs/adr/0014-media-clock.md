@@ -7,6 +7,10 @@ status = "accepted"
 
 # ADR-0014: Monotonic media clock with adaptive resampling
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Capture devices run on independent clocks that drift. Using one device as the master

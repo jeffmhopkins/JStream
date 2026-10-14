@@ -7,6 +7,10 @@ status = "accepted"
 
 # ADR-0006: MCP agents get full, authenticated access
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 <a id="context"></a>
 ## Context
 Agents should be able to do anything a user can, including going live. But "localhost

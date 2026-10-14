@@ -8,6 +8,10 @@ tier = "maintainer"
 
 # ADR-0034: YouTube interaction scope v2
 
+<!-- @generated begin adr-status -->
+> **Status:** accepted
+<!-- @generated end adr-status -->
+
 Supersedes [ADR-0009](0009-youtube-rtmps-and-api.md). It restates all of ADR-0009's
 decision, which stands, and widens what JStream does with the YouTube API: sending chat
 as the channel, showing a chat message on stream, and audience stats.
