@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:00bac63191efb980", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map changed only through main's new rows (audio, core, daemon); the encode row and this crate's purpose (sessions, fan-out, registry, stats) still match lib.rs" }
+verified = { hash = "b3:60e969ccc349d391", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#data-model changed only through ADR-0023 (opacity, blend, effects, duplicated_from); outputs keyed by mix and encoder profile still share one session, as stated" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
