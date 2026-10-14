@@ -169,7 +169,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ecc247ca7e365ce8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#70): #48 errors bullet (CliError::Read 'could not read the input', exit 1, json code io) and failing-input test, plus main's open question 5 (daemon exists); re-read together against run.rs/mcp.rs" }
+verified = { hash = "b3:85eb691d94ff7805", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #72: #48's read-vs-write error text (CliError::Read) and per-process token file sit beside main's open question 5 (daemon exists) and wss:// wording; re-read against run.rs/mcp.rs/exit.rs" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

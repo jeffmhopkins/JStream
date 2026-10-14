@@ -36,9 +36,15 @@ pub enum RtmpError {
     /// The stream key is empty.
     #[error("the stream key is empty")]
     EmptyStreamKey,
-    /// `rtmps://` was requested, but this build has no TLS transport yet.
-    #[error("rtmps:// needs TLS, which is not implemented yet; use rtmp:// or supply a TLS stream")]
-    TlsUnsupported,
+    /// The TLS handshake for `rtmps://` failed: for example the server's certificate
+    /// does not name the URL's host, has expired, or chains to no trusted root. Also
+    /// used for a TLS configuration the `ring` provider can't build.
+    #[error("TLS failed")]
+    Tls(#[source] rustls::Error),
+    /// `rtmps://` needs trusted root certificates, and the operating system's trust
+    /// store yielded none that could be used.
+    #[error("no usable root certificates in the operating system's trust store")]
+    NoRootCertificates,
     /// The server answered the handshake with an RTMP version other than 3.
     #[error("server handshake used RTMP version {version}, expected 3")]
     HandshakeVersion {

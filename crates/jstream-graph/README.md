@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:4fbdeae064ff56c2", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only reworded jstream-cli's apps row (test-only dev-deps outside it); graph's layer 2, protocol-only dependency and model description are unaffected" }
+verified = { hash = "b3:c67d016962fbb37b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #72: dependency ARCH#crate-map changed only in the apps row wording (#48 N2) and main's new rows; this crate's purpose text is unaffected" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

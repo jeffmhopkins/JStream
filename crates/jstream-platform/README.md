@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#threading", "docs/adr/0003-media-stack-and-codecs.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:3851e73bd9e5c170", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Dependency ARCH#crate-map only reworded jstream-cli's apps row (test-only dev-deps outside it); platform's layer 1, single owner of encoder/decoder traits and its deps unaffected" }
+verified = { hash = "b3:79aaa9f82c034050", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #72: dependency ARCH#crate-map changed only in the apps row wording (#48 N2) and main's new rows; this crate's purpose text is unaffected" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

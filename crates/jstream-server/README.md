@@ -48,7 +48,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:44e344d8429ef46c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rebased onto main (#70 daemon): #44 edits (BLAKE3-hashed token, digest compare; extra_hosts without a port rejected at bind with InvalidHost; blake3 dependency) plus main's open question 5 about the daemon; both re-read together, consistent with config.rs/gate.rs/lib.rs" }
+verified = { hash = "b3:9824b3b758c3592e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged main into #72: this PR's Extra hosts (name:port required, InvalidHost at bind) and Token compare (BLAKE3 digest) paragraphs plus blake3 in Dependencies sit beside main's TLS open question (ring allowlisted for RTMPS) and daemon open question 5; all re-read together against config.rs/gate.rs" }
 -->
 
 ### Listening and admission
@@ -132,8 +132,9 @@ for the token digest. No TLS crate is in the tree, so no `ring` or `rustls`.
 ### Open questions
 
 1. **TLS.** Plain `ws://` on loopback is the first cut. Remote browsers need `wss://`
-   with rustls and the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)), which
-   puts `ring` on the lint-deps native-code allowlist: a governance change.
+   with rustls and the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)): a TLS
+   feature and its wiring. `ring` is already on the lint-deps native-code allowlist, for
+   `jstream-outputs`' RTMPS, so that needs no further governance change.
 2. **Browser token.** Browsers can't set `Authorization` on a WebSocket. The client
    design sends the token in `Sec-WebSocket-Protocol` instead
    ([jstream-control › Design](../jstream-control/README.md#design)); the subprotocol

@@ -1,0 +1,21 @@
+[package]
+name = "jstream-audio"
+version = "0.0.0"
+description = "The JStream real-time audio mixer: adaptive resampling of each input onto the engine time line, a stereo mix bus with per-input gain, and metering."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "Real-time mixer: adaptive resampling, send matrix, buses, filters, metering"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+jstream-media.workspace = true
+jstream-platform.workspace = true
+thiserror.workspace = true
