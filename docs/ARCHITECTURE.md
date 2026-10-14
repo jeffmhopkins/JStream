@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:0d8bf3304c50007e", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-ARCH-002 (strictly lower layers, stated above the table) and R-ARCH-003 (clients never depend on jstream-core; mcp and server rows say dyn Control only)" }
+verified = { hash = "b3:07497799e53a9064", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: jstream-server's Cargo.toml only adds tokio's time feature (no new dependency, layer unchanged); every row still holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -448,7 +448,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:39a9aacf8e6eb259", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read after control#design's Auth rewrap: Transport (missing Origin allowed, present one on the allow list) and Slow clients still hold" }
+verified = { hash = "b3:5e40db06ecce1ee0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: the server change is only the close timeout; Transport (Origin optional) and Slow clients bullets still hold, and closing behaviour isn't described here" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

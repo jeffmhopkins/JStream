@@ -600,18 +600,9 @@ fn numbered(n: usize) -> Event {
     }
 }
 
-/// #44 "Slow clients": a client that stops reading gets its queued events dropped and
-/// one `events.dropped` notice counting them, while the engine and every other client
-/// carry on.
-#[test]
-fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
-    // About 10 MB: far more than the slow socket's kernel buffers hold, so its outbox
-    // must overflow.
-    const SENT: usize = 10_000;
-    let engine = MockEngine::new();
-    let harness = start(&engine);
-
-    // A raw client with a small receive buffer, so the server's sends block early.
+/// A raw client with a 4 KB receive buffer, past its handshake, so the server's sends to
+/// it block as soon as it stops reading.
+fn slow_client(harness: &Harness) -> tokio_tungstenite::WebSocketStream<tokio::net::TcpStream> {
     let mut slow = harness.run(async {
         let socket = match tokio::net::TcpSocket::new_v4() {
             Ok(socket) => socket,
@@ -655,6 +646,22 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
         harness.run(exchange_on(&mut slow, &hello)),
         ServerMessage::Welcome(_)
     ));
+    slow
+}
+
+/// #44 "Slow clients": a client that stops reading gets its queued events dropped and
+/// one `events.dropped` notice counting them, while the engine and every other client
+/// carry on.
+#[test]
+fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
+    // About 10 MB: far more than the slow socket's kernel buffers hold, so its outbox
+    // must overflow.
+    const SENT: usize = 10_000;
+    let engine = MockEngine::new();
+    let harness = start(&engine);
+
+    // A raw client with a small receive buffer, so the server's sends block early.
+    let mut slow = slow_client(&harness);
 
     // The slow client now reads nothing while the engine emits.
     let (control, _) = harness.session();
@@ -756,4 +763,38 @@ where
             other => panic!("no reply: {other:?}"),
         }
     }
+}
+
+/// #108 review N1: a connection whose client has stopped reading is dropped
+/// `CLOSE_TIMEOUT` after the server shuts down, instead of waiting for it for good. The
+/// client gets what its kernel buffers already held, then the connection ends without a
+/// close frame (with no timeout, reading would deliver the rest and the close frame).
+#[test]
+fn shutdown_drops_a_client_that_stopped_reading() {
+    let engine = MockEngine::new();
+    let mut harness = start(&engine);
+    let mut slow = slow_client(&harness);
+    // About 10 MB, as above: far more than the kernel buffers hold, so the connection's
+    // sends block and its outbox stays full.
+    for n in 0..10_000 {
+        engine.emit(numbered(n));
+    }
+    // Let the connection fill the socket and queue the rest, then shut down and wait
+    // past the timeout.
+    harness.run(async { tokio::time::sleep(Duration::from_millis(300)).await });
+    harness.shut_down();
+    harness.run(async { tokio::time::sleep(Duration::from_secs(3)).await });
+    let closed = harness.run(async {
+        loop {
+            match slow.next().await {
+                Some(Ok(Message::Close(_))) => break true,
+                Some(Ok(_)) => continue,
+                None | Some(Err(_)) => break false,
+            }
+        }
+    });
+    assert!(
+        !closed,
+        "the server waited for the client and sent its close frame"
+    );
 }
