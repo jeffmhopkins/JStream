@@ -369,7 +369,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. The mix is always
   `Program` until video mixes exist, so outputs share a session by profile alone.
-  Audio (protocol 0.21): an audio source's `audio` (`enabled`, `follow`, fader and
+  Audio (protocol 0.16): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
   others with their faders, and the post-fader sends, a new channel source sending to
   the master at 0 dB. A send always runs from a source to a bus; with no filters there
@@ -525,7 +525,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:231c7b6d2e48fbe8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; history and undo_conflict wording hold; the mock change is internal to jstream-control" }
+verified = { hash = "b3:160cce3c32ad09ff", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; delete.plan and blockers at 0.15 beside main's 0.14 text; #203 changes no wire shape" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -551,7 +551,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
-  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.21); filters join them once the
+  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.16); filters join them once the
   mixer has filter chains.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
@@ -594,11 +594,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
-  schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `bus.list` (protocol
-  0.21) → the buses and sends; audio levels are the `meters.tick` event, not a query).
+  schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
+  batch that deletes a scene or source with everything that refers to it, and the `rev`
+  it was planned at; `bus.list` (protocol 0.16) → the buses and sends; audio levels are
+  the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
-  ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.21, about ten a second
+  ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.16, about ten a second
   while the mixer runs) every source's and bus's levels and the master's loudness,
   which `audio.reset_loudness` restarts; the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).
@@ -608,7 +610,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   sets or clears the featured message (runtime state, reported by an event) that the chat
   message source draws as plain text. Audience stats (concurrent viewers, likes, chat
   rate) come in a low-rate `youtube.stats` event and a query.
-- **Errors** carry a stable machine-readable `code`, detail fields and a message.
+- **Errors** carry a stable machine-readable `code`, detail fields and a message. A
+  `scene.delete` or `source.delete` refused because something still refers to its
+  target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
+  [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
 - **Binary streams** (WebSocket binary frames): preview video and meters. Not designed
   yet, except the meter frame's fields
   ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
@@ -642,11 +647,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:15a3345ea80f0717", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; tool nouns add audio, bus and send; meters.tick kept apart as meters; tools.snap measured 169807 bytes, so about 170 KB" }
+verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; tool list includes delete and encoder; tools.snap 146 KB, text says about 145 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`audio`, `bus`, `canvas`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state` and `video` so far; `studio`, `youtube`
+  (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state` and `video` so far; `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -657,7 +662,7 @@ verified = { hash = "b3:15a3345ea80f0717", by = "agent:claude@session_01D4rY84zM
   about ten a second while the mixer runs, is kept the same way, as `meters`.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 170 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 175 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -844,7 +849,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:82222c1c09c24b50", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; Collections bullet holds: buses, sends and source audio are optional fields at schema 1, loaded by replaying edits" }
+verified = { hash = "b3:e8da9a7e3807bb8c", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9 CI fix: LoadError::Invalid now boxes its ProtocolError, a type-size change only; re-read, the Collections bullet (checks a loaded collection as it checks edits) holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

@@ -72,6 +72,13 @@ pub enum ProtocolError {
         field: String,
         /// Why it was rejected.
         reason: String,
+        /// When a `scene.delete` or `source.delete` is refused because other objects still
+        /// refer to its target: every one of those references, in a stable order. The
+        /// `delete.plan` query returns the batch that removes them with the target. Empty
+        /// otherwise, and then omitted. Missing (from a server older than 0.15)
+        /// parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        blockers: Vec<Blocker>,
     },
     /// An undo or redo would overwrite another client's work: a batch that client
     /// applied after the step changed a property the step sets, created or deleted an
@@ -114,6 +121,15 @@ pub enum ProtocolError {
 }
 
 impl ProtocolError {
+    /// An `invalid_argument` error with no blockers.
+    pub fn invalid_argument(field: impl Into<String>, reason: impl Into<String>) -> Self {
+        ProtocolError::InvalidArgument {
+            field: field.into(),
+            reason: reason.into(),
+            blockers: Vec::new(),
+        }
+    }
+
     /// The stable machine-readable code, as sent in the `code` field.
     pub fn code(&self) -> &'static str {
         match self {
@@ -166,6 +182,25 @@ impl fmt::Display for EntityKind {
     }
 }
 
+/// One reference that stops a `scene.delete` or `source.delete`: the object that refers
+/// to the target, and the field of that object that holds the reference.
+///
+/// ```json
+/// {"entity": "source", "id": "webcam", "field": "settings.mask"}
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Blocker {
+    /// What kind of object refers to the target: an `item` that places a source, or a
+    /// `source` that shows a scene or whose settings refer to the target.
+    pub entity: EntityKind,
+    /// That object's ID.
+    pub id: String,
+    /// The field of that object that refers to the target, as a dotted path into its
+    /// query form: `source_id` for an item, `kind.scene_id` for a `scene` source, and
+    /// `settings.<param>` for a settings reference.
+    pub field: String,
+}
+
 /// A [`ProtocolError`] as sent on the wire: its `code` and details, plus a message.
 ///
 /// ```json
@@ -193,7 +228,7 @@ impl From<ProtocolError> for WireError {
 
 #[cfg(test)]
 mod tests {
-    use super::{EntityKind, ProtocolError, WireError};
+    use super::{Blocker, EntityKind, ProtocolError, WireError};
     use crate::id::Rev;
     use serde_json::json;
 
@@ -231,6 +266,37 @@ mod tests {
         .expect("parses");
         assert_eq!(parsed.error, ProtocolError::Unknown);
         assert_eq!(parsed.message, "too many outputs");
+    }
+
+    #[test]
+    fn blockers_are_omitted_when_empty_and_default_when_missing() {
+        let plain = ProtocolError::invalid_argument("edits.0.name", "must not be empty");
+        assert_eq!(
+            serde_json::to_value(&plain).ok(),
+            Some(json!({
+                "code": "invalid_argument",
+                "field": "edits.0.name",
+                "reason": "must not be empty"
+            }))
+        );
+        let blocked = ProtocolError::InvalidArgument {
+            field: "edits.0.source_id".into(),
+            reason: "in use".into(),
+            blockers: vec![Blocker {
+                entity: EntityKind::Item,
+                id: "i1".into(),
+                field: "source_id".into(),
+            }],
+        };
+        let wire = serde_json::to_value(&blocked).expect("serializes");
+        assert_eq!(
+            wire["blockers"],
+            json!([{"entity": "item", "id": "i1", "field": "source_id"}])
+        );
+        assert_eq!(
+            serde_json::from_value::<ProtocolError>(wire).ok(),
+            Some(blocked)
+        );
     }
 
     #[test]

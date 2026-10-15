@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:9834f6266df6591f", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B2-f2 #239 touched sets moved to jstream-graph) into C2: re-read; B2-f2's History bullet (graph's Touched set) and Tests list kept as main has them; C2 adds only the live text-source test in src/tests/sources.rs, covered by the Tests list; holds" }
+verified = { hash = "b3:15b4c97bf3867340", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (C2 #221 text source, G3c #235) into B9 at 0.15: took main's stamp; section text unchanged by the merge, re-read; C2 adds a text-source test in src/tests/sources.rs; Live sources and Tests text hold; B9 only swaps error constructors" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -156,7 +156,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:009884b53e67a92d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B2-f2 #239 touched sets moved to jstream-graph) into C2: re-read; B2-f2's Conflicts paragraph (Touched from jstream-graph, encoder objects/props) and A6 audit/collection prose kept as main has them; C2 adds only a source test this section doesn't describe; holds" }
+verified = { hash = "b3:8d46495e477ef886", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (C2 #221 text source, G3c #235) into B9 at 0.15: took main's stamp; section text unchanged by the merge, re-read; C2 and G3c change no core behavior described here; B9 changes none" }
 -->
 
 ### Engine and sessions

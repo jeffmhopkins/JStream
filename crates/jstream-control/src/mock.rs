@@ -1540,10 +1540,7 @@ fn geometry_view(geometry: &ItemGeometry, at: usize) -> Result<ItemTransform, Pr
 }
 
 fn invalid(at: usize, field: &str, reason: impl Into<String>) -> ProtocolError {
-    ProtocolError::InvalidArgument {
-        field: format!("edits.{at}.{field}"),
-        reason: reason.into(),
-    }
+    ProtocolError::invalid_argument(format!("edits.{at}.{field}"), reason)
 }
 
 /// Rejects an empty ID in a creating edit, as `jstream-graph` does.
@@ -1660,10 +1657,7 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
     } else {
         return Ok(());
     };
-    Err(ProtocolError::InvalidArgument {
-        field: "key".into(),
-        reason: reason.into(),
-    })
+    Err(ProtocolError::invalid_argument("key", reason))
 }
 
 /// Checks an RTMP target; `name` is its field path within the edit (`kind.target`).
@@ -2547,10 +2541,10 @@ mod tests {
         let error = undo(&*control).expect_err("running");
         assert_eq!(
             error.protocol(),
-            Some(&ProtocolError::InvalidArgument {
-                field: "edits.0.output_id".into(),
-                reason: "output `yt` is running; stop it first".into(),
-            })
+            Some(&ProtocolError::invalid_argument(
+                "edits.0.output_id",
+                "output `yt` is running; stop it first",
+            ))
         );
         action(&*control, Action::OutputStop { output_id: yt }).expect("stop");
         assert_eq!(undo(&*control), Ok((Rev(2), Rev(1), 0, 1)));
@@ -2755,10 +2749,10 @@ mod tests {
                 scene_id: SceneId::new(""),
                 name: "x".into(),
             }),
-            Some(ProtocolError::InvalidArgument {
-                field: "edits.0.scene_id".into(),
-                reason: "must not be empty".into(),
-            })
+            Some(ProtocolError::invalid_argument(
+                "edits.0.scene_id",
+                "must not be empty"
+            ))
         );
         let field = |edit: Edit| match rejected(edit) {
             Some(ProtocolError::InvalidArgument { field, .. }) => field,
@@ -3063,10 +3057,10 @@ mod tests {
         let running = batch(&*control, delete()).expect_err("running");
         assert_eq!(
             running.protocol(),
-            Some(&ProtocolError::InvalidArgument {
-                field: "edits.0.output_id".into(),
-                reason: "output `yt` is running; stop it first".into(),
-            })
+            Some(&ProtocolError::invalid_argument(
+                "edits.0.output_id",
+                "output `yt` is running; stop it first"
+            ))
         );
         // A running target can still change; it applies from the next start.
         let retarget = Batch::single(Edit::OutputSetTarget {
@@ -3152,10 +3146,7 @@ mod tests {
             let error = set("yt", key).expect_err("bad key");
             assert_eq!(
                 error.protocol(),
-                Some(&ProtocolError::InvalidArgument {
-                    field: "key".into(),
-                    reason: reason.into(),
-                })
+                Some(&ProtocolError::invalid_argument("key", reason))
             );
         }
         assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, false)));

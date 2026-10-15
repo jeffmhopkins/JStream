@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:7d6895f2ac3f8f89", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#226 A3, #229, #230) into B2-f3: re-read; contents list holds, main changed only its stamp context" }
+verified = { hash = "b3:d305302e89ac48f5", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; B9 only swaps a test's error constructor in exit.rs; #203's text holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:923151b966533522", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; B5's Edits text and the No undo or redo command bullet hold" }
+verified = { hash = "b3:b528a9cd7c52ba57", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; No undo or redo command bullet and Edits text hold; B9 adds no CLI command" }
 -->
 
 ```sh
@@ -111,7 +111,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
   yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
   the placement edits' optional `scene_id` are not in the CLI either, nor are protocol
-  0.21's audio edits (`source.set_audio`, `bus.*`, `send.*`), `bus.list` or
+  0.16's audio edits (`source.set_audio`, `bus.*`, `send.*`), `bus.list` or
   `audio.reset_loudness`.
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
@@ -227,7 +227,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:237f2c2d77fddc0e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; holds" }
+verified = { hash = "b3:96f8118049fee449", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; exit-code table still maps invalid_argument to 17; blockers ride in its detail" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

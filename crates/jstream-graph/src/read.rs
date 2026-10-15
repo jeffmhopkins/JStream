@@ -1,6 +1,7 @@
 //! Reading the graph as protocol query results: what an engine answers to the queries
 //! that read collection state (`scene.list`, `source.list`, `item.list`, `output.list`,
-//! `encoder.list`, `bus.list`, `state.get`), and to the kind queries (`kind.list`, `kind.describe`).
+//! `encoder.list`, `bus.list`, `state.get`), to the kind queries (`kind.list`,
+//! `kind.describe`), and to `delete.plan` (`plan.rs`).
 //!
 //! Reads never change the graph. Each collection result carries the revision it was
 //! read at; kinds are not collection state, so their results carry none.
@@ -16,8 +17,9 @@ impl Graph {
     /// graph doesn't hold (`output.status` reads runtime state) or is a query this crate
     /// doesn't know.
     ///
-    /// Fails only with `not_found`, for an `item.list` of a missing scene, and with
-    /// `invalid_argument` on `kind_id`, for a `kind.describe` of a kind it doesn't have.
+    /// Fails only with `not_found`, for an `item.list` of a missing scene or a
+    /// `delete.plan` of a missing target, and with `invalid_argument` on `kind_id`, for a
+    /// `kind.describe` of a kind it doesn't have.
     pub fn query(&self, query: &Query) -> Option<Result<QueryResult, ProtocolError>> {
         Some(match query {
             Query::SceneList => Ok(self.scene_list()),
@@ -29,6 +31,7 @@ impl Graph {
             Query::OutputList => Ok(self.output_list()),
             Query::EncoderList => Ok(self.encoder_list()),
             Query::BusList => Ok(self.bus_list()),
+            Query::DeletePlan { target } => self.delete_plan(target),
             _ => return None,
         })
     }
@@ -43,12 +46,12 @@ impl Graph {
     /// The `kind.describe` result for `kind_id`: its descriptor and settings schema.
     /// Fails with `invalid_argument` on `kind_id` if there is no such kind.
     pub fn kind_describe(&self, kind_id: &str) -> Result<QueryResult, ProtocolError> {
-        let kind = self
-            .kind(kind_id)
-            .ok_or_else(|| ProtocolError::InvalidArgument {
-                field: "kind_id".into(),
-                reason: format!("there is no kind `{kind_id}`; `kind.list` names them"),
-            })?;
+        let kind = self.kind(kind_id).ok_or_else(|| {
+            ProtocolError::invalid_argument(
+                "kind_id",
+                format!("there is no kind `{kind_id}`; `kind.list` names them"),
+            )
+        })?;
         Ok(QueryResult::KindDescribe {
             settings_schema: kind.settings_schema(),
             kind: kind.clone(),

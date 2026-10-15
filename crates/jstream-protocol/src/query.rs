@@ -1,7 +1,7 @@
 //! Queries: reads with no effect on state, and their results.
 
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
-use crate::command::{Crop, ItemTransform, SceneRole, SourceKind};
+use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
@@ -76,6 +76,36 @@ pub enum Query {
     /// Lists the collection's audio buses, ordered by ID, and every send into them.
     #[serde(rename = "bus.list")]
     BusList,
+    /// The batch that deletes a scene or source together with everything that refers to
+    /// it, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`
+    /// lists those `blockers`). The plan removes the items that place a deleted source,
+    /// deletes the `scene` sources that show a deleted scene (and their items), and sets
+    /// settings references to the target to `null`, keeping the sources that hold them.
+    /// The client shows it, then sends its `edits` as an ordinary batch with
+    /// `expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with
+    /// `not_found` if the target doesn't exist.
+    #[serde(rename = "delete.plan")]
+    DeletePlan {
+        /// What to delete.
+        target: DeleteTarget,
+    },
+}
+
+/// What a `delete.plan` deletes: a scene or a source.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum DeleteTarget {
+    /// A scene.
+    Scene {
+        /// The scene to delete.
+        scene_id: SceneId,
+    },
+    /// A source.
+    Source {
+        /// The source to delete.
+        source_id: SourceId,
+    },
 }
 
 impl Query {
@@ -93,6 +123,7 @@ impl Query {
             Query::OutputList => "output.list",
             Query::EncoderList => "encoder.list",
             Query::BusList => "bus.list",
+            Query::DeletePlan { .. } => "delete.plan",
         }
     }
 }
@@ -177,11 +208,11 @@ pub enum QueryResult {
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
         /// Every audio bus, ordered by ID, the master among them. Missing (from a
-        /// server older than 0.21) parses as empty.
+        /// server older than 0.16) parses as empty.
         #[serde(default)]
         buses: Vec<BusInfo>,
         /// Every send, ordered by bus, then by source. Missing (from a server older
-        /// than 0.21) parses as empty.
+        /// than 0.16) parses as empty.
         #[serde(default)]
         sends: Vec<SendInfo>,
     },
@@ -238,6 +269,18 @@ pub enum QueryResult {
         /// Every send, ordered by bus, then by source.
         sends: Vec<SendInfo>,
     },
+    /// The result of `delete.plan`.
+    #[serde(rename = "delete.plan")]
+    DeletePlan {
+        /// The revision the plan was made at. Send `edits` with this `expected_rev`, so
+        /// the batch is refused if the state changed since.
+        rev: Rev,
+        /// The edits, in order: `item.remove` for the items that place a deleted source,
+        /// `source.set_settings` setting each reference to a deleted object to `null`,
+        /// `source.delete` for the `scene` sources that show a deleted scene, and last the
+        /// delete of the target itself.
+        edits: Vec<Edit>,
+    },
 }
 
 impl QueryResult {
@@ -255,6 +298,7 @@ impl QueryResult {
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::EncoderList { .. } => "encoder.list",
             QueryResult::BusList { .. } => "bus.list",
+            QueryResult::DeletePlan { .. } => "delete.plan",
         }
     }
 }
@@ -293,7 +337,7 @@ pub struct SourceInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicated_from: Option<SourceId>,
     /// Its audio settings, for an audio source: one whose kind produces audio, or a
-    /// `scene` source. Omitted for every other source, and by a server older than 0.21.
+    /// `scene` source. Omitted for every other source, and by a server older than 0.16.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audio: Option<SourceAudio>,
 }

@@ -1790,6 +1790,93 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "canvas"
     },
     {
+      "description": "Runs one `delete` operation: set `op.type` to one of `delete.plan` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "DeleteTarget": {
+            "description": "What a `delete.plan` deletes: a scene or a source.",
+            "oneOf": [
+              {
+                "description": "A scene.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to delete."
+                  },
+                  "type": {
+                    "const": "scene",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A source.",
+                "properties": {
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to delete."
+                  },
+                  "type": {
+                    "const": "source",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "SceneId": {
+            "description": "A scene in the collection.",
+            "type": "string"
+          },
+          "SourceId": {
+            "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `delete` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "The batch that deletes a scene or source together with everything that refers to\nit, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`\nlists those `blockers`). The plan removes the items that place a deleted source,\ndeletes the `scene` sources that show a deleted scene (and their items), and sets\nsettings references to the target to `null`, keeping the sources that hold them.\nThe client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
+                "properties": {
+                  "target": {
+                    "$ref": "#/$defs/DeleteTarget",
+                    "description": "What to delete."
+                  },
+                  "type": {
+                    "const": "delete.plan",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "target"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "delete"
+    },
+    {
       "description": "Returns the full JSON Schema of the JStream control protocol: every command, query, result, event and error code. Use it for details the other tools' schemas leave out.",
       "inputSchema": {
         "additionalProperties": false,

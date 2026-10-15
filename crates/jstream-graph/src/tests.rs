@@ -2,11 +2,11 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    AudioFollow, BusId, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, EntityKind, Finite32,
-    FitMode, ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId,
-    OutputInfo, OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SceneRole, Settings, Size, SourceAudio,
-    SourceId, SourceKind, Vec2,
+    AudioFollow, BusId, Canvas, Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId,
+    EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, KindCategory,
+    KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor, ParamType,
+    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId,
+    SceneRole, Settings, Size, SourceAudio, SourceId, SourceKind, Vec2,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -196,7 +196,7 @@ fn apply_err(graph: &mut Graph, edits: Vec<Edit>) -> ProtocolError {
 
 fn invalid_reason(error: ProtocolError) -> (String, String) {
     match error {
-        ProtocolError::InvalidArgument { field, reason } => (field, reason),
+        ProtocolError::InvalidArgument { field, reason, .. } => (field, reason),
         other => panic!("expected invalid_argument, got {other:?}"),
     }
 }
@@ -982,14 +982,14 @@ mod property {
     //! A hand-rolled, seeded generator keeps the test deterministic and dependency-free.
 
     use super::{
-        add, builtin, graph, output_create, record_create, scene_create, scene_ref, scene_source,
-        set_settings, source_ref, target,
+        add, blockers, builtin, graph, output_create, plan, record_create, scene_create, scene_ref,
+        scene_source, set_settings, source_ref, target,
     };
     use crate::Graph;
     use jstream_protocol::{
-        AudioFollow, BusId, Crop, Edit, EncoderProfile, EncoderProfileId, Finite32, FitMode,
-        ItemGeometry, ItemId, ItemTransform, OutputId, RateControl, Rev, SceneId, SceneRole,
-        Settings, Size, SourceId, SourceKind, Vec2,
+        AudioFollow, BusId, Crop, DeleteTarget, Edit, EncoderProfile, EncoderProfileId, Finite32,
+        FitMode, ItemGeometry, ItemId, ItemTransform, OutputId, RateControl, Rev, SceneId,
+        SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1325,6 +1325,7 @@ mod property {
         let mut applied_names = BTreeSet::new();
         let mut successes = 0;
         let mut failures = 0;
+        let mut plans = 0;
         for seed in 1..=40u64 {
             let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15));
             let mut graph = graph();
@@ -1357,6 +1358,7 @@ mod property {
                         assert_eq!(graph, before, "a failed batch changed the graph");
                     }
                 }
+                plans += check_delete_plans(&graph);
             }
         }
         // The generator must actually exercise every edit and both outcomes.
@@ -1402,6 +1404,62 @@ mod property {
             successes > 1000 && failures > 100,
             "{successes} ok, {failures} failed"
         );
+        assert!(plans > 1000, "only {plans} delete plans had blockers");
+    }
+
+    /// ADR-0025: for every scene and source, a plain delete is refused exactly when it
+    /// has blockers, and then the error lists them; the plan always applies as one batch
+    /// at the planned rev, deletes the target, and undoes exactly. Returns how many
+    /// targets had blockers.
+    fn check_delete_plans(graph: &Graph) -> usize {
+        let state = graph.state();
+        let scenes = state.scenes().iter().map(|s| {
+            let id = s.id().clone();
+            (
+                DeleteTarget::Scene {
+                    scene_id: id.clone(),
+                },
+                Edit::SceneDelete { scene_id: id },
+            )
+        });
+        let sources = state.sources().map(|s| {
+            let id = s.id().clone();
+            (
+                DeleteTarget::Source {
+                    source_id: id.clone(),
+                },
+                Edit::SourceDelete { source_id: id },
+            )
+        });
+        let mut blocked = 0;
+        for (target, delete) in scenes.chain(sources).collect::<Vec<_>>() {
+            let edits = plan(graph, target);
+            let mut alone = graph.clone();
+            match alone.apply(std::slice::from_ref(&delete), None) {
+                Ok(_) => assert_eq!(edits, vec![delete.clone()], "unblocked plan"),
+                Err(error) => {
+                    blocked += 1;
+                    assert!(!blockers(error).is_empty(), "refused without blockers");
+                    assert!(edits.len() > 1, "blocked plan {edits:?}");
+                }
+            }
+            assert_eq!(edits.last(), Some(&delete));
+            let mut planned = graph.clone();
+            let applied = planned
+                .apply(&edits, Some(graph.rev()))
+                .unwrap_or_else(|e| panic!("plan {edits:?} failed: {e}"));
+            let gone = match &delete {
+                Edit::SceneDelete { scene_id } => planned.state().scene(scene_id).is_none(),
+                Edit::SourceDelete { source_id } => planned.state().source(source_id).is_none(),
+                _ => false,
+            };
+            assert!(gone, "plan {edits:?} left its target");
+            planned
+                .apply(&applied.inverse.edits, Some(applied.rev))
+                .unwrap_or_else(|e| panic!("undo of plan {edits:?} failed: {e}"));
+            assert_eq!(planned.state(), graph.state(), "undo of plan {edits:?}");
+        }
+        blocked
     }
 }
 
@@ -1642,44 +1700,197 @@ fn rename_changes_only_the_name() {
     );
 }
 
+fn blockers(error: ProtocolError) -> Vec<(EntityKind, String, String)> {
+    match error {
+        ProtocolError::InvalidArgument { blockers, .. } => blockers
+            .into_iter()
+            .map(|b| (b.entity, b.id, b.field))
+            .collect(),
+        other => panic!("expected invalid_argument, got {other:?}"),
+    }
+}
+
+fn blocker(entity: EntityKind, id: &str, field: &str) -> (EntityKind, String, String) {
+    (entity, id.into(), field.into())
+}
+
 #[test]
 fn referenced_objects_cannot_be_deleted() {
     let mut graph = fixture();
     apply_ok(
         &mut graph,
-        vec![set_settings(
-            "cam",
-            &[("mask", scene_ref("c")), ("follow", source_ref("mic"))],
-        )],
+        vec![
+            set_settings(
+                "cam",
+                &[("mask", scene_ref("c")), ("follow", source_ref("mic"))],
+            ),
+            add("a", "i1", "mic"),
+        ],
     );
-    // `c` is also shown by `sc`, which is reported first; without it, the reference is.
-    apply_ok(
-        &mut graph,
-        vec![Edit::SourceDelete {
-            source_id: SourceId::new("sc"),
-        }],
-    );
+    // ADR-0025: the error lists every blocker, not just the first kind found.
     let delete_scene = Edit::SceneDelete {
         scene_id: SceneId::new("c"),
     };
-    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![delete_scene.clone()]));
+    let error = apply_err(&mut graph, vec![delete_scene.clone()]);
+    let (field, reason) = invalid_reason(error.clone());
     assert_eq!(field, "edits.0.scene_id");
-    assert!(reason.contains("cam.settings.mask"), "{reason}");
+    assert!(reason.contains("source `cam` (settings.mask)"), "{reason}");
+    assert_eq!(
+        blockers(error),
+        vec![
+            blocker(EntityKind::Source, "sc", "kind.scene_id"),
+            blocker(EntityKind::Source, "cam", "settings.mask"),
+        ]
+    );
     let delete_mic = Edit::SourceDelete {
         source_id: SourceId::new("mic"),
     };
-    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![delete_mic.clone()]));
-    assert_eq!(field, "edits.0.source_id");
-    assert!(reason.contains("cam.settings.follow"), "{reason}");
+    let error = apply_err(&mut graph, vec![delete_mic.clone()]);
+    assert_eq!(invalid_reason(error.clone()).0, "edits.0.source_id");
+    assert_eq!(
+        blockers(error),
+        vec![
+            blocker(EntityKind::Item, "i1", "source_id"),
+            blocker(EntityKind::Source, "cam", "settings.follow"),
+        ]
+    );
     // Clearing the references first, in the same batch, works and undoes exactly; the
     // deleted source comes back with its settings.
     apply_ok(
         &mut graph,
         vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("i1"),
+            },
+            Edit::SourceDelete {
+                source_id: SourceId::new("sc"),
+            },
             set_settings("cam", &[("mask", Value::Null), ("follow", Value::Null)]),
             delete_scene,
             delete_mic,
         ],
+    );
+}
+
+fn plan(graph: &Graph, target: DeleteTarget) -> Vec<Edit> {
+    match graph.query(&Query::DeletePlan { target }) {
+        Some(Ok(QueryResult::DeletePlan { rev, edits })) => {
+            assert_eq!(rev, graph.rev());
+            edits
+        }
+        other => panic!("expected a delete plan, got {other:?}"),
+    }
+}
+
+#[test]
+fn delete_plan_removes_a_scene_with_its_scene_sources_and_clears_references() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![
+            // `sc` shows `c` and is placed twice; `cam` refers to both `c` and `sc`. The
+            // scene's own item `i3` goes with the scene, so the plan doesn't list it.
+            add("a", "i1", "sc"),
+            add("b", "i2", "sc"),
+            add("c", "i3", "mic"),
+            set_settings(
+                "cam",
+                &[("mask", scene_ref("c")), ("follow", source_ref("sc"))],
+            ),
+            create_color("bg", &[("mask", scene_ref("c"))]),
+        ],
+    );
+    let edits = plan(
+        &graph,
+        DeleteTarget::Scene {
+            scene_id: SceneId::new("c"),
+        },
+    );
+    assert_eq!(
+        edits,
+        vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("i1"),
+            },
+            Edit::ItemRemove {
+                item_id: ItemId::new("i2"),
+            },
+            set_settings("bg", &[("mask", Value::Null)]),
+            set_settings("cam", &[("follow", Value::Null), ("mask", Value::Null)]),
+            Edit::SourceDelete {
+                source_id: SourceId::new("sc"),
+            },
+            Edit::SceneDelete {
+                scene_id: SceneId::new("c"),
+            },
+        ]
+    );
+    let before = graph.clone();
+    let applied = graph
+        .apply(&edits, Some(before.rev()))
+        .expect("plan applies");
+    let state = graph.state();
+    assert!(state.scene(&SceneId::new("c")).is_none());
+    assert!(state.source(&SourceId::new("sc")).is_none());
+    // The sources holding the references stay.
+    assert!(state.source(&SourceId::new("cam")).is_some());
+    assert!(state.source(&SourceId::new("bg")).is_some());
+    // Undo is the batch's ordinary inverse.
+    graph
+        .apply(&applied.inverse.edits, Some(applied.rev))
+        .expect("undo applies");
+    assert_eq!(graph.state(), before.state());
+}
+
+#[test]
+fn delete_plan_removes_a_sources_placements_and_clears_references() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![
+            add("a", "i1", "mic"),
+            add("a", "i2", "mic"),
+            set_settings("cam", &[("follow", source_ref("mic"))]),
+        ],
+    );
+    let edits = plan(
+        &graph,
+        DeleteTarget::Source {
+            source_id: SourceId::new("mic"),
+        },
+    );
+    assert_eq!(
+        edits,
+        vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("i1"),
+            },
+            Edit::ItemRemove {
+                item_id: ItemId::new("i2"),
+            },
+            set_settings("cam", &[("follow", Value::Null)]),
+            Edit::SourceDelete {
+                source_id: SourceId::new("mic"),
+            },
+        ]
+    );
+    apply_ok(&mut graph, edits);
+    assert!(graph.state().source(&SourceId::new("mic")).is_none());
+}
+
+#[test]
+fn delete_plan_of_a_missing_target_is_not_found() {
+    let graph = fixture();
+    assert_eq!(
+        graph.query(&Query::DeletePlan {
+            target: DeleteTarget::Scene {
+                scene_id: SceneId::new("nope"),
+            },
+        }),
+        Some(Err(ProtocolError::NotFound {
+            entity: EntityKind::Scene,
+            id: "nope".into(),
+        }))
     );
 }
 

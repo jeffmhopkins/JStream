@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:c5ffb10192a7d322", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; added audio.rs bullet, the audio edits and audio.reset_loudness, bus.list, meters.tick, BusId master, 0.21 version line (placeholder until the queue merge), parity audio coverage and the mic kind" }
+verified = { hash = "b3:7087dc44ec771c09", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: version line says 0.15 for delete.plan and blockers, 0.14 references and clones; Queries bullet keeps encoder.list and adds delete.plan/DeleteTarget; Errors bullet names Blocker" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -61,9 +61,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   check (`gain_db_problem`); and `SourceMeter`, `BusMeter` and `Loudness`, the readings
   a `meters.tick` carries.
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`,
-  `kind.list` and `kind.describe`,
-  with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo` and `ItemInfo`
+  `output.list`, `output.status`, `encoder.list`, `bus.list`, `video.snapshot`, `kind.list`,
+  `kind.describe` and `delete.plan` (with its `DeleteTarget`), with `QueryResult` and the
+  `SceneSummary`, `SceneInfo`, `SourceInfo` and `ItemInfo`
   shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
   mix as a PNG.
@@ -78,7 +78,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `events.dropped`,
   `stats.tick` and `meters.tick`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
-  codes, and `WireError`, its wire form with a message.
+  codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
+  form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs (`BusId::master()` is
   the one fixed ID, `master`), `Rev`, and `PROTOCOL_VERSION`.
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
@@ -92,9 +93,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.21 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.16 because of
   audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
-  `audio.reset_loudness`); 0.14 added references and clones (`item.set_source`,
+  `audio.reset_loudness`); 0.15 added `delete.plan` and the `blockers` detail on
+  `invalid_argument`, 0.14 references and clones (`item.set_source`,
   `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
   `item.move`, a scene's `role` and the placement edits' `scene_id`), 0.11 the canvas
@@ -130,7 +132,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:e5a402438d135a94", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; new Audio subsection (source audio, buses, sends, no bus-to-bus sends, meters runtime), state.get buses/sends and bus.list, undo closure for audio edits and bus.delete, audio conflict properties, meters.tick event" }
+verified = { hash = "b3:6b59c1521d465bbf", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; envelope example at 0.15; Deletes bullet, delete.plan in Queries, blockers row and OQ12 hold beside main's groups, encoder and references text; blockers doc says older than 0.15" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -150,8 +152,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":11},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":11},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":15},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":15},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -261,7 +263,7 @@ any other existing scene is `invalid_argument` on `edits.N.scene_id`, and a miss
 ### Audio
 
 [ADR-0028](../../docs/adr/0028-audio-model-v2.md) makes audio part of the collection
-(0.21). An **audio source** is one whose kind has audio (`KindDescriptor.audio`), or a
+(0.16). An **audio source** is one whose kind has audio (`KindDescriptor.audio`), or a
 `scene` source, whose audio is what the scene shows. Its `SourceInfo.audio` holds
 `enabled`, `follow` (`always` or `when_shown`), its fader `gain_db` and `muted`; every
 other source omits `audio`. A new source takes its kind's defaults: on, at 0 dB,
@@ -334,8 +336,15 @@ never a type per kind.
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
   `source.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
-  scene `a`). `scene.delete` and `source.delete` are rejected while a setting refers to the
-  target, naming each `<source>.settings.<param>`. Asset references are not edges.
+  scene `a`). Asset references are not edges.
+- **Deletes are refused while anything refers to the target**, with no cascading edit
+  ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
+  `source.delete` is refused while an item places the source, and `scene.delete` while a
+  `scene` source shows the scene; either is refused while a setting refers to its
+  target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
+  `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
+  or the source whose setting refers to it (`settings.<param>`). `delete.plan` returns
+  the batch that removes them with the target (see [Queries](#design)).
 
 `SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
 parameters), so a reader of 0.7 messages sees no change for those.
@@ -415,14 +424,14 @@ Queries read and never change `rev`. Those that read the collection state carry 
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty), and the `buses` and `sends`
-  (as `bus.list`; missing from a pre-0.21 server, both parse as empty). A client reads
+  (as `bus.list`; missing from a pre-0.16 server, both parse as empty). A client reads
   it on connecting, and again after a `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
   its name, `SourceKind`, settings and, for an audio source, its `audio`.
 - `bus.list`: the buses, ordered by ID (the master among them), and every send,
-  ordered by bus and then by source, at a `rev` (0.21).
+  ordered by bus and then by source, at a `rev` (0.16).
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
 - `output.list`: the outputs, ordered by ID (outputs have no display order), each with
@@ -439,6 +448,17 @@ Queries read and never change `rev`. Those that read the collection state carry 
   so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
+- `delete.plan {target}`: the batch that deletes a scene or source (`target` is
+  `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
+  everything that refers to it, as `edits` and the `rev` it was planned at, or
+  `not_found` for a missing target. In order, the edits remove the items that place a
+  deleted source, set every settings reference to a deleted object to `null` (one
+  `source.set_settings` per source, which keeps the source), delete the `scene` sources
+  that show a deleted scene, and last delete the target. Deleting a scene deletes the
+  `scene` sources that show it, and the cascade stops there, since deleting a source
+  deletes no scene. A target nothing refers to plans just its own delete. The client
+  shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
+  refused if the state moved on, and its undo is the batch's inverse.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
@@ -581,7 +601,7 @@ After `welcome`, the server pushes every event to every client.
   built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
   those meters exist, as later optional fields. Audience figures are `youtube.stats`
   ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)).
-- `meters.tick {sources, buses}` is one reading of the audio levels (0.21), about ten
+- `meters.tick {sources, buses}` is one reading of the audio levels (0.16), about ten
   a second while the mixer runs; an idle engine emits none. Each routed source and
   each bus has `peak` (the largest absolute sample since the previous tick) and `rms`
   (over the latest mixer block), linear full scale per channel, left then right. The
@@ -605,7 +625,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `rev_conflict` | `expected_rev` is stale; nothing applied | `expected`, `current` |
 | `not_found` | A command named a missing object | `entity`, `id` |
 | `already_exists` | A creating edit reused an ID | `entity`, `id` |
-| `invalid_argument` | A field's value was rejected | `field`, `reason` |
+| `invalid_argument` | A field's value was rejected | `field`, `reason`, and `blockers` for a refused delete |
 | `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
 | `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
@@ -783,8 +803,7 @@ described above.
     absolute path under a known root in relative form, and kind versions on stored
     settings, which come with persistence.
 12. **Deleting referenced objects.** Settled by
-    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md): rejection stays
-    the only delete, with no cascading edit. The error will list every blocker as a
-    structured detail, and a `delete.plan` query will return the batch that removes the
-    target and its blockers. Not built yet: today the error's `reason` names the
-    blockers, and the client removes them itself.
+    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) and built:
+    rejection stays the only delete, with no cascading edit. The error lists every
+    blocker in `blockers`, and the `delete.plan` query returns the batch that removes
+    the target and its blockers ([Edits, actions and queries](#design)).

@@ -182,6 +182,29 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "Blocker": {
+      "description": "One reference that stops a `scene.delete` or `source.delete`: the object that refers\nto the target, and the field of that object that holds the reference.\n\n```json\n{\"entity\": \"source\", \"id\": \"webcam\", \"field\": \"settings.mask\"}\n```",
+      "properties": {
+        "entity": {
+          "$ref": "#/$defs/EntityKind",
+          "description": "What kind of object refers to the target: an `item` that places a source, or a\n`source` that shows a scene or whose settings refer to the target."
+        },
+        "field": {
+          "description": "The field of that object that refers to the target, as a dotted path into its\nquery form: `source_id` for an item, `kind.scene_id` for a `scene` source, and\n`settings.<param>` for a settings reference.",
+          "type": "string"
+        },
+        "id": {
+          "description": "That object's ID.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "id",
+        "field"
+      ],
+      "type": "object"
+    },
     "BusId": {
       "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
       "type": "string"
@@ -524,6 +547,47 @@ source: crates/jstream-protocol/src/fixtures.rs
         "bottom"
       ],
       "type": "object"
+    },
+    "DeleteTarget": {
+      "description": "What a `delete.plan` deletes: a scene or a source.",
+      "oneOf": [
+        {
+          "description": "A scene.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to delete."
+            },
+            "type": {
+              "const": "scene",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A source.",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source to delete."
+            },
+            "type": {
+              "const": "source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "DropCounts": {
       "description": "Running totals of frames and packets the pipeline has dropped since the engine\nstarted (R-RT-004).\n\nEach field sums one kind of drop across every stage that counts it. A stage that\ndoes not count that kind contributes nothing. Totals only grow: a client computes\nan interval by subtracting the previous tick.\n\nSilence a stage inserts to cover a gap (an audio underrun, a device gap, encoder\ngap-fill) is not a drop and is not included.\n\nA missing field parses as 0, so a counter added in a later minor version can be left\nout by an older sender (R-API-001). Unknown fields are ignored.",
@@ -2843,6 +2907,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "The batch that deletes a scene or source together with everything that refers to\nit, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`\nlists those `blockers`). The plan removes the items that place a deleted source,\ndeletes the `scene` sources that show a deleted scene (and their items), and sets\nsettings references to the target to `null`, keeping the sources that hold them.\nThe client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
+          "properties": {
+            "target": {
+              "$ref": "#/$defs/DeleteTarget",
+              "description": "What to delete."
+            },
+            "type": {
+              "const": "delete.plan",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "target"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -2990,7 +3072,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "properties": {
             "buses": {
               "default": [],
-              "description": "Every audio bus, ordered by ID, the master among them. Missing (from a\nserver older than 0.21) parses as empty.",
+              "description": "Every audio bus, ordered by ID, the master among them. Missing (from a\nserver older than 0.16) parses as empty.",
               "items": {
                 "$ref": "#/$defs/BusInfo"
               },
@@ -3033,7 +3115,7 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "sends": {
               "default": [],
-              "description": "Every send, ordered by bus, then by source. Missing (from a server older\nthan 0.21) parses as empty.",
+              "description": "Every send, ordered by bus, then by source. Missing (from a server older\nthan 0.16) parses as empty.",
               "items": {
                 "$ref": "#/$defs/SendInfo"
               },
@@ -3222,6 +3304,32 @@ source: crates/jstream-protocol/src/fixtures.rs
             "rev",
             "buses",
             "sends"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `delete.plan`.",
+          "properties": {
+            "edits": {
+              "description": "The edits, in order: `item.remove` for the items that place a deleted source,\n`source.set_settings` setting each reference to a deleted object to `null`,\n`source.delete` for the `scene` sources that show a deleted scene, and last the\ndelete of the target itself.",
+              "items": {
+                "$ref": "#/$defs/Edit"
+              },
+              "type": "array"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the plan was made at. Send `edits` with this `expected_rev`, so\nthe batch is refused if the state changed since."
+            },
+            "type": {
+              "const": "delete.plan",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "rev",
+            "edits"
           ],
           "type": "object"
         }
@@ -3591,7 +3699,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "null"
             }
           ],
-          "description": "Its audio settings, for an audio source: one whose kind produces audio, or a\n`scene` source. Omitted for every other source, and by a server older than 0.21."
+          "description": "Its audio settings, for an audio source: one whose kind produces audio, or a\n`scene` source. Omitted for every other source, and by a server older than 0.16."
         },
         "duplicated_from": {
           "anyOf": [
@@ -3942,6 +4050,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "A field had a value the engine can't accept.",
           "properties": {
+            "blockers": {
+              "description": "When a `scene.delete` or `source.delete` is refused because other objects still\nrefer to its target: every one of those references, in a stable order. The\n`delete.plan` query returns the batch that removes them with the target. Empty\notherwise, and then omitted. Missing (from a server older than 0.15)\nparses as empty.",
+              "items": {
+                "$ref": "#/$defs/Blocker"
+              },
+              "type": "array"
+            },
             "code": {
               "const": "invalid_argument",
               "type": "string"
@@ -4067,5 +4182,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.14"
+  "title": "JStream protocol 0.16"
 }

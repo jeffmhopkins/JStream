@@ -727,10 +727,9 @@ fn the_engine_answers_like_the_mock() {
     /// Error messages may differ between implementations; codes and fields may not.
     fn comparable(result: Result<CallResult, ControlError>) -> Result<CallResult, ProtocolError> {
         result.map_err(|error| match error.protocol() {
-            Some(ProtocolError::InvalidArgument { field, .. }) => ProtocolError::InvalidArgument {
-                field: field.clone(),
-                reason: String::new(),
-            },
+            Some(ProtocolError::InvalidArgument { field, .. }) => {
+                ProtocolError::invalid_argument(field.clone(), String::new())
+            }
             Some(ProtocolError::ActionFailed { .. }) => ProtocolError::ActionFailed {
                 reason: String::new(),
             },
@@ -3785,10 +3784,7 @@ fn stream_key_actions_report_without_naming_the_key() {
         let error = block_on(control.call(set_key("out_yt", key))).expect_err("bad key");
         assert_eq!(
             error.protocol(),
-            Some(&ProtocolError::InvalidArgument {
-                field: "key".into(),
-                reason: reason.into()
-            })
+            Some(&ProtocolError::invalid_argument("key", reason))
         );
         assert!(!leaks(&error), "{error:?}");
     }

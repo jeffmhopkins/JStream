@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:1c40303f85b0c103", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B2-f2 #239 touched sets moved to jstream-graph) into C2: re-read; B2-f2's Applied/Touched sets bullet and Tests line kept as main has them; C2 changes no graph code (text kind is data from jstream-sources); holds" }
+verified = { hash = "b3:9dd68585179baac9", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (C2 #221 text source, G3c #235) into B9 at 0.15: took main's stamp; section text unchanged by the merge, re-read; the merge changes no graph code; B9's blockers and delete_plan text and #239's Touched text hold" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -96,10 +96,12 @@ the batch **touched**.
   a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
   places the source or a setting refers to it, and `scene.delete` while a `scene`
-  source shows the scene or a setting refers to it. The error names the blockers (a
-  setting as `<source>.settings.<param>`), and the client removes them first, in the
-  same batch if it likes. Rejecting rather than cascading keeps each edit's effect, and
-  its inverse, limited to the object it names.
+  source shows the scene or a setting refers to it. The `invalid_argument` lists every
+  blocker in `blockers` (`deps::blockers`, the reverse of the cycle check's edges): the
+  item (`source_id`), the `scene` source (`kind.scene_id`) or the setting
+  (`settings.<param>`). The client removes them first, in the same batch if it likes,
+  or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
+  edit's effect, and its inverse, limited to the object it names.
 - **Canvas and geometry** ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)):
   `canvas.set_size` accepts each side from 1 to `MAX_CANVAS_EDGE` (8192) and moves no
   item. `item.add` stores its `geometry`, or else its `transform` (the identity when
@@ -171,8 +173,14 @@ collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list`
 `encoder.list` and `bus.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
-unknown kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
-`not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
+unknown kind), and `delete.plan` (`plan.rs`,
+[ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
+`not_found` for an `item.list` of a missing scene or a `delete.plan` of a missing
+target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
+check uses: a scene's plan also deletes the `scene` sources that show it, the items
+placing any deleted source are removed, settings references to anything deleted are set
+to `null` (one `source.set_settings` per source), and the target's own delete comes
+last. Sources come ordered by ID, scenes in
 display order, items bottom first, outputs, encoder profiles and buses ordered by
 ID, and sends by bus and then source. `state.get` carries the canvas, the buses and
 the sends, and an audio source's info its `audio`. A geometry item reads its `geometry`, and the deprecated `transform` view the
@@ -210,7 +218,8 @@ the engine's; this crate does no I/O.
   (with a `send.remove` of a default master send the file doesn't have). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
-  (`` item `i1` ``) and the protocol error; nothing is partly loaded. Then `rev` is set
+  (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
+  `LoadError` stay small); nothing is partly loaded. Then `rev` is set
   to the file's, so revisions keep increasing across restarts. A source whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
@@ -237,7 +246,10 @@ property test: a seeded generator applies 6000 random
 batches of every edit, including moves, role changes, source switches, addressed
 placement edits and the audio edits. After each successful one, the state must hold no cycle, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
-restore the batch's result. After each failed one, the graph must be unchanged.
+restore the batch's result. After each failed one, the graph must be unchanged. And
+after every batch, for each scene and source: a plain delete is refused exactly when
+it has blockers, the error lists them, and the `delete.plan` batch applies at the
+planned `rev`, removes the target, and undoes exactly.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
 scene `b` made a group, a clone, a `duplicated_from` naming a missing source, and the
