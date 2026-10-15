@@ -135,7 +135,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:112f148ae88f982d" }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:6412cfa1dc90c301", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
+stamp = { hash = "b3:61ae488b09f0b764", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; the NV12-pass sentence and still-outside list hold against convert/" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -153,7 +153,7 @@ stamp = { hash = "b3:1f10a420e9f6a9bc" }
 stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:99bce65cb31e7d4f", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
+stamp = { hash = "b3:2c9193d846fa4256", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; the NV12-pass sentence and still-outside list hold against convert/" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
@@ -170,6 +170,18 @@ stamp = { hash = "b3:ec3c05f2f0529e75" }
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/compositor.rs"]
 stamp = { hash = "b3:bb5175d8f36e082d" }
 
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/convert/mod.rs"]
+stamp = { hash = "b3:612837aa39f2b3fc", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; the NV12-pass sentence and still-outside list hold against convert/" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/convert/nv12.wgsl"]
+stamp = { hash = "b3:6bcdf4786da3e2d9", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; the NV12-pass sentence and still-outside list hold against convert/" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/convert/reference.rs"]
+stamp = { hash = "b3:1babcee9f4c2474f", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; the NV12-pass sentence and still-outside list hold against convert/" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/convert/tests.rs"]
+stamp = { hash = "b3:5a95edc8c6122e5a", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; the NV12-pass sentence and still-outside list hold against convert/" }
+
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
 
@@ -180,7 +192,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:0edf4c378e3b8335" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:0ed7d39913b73022" }
+stamp = { hash = "b3:fbea8a06fbeff8c1", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; the NV12-pass sentence and still-outside list hold against convert/" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -192,7 +204,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:eaa109533b8798d8" }
+stamp = { hash = "b3:98b839cc712a5d64", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; the NV12-pass sentence and still-outside list hold against convert/" }
 
 ["ARCH#mcp"."body"]
 stamp = { hash = "b3:9ca86438d4d9c457", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
@@ -1683,13 +1695,13 @@ stamp = { hash = "b3:4a6d6e6f01f968f4" }
 stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 
 ["CRATE-jstream-platform#gpu-frames"."body"]
-stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
+stamp = { hash = "b3:5034d6ead2f9ce5d", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; render has the NV12 pass, nothing writes the encode target yet; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
 stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge cascade from ARCH#crate-map: re-read; the crate-map body is unchanged apart from the stamp move, nothing in it bears on GPU frames; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:6412cfa1dc90c301" }
+stamp = { hash = "b3:61ae488b09f0b764", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; render has the NV12 pass, nothing writes the encode target yet; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:9074e32b08b81d5b" }
@@ -2073,7 +2085,7 @@ stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c594f42e1b065295" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:7f2a94f0736d9611", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
+stamp = { hash = "b3:83388fb2ca54a8bf", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; pass 5 and the resources rows match convert/mod.rs and nv12.wgsl" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -2093,6 +2105,18 @@ stamp = { hash = "b3:ec3c05f2f0529e75" }
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/compositor.rs"]
 stamp = { hash = "b3:bb5175d8f36e082d" }
 
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/convert/mod.rs"]
+stamp = { hash = "b3:612837aa39f2b3fc", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; pass 5 and the resources rows match convert/mod.rs and nv12.wgsl" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/convert/nv12.wgsl"]
+stamp = { hash = "b3:6bcdf4786da3e2d9", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; pass 5 and the resources rows match convert/mod.rs and nv12.wgsl" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/convert/reference.rs"]
+stamp = { hash = "b3:1babcee9f4c2474f", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; pass 5 and the resources rows match convert/mod.rs and nv12.wgsl" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/convert/tests.rs"]
+stamp = { hash = "b3:5a95edc8c6122e5a", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; pass 5 and the resources rows match convert/mod.rs and nv12.wgsl" }
+
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
 
@@ -2103,7 +2127,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:0edf4c378e3b8335" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:0ed7d39913b73022" }
+stamp = { hash = "b3:fbea8a06fbeff8c1", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; pass 5 and the resources rows match convert/mod.rs and nv12.wgsl" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -2115,19 +2139,19 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:eaa109533b8798d8" }
+stamp = { hash = "b3:98b839cc712a5d64", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; pass 5 and the resources rows match convert/mod.rs and nv12.wgsl" }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:79c89d3a788a641a", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: render's link to ARCH Threads for the cache hand-off still points at the model's State-to-RT-threads text; holds" }
+stamp = { hash = "b3:3c9e3ac99f61eea3", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; Nv12Converter bullet and Not-in-this-cut match convert/ and lib.rs exports" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
-stamp = { hash = "b3:3c3b2d799f3dc3f1" }
+stamp = { hash = "b3:5034d6ead2f9ce5d", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; Nv12Converter bullet and Not-in-this-cut match convert/ and lib.rs exports" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-render"]
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:6412cfa1dc90c301" }
+stamp = { hash = "b3:61ae488b09f0b764", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; Nv12Converter bullet and Not-in-this-cut match convert/ and lib.rs exports" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2150,6 +2174,18 @@ stamp = { hash = "b3:ec3c05f2f0529e75" }
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/compositor.rs"]
 stamp = { hash = "b3:bb5175d8f36e082d" }
 
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/convert/mod.rs"]
+stamp = { hash = "b3:612837aa39f2b3fc", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; Nv12Converter bullet and Not-in-this-cut match convert/ and lib.rs exports" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/convert/nv12.wgsl"]
+stamp = { hash = "b3:6bcdf4786da3e2d9", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; Nv12Converter bullet and Not-in-this-cut match convert/ and lib.rs exports" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/convert/reference.rs"]
+stamp = { hash = "b3:1babcee9f4c2474f", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; Nv12Converter bullet and Not-in-this-cut match convert/ and lib.rs exports" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/convert/tests.rs"]
+stamp = { hash = "b3:5a95edc8c6122e5a", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; Nv12Converter bullet and Not-in-this-cut match convert/ and lib.rs exports" }
+
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
 
@@ -2160,7 +2196,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:0edf4c378e3b8335" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:0ed7d39913b73022" }
+stamp = { hash = "b3:fbea8a06fbeff8c1", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; Nv12Converter bullet and Not-in-this-cut match convert/ and lib.rs exports" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -2172,10 +2208,10 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:eaa109533b8798d8" }
+stamp = { hash = "b3:98b839cc712a5d64", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: re-read; Nv12Converter bullet and Not-in-this-cut match convert/ and lib.rs exports" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:d6b297a7651495df", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph matches benches/composite.rs (every item rotated, CI panics without an adapter)" }
+stamp = { hash = "b3:20b86abc80dff188", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: kept both the NV12 paragraph (six convert tests, lavapipe skip) and main's Benchmarks paragraph; added the NV12 pass to Not measured" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
@@ -2187,7 +2223,7 @@ stamp = { hash = "b3:7db1a4e21a6cee80" }
 stamp = { hash = "b3:e2b28a2df72d9e17" }
 
 ["CRATE-jstream-render#testing"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:eaa109533b8798d8" }
+stamp = { hash = "b3:98b839cc712a5d64", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "Merge of main (stamp ledger #376, benches) into E3d: kept both the NV12 paragraph (six convert tests, lavapipe skip) and main's Benchmarks paragraph; added the NV12 pass to Not measured" }
 
 ["CRATE-jstream-server#design"."body"]
 stamp = { hash = "b3:4347075071d4ca18", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
