@@ -146,7 +146,12 @@ verified = { hash = "b3:b0200407002e63d1", by = "agent:claude@session_01QBbMRwRu
 - CLAP audio effect filters, hosted out of process
   ([ADR-0035](docs/adr/0035-clap-plugins-out-of-process.md)), as plugin kinds whose
   parameters and opaque saved state are the filter's settings
-  ([ADR-0037](docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)).
+  ([ADR-0037](docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)). A
+  `state` may be 2 MiB, so a batch carrying two can pass the server's 4 MiB message
+  limit, which closes the connection. The maintainer chose to settle this here (issue
+  #102): a maintainer-tier ADR superseding ADR-0037's `state` clause adds a stable
+  `too_large` error for requests over a soft limit, read below a higher hard frame
+  limit, so an oversized batch fails cleanly.
 - macOS platform crate (VideoToolbox/AudioToolbox; a signed camera extension needs its own ADR).
   A Syphon receiver, the macOS follow-up to Spout2, is considered with it.
 - Linux: codec-path ADR first, then the platform crate (virtual camera via v4l2loopback,
