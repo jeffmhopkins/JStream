@@ -821,7 +821,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:b0f8eb4543a20caa", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3: publish.rs PublishError::new made public) into #207: took main's stamp; re-read; shared program stage and per-output thread text unaffected; holds" }
+verified = { hash = "b3:3e366d337ea26ab4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (#207 STOP_DRAIN) into D7b: took main's stamp; re-read; text unchanged by #207 (stop deadline not described here), last sentence names the mixer collector freeing removed buses' state and filter chains, matches retire.rs" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
