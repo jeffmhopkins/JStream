@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:bc332a2f4c8a4884", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:22338c0c00b36187", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: crate map has both #379's jstream-outputs row (built vs planned, matches Cargo.toml summary) and C8's jstream-browser row with CEF off the platform-windows row" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -66,7 +66,7 @@ stamp = { hash = "b3:ac31564403d9a839" }
 stamp = { hash = "b3:24f40f915476b541" }
 
 ["ARCH#crate-map"."file:crates/jstream-outputs/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:65f39753685d6476", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the crate map after merging main: the jstream-outputs row now matches its Cargo.toml summary (RTMP(S) client, recording; vcam output runs in jstream-core's runtime, runtime/vcam.rs); other rows unchanged by this PR." }
+stamp = { hash = "b3:5d9bb5b509981c85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "jstream-outputs row and its manifest summary now match the crate: RTMP(S) client with reconnect and the recording sink are built, it depends on mux (not encode or a platform crate), and the Output trait plus encode/platform use are marked planned; other rows unchanged" }
 
 ["ARCH#crate-map"."file:crates/jstream-platform-windows/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:70046124f5cf9949" }
@@ -141,7 +141,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:112f148ae88f982d" }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c: one-scene paragraph adds that step 5's encoder side is built (Codecs::on_context, D3D11 copy with fences, open_on fallback) and that nothing writes encode targets yet; steps 1-6 unchanged" }
+stamp = { hash = "b3:49324e4ee28be6df", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -168,7 +168,7 @@ stamp = { hash = "b3:47d78ccae6c3ccc8", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:8e0dd43ba922fd3d" }
+stamp = { hash = "b3:8e0dd43ba922fd3d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:5641b05dca77952a" }
@@ -177,7 +177,7 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:705e6506274fa233" }
+stamp = { hash = "b3:705e6506274fa233", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
@@ -186,7 +186,7 @@ stamp = { hash = "b3:219665bab5be0284" }
 stamp = { hash = "b3:f1de9efc6510e1ea" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/image.rs"]
-stamp = { hash = "b3:e2eefb59f2b0e692" }
+stamp = { hash = "b3:e2eefb59f2b0e692", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
 stamp = { hash = "b3:0ed7d39913b73022" }
@@ -201,7 +201,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:ff7828f70313a653" }
+stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
 
 ["ARCH#mcp"."body"]
 stamp = { hash = "b3:9ca86438d4d9c457", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
@@ -219,7 +219,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:8c0c258dab2abccb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:3556c783961d4f89", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: MCP section names no timeout constants; still accurate after the hello bound" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
 stamp = { hash = "b3:0bc178fa258b5061" }
@@ -237,13 +237,13 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: MCP section names no timeout constants; still accurate after the hello bound" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:e57559ad7b2a4fbc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: MCP section names no timeout constants; still accurate after the hello bound" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -330,7 +330,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:5cfa3cb55bbe75fa", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
+stamp = { hash = "b3:11383ebdefba1cd2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Summary of envelope/edits/actions holds; asset-path rule detail lives in protocol README Design, unchanged here by #403" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
@@ -372,7 +372,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
+stamp = { hash = "b3:191691f27a6abd62", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Summary of envelope/edits/actions holds; asset-path rule detail lives in protocol README Design, unchanged here by #403" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -390,7 +390,7 @@ stamp = { hash = "b3:13f2fa2d982a7e24" }
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
+stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Summary of envelope/edits/actions holds; asset-path rule detail lives in protocol README Design, unchanged here by #403" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
@@ -399,7 +399,7 @@ stamp = { hash = "b3:c594f42e1b065295" }
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:6d997bdefee6d70b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301) into #268: server shutdown and zero-limit details are server Design detail; envelope and versioning text unchanged; holds" }
+stamp = { hash = "b3:cd49bc260e000934", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: hello/welcome envelope text unaffected by the server-side deadline race" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
 stamp = { hash = "b3:c93c7afdc52f6566", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-server config/error/lib changes (zero-limit refusal): section summarises the wire protocol and doesn't state server limits; holds" }
@@ -420,10 +420,10 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 stamp = { hash = "b3:05057d7979293830" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Control protocol summary against the server shutdown change: envelope, request/response and versioning claims unaffected; a call after shutdown fails Disconnected as the connection closes, detailed in jstream-server README design." }
+stamp = { hash = "b3:e7d6a868ffe2691c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: hello/welcome envelope text unaffected by the server-side deadline race" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Control protocol summary against the server shutdown change: envelope, request/response and versioning claims unaffected; a call after shutdown fails Disconnected as the connection closes, detailed in jstream-server README design." }
+stamp = { hash = "b3:57ef1003003326da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: hello/welcome envelope text unaffected by the server-side deadline race" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -966,7 +966,7 @@ stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: re-read; engine/session design does not restate asset-path rules; the protocol Design change only tightens a per-value check" }
+stamp = { hash = "b3:e7ba7a11964cf62d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Engine/session design does not state asset-path rules; #403's protocol Design change does not affect it" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d638c6ca8019b15d" }
@@ -1206,7 +1206,7 @@ stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:2eccf44ddfe2b0bf", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of wave/m1 into #219: stale via core#design only (wave's browser sources and E3b's capture text); daemon text names neither with_browser nor the GPU path beyond handing WindowsGpu and WgcCapture to with_backends; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
+stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: daemon design does not describe handshake timing; dep change in server Design doesn't affect it" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:7ab4accbf98f6662" }
@@ -1518,7 +1518,7 @@ stamp = { hash = "b3:6c1b99c4b8c63792" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: re-read; graph purpose relies on protocol Edits, IDs and errors, unaffected by the tighter absolute asset-path check" }
+stamp = { hash = "b3:e7ba7a11964cf62d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Graph purpose does not state asset-path rules; #403's protocol Design change does not affect it" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1569,7 +1569,7 @@ stamp = { hash = "b3:534ac6c88886c8f2" }
 stamp = { hash = "b3:943bb9518712a4b5" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:c252221e9c760096", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:314c5701cc782d41", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: 3 s hello bound for initialize and tool-call hello matches HELLO_TIMEOUT in server.rs; error-table row matches the disconnected retry message" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
 stamp = { hash = "b3:9ca86438d4d9c457" }
@@ -1599,13 +1599,13 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: 3 s hello bound for initialize and tool-call hello matches HELLO_TIMEOUT in server.rs; error-table row matches the disconnected retry message" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:e57559ad7b2a4fbc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: 3 s hello bound for initialize and tool-call hello matches HELLO_TIMEOUT in server.rs; error-table row matches the disconnected retry message" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1629,13 +1629,13 @@ stamp = { hash = "b3:5c306baedd4f5ddc" }
 stamp = { hash = "b3:77d18110cc2318e2" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/server.rs"]
-stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against server.rs (with_timeout/Timer bounding open_early's hello at 3 s) and tests.rs: contents list and 'needs no async runtime' still hold (timer is its own thread)" }
+stamp = { hash = "b3:8617a5a0a54afeeb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: contents list still matches server.rs/tests.rs; HELLO_TIMEOUT rename adds no item" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/stdio.rs"]
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against server.rs (with_timeout/Timer bounding open_early's hello at 3 s) and tests.rs: contents list and 'needs no async runtime' still hold (timer is its own thread)" }
+stamp = { hash = "b3:e57559ad7b2a4fbc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: contents list still matches server.rs/tests.rs; HELLO_TIMEOUT rename adds no item" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1725,10 +1725,10 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:20caa632a5d049a6" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:877a14f301fe5a09", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the whole Purpose section against the #399 fix: the Reconnect bullet now says the cached video header is the AVC header or the enhanced RTMP SequenceStart (HEVC/AV1), never a SequenceEnd, and that it is re-sent before the next keyframe; the Tests paragraph lists the new enhanced reconnect test; the Not-yet line says enhanced RTMP is not end to end (no fourCcList in connect) while the resync understands enhanced tags. Other bullets (handshake, chunk, commands, media, transport, URLs, recorder, threading) are untouched by the diff and still hold." }
+stamp = { hash = "b3:f1d314a4be1d9af9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Reconnect bullet and the testing paragraph against #411: an AVC end-of-sequence tag (0x17 0x02) is now neither the cached header nor a resume keyframe; reworded 'never a SequenceEnd' to cover AVC and listed the AVC case in the reconnect test summary." }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
-stamp = { hash = "b3:230ac9edc35e19b9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main: rtmp and record modules as lib.rs says; Output trait still later; vcam output is in jstream-core runtime (runtime/vcam.rs), and the jstream-core README#runtime anchor exists; deps unchanged." }
+stamp = { hash = "b3:13fabd34e2ef41ff", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Purpose still holds against the reworded crate-map row: it says the Output trait comes later and lists jstream-media and jstream-mux as its JStream dependencies, matching the row" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
@@ -1773,10 +1773,10 @@ stamp = { hash = "b3:39da26659f649772", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:2a8136c51316c064", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against PR #370 diff: URLs-and-keys bullet now states Rejected redacts the key, then cuts code/description to 512 chars (MAX_REMOTE_TEXT) and replaces control chars with spaces, matching rejected()/remote_text() in rtmp/publisher.rs and its new tests; rest of section unaffected by the merge." }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/reconnect.rs"]
-stamp = { hash = "b3:4578655c32dd54e1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the whole Purpose section against the #399 fix: the Reconnect bullet now says the cached video header is the AVC header or the enhanced RTMP SequenceStart (HEVC/AV1), never a SequenceEnd, and that it is re-sent before the next keyframe; the Tests paragraph lists the new enhanced reconnect test; the Not-yet line says enhanced RTMP is not end to end (no fourCcList in connect) while the resync understands enhanced tags. Other bullets (handshake, chunk, commands, media, transport, URLs, recorder, threading) are untouched by the diff and still hold." }
+stamp = { hash = "b3:fae597dd0e301b1f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Reconnect bullet and the testing paragraph against #411: an AVC end-of-sequence tag (0x17 0x02) is now neither the cached header nor a resume keyframe; reworded 'never a SequenceEnd' to cover AVC and listed the AVC case in the reconnect test summary." }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/reconnect/tests.rs"]
-stamp = { hash = "b3:e2fbf3dae0d0df7b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the whole Purpose section against the #399 fix: the Reconnect bullet now says the cached video header is the AVC header or the enhanced RTMP SequenceStart (HEVC/AV1), never a SequenceEnd, and that it is re-sent before the next keyframe; the Tests paragraph lists the new enhanced reconnect test; the Not-yet line says enhanced RTMP is not end to end (no fourCcList in connect) while the resync understands enhanced tags. Other bullets (handshake, chunk, commands, media, transport, URLs, recorder, threading) are untouched by the diff and still hold." }
+stamp = { hash = "b3:1774b57e9fa71c5e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Reconnect bullet and the testing paragraph against #411: an AVC end-of-sequence tag (0x17 0x02) is now neither the cached header nor a resume keyframe; reworded 'never a SequenceEnd' to cover AVC and listed the AVC case in the reconnect test summary." }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/test_util.rs"]
 stamp = { hash = "b3:1b537bb60e282a9b" }
@@ -1791,13 +1791,13 @@ stamp = { hash = "b3:4a6d6e6f01f968f4" }
 stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 
 ["CRATE-jstream-platform#gpu-frames"."body"]
-stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (6b987c5) into #325: stamp-only conflict; E3c encoder text (on_context, release fence, FrameSync::platform, LUID filter) unchanged; holds" }
+stamp = { hash = "b3:76df49408e9eabb9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; frames are delivered and composited, encoders don't take them yet, on_context default method text matches capture.rs; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:bc332a2f4c8a4884", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
+stamp = { hash = "b3:22338c0c00b36187", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: re-read against the merged crate map; the platform rows it relies on match, and the CEF move to jstream-browser is consistent with this section" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:a6f6991c32106b42" }
+stamp = { hash = "b3:49324e4ee28be6df", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; frames are delivered and composited, encoders don't take them yet, on_context default method text matches capture.rs; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via the crate map (new jstream-browser row, CEF off the platform-windows row) and R-UNSAFE-001 (adds jstream-browser); the GPU frame design is untouched, and the browser backend's shared-texture copy uses GpuFrame as described; holds" }
@@ -1806,7 +1806,7 @@ stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: Codecs::on_context and FrameSync::platform bullets hold; Not yet combines main's video_devices item with E3c's vcam and vendor-ID items; holds" }
+stamp = { hash = "b3:3356d3703539746c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture bullet's on_context (default None) matches capture.rs, Not-yet says the engine composites GPU frames but encoders and vcam don't take them; holds" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:e204cadb57ccceae" }
@@ -1839,7 +1839,7 @@ stamp = { hash = "b3:f0a2d34cd26f9151" }
 stamp = { hash = "b3:4c383cdea1e1ca60" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/capture.rs"]
-stamp = { hash = "b3:d0428542e93b8a89" }
+stamp = { hash = "b3:d0428542e93b8a89", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture bullet's on_context (default None) matches capture.rs, Not-yet says the engine composites GPU frames but encoders and vcam don't take them; holds" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/clock.rs"]
 stamp = { hash = "b3:34c4d1c416af47c3" }
@@ -1878,10 +1878,10 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:574e358c2bd2905b", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (f85c8b2) into #325: stamp-only conflict; re-read E3c's MfCodecs CPU/GPU path bullets, WindowsGpu release fence and Not yet beside #219's vcam Start text; holds" }
+stamp = { hash = "b3:a7c9e7bbf0b3064e", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU path bullet's Capture::on_context answered by on_gpu matches wgc.rs, open-questions text on encoders still open for E3c; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:94ddd281fa3bc568" }
+stamp = { hash = "b3:3356d3703539746c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU path bullet's Capture::on_context answered by on_gpu matches wgc.rs, open-questions text on encoders still open for E3c; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:43948c5058fe4611", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via its crate-map row, which drops the CEF browser backend (now in jstream-browser), and R-UNSAFE-001 (adds jstream-browser); this README never described CEF, its text holds" }
@@ -1938,7 +1938,7 @@ stamp = { hash = "b3:bc308dcc158e28d4" }
 stamp = { hash = "b3:2843d6ac31fa1d3a" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/capture/wgc.rs"]
-stamp = { hash = "b3:3c32bd9bae965208" }
+stamp = { hash = "b3:3c32bd9bae965208", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU path bullet's Capture::on_context answered by on_gpu matches wgc.rs, open-questions text on encoders still open for E3c; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/clock.rs"]
 stamp = { hash = "b3:bcbc90e406de91b4" }
@@ -2040,7 +2040,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
+stamp = { hash = "b3:e7ba7a11964cf62d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Rejections bullet updated for #403: DOS device names refused as the last component under every root (relative CON.png, media/nul); rest of Design unaffected" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2097,7 +2097,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
+stamp = { hash = "b3:191691f27a6abd62", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Rejections bullet updated for #403: DOS device names refused as the last component under every root (relative CON.png, media/nul); rest of Design unaffected" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -2115,7 +2115,7 @@ stamp = { hash = "b3:13f2fa2d982a7e24" }
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
+stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Rejections bullet updated for #403: DOS device names refused as the last component under every root (relative CON.png, media/nul); rest of Design unaffected" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
@@ -2160,7 +2160,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: kind.rs/settings.rs changes only tighten check_asset_path and its docs; the Kinds and settings contents bullet (pure per-value checks incl. check_asset_path) still holds" }
+stamp = { hash = "b3:191691f27a6abd62", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Contents list unchanged by #403 (check_asset_path rule only); no asset-path rule stated here" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -2178,7 +2178,7 @@ stamp = { hash = "b3:13f2fa2d982a7e24" }
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: kind.rs/settings.rs changes only tighten check_asset_path and its docs; the Kinds and settings contents bullet (pure per-value checks incl. check_asset_path) still holds" }
+stamp = { hash = "b3:af463a30bf6d7ee2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Contents list unchanged by #403 (check_asset_path rule only); no asset-path rule stated here" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
@@ -2229,16 +2229,16 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; staged-hold PRESENT transition in render and render_into, staged cleared after submit, ResourceCache import paragraph (kept imports, cap 8, size change retires) match compositor.rs and cache.rs; holds" }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:7bb23bacf002a8e0", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c: stale via platform gpu-frames and ARCH; render untouched, still does no NV12 conversion or encode-target export (Not in this cut holds); holds" }
+stamp = { hash = "b3:7bb23bacf002a8e0", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
-stamp = { hash = "b3:74089efe2d4ea366" }
+stamp = { hash = "b3:76df49408e9eabb9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-render"]
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:a6f6991c32106b42" }
+stamp = { hash = "b3:49324e4ee28be6df", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2250,7 +2250,7 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Cargo.toml only adds the criterion dev-dependency and the composite bench target" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/cache.rs"]
-stamp = { hash = "b3:8e0dd43ba922fd3d" }
+stamp = { hash = "b3:8e0dd43ba922fd3d", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/color.rs"]
 stamp = { hash = "b3:5641b05dca77952a" }
@@ -2259,7 +2259,7 @@ stamp = { hash = "b3:5641b05dca77952a" }
 stamp = { hash = "b3:ec3c05f2f0529e75" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:705e6506274fa233" }
+stamp = { hash = "b3:705e6506274fa233", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/error.rs"]
 stamp = { hash = "b3:219665bab5be0284" }
@@ -2268,7 +2268,7 @@ stamp = { hash = "b3:219665bab5be0284" }
 stamp = { hash = "b3:f1de9efc6510e1ea" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/image.rs"]
-stamp = { hash = "b3:e2eefb59f2b0e692" }
+stamp = { hash = "b3:e2eefb59f2b0e692", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
 stamp = { hash = "b3:0ed7d39913b73022" }
@@ -2283,7 +2283,7 @@ stamp = { hash = "b3:62fced90ebade4b5" }
 stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:ff7828f70313a653" }
+stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#testing"."body"]
 stamp = { hash = "b3:d2dc1d36012c166b", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (#361 benchmarks) into #219: re-read; main's criterion Benchmarks paragraph sits beside E3b's GPU-frames-through-the-cache test text; benches compile against E3b's compositor (workspace clippy --all-targets clean); holds" }
@@ -2301,7 +2301,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU-frames-through-the-cache test text matches the_cache_imports_gpu_frames_without_keeping_their_holds in tests.rs; holds" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
+stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: Sessions bullet matches session.rs handshake() racing the engine's hello answer against handshake_timeout, closing 1008 no handshake in time" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client error-event handling, CSP wording, open question 3 edit): server-side checks, subprotocol token and CSP description unaffected, holds." }
@@ -2337,10 +2337,10 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 stamp = { hash = "b3:05057d7979293830" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
+stamp = { hash = "b3:e7d6a868ffe2691c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: Sessions bullet matches session.rs handshake() racing the engine's hello answer against handshake_timeout, closing 1008 no handshake in time" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
+stamp = { hash = "b3:57ef1003003326da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: Sessions bullet matches session.rs handshake() racing the engine's hello answer against handshake_timeout, closing 1008 no handshake in time" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2370,10 +2370,10 @@ stamp = { hash = "b3:ca2a076f73f966ae" }
 stamp = { hash = "b3:05057d7979293830" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
+stamp = { hash = "b3:e7d6a868ffe2691c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: purpose unchanged by the handshake() race in session.rs" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
+stamp = { hash = "b3:57ef1003003326da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: purpose unchanged by the handshake() race in session.rs" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2733,7 +2733,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: stale via platform#purpose only; Secret and OAuthTokenStore text unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:94ddd281fa3bc568" }
+stamp = { hash = "b3:3356d3703539746c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (#376) into #219: stale via platform#purpose only (Capture::on_context added); youtube text names neither; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:e3b27ea549009815" }
@@ -3051,7 +3051,7 @@ stamp = { hash = "b3:6dc625770a5edc67" }
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; step 7 (Ctrl-C prints stopped, exits 0) holds with #301's bounded close wait; default limits are non-zero; holds" }
+stamp = { hash = "b3:24642d8634dd43c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: go-live steps don't depend on the hello deadline wording" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:c40bfcab7de124d7", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }

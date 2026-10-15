@@ -16,6 +16,8 @@ use crate::rtmp::test_util::{Duplex, duplex};
 
 /// An AVC sequence header (frame type 1, codec 7, `AVCPacketType` 0).
 const AVC_HEADER: [u8; 9] = [0x17, 0, 0, 0, 0, 1, 0x64, 0, 0x1F];
+/// An AVC end of sequence (`AVCPacketType` 2), as `jstream-mux` writes it.
+const AVC_END: [u8; 5] = [0x17, 2, 0, 0, 0];
 /// An AAC sequence header (`AACPacketType` 0) with a 2-byte `AudioSpecificConfig`.
 const AAC_HEADER: [u8; 4] = [0xAF, 0, 0x12, 0x10];
 /// A raw AAC frame.
@@ -385,23 +387,39 @@ fn classifies_enhanced_and_legacy_video_tags() {
     assert!(classify_video(&AVC_HEADER) == Packet::Header);
     assert!(classify_video(&keyframe()) == Packet::Keyframe);
     assert!(classify_video(&inter()) == Packet::Other);
+    // An AVC end of sequence (`AVCPacketType` 2) is on a keyframe but is neither a
+    // header nor a point to resume at (#411).
+    assert!(classify_video(&AVC_END) == Packet::Other);
+    assert!(classify_video(&[0x27, 2, 0, 0, 0]) == Packet::Other);
 }
 
-/// An enhanced RTMP (HEVC or AV1) stream survives a link drop: the `SequenceStart` is
-/// re-sent before the next coded keyframe and video resumes there; inter frames and a
-/// `SequenceEnd` sent while resyncing are dropped, and the `SequenceEnd` doesn't
-/// replace the cached header (#399).
+/// An enhanced RTMP (HEVC or AV1) or legacy AVC stream survives a link drop: the
+/// sequence header is re-sent before the next coded keyframe and video resumes there;
+/// inter frames and an end of sequence sent while resyncing are dropped, and the end of
+/// sequence doesn't replace the cached header (#399, #411).
 #[test]
-fn enhanced_video_resends_sequence_start_and_resumes_at_keyframe() {
+fn video_resends_sequence_header_and_resumes_at_keyframe() {
+    let mut cases = Vec::new();
     for (fourcc, coded) in [
         (VideoFourCc::Hevc, ExVideoPacketType::CodedFrames),
         (VideoFourCc::Av1, ExVideoPacketType::CodedFramesX),
     ] {
-        let start = ex_video(true, ExVideoPacketType::SequenceStart, fourcc);
-        let idr = ex_video(true, coded, fourcc);
-        let inter = ex_video(false, coded, fourcc);
-        let end = ex_video(true, ExVideoPacketType::SequenceEnd, fourcc);
-
+        cases.push((
+            format!("{fourcc:?}"),
+            ex_video(true, ExVideoPacketType::SequenceStart, fourcc),
+            ex_video(true, coded, fourcc),
+            ex_video(false, coded, fourcc),
+            ex_video(true, ExVideoPacketType::SequenceEnd, fourcc),
+        ));
+    }
+    cases.push((
+        "Avc".to_owned(),
+        AVC_HEADER.to_vec(),
+        keyframe(),
+        inter(),
+        AVC_END.to_vec(),
+    ));
+    for (name, start, idr, inter, end) in cases {
         let (log_tx, logs) = channel();
         let connections = Arc::new(AtomicUsize::new(0));
         let connector: Connector<Duplex> = Arc::new(move || {
@@ -426,7 +444,7 @@ fn enhanced_video_resends_sequence_start_and_resumes_at_keyframe() {
         logs.recv().unwrap(); // the server has hung up
         p.send_video(33, &inter).unwrap();
         states.record(&p);
-        assert_eq!(p.state(), LinkState::Reconnecting, "{fourcc:?}");
+        assert_eq!(p.state(), LinkState::Reconnecting, "{name}");
 
         clock.advance(Duration::from_secs(1));
         poll_until(&mut p, &mut states, |p| p.state() == LinkState::Active).unwrap();
@@ -435,7 +453,7 @@ fn enhanced_video_resends_sequence_start_and_resumes_at_keyframe() {
         p.send_video(80, &end).unwrap();
         p.send_video(100, &idr).unwrap();
         p.send_video(133, &inter).unwrap();
-        assert_eq!(p.stats().dropped_video, 3, "{fourcc:?}: {:?}", p.stats());
+        assert_eq!(p.stats().dropped_video, 3, "{name}: {:?}", p.stats());
         drop(p.finish().unwrap());
 
         let second = logs.recv().unwrap();
@@ -449,7 +467,7 @@ fn enhanced_video_resends_sequence_start_and_resumes_at_keyframe() {
         assert_eq!(
             media,
             [line(100, &start), line(100, &idr), line(133, &inter)],
-            "{fourcc:?}"
+            "{name}"
         );
     }
 }
