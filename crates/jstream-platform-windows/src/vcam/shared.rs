@@ -7,7 +7,7 @@ use jstream_platform::PlatformError;
 use jstream_vcam_proto::{Control, MAPPING_SIZE};
 use windows::Win32::Foundation::{
     CloseHandle, ERROR_ALREADY_EXISTS, GetLastError, HANDLE, HLOCAL, INVALID_HANDLE_VALUE,
-    LocalFree,
+    LocalFree, SetLastError, WIN32_ERROR,
 };
 use windows::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -114,6 +114,9 @@ impl Mapping {
         let size = u32::try_from(MAPPING_SIZE).map_err(|_| PlatformError::Unsupported {
             what: "a control block larger than 4 GiB".into(),
         })?;
+        // Cleared first, so a stale status can't read as "already exists" below.
+        // SAFETY: plain call.
+        unsafe { SetLastError(WIN32_ERROR(0)) };
         // SAFETY: `sa` outlives the call; the name is a valid wide string.
         let handle = unsafe {
             CreateFileMappingW(

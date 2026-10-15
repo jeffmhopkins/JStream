@@ -12,8 +12,8 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:d67a685eabc8b765", by = "agent:claude@session_01HGK7agjEsYDqGN4QkkiUjA", note = "G3a hw-test fix: the test's source reader now enables video processing and publishes grey; README's description of the virtual-camera test (solid colour served back through an RGB32 reader) still holds" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
+verified = { hash = "b3:dad64355718ec57d", by = "agent:claude@session_01HGK7agjEsYDqGN4QkkiUjA", note = "Review N2: depends_on now names ADR-0020, which the WindowsVcam bullet rests on; re-read the bullet against ADR-0020's engine-side and registration decisions; N1 change in vcam/shared.rs doesn't alter the prose" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
