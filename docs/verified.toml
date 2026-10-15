@@ -153,7 +153,7 @@ stamp = { hash = "b3:1f10a420e9f6a9bc" }
 stamp = { hash = "b3:42604b9f922a7f66", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:9df73e97d087ef62", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:9df73e97d087ef62", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (render ratio.rs, ratio.wgsl, aspect/mod.rs) and its README paragraph, and drops filter/mod.rs's allow. The section's filter sentence (a filter draws one premultiplied image into one of its output_size; chain runtime not built) still covers it, and aspect_ratio's output_size is exactly such a size change; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/cache.rs"]
 stamp = { hash = "b3:071eeba73136670c" }
@@ -171,19 +171,19 @@ stamp = { hash = "b3:96a4560d010d62b0", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (render ratio.rs, ratio.wgsl, aspect/mod.rs) and its README paragraph, and drops filter/mod.rs's allow. The section's filter sentence (a filter draws one premultiplied image into one of its output_size; chain runtime not built) still covers it, and aspect_ratio's output_size is exactly such a size change; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/aspect/ratio.rs"]
-stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (render ratio.rs, ratio.wgsl, aspect/mod.rs) and its README paragraph, and drops filter/mod.rs's allow. The section's filter sentence (a filter draws one premultiplied image into one of its output_size; chain runtime not built) still covers it, and aspect_ratio's output_size is exactly such a size change; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/aspect/ratio.wgsl"]
-stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (render ratio.rs, ratio.wgsl, aspect/mod.rs) and its README paragraph, and drops filter/mod.rs's allow. The section's filter sentence (a filter draws one premultiplied image into one of its output_size; chain runtime not built) still covers it, and aspect_ratio's output_size is exactly such a size change; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c83b3511a674ea97", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:c83b3511a674ea97", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (render ratio.rs, ratio.wgsl, aspect/mod.rs) and its README paragraph, and drops filter/mod.rs's allow. The section's filter sentence (a filter draws one premultiplied image into one of its output_size; chain runtime not built) still covers it, and aspect_ratio's output_size is exactly such a size change; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -2118,19 +2118,19 @@ stamp = { hash = "b3:96a4560d010d62b0", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (ratio.rs, ratio.wgsl, aspect/mod.rs registration) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter with no new thread, I/O, cache or steady-path allocation, so Design's passes, resources and threading text is unchanged; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/aspect/ratio.rs"]
-stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (ratio.rs, ratio.wgsl, aspect/mod.rs registration) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter with no new thread, I/O, cache or steady-path allocation, so Design's passes, resources and threading text is unchanged; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/aspect/ratio.wgsl"]
-stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (ratio.rs, ratio.wgsl, aspect/mod.rs registration) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter with no new thread, I/O, cache or steady-path allocation, so Design's passes, resources and threading text is unchanged; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c83b3511a674ea97", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:c83b3511a674ea97", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the aspect_ratio filter (ratio.rs, ratio.wgsl, aspect/mod.rs registration) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter with no new thread, I/O, cache or steady-path allocation, so Design's passes, resources and threading text is unchanged; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
@@ -2172,7 +2172,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:f6e6a1787b97c3c6", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:632066503e56563c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:632066503e56563c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "Aspect ratio (V1a): not yet" with the aspect_ratio paragraph. Checked against ratio.rs (descriptor settings, ranges and visible_if; output_size's crop/pad/stretch rule, rounding, floor of 1, saturating math, TooLarge) and ratio.wgsl (crop and pad copy 1:1 with the anchor offset; bilinear, Catmull-Rom and Lanczos-3 resample, normalised and clamped to [0, a] as an SDR assumption; no downscale widening). aspect/mod.rs registers the kind; filter/mod.rs drops the spent unused_imports allow. Harness text above is unchanged; holds""" }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199" }
@@ -2181,19 +2181,19 @@ stamp = { hash = "b3:b655210653447199" }
 stamp = { hash = "b3:10fc5503702046a4" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "Aspect ratio (V1a): not yet" with the aspect_ratio paragraph. Checked against ratio.rs (descriptor settings, ranges and visible_if; output_size's crop/pad/stretch rule, rounding, floor of 1, saturating math, TooLarge) and ratio.wgsl (crop and pad copy 1:1 with the anchor offset; bilinear, Catmull-Rom and Lanczos-3 resample, normalised and clamped to [0, a] as an SDR assumption; no downscale widening). aspect/mod.rs registers the kind; filter/mod.rs drops the spent unused_imports allow. Harness text above is unchanged; holds""" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/aspect/ratio.rs"]
-stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "Aspect ratio (V1a): not yet" with the aspect_ratio paragraph. Checked against ratio.rs (descriptor settings, ranges and visible_if; output_size's crop/pad/stretch rule, rounding, floor of 1, saturating math, TooLarge) and ratio.wgsl (crop and pad copy 1:1 with the anchor offset; bilinear, Catmull-Rom and Lanczos-3 resample, normalised and clamped to [0, a] as an SDR assumption; no downscale widening). aspect/mod.rs registers the kind; filter/mod.rs drops the spent unused_imports allow. Harness text above is unchanged; holds""" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/aspect/ratio.wgsl"]
-stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "Aspect ratio (V1a): not yet" with the aspect_ratio paragraph. Checked against ratio.rs (descriptor settings, ranges and visible_if; output_size's crop/pad/stretch rule, rounding, floor of 1, saturating math, TooLarge) and ratio.wgsl (crop and pad copy 1:1 with the anchor offset; bilinear, Catmull-Rom and Lanczos-3 resample, normalised and clamped to [0, a] as an SDR assumption; no downscale widening). aspect/mod.rs registers the kind; filter/mod.rs drops the spent unused_imports allow. Harness text above is unchanged; holds""" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c83b3511a674ea97", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:c83b3511a674ea97", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = """This PR's whole change to Filters: replaces "Aspect ratio (V1a): not yet" with the aspect_ratio paragraph. Checked against ratio.rs (descriptor settings, ranges and visible_if; output_size's crop/pad/stretch rule, rounding, floor of 1, saturating math, TooLarge) and ratio.wgsl (crop and pad copy 1:1 with the anchor offset; bilinear, Catmull-Rom and Lanczos-3 resample, normalised and clamped to [0, a] as an SDR assumption; no downscale widening). aspect/mod.rs registers the kind; filter/mod.rs drops the spent unused_imports allow. Harness text above is unchanged; holds""" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e" }
@@ -2250,19 +2250,19 @@ stamp = { hash = "b3:96a4560d010d62b0", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:219665bab5be0284" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/aspect/mod.rs"]
-stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:29d043ce9816c46e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds aspect/ratio.rs and ratio.wgsl, registers aspect_ratio in aspect/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/aspect/ratio.rs"]
-stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:7222b411286e5195", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds aspect/ratio.rs and ratio.wgsl, registers aspect_ratio in aspect/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/aspect/ratio.wgsl"]
-stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:9b769e8868051670", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds aspect/ratio.rs and ratio.wgsl, registers aspect_ratio in aspect/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/assets/mod.rs"]
 stamp = { hash = "b3:12b48a3adcb917db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:c83b3511a674ea97", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging the harness (B7's branch with main via #376): re-read; the merge changed no render code and no text in this section (only moved stamps), and ARCH's other changes from main are outside it; the v1a group's last verification holds" }
+stamp = { hash = "b3:c83b3511a674ea97", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds aspect/ratio.rs and ratio.wgsl, registers aspect_ratio in aspect/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/mod.rs"]
 stamp = { hash = "b3:de0f98158fb04e4e", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Ledger migration after merging B7's branch (main via #376): re-read; the merge changed no render or platform code and no text in this section, only moved its inline stamp; the #300 round-2 verification still holds" }
