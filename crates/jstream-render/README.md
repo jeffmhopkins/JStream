@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:cfee4b9a02104325", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: E3a's capture-format text and B3's two placement forms both present; matches place.rs and scene.rs" }
+verified = { hash = "b3:ca6b75737c6466d6", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#183 geometry placement) into ADR-0042: purpose now also covers Cargo.toml; 'composited on the GPU with wgpu' still matches the wgpu dependency; main's geometry/legacy placement bullets are main's" }
 -->
 
 One scene, composited on the GPU with wgpu
