@@ -46,13 +46,14 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0030](0030-studio-state-and-scene-switching.md) | Studio state and scene switching | accepted | agent |  |
 | [ADR-0031](0031-source-types-and-decoding-scope.md) | Source types for v1 and decoding scope | accepted | maintainer |  |
 | [ADR-0032](0032-live-edits-and-undo.md) | Live parameter edits and undo on the wire | accepted | agent |  |
-| [ADR-0034](0034-youtube-interaction-scope-v2.md) | YouTube interaction scope v2 | accepted | maintainer |  |
+| [ADR-0034](0034-youtube-interaction-scope-v2.md) | YouTube interaction scope v2 | superseded | maintainer | [ADR-0041](0041-youtube-interaction-scope-v3.md) |
 | [ADR-0035](0035-clap-plugins-out-of-process.md) | CLAP audio plugins, out of process | accepted | maintainer |  |
 | [ADR-0036](0036-mcp-events-polling-tool.md) | Engine events over MCP through a polling tool | accepted | agent |  |
 | [ADR-0037](0037-kind-descriptors-for-transitions-and-plugins.md) | Kind descriptors for transitions and CLAP plugins | accepted | agent |  |
 | [ADR-0038](0038-adr-status-banner-and-index.md) | Generated ADR status banners and index | accepted | maintainer |  |
 | [ADR-0039](0039-hash-ignores-metadata-and-row-dependencies.md) | Doc hashes ignore metadata blocks; row-level crate-map dependencies | accepted | maintainer |  |
 | [ADR-0040](0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md) | Scene structure: orphaned overrides, shared groups and deleted hotkey targets | accepted | maintainer |  |
+| [ADR-0041](0041-youtube-interaction-scope-v3.md) | YouTube interaction scope v3: one sign-in | accepted | maintainer |  |
 | [ADR-0042](0042-narrow-hot-architecture-sections.md) | Narrow the hot architecture sections: manifest views, app entry points, threading model | accepted | maintainer |  |
 | [ADR-0043](0043-narrow-maintainer-tier.md) | Decision tiers v2: the maintainer decides product-level calls only | accepted | maintainer |  |
 <!-- @generated end adr-index -->

@@ -1,8 +1,10 @@
 //! The built binary end to end: it starts on a free `127.0.0.1` port with a token file
 //! it creates, `jstream-control`'s WebSocket client drives it (handshake, a batch, a
 //! query and the `state.changed` event), an MCP client reads the result over streamable
-//! HTTP, and a SIGINT stops it gracefully. A second run reuses the token. Hermetic: loopback only, files under the target directory (the
-//! platform data directory, where logs go by default, is pointed there too).
+//! HTTP, and a SIGINT stops it gracefully. The batch is in the audit log. A second run
+//! reuses the token and loads the `--collection` file the first one saved. Hermetic:
+//! loopback only, files under the target directory (the platform data directory, where
+//! logs go by default, is pointed there too).
 
 use futures_util::StreamExt;
 use jstream_control::protocol::{
@@ -229,6 +231,8 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     let token_arg = token_file.to_str().expect("a UTF-8 path");
     let logs = dir.join("logs");
     let logs_arg = logs.to_str().expect("a UTF-8 path");
+    let collection = dir.join("collection.json");
+    let collection_arg = collection.to_str().expect("a UTF-8 path");
     let mut daemon = start(&[
         "--token-file",
         token_arg,
@@ -238,6 +242,8 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         "out_1",
         "--log-dir",
         logs_arg,
+        "--collection",
+        collection_arg,
     ]);
     assert!(daemon.url.starts_with("ws://127.0.0.1:"), "{}", daemon.url);
     assert!(daemon.url.ends_with("/api/v1/ws"), "{}", daemon.url);
@@ -363,6 +369,15 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         !file.contains(WRONG_TOKEN),
         "the wrong token was logged: {file}"
     );
+    // The audit log, next to the log files, has the batch and the WebSocket client's
+    // name, and no token.
+    let audit = std::fs::read_to_string(logs.join("audit.jsonl")).expect("the audit log");
+    assert!(
+        audit.contains("\"call\":\"batch\",\"edits\":[\"scene.create\"]"),
+        "{audit}"
+    );
+    assert!(audit.contains("\"client_name\":\"daemon-e2e\""), "{audit}");
+    assert!(!audit.contains(token), "the token was audited: {audit}");
     assert_eq!(timely(events.next()).await, None, "the event stream ends");
     match timely(control.call(Call::Query {
         query: Query::SceneList,
@@ -373,8 +388,8 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         other => panic!("expected Disconnected, got {other:?}"),
     }
 
-    // A restart reuses the token in the file, and the engine starts empty again. It
-    // logs to a new file, at the level `--log-level` sets.
+    // A restart reuses the token in the file, and loads the collection the first run
+    // saved. It logs to a new file, at the level `--log-level` sets.
     let mut again = start(&[
         "--token-file",
         token_arg,
@@ -382,6 +397,8 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         logs_arg,
         "--log-level",
         "warn",
+        "--collection",
+        collection_arg,
     ]);
     assert_eq!(
         again.banner,
@@ -406,11 +423,7 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         .await
         .expect("the same token still works");
     let welcome = timely(control.hello(hello())).await.expect("welcome");
-    assert_eq!(
-        welcome.rev,
-        Rev(0),
-        "the daemon loads no collection file yet"
-    );
+    assert_eq!(welcome.rev, Rev(1), "the saved collection is loaded");
     stop(&mut again);
     let first = files[0].clone();
     let files = log_files(&logs);
@@ -456,8 +469,15 @@ fn usage_errors_exit_2_and_start_nothing() {
     let token_arg = token_file.to_str().expect("a UTF-8 path");
     for (args, message) in [
         (
-            vec!["--token-file", token_arg, "--collection", "c.json"],
-            "`--collection` is not supported yet",
+            vec![
+                "--token-file",
+                token_arg,
+                "--collection",
+                "a.json",
+                "--collection",
+                "b.json",
+            ],
+            "`--collection` given twice",
         ),
         (
             vec!["--token-file", token_arg, "--port", "http"],

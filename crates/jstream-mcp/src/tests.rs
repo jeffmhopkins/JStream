@@ -211,7 +211,9 @@ fn handshake_list_and_call_round_trip() {
         [
             "batch",
             "canvas",
+            "delete",
             "describe_api",
+            "encoder",
             "events",
             "history",
             "item",
@@ -277,7 +279,7 @@ fn handshake_list_and_call_round_trip() {
         json!({"type": "state.get", "rev": 2,
                "canvas": {"width": 1920, "height": 1080}, "sources": [cam],
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
-               "outputs": []})
+               "outputs": [], "encoders": []})
     );
     let started = f.call_tool(
         "output",
@@ -328,7 +330,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(13));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(15));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(

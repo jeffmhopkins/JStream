@@ -1,0 +1,35 @@
+{
+  "kind": "youtube#liveStreamListResponse",
+  "etag": "fixture-etag-streams",
+  "pageInfo": { "totalResults": 1, "resultsPerPage": 1 },
+  "items": [
+    {
+      "kind": "youtube#liveStream",
+      "etag": "fixture-etag-stream1",
+      "id": "UCfixturechannel000000000fixturestream1",
+      "snippet": {
+        "publishedAt": "2026-01-02T03:04:05Z",
+        "channelId": "UCfixturechannel000000000",
+        "title": "Default stream key",
+        "description": "",
+        "isDefaultStream": false
+      },
+      "cdn": {
+        "ingestionType": "rtmp",
+        "ingestionInfo": {
+          "streamName": "abcd-efgh-ijkl-mnop-qrst",
+          "ingestionAddress": "rtmp://a.rtmp.youtube.com/live2",
+          "backupIngestionAddress": "rtmp://b.rtmp.youtube.com/live2?backup=1",
+          "rtmpsIngestionAddress": "rtmps://a.rtmps.youtube.com/live2",
+          "rtmpsBackupIngestionAddress": "rtmps://b.rtmps.youtube.com/live2?backup=1"
+        },
+        "resolution": "variable",
+        "frameRate": "variable"
+      },
+      "status": {
+        "streamStatus": "inactive",
+        "healthStatus": { "status": "noData" }
+      }
+    }
+  ]
+}

@@ -43,7 +43,7 @@ The forces:
 state, not in the collection. It is not counted by `rev`, not undoable, and not part of
 `state.get`.
 
-**Protocol (0.13):**
+**Protocol (0.16):**
 - Action `scene.switch { scene_id }` puts a scene on program with a cut. It fails with
   `not_found` for a scene not in the collection. Switching to the scene already on
   program succeeds and emits nothing. ADR-0029's optional `preset` is added with the
@@ -63,8 +63,9 @@ state, not in the collection. It is not counted by `rev`, not undoable, and not 
   possible (it is an action), and undoing a `scene.delete` brings the scene back
   without putting it on program.
 
-**What follows program:** `video.snapshot` composites the program scene, and so does
-every output that renders a scene once the render thread composites scenes (E1, C1b). A
+**What follows program:** the program mix composites the program scene, so
+`video.snapshot` and every running output (the render thread) show it, and a switch
+re-plans the mix so the next frame shows the new scene. A
 `VideoMix` with input `Program` (ARCH › Data model) follows it when mixes are built.
 
 **Not decided here:** the preview scene and `studio.set_preview` (studio mode, M2); where

@@ -7,7 +7,7 @@
 [[external]]
 id = "yt-live-api"
 url = "https://developers.google.com/youtube/v3/live/getting-started"
-relied_on = "YouTube Live Streaming API: liveBroadcasts (insert/bind/transition), liveStreams (health), liveChatMessages (list, and insert to send chat as the channel), video statistics reads (concurrent viewers, likes), and the OAuth scopes each method accepts: youtube.readonly for reads, youtube (or youtube.force-ssl) for broadcast control and liveChatMessages.insert (ADR-0034)"
+relied_on = "YouTube Live Streaming API: liveBroadcasts (insert/bind/transition), liveStreams (health), liveChatMessages (list, and insert to send chat as the channel), video statistics reads (concurrent viewers, likes), and the OAuth scopes each method accepts: JStream signs in once with youtube, which broadcast control and liveChatMessages.insert need (youtube.force-ssl also works) and which the reads accept too (ADR-0041)"
 review_every = "90d"
 status = "ok"
 checked_note = "Page loads; content not yet re-read against relied_on"
@@ -187,3 +187,27 @@ relied_on = "GitHub private vulnerability reporting is enabled for the repositor
 review_every = "180d"
 status = "unverified"
 checked_note = "Not loaded from the builder sandbox; needs the repository setting 'Private vulnerability reporting' enabled"
+
+[[external]]
+id = "google-oauth-native-app"
+url = "https://developers.google.com/identity/protocols/oauth2/native-app"
+relied_on = "OAuth 2.0 for installed apps: authorization endpoint accounts.google.com/o/oauth2/v2/auth, token endpoint oauth2.googleapis.com/token, revoke endpoint oauth2.googleapis.com/revoke; loopback redirect http://127.0.0.1:<port>; PKCE code_challenge with S256; state; code exchange (client_id, optional client_secret, code, code_verifier, grant_type=authorization_code, redirect_uri) always returns a refresh token for installed apps; refresh (grant_type=refresh_token) may omit a new refresh token; invalid_grant on refresh means consent again; no incremental authorization for installed apps"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read the endpoints, authorization and token parameters, loopback format, refresh and invalid_grant sections for jstream-youtube"
+
+[[external]]
+id = "rfc-7636"
+url = "https://www.rfc-editor.org/rfc/rfc7636"
+relied_on = "PKCE: code_verifier of 43 to 128 unreserved characters (4.1); S256 challenge = BASE64URL(SHA256(ASCII(verifier))) (4.2); Appendix B test vector"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read 4.1, 4.2 and the Appendix B values the jstream-youtube test uses"
+
+[[external]]
+id = "roboto-font"
+url = "https://github.com/googlefonts/roboto"
+relied_on = "Source of the text source's bundled font (crates/jstream-sources/assets/fonts, described in crates/jstream-sources/README.md): src/hinted/Roboto-Regular.ttf, Roboto 2.001047, under the repository's Apache License 2.0"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read: LICENSE is the Apache License 2.0, and src/hinted/Roboto-Regular.ttf is on main with the SHA-256 the jstream-sources README records"

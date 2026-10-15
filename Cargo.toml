@@ -10,7 +10,13 @@ publish = false
 
 [workspace.dependencies]
 # Shared dependency versions live here (R-DEP-003). Member crates use `dep.workspace = true`.
+# Coverage rasterising of glyph outlines for the text source (ADR-0031: pure-Rust font
+# crates). No dependencies; `std` is its only default feature.
+ab_glyph_rasterizer = { version = "0.1", default-features = false, features = ["std"] }
 anyhow = "1"
+# The render snapshot (ARCH › Threads, "State to RT threads"): the control side swaps an
+# immutable snapshot that the render thread loads without a lock. No dependencies.
+arc-swap = { version = "1.9", default-features = false }
 # Test-only global allocator that flags allocations inside a marked scope (R-RT-001).
 # Warn mode counts violations instead of aborting, so a test can assert on them, in
 # debug and release builds alike.
@@ -25,7 +31,12 @@ futures-util = { version = "0.3", default-features = false, features = ["sink", 
 # OS randomness (the daemon's control token). Already in the tree through tungstenite's
 # `rand`, so the version matches it.
 getrandom = { version = "0.3", default-features = false }
+# GIF decoding for the image source (ADR-0031: pure-Rust image crates). No default
+# features: `color_quant` only matters for encoding RGBA frames.
+gif = { version = "0.14", default-features = false, features = ["std"] }
 globset = { version = "0.4", default-features = false }
+# WebP decoding (still and animated) for the image source (ADR-0031).
+image-webp = { version = "0.2", default-features = false }
 insta = { version = "1", default-features = false }
 jstream-audio = { path = "crates/jstream-audio" }
 jstream-control = { path = "crates/jstream-control" }
@@ -37,15 +48,21 @@ jstream-media = { path = "crates/jstream-media" }
 jstream-mux = { path = "crates/jstream-mux" }
 jstream-outputs = { path = "crates/jstream-outputs" }
 jstream-platform = { path = "crates/jstream-platform" }
+jstream-platform-windows = { path = "crates/jstream-platform-windows" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }
+jstream-sources = { path = "crates/jstream-sources" }
 jstream-vcam-proto = { path = "crates/jstream-vcam-proto" }
+jstream-youtube = { path = "crates/jstream-youtube" }
 # PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.
-png = { version = "0.17", default-features = false }
+png = { version = "0.18", default-features = false }
 pulldown-cmark = { version = "0.13", default-features = false }
+# SHA-256 and the OS random source for OAuth PKCE (`jstream-youtube`). Already in the tree
+# as rustls' crypto provider (R-DEP-006), so this adds no crate; no default features.
+ring = { version = "0.17", default-features = false }
 # Test-only certificates for the RTMPS tests; `ring` instead of the default aws-lc-rs (R-DEP-006).
 rcgen = { version = "0.14", default-features = false, features = ["ring"] }
 # TLS (R-DEP-006): rustls with the `ring` provider. No default features, so no aws-lc-rs
@@ -57,6 +74,12 @@ rustls-native-certs = "0.8"
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 serde = { version = "1", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
+# Font parsing and glyph outlines for the text source (ADR-0031: pure-Rust font crates),
+# from Google's fontations. Pulls in `read-fonts`, `font-types`, `bytemuck`, `yoke` and
+# `once_cell`, plus derive macros at build time. Chosen over `ab_glyph` and `fontdue`
+# because their `ttf-parser` is unmaintained (RUSTSEC-2026-0192). No default features:
+# `autohint_shaping` only serves the autohinter, which is not used.
+skrifa = { version = "0.48", default-features = false, features = ["std"] }
 thiserror = { version = "2", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false }
 # No TLS feature: plain `ws://` only, so no `rustls`/`ring` in the tree yet.
@@ -78,6 +101,10 @@ windows = { version = "=0.62.2", default-features = false }
 # `#[implement]` (COM callbacks) expands to `windows_core::` paths, so it is a direct
 # dependency at the version `windows` uses.
 windows-core = { version = "=0.62.2", default-features = false }
+# JPEG decoding for the image source (ADR-0031), and `zune-core` for its options. No
+# `log`; the `x86` and `neon` features keep the SIMD paths, chosen at run time.
+zune-core = { version = "0.5", default-features = false, features = ["std"] }
+zune-jpeg = { version = "0.5", default-features = false, features = ["std", "x86", "neon"] }
 
 # Editing this table is a governance change (R-GOV-001). See docs/RULES.md for each rule.
 [workspace.lints.rust]

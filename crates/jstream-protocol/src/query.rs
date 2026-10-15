@@ -1,6 +1,7 @@
 //! Queries: reads with no effect on state, and their results.
 
-use crate::command::{Crop, ItemTransform, SceneRole, SourceKind};
+use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
+use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
@@ -39,8 +40,9 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
-    /// items, and every output) at one revision: what a client reads on connecting, after
-    /// a `state.changed` it didn't cause, or before an edit it sends with `expected_rev`.
+    /// items, every output and every encoder profile) at one revision: what a client
+    /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
+    /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
     StateGet,
     /// The current program mix, as a PNG.
@@ -70,6 +72,39 @@ pub enum Query {
     /// collection state (ADR-0030), so the result carries no `rev`.
     #[serde(rename = "studio.get")]
     StudioGet,
+    /// Lists the collection's encoder profiles, ordered by ID.
+    #[serde(rename = "encoder.list")]
+    EncoderList,
+    /// The batch that deletes a scene or source together with everything that refers to
+    /// it, which `scene.delete` and `source.delete` alone refuse (their `invalid_argument`
+    /// lists those `blockers`). The plan removes the items that place a deleted source,
+    /// deletes the `scene` sources that show a deleted scene (and their items), and sets
+    /// settings references to the target to `null`, keeping the sources that hold them.
+    /// The client shows it, then sends its `edits` as an ordinary batch with
+    /// `expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with
+    /// `not_found` if the target doesn't exist.
+    #[serde(rename = "delete.plan")]
+    DeletePlan {
+        /// What to delete.
+        target: DeleteTarget,
+    },
+}
+
+/// What a `delete.plan` deletes: a scene or a source.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum DeleteTarget {
+    /// A scene.
+    Scene {
+        /// The scene to delete.
+        scene_id: SceneId,
+    },
+    /// A source.
+    Source {
+        /// The source to delete.
+        source_id: SourceId,
+    },
 }
 
 impl Query {
@@ -86,6 +121,8 @@ impl Query {
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
             Query::StudioGet => "studio.get",
+            Query::EncoderList => "encoder.list",
+            Query::DeletePlan { .. } => "delete.plan",
         }
     }
 }
@@ -115,6 +152,20 @@ pub enum QueryResult {
         /// never reported. Missing (from a server older than 0.7) parses as `false`.
         #[serde(default)]
         key_set: bool,
+        /// The encoder session the output uses while it runs: which profile, and which
+        /// other running outputs share it. Absent while it isn't running, and from a
+        /// server older than 0.13.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        encoder: Option<EncoderSessionInfo>,
+        /// How many video encoder sessions the engine has open now, for every output,
+        /// and how many of them are hardware ones. Hardware encoders cap their
+        /// concurrent sessions per GPU vendor and driver, and the engine doesn't guess
+        /// the cap. Missing (from a server older than 0.13) parses as 0.
+        #[serde(default)]
+        encoder_sessions: u32,
+        /// Of `encoder_sessions`, the hardware ones. Missing parses as 0.
+        #[serde(default)]
+        hardware_sessions: u32,
     },
     /// The result of `source.list`.
     #[serde(rename = "source.list")]
@@ -151,6 +202,10 @@ pub enum QueryResult {
         /// as empty.
         #[serde(default)]
         outputs: Vec<OutputInfo>,
+        /// Every encoder profile, ordered by ID. Missing (from a server older than
+        /// 0.13) parses as empty.
+        #[serde(default)]
+        encoders: Vec<EncoderProfileInfo>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -194,6 +249,26 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
     },
+    /// The result of `encoder.list`.
+    #[serde(rename = "encoder.list")]
+    EncoderList {
+        /// The revision the list was read at.
+        rev: Rev,
+        /// The profiles, ordered by ID.
+        encoders: Vec<EncoderProfileInfo>,
+    },
+    /// The result of `delete.plan`.
+    #[serde(rename = "delete.plan")]
+    DeletePlan {
+        /// The revision the plan was made at. Send `edits` with this `expected_rev`, so
+        /// the batch is refused if the state changed since.
+        rev: Rev,
+        /// The edits, in order: `item.remove` for the items that place a deleted source,
+        /// `source.set_settings` setting each reference to a deleted object to `null`,
+        /// `source.delete` for the `scene` sources that show a deleted scene, and last the
+        /// delete of the target itself.
+        edits: Vec<Edit>,
+    },
 }
 
 impl QueryResult {
@@ -210,6 +285,8 @@ impl QueryResult {
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::StudioGet { .. } => "studio.get",
+            QueryResult::EncoderList { .. } => "encoder.list",
+            QueryResult::DeletePlan { .. } => "delete.plan",
         }
     }
 }
@@ -242,6 +319,11 @@ pub struct SourceInfo {
     /// source and for a kind without parameters.
     #[serde(default, skip_serializing_if = "Settings::is_empty")]
     pub settings: Settings,
+    /// The source this one was copied from by `source.duplicate`, while that source
+    /// exists. Omitted if it was not copied, or its original has been deleted. An item
+    /// placing this source can go back to placing the original with `item.set_source`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duplicated_from: Option<SourceId>,
 }
 
 /// One scene with its items, as `state.get` reports it.

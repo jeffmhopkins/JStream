@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f09027d0a5c57a57", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; contents list holds with B6's edits and B10's scene switch/studio get" }
+verified = { hash = "b3:57adcafb004f9dd5", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; contents hold with scene switch/studio get beside main's commands" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:73e10e296433d951", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; scene switch and studio get rows sit beside B6's rows; holds" }
+verified = { hash = "b3:ab80bb4dfa3cf4ab", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; scene switch and studio get rows hold beside main's new rows" }
 -->
 
 ```sh
@@ -103,13 +103,17 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings. `source.set_settings`, and `source.create`
-  with settings, need a JSON argument form the CLI doesn't have yet, so a source it
-  creates gets its kind's defaults. Protocol 0.11's `canvas.set_size`,
+  protocol is supported except settings, encoder profiles and `source.create`'s
+  `duplicated_from`. `source.set_settings`,
+  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
+  and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
+  source it creates gets its kind's defaults and an output it creates the engine's
+  default encoder (MCP and the WebSocket API take them). Protocol 0.11's `canvas.set_size`,
   `item.set_geometry` and `item.add`'s `geometry`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
   yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
-  the placement edits' optional `scene_id` are not in the CLI either. Several edits on one line go as **one atomic batch**: one new
+  the placement edits' optional `scene_id` are not in the CLI either.
+  `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -118,6 +122,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
   the URL.
+- **No undo or redo command.** Undo history belongs to a client and ends with its
+  session ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), and each run of a
+  command is a new client, so a one-shot `undo` would always find nothing to undo.
+  `mcp` is one client for its whole run: its `history` tool undoes and redoes the
+  agent's own edits.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
@@ -144,7 +153,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
   server URL, as `output.create` takes it). `state get` prints the sources, then each
   scene in display order with its items, then the outputs. `output status` prints
-  `<id>: <state>, stream key set` (or `not set`). An empty list prints `no scenes`,
+  `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
+  `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
@@ -215,7 +225,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:550eab4a97289a04", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; Output bullet names studio.changed; B6 placement text unchanged; holds" }
+verified = { hash = "b3:4a3764830fb75062", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; Output bullet's studio.changed note holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
