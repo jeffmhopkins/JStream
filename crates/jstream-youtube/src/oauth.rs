@@ -39,7 +39,7 @@ pub enum Scope {
     /// `youtube.readonly`: listing broadcasts and streams, and stream health.
     Readonly,
     /// `youtube`: everything `Readonly` allows, plus creating broadcasts and streams,
-    /// binding and transitioning. Asked for only when broadcast control is first used.
+    /// binding and transitioning. JStream signs in once, asking for this alone.
     Manage,
 }
 
