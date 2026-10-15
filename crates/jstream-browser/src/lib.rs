@@ -1,8 +1,8 @@
 //! Browser sources' engine (ADR-0021, docs/adr/0021-browser-source.md; ADR-0046,
 //! docs/adr/0046-browser-crate-and-helper.md; ADR-0048,
 //! docs/adr/0048-sandboxed-browser-helper.md): web pages rendered off screen by CEF in a
-//! sandboxed helper process, each page's frames as textures on the engine's GPU device
-//! and its audio as a stream the engine records like a device's.
+//! sandboxed helper process, each page's frames as textures on a GPU device the host hands
+//! it and its audio as a stream the engine records like a device's.
 //!
 //! The seam is [`BrowserBackend`], which `jstream-sources` holds injected like every
 //! other backend: [`open`](BrowserBackend::open) a [`PageSpec`] and get a
@@ -58,8 +58,9 @@ pub trait BrowserBackend: Send + Sync {
     /// has stopped.
     fn open(&self, spec: &PageSpec) -> Result<Box<dyn BrowserPage>, BrowserError>;
 
-    /// The GPU device pages deliver their frames on: the engine's own, on the media
-    /// adapter, so the compositor samples them where they are (ADR-0004). With `None`
+    /// The GPU device pages deliver their frames on: one on the media adapter, so the
+    /// compositor can sample them where they are (ADR-0004). The host opens it for now,
+    /// until the engine hands out its own. With `None`
     /// (the default) pages keep painting but their frames are dropped. Pages open before
     /// the call follow it from their next paint.
     fn use_device(&self, gpu: Option<&GpuContext>);

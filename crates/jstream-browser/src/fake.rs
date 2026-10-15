@@ -82,7 +82,7 @@ impl FakeBrowser {
         self.lock().refuse = error;
     }
 
-    /// Whether the engine last gave it a device ([`BrowserBackend::use_device`]).
+    /// Whether the host last gave it a device ([`BrowserBackend::use_device`]).
     pub fn has_device(&self) -> bool {
         self.lock().device
     }

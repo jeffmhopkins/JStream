@@ -18,8 +18,8 @@ verified = { hash = "b3:db5346e471ecf3b1", by = "agent:claude@session_01E4Mb9bbG
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
 web pages rendered off screen by CEF in a sandboxed helper process, each page's frames
-as textures on the engine's GPU device and its audio as a stream the engine records like
-a device's. Layer 3, its own crate rather than part of a platform crate, so that only
+as textures on a GPU device the host hands it and its audio as a stream the engine
+records like a device's. Layer 3, its own crate rather than part of a platform crate, so that only
 the helper's build downloads and builds CEF
 ([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.md),
 [ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)).
