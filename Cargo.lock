@@ -2643,6 +2643,7 @@ dependencies = [
  "jstream-control",
  "jstream-protocol",
  "leptos",
+ "serde_json",
 ]
 
 [[package]]
