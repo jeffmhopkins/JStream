@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:244d70caa87b2ce8", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose unchanged; ARCH#threading change (recording sink) doesn't touch platform traits" }
+verified = { hash = "b3:d21753664d9d1008", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (#174, #170, #171) into C4b: main didn't edit this section's text; re-read Video capture devices and Not yet (MfVideoDevices/MfMjpegDecoder exist; Backends field, CaptureStats decode count, MJPEG Codec variant remain) against src and the crate-map row" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -128,7 +128,7 @@ MJPEG `Codec` variant, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:7856c3f80a2d5b2d", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Stale only through ARCH#crate-map (G2's vcam-windows row gained a logging clause); re-read: the GpuInterop/GpuFrame design and the crate-map reference are unchanged" }
+verified = { hash = "b3:eba2b5b1242f1342", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (#174 G2 vcam-windows row) into C4b: the crate-map row this relies on still names GpuInterop with wgpu types; GpuInterop/GpuFrame design unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
