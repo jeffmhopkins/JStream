@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:280a330c50e3e9fe", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: re-read; resolved Kinds bullet: descriptors taken from jstream-sources' registry (kinds.rs) plus E1's display-capture exception; E1's Snapshot bullet kept; Not here yet keeps E1's audio/outputs snapshots with C1a's rendering from the source registry in place of real source kinds" }
+verified = { hash = "b3:f0bfdb774a0cec8f", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (#205 #179 #167 #172 #182): re-read against both sides; only test constructors gained role: None here, section claims unaffected" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -131,7 +131,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8530f5004443e479", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: re-read; resolved Not yet: daemon --collection/audit file with rendering sources from jstream-sources' registry, plus E1's audio/outputs snapshots bullet as is; Dependencies list jstream-sources and serde_json dev-only, matching Cargo.toml after E1's arc-swap" }
+verified = { hash = "b3:fd06a6edd970801c", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (#205 #179 #167 #172 #182): re-read against both sides; only test constructors gained role: None here, section claims unaffected" }
 -->
 
 ### Engine and sessions

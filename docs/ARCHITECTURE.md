@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:b1fa4484ef1c0a26", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: stamp-only; E1's text taken as is; C1a's kinds sentence holds" }
+verified = { hash = "b3:bf7c5c0b57f6c6e3", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (#205 save/load): role set by scene.create or scene.set_role; Not-yet list keeps main's persistence changes, without scene.create's role" }
 -->
 
 ```
@@ -505,7 +505,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f0076c01335e63b3", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: re-read after adding the wire test for scene.create's optional role (omitted when absent); text holds" }
+verified = { hash = "b3:e79222cc528c0dce", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r round 2: re-read after fixtures/examples.snap change; Edits bullet on scene.create's role holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -812,7 +812,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:333fc86c8cb74fff", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6): persist/ now also stores scene roles; Collections and Asset files bullets hold" }
+verified = { hash = "b3:da72f583470f5c1b", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: load rebuild now passes the role on scene.create; Collections bullet's role storage claim holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

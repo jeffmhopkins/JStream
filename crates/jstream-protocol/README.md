@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:4dd104de3edfb538", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: re-read after adding the wire test for scene.create's optional role (omitted when absent); text holds" }
+verified = { hash = "b3:7a94252446e123ce", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r round 2: fixtures add a scene.create with role group (examples.snap shows the wire form); text holds; version bump pending queue" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -104,7 +104,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:3e13ebd5da91e3c7", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: re-read after adding the wire test for scene.create's optional role (omitted when absent); text holds" }
+verified = { hash = "b3:05d294b8c6702ab7", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r round 2: split the Groups sentence (N3); scene.create's optional role and delete inverse text hold" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -203,9 +203,9 @@ order with 0 at the bottom.
 ### Groups and placement addressing
 
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
-`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`, and
-`scene.create` takes an optional `role` (omitted means `scene`), and
-`scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
+`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`. `scene.create` takes
+an optional `role` (omitted means `scene`), and `scene.set_role { scene_id, role }`
+changes it; the role changes no engine behaviour.
 `scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.11 reader sees
 no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
 to a position in another scene, keeping its ID and every placement property, under the

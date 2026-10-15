@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:6777f086abb3388a", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 B1 finding: Not-here-yet now says the engine can load and save a collection file but the daemon doesn't wire --collection yet (A6); rest unchanged" }
+verified = { hash = "b3:d1d88dab885cfe63", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (#205 #179 #167 #172 #182): re-read against both sides; only test constructors gained role: None here, section claims unaffected" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -128,7 +128,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:c28ae2b0696a573a", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: stamp-only, stale through core#design; daemon untouched by C1a" }
+verified = { hash = "b3:070af05b1437dffb", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (#205 #179 #167 #172 #182): re-read against both sides; only test constructors gained role: None here, section claims unaffected" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

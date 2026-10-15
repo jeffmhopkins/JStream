@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:1d57ced139f94302", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: only test constructors gained role: None; section text doesn't describe scene.create's fields and still holds" }
+verified = { hash = "b3:1d57ced139f94302", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r round 2: args.rs gained scene.create's optional role:<role> argument and scene_role parser; purpose text (one-to-one protocol mapping) still holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -214,11 +214,12 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ee66191a69123237", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: only test constructors gained role: None; section text doesn't describe scene.create's fields and still holds" }
+verified = { hash = "b3:e174d2164eaada8f", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r round 2: args.rs parser now takes an optional trailing role: on scene.create; reworded the fixed-arity bullet to say so" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
-  most, a sequence of fixed-arity edits named by their protocol command names, doesn't
+  most, a sequence of fixed-arity edits (only `scene.create` takes one optional trailing
+  `role:`) named by their protocol command names, doesn't
   fit a derive-based parser: with `clap` it would be a trailing list of raw strings
   parsed by hand anyway. A parser crate would add a dependency tree (and a review under
   [R-DEP-004](../../docs/RULES.md#R-DEP-004)) for the few global options and the help

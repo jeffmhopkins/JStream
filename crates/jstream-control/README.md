@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:8fe608ad9cc11933", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: only test constructors gained role: None; section text doesn't describe scene.create's fields and still holds" }
+verified = { hash = "b3:8fe608ad9cc11933", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r round 2: mock.rs now stores the role scene.create names and reports it in scene.list/state.get; purpose text still holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
