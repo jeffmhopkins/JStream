@@ -49,7 +49,6 @@ mod tests {
     use super::{PORTABLE_MARKER, dir};
     use std::ffi::OsString;
     use std::fs;
-    use std::path::PathBuf;
 
     fn env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<OsString> {
         let pairs: Vec<(String, OsString)> = pairs
@@ -81,7 +80,9 @@ mod tests {
     fn windows_uses_appdata() {
         assert_eq!(
             dir(None, env(&[("APPDATA", r"C:\Users\me\AppData\Roaming")])),
-            Some(PathBuf::from(r"C:\Users\me\AppData\Roaming\JStream"))
+            Some(std::path::PathBuf::from(
+                r"C:\Users\me\AppData\Roaming\JStream"
+            ))
         );
         assert_eq!(dir(None, env(&[("APPDATA", "")])), None);
         assert_eq!(dir(None, env(&[("APPDATA", r"relative\dir")])), None);
@@ -92,17 +93,17 @@ mod tests {
     fn elsewhere_uses_the_xdg_data_folder() {
         assert_eq!(
             dir(None, env(&[("XDG_DATA_HOME", "/x"), ("HOME", "/h")])),
-            Some(PathBuf::from("/x/jstream"))
+            Some(std::path::PathBuf::from("/x/jstream"))
         );
         assert_eq!(
             dir(None, env(&[("HOME", "/h")])),
-            Some(PathBuf::from("/h/.local/share/jstream"))
+            Some(std::path::PathBuf::from("/h/.local/share/jstream"))
         );
         assert_eq!(dir(None, env(&[])), None);
         assert_eq!(dir(None, env(&[("HOME", "relative")])), None);
         assert_eq!(
             dir(None, env(&[("XDG_DATA_HOME", "x"), ("HOME", "/h")])),
-            Some(PathBuf::from("/h/.local/share/jstream")),
+            Some(std::path::PathBuf::from("/h/.local/share/jstream")),
             "a relative XDG_DATA_HOME is ignored"
         );
     }

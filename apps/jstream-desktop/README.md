@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:11cde682ea827a38", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI doc fix: Host::stop's rustdoc says 5 s instead of linking the private STOP_TIMEOUT; behaviour unchanged, section holds" }
+verified = { hash = "b3:f0925d97c67e7dbc", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -51,7 +51,7 @@ folder.
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:02a94e83d53dfed7", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Round 1 B1: the window connects at once only once jstream-server takes the subprotocol token (#246); until then it shows the connect form's error. N2: relative env values are ignored (data.rs), consistent with the data-folder bullet; rest holds" }
+verified = { hash = "b3:9350838a23a53c88", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
 -->
 
 On Windows, with the UI built first:
@@ -93,7 +93,7 @@ the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:247e2e47f53aace6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI doc fix: Host::stop's rustdoc says 5 s instead of linking the private STOP_TIMEOUT; behaviour unchanged, section holds" }
+verified = { hash = "b3:d96c04dd03d1418a", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
