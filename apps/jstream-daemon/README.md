@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:3114ad1e18d827f8", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 N2: register.rs log_status doc now says warn for Moved, info for Missing; purpose bullets unchanged and hold" }
+verified = { hash = "b3:cc4e14786e0fd3a5", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B9 #197, G3c #235) into C9: main's text kept with C9's; register-vcam bullet from G3c and C9's unchanged purpose text both hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -184,7 +184,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:25de29a3d3f25a04", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (#239) into G3c: core's change is undo touched-set and save wording; daemon Design's collection/audit and Virtual camera registration bullets re-read and hold" }
+verified = { hash = "b3:c96efbd6496a58d5", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B9 #197, G3c #235) into C9: main's text kept with C9's; G3c's virtual camera paragraphs kept, C9's MfMediaDecoders in Live on Windows and the delay-load list; re-read" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
