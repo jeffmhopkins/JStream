@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:93f18bde144c048e", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (#217 asset reads, png 0.18, C1b) into C2: re-read the whole section; main's Assets and seams text kept; C2's text kind, Bundled font, dependencies and tests paragraphs match text/mod.rs, raster.rs and tests/text.rs (golden reader moved to png 0.18's BufRead API); covers back to main's globs" }
+verified = { hash = "b3:09aba095c77b4b2f", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review N6: Tests paragraph rewrapped, no wording change; rest re-read, holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -72,6 +72,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
+- `audio_input` (a `device` ID; empty follows the system's default input),
+  `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
+  found again when the application restarts) are audio-only: their descriptors have
+  audio and no video, `create` fails with `SourceError::AudioOnly`, and the engine
+  records them through the platform's audio I/O from the `AudioTarget` that
+  `AudioTarget::of(kind, settings)` reads from their settings (see `jstream-core`'s
+  *Audio sources*). Both settings are free text rather than a list of what is present,
+  so a collection naming an unplugged device still loads.
 - `text`: the `text` string drawn with the `font` asset (TrueType or OpenType, or the
   first font of a collection), or with the bundled font when it is `null`. Fonts are
   read with `skrifa` and glyph outlines rasterised with `ab_glyph_rasterizer`, unhinted.
@@ -142,10 +150,11 @@ features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmainta
 (RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
-**Tests.** Unit tests cover colour parsing, animation timing and the text outline's
-distance transform. `tests/sources.rs` checks the registry and runs the colour and
-image kinds through the public API on files in a temporary folder: PNG, GIF and
-lossless WebP files are encoded by the test, and `tests/data` holds a JPEG, a lossy
-WebP and an animated WebP made once with Pillow, as the test's header describes. `tests/text.rs` draws with the
-bundled font: wrapping, alignment, padding, outline, live updates, font assets and
-limits, plus golden PNGs in `tests/data/text` (`JSTREAM_BLESS=1` rewrites them).
+**Tests.** Unit tests cover colour parsing, animation timing, the text outline's
+distance transform and reading an audio target from settings. `tests/sources.rs` checks
+the registry and runs the colour and image kinds through the public API on files in a
+temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
+`tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
+the test's header describes. `tests/text.rs` draws with the bundled font: wrapping,
+alignment, padding, outline, live updates, font assets and limits, plus golden PNGs in
+`tests/data/text` (`JSTREAM_BLESS=1` rewrites them).

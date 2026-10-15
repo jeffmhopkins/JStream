@@ -1,6 +1,7 @@
 //! The kind registry: every source kind by ID, for `kind.list`, `kind.describe` and
 //! creating sources.
 
+use crate::audio;
 use crate::color::ColorKind;
 use crate::describe::described;
 use crate::image::ImageKind;
@@ -16,9 +17,11 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0031, docs/adr/0031-source-types-and-decoding-scope.md).
-    /// `color`, `image` and `text` produce frames. `display`, `media`, `webcam` and
-    /// `window` are described only, so their sources can be created and configured but
-    /// fail to start with [`SourceError::NotBuilt`].
+    /// `color`, `image` and `text` produce frames. `audio_input`, `desktop_audio` and
+    /// `app_audio` are audio-only: the engine records them, and `create` fails with
+    /// [`SourceError::AudioOnly`]. `display`, `media`, `webcam` and `window` are
+    /// described only, so their sources can be created and configured but fail to start
+    /// with [`SourceError::NotBuilt`].
     pub fn builtin() -> Self {
         let mut kinds: BTreeMap<String, Box<dyn SourceKind>> = BTreeMap::new();
         let mut add = |kind: Box<dyn SourceKind>| {
@@ -27,6 +30,9 @@ impl Registry {
         add(Box::new(ColorKind::new()));
         add(Box::new(ImageKind::new()));
         add(Box::new(TextKind::new()));
+        for kind in audio::kinds() {
+            add(Box::new(kind));
+        }
         for kind in described() {
             add(Box::new(kind));
         }

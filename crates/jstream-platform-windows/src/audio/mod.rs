@@ -11,6 +11,8 @@ mod device;
 #[cfg(any(windows, test))]
 mod format;
 #[cfg(windows)]
+mod process;
+#[cfg(windows)]
 mod stream;
 
 #[cfg(windows)]
@@ -18,12 +20,13 @@ pub use backend::WasapiAudio;
 
 #[cfg(windows)]
 mod backend {
+    use jstream_platform::media::AudioFormat;
     use jstream_platform::{
         AudioDeviceInfo, AudioInputHandler, AudioInputTarget, AudioIo, AudioOutputHandler,
-        AudioOutputTarget, AudioStream, PlatformError,
+        AudioOutputTarget, AudioProcess, AudioStream, PlatformError,
     };
 
-    use super::{device, stream};
+    use super::{device, process, stream};
     use crate::com::Com;
 
     /// Audio devices through WASAPI: capture endpoints, loopback of render endpoints and
@@ -48,6 +51,14 @@ mod backend {
         fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
             let _com = Com::init()?;
             device::list(&device::enumerator()?)
+        }
+
+        fn processes(&self) -> Result<Vec<AudioProcess>, PlatformError> {
+            process::list()
+        }
+
+        fn input_format(&self, target: &AudioInputTarget) -> Result<AudioFormat, PlatformError> {
+            stream::input_format(target)
         }
 
         fn open_input(
@@ -93,6 +104,18 @@ mod device_tests {
         frames: Arc<AtomicU64>,
         last_time: Arc<AtomicU64>,
         channels: usize,
+    }
+
+    impl Count {
+        /// A counter nothing reads.
+        fn new() -> Self {
+            Self {
+                packets: Arc::new(AtomicU64::new(0)),
+                frames: Arc::new(AtomicU64::new(0)),
+                last_time: Arc::new(AtomicU64::new(0)),
+                channels: 1,
+            }
+        }
     }
 
     impl AudioInputHandler for Count {
@@ -141,6 +164,50 @@ mod device_tests {
             assert!(!of_dir.is_empty(), "no {dir:?} devices");
             assert_eq!(of_dir.iter().filter(|d| d.is_default).count(), 1, "{dir:?}");
         }
+    }
+
+    #[test]
+    #[ignore = "needs a microphone and speakers"]
+    fn input_format_matches_the_opened_stream() {
+        let audio = WasapiAudio::new();
+        for target in [
+            AudioInputTarget::DefaultInput,
+            AudioInputTarget::DefaultOutputLoopback,
+        ] {
+            let format = audio.input_format(&target).expect("input format");
+            let stream = audio
+                .open_input(&target, Box::new(Count::new()))
+                .expect("open");
+            assert_eq!(stream.format(), format, "{target:?}");
+        }
+    }
+
+    #[test]
+    #[ignore = "needs real audio devices"]
+    fn lists_this_process_and_records_its_loopback() {
+        let audio = WasapiAudio::new();
+        let me = std::process::id();
+        let processes = audio.processes().expect("processes");
+        let this = processes
+            .iter()
+            .find(|p| p.pid == me)
+            .expect("this process is listed");
+        assert!(this.exe.ends_with(".exe"), "{:?}", this.exe);
+        let target = AudioInputTarget::ProcessLoopback { pid: me };
+        let format = audio.input_format(&target).expect("input format");
+        let stream = audio
+            .open_input(&target, Box::new(Count::new()))
+            .expect("open process loopback");
+        assert_eq!(stream.format(), format);
+        // A process that isn't running is not found.
+        let gone = processes.iter().map(|p| p.pid).max().unwrap_or(0) + 4;
+        let err = audio
+            .input_format(&AudioInputTarget::ProcessLoopback { pid: gone })
+            .err();
+        assert!(
+            matches!(err, Some(PlatformError::NotFound { .. })),
+            "{err:?}"
+        );
     }
 
     #[test]

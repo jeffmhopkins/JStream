@@ -3,6 +3,7 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod audio;
 mod collection;
 mod history;
 mod sources;
@@ -1214,6 +1215,17 @@ fn output_start_returns_after_a_panicking_teardown() {
     impl AudioIo for PanicAudio {
         fn devices(&self) -> Result<Vec<jstream_platform::AudioDeviceInfo>, PlatformError> {
             self.inner.devices()
+        }
+
+        fn processes(&self) -> Result<Vec<jstream_platform::AudioProcess>, PlatformError> {
+            self.inner.processes()
+        }
+
+        fn input_format(
+            &self,
+            target: &AudioInputTarget,
+        ) -> Result<jstream_media::AudioFormat, PlatformError> {
+            self.inner.input_format(target)
         }
 
         fn open_input(
@@ -2564,6 +2576,17 @@ mod cpu_pipeline {
             self.inner.devices()
         }
 
+        fn processes(&self) -> Result<Vec<jstream_platform::AudioProcess>, PlatformError> {
+            self.inner.processes()
+        }
+
+        fn input_format(
+            &self,
+            target: &AudioInputTarget,
+        ) -> Result<jstream_media::AudioFormat, PlatformError> {
+            self.inner.input_format(target)
+        }
+
         fn open_input(
             &self,
             target: &AudioInputTarget,
@@ -2706,6 +2729,17 @@ mod cpu_pipeline {
     impl AudioIo for PanicOnDropAudio {
         fn devices(&self) -> Result<Vec<AudioDeviceInfo>, PlatformError> {
             self.inner.devices()
+        }
+
+        fn processes(&self) -> Result<Vec<jstream_platform::AudioProcess>, PlatformError> {
+            self.inner.processes()
+        }
+
+        fn input_format(
+            &self,
+            target: &AudioInputTarget,
+        ) -> Result<jstream_media::AudioFormat, PlatformError> {
+            self.inner.input_format(target)
         }
 
         fn open_input(
