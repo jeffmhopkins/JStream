@@ -80,8 +80,8 @@ enum Era {
 /// them for the `events` tool.
 ///
 /// [`handle`](Server::handle) answers one message. It needs no particular executor: the
-/// future only awaits the [`Control`] futures. [`serve_stdio`](crate::serve_stdio) runs it
-/// over a byte stream.
+/// future awaits only the [`Control`] futures and the hello wait's timer, which its own
+/// thread wakes. [`serve_stdio`](crate::serve_stdio) runs it over a byte stream.
 ///
 /// Logging (R-RS-005): each server has an `mcp_session` span, every request runs in an
 /// `mcp_request` span under it naming the method, and each tool call in a `tool_call`

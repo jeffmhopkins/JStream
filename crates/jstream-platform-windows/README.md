@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:8c7cf9a76c031593", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
+verified = { hash = "b3:0404c877330db340", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272 CL1) into #143: stale only through ARCH#threading, whose merged text is this PR's wording plus #272's CLAP-hosts paragraph (shared block and mixer side built, host process not yet); re-read, this section's text is main's and names neither; holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

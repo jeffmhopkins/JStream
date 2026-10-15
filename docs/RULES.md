@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e23ff09bf4f04289", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
+verified = { hash = "b3:00452780759b35c1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272 CL1) into #143: rule text unchanged; ARCH#threading merged = this PR's wording + #272's CLAP status; neither changes R-RT-001..006; holds" }
 -->
 
 <a id="R-RT-001"></a>

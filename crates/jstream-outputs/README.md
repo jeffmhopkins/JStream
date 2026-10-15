@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:9ce22b7cc46effb8", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
+verified = { hash = "b3:bb0a6d1fddeee0e5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272 CL1) into #143: stale only through ARCH#threading, whose merged text is this PR's wording plus #272's CLAP-hosts paragraph (shared block and mixer side built, host process not yet); re-read, this section's text is main's and names neither; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

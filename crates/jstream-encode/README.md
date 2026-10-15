@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:e05a9bf96b641c44", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
+verified = { hash = "b3:b0e699a2f5912c0c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272 CL1) into #143: stale only through ARCH#threading, whose merged text is this PR's wording plus #272's CLAP-hosts paragraph (shared block and mixer side built, host process not yet); re-read, this section's text is main's and names neither; holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

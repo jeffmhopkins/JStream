@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:35541b5409acc9e5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N2): re-read; contents list and 'needs no async runtime' still hold (the open-early timeout uses a std thread timer)" }
+verified = { hash = "b3:44c12e4c16f2776e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "B2 in #143: server.rs rustdoc fix only; contents list and 'needs no async runtime' hold (the hello wait's timer is a std thread)" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:1fb43a9396a5c4f4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "B1: Async and transports now says handle awaits the Control futures and with_timeout's timer, which its own thread wakes (server.rs open_early), so any executor and serve_stdio's block_on still drive it; Session and identity's 3 s hello wait holds" }
+verified = { hash = "b3:3346f4d0a7f9114b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "B2 in #143: Server rustdoc now mirrors Async and transports (awaits the Control futures and the hello wait's timer, which its own thread wakes); section re-read; holds" }
 -->
 
 ### Tools

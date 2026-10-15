@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:3a75e323ed3b2ea2", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: main's text; re-checked its render-snapshot mentions (program mix drawn from it, PNG on the snapshot thread) make no lock-free claim for the snapshot thread, holds" }
+verified = { hash = "b3:288340abf7e53bcd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272 CL1) into #143: stale only through ARCH#threading, whose merged text is this PR's wording plus #272's CLAP-hosts paragraph (shared block and mixer side built, host process not yet); re-read, this section's text is main's and names neither; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -909,7 +909,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:037387eaec0b2653", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
+verified = { hash = "b3:c44054f5f7431f8b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272 CL1) into #143: stale only through ARCH#threading, whose merged text is this PR's wording plus #272's CLAP-hosts paragraph (shared block and mixer side built, host process not yet); re-read, this section's text is main's and names neither; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

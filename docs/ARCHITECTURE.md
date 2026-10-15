@@ -390,7 +390,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:6012cce52fa65794", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; main's render-snapshot paragraph (render thread loads lock-free, video.snapshot reads under the lock) kept as is; this PR's CLAP hosts paragraph (shared block and mixer side built, host/restarts/stats.tick not yet, dry-signal bypass) checked against rt/host.rs" }
+verified = { hash = "b3:3e2ba6d0a9eaf813", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272 CL1) into #143: kept this PR's marker-value wording, R-RT links, grammar fix and rewrap, and #272's CLAP plugin hosts status paragraph (shared block and mixer side built; host process, restarts, stats.tick not yet); re-read whole section; holds" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -529,7 +529,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:74d27819755c5784", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 241 N2/N6: only the mock's cycle reason text and a rustdoc changed; nothing in the protocol summary describes them; holds" }
+verified = { hash = "b3:ac5d28b9b674d023", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#272, #263) into #143: covered changes are this PR's ServerConfig limits/hello-timeout checks and #263's mock cycle-reason text; section describes neither; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -655,7 +655,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:7143bda21fa6463d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through jstream-mcp's README edit (B1: handle also awaits the hello wait's timer); ARCH MCP covers tools, events and access and says nothing about executors or hello timing; holds" }
+verified = { hash = "b3:b50f143018e8efbe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "B2/N9 in #143: Server rustdoc now says handle awaits the Control futures and the hello wait's timer; ARCH MCP covers tools, events and access, not executors; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
