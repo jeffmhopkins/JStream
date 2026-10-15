@@ -157,7 +157,13 @@ pub fn Canvas() -> impl IntoView {
             spawn_local(run_preview(
                 frames,
                 control,
-                screen::Screen::new(element),
+                screen::Screen::new(element, move || {
+                    // Shown once the first picture is drawn, unless the stream has
+                    // already ended.
+                    if preview_state.try_get_untracked() == Some(PreviewState::Starting) {
+                        preview_state.try_set(PreviewState::Live);
+                    }
+                }),
                 size,
                 ratio,
                 preview_state,
@@ -729,10 +735,6 @@ async fn run_preview(
                 state.try_set(PreviewState::Unavailable(error.to_string()));
                 return;
             }
-            continue;
-        }
-        if screen.drew() && state.try_get_untracked() != Some(PreviewState::Live) {
-            state.try_set(PreviewState::Live);
         }
     }
 }

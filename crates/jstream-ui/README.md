@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:d6512bcd90dc04e3", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "U4 preview: Canvas bullet now says the boxes are drawn over the live program preview; rest re-read, holds" }
+verified = { hash = "b3:b645a899ebb63515", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Round 1 fixes (JPEG newest-wins slot, Live from the draw callback): Canvas bullet unchanged and still accurate; holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -50,7 +50,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bb355cf26cd97353", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "U4 preview: re-read; the canvas keeps only its event and binary streams plus a Weak control handle, so disconnecting still closes the socket; no style attributes (style: bindings only); holds" }
+verified = { hash = "b3:3fedc2f28a630dcb", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Round 1 fixes: no new styles or sockets; one-shot createImageBitmap closures hold only decoder state, the session still closes on disconnect; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -117,7 +117,7 @@ verified = { hash = "b3:bb355cf26cd97353", by = "agent:claude@session_01PE5Ejidr
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:ac18538018be0967", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "U4 preview: new Preview bullet checked against preview.rs (channel 1, 30 fps, 320x180..1280x720, H.264 then JPEG, avc1 from SPS, backlog 3), screen.rs (VideoDecoder/createImageBitmap via Reflect, JPEG drop while busy) and mod.rs (fit-placed canvas, JPEG fallback, refusal and end messages); JPEG path exercised in Chromium against the daemon" }
+verified = { hash = "b3:86004ad7b2d055e3", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Preview bullet now says JPEG decodes one at a time with only the newest waiting (screen.rs Jpegs/next_jpeg); rest re-checked against preview.rs and mod.rs; JPEG path re-run in Chromium against the daemon" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
@@ -142,8 +142,9 @@ is the component.
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
-  decoder's queue passes 3 chunks; JPEG frames go through `createImageBitmap`, and one
-  that arrives while the last is still decoding is dropped. Each decoded picture is
+  decoder's queue passes 3 chunks; JPEG frames go through `createImageBitmap` one at a
+  time, and while one decodes only the newest that arrives waits, so the last picture
+  is never lost. Each decoded picture is
   drawn into a `<canvas>` placed with the canvas's own fit, so the picture lies exactly
   under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says

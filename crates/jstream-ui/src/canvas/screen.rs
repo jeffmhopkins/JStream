@@ -28,7 +28,7 @@ mod native {
         }
 
         /// Draws into `canvas`; natively there is nothing to draw on.
-        pub fn new<T>(_canvas: T) -> Option<Screen> {
+        pub fn new<T>(_canvas: T, _on_first: impl Fn() + 'static) -> Option<Screen> {
             None
         }
 
@@ -44,11 +44,6 @@ mod native {
         pub fn h264_failed(&self) -> bool {
             false
         }
-
-        /// Whether a picture has been drawn.
-        pub fn drew(&self) -> bool {
-            false
-        }
     }
 }
 
@@ -59,7 +54,7 @@ mod web {
     use leptos::web_sys::js_sys::{Array, Function, Object, Reflect, Uint8Array};
     use leptos::web_sys::wasm_bindgen::closure::Closure;
     use leptos::web_sys::wasm_bindgen::{JsCast, JsValue};
-    use std::cell::Cell;
+    use std::cell::{Cell, RefCell};
     use std::rc::Rc;
 
     fn global(name: &str) -> Option<JsValue> {
@@ -115,11 +110,99 @@ mod web {
             .unwrap_or_else(|| "the browser refused".to_owned())
     }
 
+    /// Draws decoded pictures into the canvas's 2D context.
+    struct Painter {
+        context: JsValue,
+        /// A picture has been drawn.
+        drew: Cell<bool>,
+        /// Called once, when the first picture is drawn.
+        on_first: Box<dyn Fn()>,
+        /// The screen is gone: pictures still arriving are closed, not drawn.
+        closed: Cell<bool>,
+    }
+
+    impl Painter {
+        /// Draws `image` (a `VideoFrame` or an `ImageBitmap`), then closes it.
+        fn draw(&self, image: JsValue) {
+            if !self.closed.get() {
+                let zero = JsValue::from_f64(0.0);
+                if call(
+                    &self.context,
+                    "drawImage",
+                    &[image.clone(), zero.clone(), zero],
+                )
+                .is_ok()
+                    && !self.drew.replace(true)
+                {
+                    (self.on_first)();
+                }
+            }
+            let _closed = call(&image, "close", &[]);
+        }
+    }
+
+    /// JPEG decoding through `createImageBitmap`, one picture at a time. While one is
+    /// decoding, only the newest picture waits, so a slow decode shows the latest
+    /// picture instead of a backlog.
+    struct Jpegs {
+        painter: Rc<Painter>,
+        busy: Cell<bool>,
+        pending: RefCell<Option<Vec<u8>>>,
+    }
+
+    /// Decodes and draws one JPEG, or keeps it as the newest waiting one.
+    fn decode_jpeg(jpegs: &Rc<Jpegs>, payload: &[u8]) -> Result<(), String> {
+        if jpegs.busy.get() {
+            *jpegs.pending.borrow_mut() = Some(payload.to_vec());
+            return Ok(());
+        }
+        let parts = Array::of1(&Uint8Array::from(payload));
+        let blob = construct(
+            "Blob",
+            &[
+                JsValue::from(parts),
+                object(&[("type", JsValue::from_str("image/jpeg"))])?,
+            ],
+        )?;
+        let promise = call(
+            &leptos::web_sys::js_sys::global(),
+            "createImageBitmap",
+            &[blob],
+        )?;
+        // One-shot closures free themselves once called, and hold the decoder state
+        // alive until then, so a decode still running when the screen goes is harmless.
+        let done = {
+            let jpegs = Rc::clone(jpegs);
+            Closure::once_into_js(move |bitmap: JsValue| {
+                jpegs.painter.draw(bitmap);
+                next_jpeg(&jpegs);
+            })
+        };
+        let failed = {
+            let jpegs = Rc::clone(jpegs);
+            Closure::once_into_js(move |_: JsValue| next_jpeg(&jpegs))
+        };
+        call(&promise, "then", &[done, failed])?;
+        jpegs.busy.set(true);
+        Ok(())
+    }
+
+    /// A decode finished: start on the newest waiting picture, if any.
+    fn next_jpeg(jpegs: &Rc<Jpegs>) {
+        jpegs.busy.set(false);
+        let waiting = jpegs.pending.borrow_mut().take();
+        if let Some(payload) = waiting
+            && !jpegs.painter.closed.get()
+        {
+            // A picture the browser refuses is skipped; the next one may decode.
+            let _shown = decode_jpeg(jpegs, &payload);
+        }
+    }
+
     /// The `<canvas>` the preview is drawn in, and the decoders that feed it.
     pub struct Screen {
         canvas: JsValue,
-        /// A picture has been drawn.
-        drew: Rc<Cell<bool>>,
+        painter: Rc<Painter>,
         /// The `VideoDecoder`, once an H.264 keyframe configured it.
         decoder: Option<JsValue>,
         feed: H264Feed,
@@ -128,11 +211,7 @@ mod web {
         /// Draws each decoded `VideoFrame`, then closes it.
         on_frame: Closure<dyn FnMut(JsValue)>,
         on_error: Closure<dyn FnMut(JsValue)>,
-        /// A JPEG is being decoded: later ones are dropped until it is drawn, so a slow
-        /// decode shows the newest picture instead of a backlog.
-        jpeg_busy: Rc<Cell<bool>>,
-        on_bitmap: Closure<dyn FnMut(JsValue)>,
-        on_bitmap_error: Closure<dyn FnMut(JsValue)>,
+        jpegs: Rc<Jpegs>,
     }
 
     impl Screen {
@@ -141,65 +220,52 @@ mod web {
             global("VideoDecoder").is_some() && global("EncodedVideoChunk").is_some()
         }
 
-        /// A screen on `canvas`, or `None` if it has no 2D context.
-        pub fn new(canvas: leptos::web_sys::HtmlCanvasElement) -> Option<Screen> {
+        /// A screen on `canvas`, or `None` if it has no 2D context. `on_first` is
+        /// called when the first picture has been drawn.
+        pub fn new(
+            canvas: leptos::web_sys::HtmlCanvasElement,
+            on_first: impl Fn() + 'static,
+        ) -> Option<Screen> {
             let canvas = JsValue::from(canvas);
             let context = call(&canvas, "getContext", &[JsValue::from_str("2d")]).ok()?;
             if context.is_null() {
                 return None;
             }
-            let drew = Rc::new(Cell::new(false));
-            let draw = {
-                let context = context.clone();
-                let drew = Rc::clone(&drew);
-                move |image: JsValue| {
-                    let zero = JsValue::from_f64(0.0);
-                    if call(&context, "drawImage", &[image.clone(), zero.clone(), zero]).is_ok() {
-                        drew.set(true);
-                    }
-                    let _closed = call(&image, "close", &[]);
-                }
-            };
+            let painter = Rc::new(Painter {
+                context,
+                drew: Cell::new(false),
+                on_first: Box::new(on_first),
+                closed: Cell::new(false),
+            });
             let failed = Rc::new(Cell::new(false));
-            let jpeg_busy = Rc::new(Cell::new(false));
-            let on_frame = Closure::<dyn FnMut(JsValue)>::new(draw.clone());
+            let on_frame = {
+                let painter = Rc::clone(&painter);
+                Closure::<dyn FnMut(JsValue)>::new(move |frame| painter.draw(frame))
+            };
             let on_error = {
                 let failed = Rc::clone(&failed);
                 Closure::<dyn FnMut(JsValue)>::new(move |_| failed.set(true))
             };
-            let on_bitmap = {
-                let busy = Rc::clone(&jpeg_busy);
-                Closure::<dyn FnMut(JsValue)>::new(move |bitmap| {
-                    busy.set(false);
-                    draw(bitmap);
-                })
-            };
-            let on_bitmap_error = {
-                let busy = Rc::clone(&jpeg_busy);
-                Closure::<dyn FnMut(JsValue)>::new(move |_| busy.set(false))
-            };
+            let jpegs = Rc::new(Jpegs {
+                painter: Rc::clone(&painter),
+                busy: Cell::new(false),
+                pending: RefCell::new(None),
+            });
             Some(Screen {
                 canvas,
-                drew,
+                painter,
                 decoder: None,
                 feed: H264Feed::default(),
                 failed,
                 on_frame,
                 on_error,
-                jpeg_busy,
-                on_bitmap,
-                on_bitmap_error,
+                jpegs,
             })
         }
 
         /// Whether the H.264 decoder has failed, so the stream should fall back to JPEG.
         pub fn h264_failed(&self) -> bool {
             self.failed.get()
-        }
-
-        /// Whether a picture has been drawn.
-        pub fn drew(&self) -> bool {
-            self.drew.get()
         }
 
         /// Shows one frame: sizes the canvas to the picture, then decodes and draws it.
@@ -280,34 +346,13 @@ mod web {
         }
 
         fn jpeg(&mut self, payload: &[u8]) -> Result<(), String> {
-            if self.jpeg_busy.get() {
-                return Ok(());
-            }
-            let parts = Array::of1(&Uint8Array::from(payload));
-            let blob = construct(
-                "Blob",
-                &[
-                    JsValue::from(parts),
-                    object(&[("type", JsValue::from_str("image/jpeg"))])?,
-                ],
-            )?;
-            let window = leptos::web_sys::js_sys::global();
-            let promise = call(&window, "createImageBitmap", &[blob])?;
-            self.jpeg_busy.set(true);
-            call(
-                &promise,
-                "then",
-                &[
-                    JsValue::from(self.on_bitmap.as_ref()),
-                    JsValue::from(self.on_bitmap_error.as_ref()),
-                ],
-            )
-            .map(|_| ())
+            decode_jpeg(&self.jpegs, payload)
         }
     }
 
     impl Drop for Screen {
         fn drop(&mut self) {
+            self.painter.closed.set(true);
             if let Some(decoder) = self.decoder.take() {
                 let _closed = call(&decoder, "close", &[]);
             }

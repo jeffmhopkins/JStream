@@ -47,7 +47,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 83% | 29 | 3 | 3 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `███████░░░` 67% | 4 | 1 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 32% | 6 | 7 | 6 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 32% | 6 | 8 | 5 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 13% | 1 | 0 | 7 |
 
 73 of 106 items are merged; 6 of those still wait on a run on Windows hardware.
@@ -184,7 +184,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U3b | Outputs and go-live panel | ✅ merged | #254 |
 | U3c | Mixer panel | ⏳ planned |  |
 | U4 | Canvas editing | ✅ merged | #255 |
-| U4p | Live preview on canvas | ⏳ planned |  |
+| U4p | Live preview on canvas | 🔍 in review | #302 |
 | U1 | Preview stream | 🔍 in review | #251 |
 | U5 | Tauri desktop app | 🧪 merged, Windows run pending: desktop app check | #258 |
 | T1 | Studio mode and transitions | 🔍 in review | #260 |
