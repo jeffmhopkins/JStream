@@ -17,7 +17,7 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:847c096affe4cfe0", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "New runbook: prerequisites match daemon Usage (exit 3 for missing Media Foundation, token file created then reused, parent dir must exist) and R-SEC-001 for the key" }
+verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +36,7 @@ verified = { hash = "b3:847c096affe4cfe0", by = "agent:claude@session_01PHLTrve4
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:03463792587031a6", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Main red: #234 and #203 landed together; #203 only added CLI Usage's 'no undo or redo command' note; re-read steps 1-8 against daemon and CLI Usage; no step uses undo; holds" }
+verified = { hash = "b3:201134c5a2e01771", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through server design; steps unchanged; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -91,15 +91,15 @@ $cli = 'target\release\jstream-cli.exe'
    Check: the state goes `stopping`, then `stopped`, and the service sees the stream
    end. Then press Ctrl-C in the daemon's terminal. It prints `stopped` and exits 0.
 8. **Clean up** if this was a test: `output clear-key live` removes the key from
-   Credential Manager. The output itself is gone when the daemon stops, because the
-   daemon doesn't save a collection yet.
+   Credential Manager. The output itself is gone when the daemon stops, unless it
+   was started with `--collection <file>`, which saves it for the next run.
 
 <a id="smoke"></a>
 ## Smoke script
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:8f76b8a97add354b", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Main red: #234 and #203 landed together; #203 only added CLI Usage's 'no undo or redo command' note; re-read options, steps 1-11 and exit codes; smoke.ps1 unchanged and uses no undo; holds" }
+verified = { hash = "b3:16b8dbc81732feb1", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

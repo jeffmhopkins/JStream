@@ -93,10 +93,12 @@ fn populated() -> MockEngine {
             Edit::SceneCreate {
                 scene_id: SceneId::new("main"),
                 name: "Main".into(),
+                role: None,
             },
             Edit::SceneCreate {
                 scene_id: SceneId::new("brb"),
                 name: "Be right back".into(),
+                role: None,
             },
             Edit::SourceCreate {
                 source_id: SourceId::new("cam"),
@@ -196,9 +198,9 @@ fn scene_list_golden() {
     assert_eq!(
         run_on(&engine, &["--mock", "scene", "list"]),
         ok("rev 1\n\
-            ID    NAME           ITEMS\n\
-            main  Main           2\n\
-            brb   Be right back  0\n")
+            ID    NAME           ROLE   ITEMS\n\
+            main  Main           scene  2\n\
+            brb   Be right back  scene  0\n")
     );
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "scene", "list"]),
@@ -347,6 +349,99 @@ fn state_get_golden() {
     );
 }
 
+/// Protocol 0.12's grouping (`scene.set_role`, `item.move`) and 0.11's geometry and
+/// canvas edits, as one batch, and how the tables show them.
+#[test]
+fn groups_geometry_and_canvas_golden() {
+    let engine = populated();
+    let line = [
+        "--mock",
+        "edit",
+        "scene.create",
+        "grp",
+        "Cameras",
+        "scene.set_role",
+        "grp",
+        "group",
+        "source.create",
+        "grp_src",
+        "Cameras",
+        "scene:grp",
+        "item.add",
+        "main",
+        "grp_1",
+        "grp_src",
+        "item.move",
+        "cam_1",
+        "grp",
+        "0",
+        "item.move",
+        "cam_2",
+        "grp",
+        "1",
+        "item.set_geometry",
+        "cam_2",
+        "320",
+        "180",
+        "640",
+        "360",
+        "0",
+        "fill",
+        "canvas.set_size",
+        "1280",
+        "720",
+    ];
+    assert_eq!(run_on(&engine, &line), ok("applied: rev 2 (req_1)\n"));
+    assert_eq!(
+        run_on(&engine, &["--mock", "scene", "list"]),
+        ok("rev 2\n\
+            ID    NAME           ROLE   ITEMS\n\
+            main  Main           scene  1\n\
+            brb   Be right back  scene  0\n\
+            grp   Cameras        group  2\n")
+    );
+    let state = run_on(&engine, &["--mock", "state", "get"]);
+    assert_eq!(state.code, exit::OK, "{state:?}");
+    assert!(
+        state.out.contains("\ngroup grp (Cameras):\n"),
+        "{}",
+        state.out
+    );
+    let json = run_on(&engine, &["--json", "--mock", "state", "get"]);
+    let value: Value = serde_json::from_str(json.out.trim()).expect("json");
+    let result = &value["result"]["result"];
+    assert_eq!(result["canvas"], json!({"width": 1280, "height": 720}));
+    let group = &result["scenes"][2];
+    assert_eq!(group["role"], "group");
+    assert_eq!(group["items"][0]["item_id"], "cam_1");
+    assert_eq!(
+        group["items"][1]["geometry"],
+        json!({
+            "center": {"x": 320.0, "y": 180.0},
+            "size": {"width": 640.0, "height": 360.0},
+            "fit_mode": "fill",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+        })
+    );
+
+    // The group's own placement can't move into the group: it would contain itself.
+    let cycle = run_on(
+        &engine,
+        &["--mock", "edit", "item.move", "grp_1", "grp", "0"],
+    );
+    assert_eq!(
+        cycle,
+        failed(
+            17,
+            "error: invalid `edits.0.scene_id`: moving item `grp_1` (source `grp_src`) into \
+             scene `grp` would create a cycle (invalid_argument)\n"
+        )
+    );
+}
+
 #[test]
 fn edits_go_as_one_batch_golden() {
     let engine = populated();
@@ -394,7 +489,7 @@ fn edits_go_as_one_batch_golden() {
     );
     assert_eq!(
         run_on(&engine, &["--mock", "scene", "list"]),
-        ok("rev 3\nID    NAME  ITEMS\nmain  Main  1\n")
+        ok("rev 3\nID    NAME  ROLE   ITEMS\nmain  Main  scene  1\n")
     );
 }
 
@@ -683,6 +778,40 @@ fn stream_keys_golden() {
             r#"{"type":"output.status","output_id":"yt","state":"stopped","key_set":false,"encoder_sessions":0,"hardware_sessions":0}}}"#,
             "\n"
         ))
+    );
+}
+
+#[test]
+fn program_scene_golden() {
+    let engine = populated();
+    assert_eq!(
+        run_on(&engine, &["--mock", "studio", "get"]),
+        ok("program: main\n")
+    );
+    let control = session(&engine);
+    let events = control.events();
+    assert_eq!(
+        run_on(&engine, &["--mock", "scene", "switch", "brb"]),
+        ok("scene.switch accepted for brb (req_1)\n")
+    );
+    assert_eq!(
+        run_on(&engine, &["--json", "--mock", "studio", "get"]),
+        ok(concat!(
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"studio.get","#,
+            r#""program_scene":"brb"}}}"#,
+            "\n"
+        ))
+    );
+    assert_eq!(engine.rev(), Rev(1), "a switch is not an edit");
+    let mut out = Vec::new();
+    stream_events(events, Some(1), false, &mut out).expect("one event");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "studio.changed program brb by mock_4 (req_1)\n"
+    );
+    assert_eq!(
+        run_on(&MockEngine::new(), &["--mock", "studio", "get"]),
+        ok("program: none (no scenes)\n")
     );
 }
 

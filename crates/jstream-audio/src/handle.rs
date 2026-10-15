@@ -1,17 +1,18 @@
-//! Control-plane handles: faders, mutes, sends, meters and counters of the inputs and
-//! the buses.
+//! Control-plane handles: faders, mutes, sends, filter chains, meters and counters of
+//! the inputs and the buses.
 //! Every method is a few atomic operations, so the control thread never waits on a
 //! real-time thread and vice versa (docs/RULES.md#R-RT-003).
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use crate::MeterReading;
 use crate::rt::bus::{BusShared, MASTER_ID};
-use crate::rt::cmd::ControlPlane;
+use crate::rt::chain::{FilterParams, FilterSpec};
+use crate::rt::cmd::{ChainTarget, ControlPlane};
 use crate::rt::input::InputShared;
 use crate::rt::ring::FrameRing;
 use crate::rt::shared::db_to_gain;
+use crate::{AudioError, MeterReading};
 
 /// One mixer's input. Opaque: only [`InputControl::id`] produces one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -35,8 +36,69 @@ impl BusId {
     };
 }
 
-/// Controls and observes one mixer input: the source's fader and mute, and its row of
-/// the send matrix. Cheap to clone; every clone controls the
+/// One filter in a mixer's chains. Opaque: [`FilterControl::id`] produces one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct FilterId(u64);
+
+/// Edits and removes one filter in an input's, a bus's, the master's or an output tap's
+/// chain. Cheap to clone.
+#[derive(Clone, Debug)]
+pub struct FilterControl {
+    id: u64,
+    target: ChainTarget,
+    latency: usize,
+    plane: Arc<ControlPlane>,
+}
+
+impl FilterControl {
+    /// This filter's id.
+    pub fn id(&self) -> FilterId {
+        FilterId(self.id)
+    }
+
+    /// The latency the filter adds to its chain, frames (the limiter's look-ahead; 0 for
+    /// the others). Fixed when it was built.
+    pub fn latency_frames(&self) -> usize {
+        self.latency
+    }
+
+    /// Changes the filter's settings. The mixer applies them at the start of its next
+    /// block, through the kernel's own setter (a gain change ramps; the others take
+    /// effect at once).
+    ///
+    /// # Errors
+    /// [`AudioError::InvalidConfig`] when `params` is another kind of filter's or out of
+    /// range, [`AudioError::Removed`] when the filter (or its input or bus) was removed,
+    /// and [`AudioError::CommandQueueFull`] when the queue can't take the edit.
+    pub fn set(&self, params: FilterParams) -> Result<(), AudioError> {
+        self.plane.edit_filter(self.target, self.id, params)
+    }
+
+    /// Removes the filter from its chain; it is freed on the collector thread. False when
+    /// it was already removed (or its input or bus was), or the queue can't take it.
+    pub fn remove(&self) -> bool {
+        self.plane.remove_filter(self.target, self.id)
+    }
+}
+
+/// Adds `spec` at `index` in `target`'s chain.
+fn insert_filter(
+    plane: &Arc<ControlPlane>,
+    target: ChainTarget,
+    index: usize,
+    spec: FilterSpec,
+) -> Result<FilterControl, AudioError> {
+    let (id, latency) = plane.add_filter(target, index, spec)?;
+    Ok(FilterControl {
+        id,
+        target,
+        latency,
+        plane: Arc::clone(plane),
+    })
+}
+
+/// Controls and observes one mixer input: the source's filter chain, fader and mute,
+/// and its row of the send matrix. Cheap to clone; every clone controls the
 /// same input.
 ///
 /// It also holds a reference to everything the input's audio thread and the mixer
@@ -70,6 +132,30 @@ impl InputControl {
     /// This input's id.
     pub fn id(&self) -> InputId {
         self.id
+    }
+
+    /// Appends a filter to the input's chain, which runs before its fader. Allocates the
+    /// filter here; the mixer installs it at the start of its next block.
+    ///
+    /// # Errors
+    /// [`AudioError::InvalidConfig`] for settings out of range or a chain whose latency
+    /// would pass 100 ms, [`AudioError::TooManyFilters`] past 8 filters,
+    /// [`AudioError::Removed`] once the input was removed, and
+    /// [`AudioError::CommandQueueFull`].
+    pub fn add_filter(&self, spec: FilterSpec) -> Result<FilterControl, AudioError> {
+        self.insert_filter(usize::MAX, spec)
+    }
+
+    /// [`Self::add_filter`] at `index` in the chain (clamped to its end).
+    ///
+    /// # Errors
+    /// As [`Self::add_filter`].
+    pub fn insert_filter(
+        &self,
+        index: usize,
+        spec: FilterSpec,
+    ) -> Result<FilterControl, AudioError> {
+        insert_filter(&self.plane, ChainTarget::Input(self.id.0), index, spec)
     }
 
     /// Removes this input. The mixer drops it on its next block and the ring is freed
@@ -226,6 +312,31 @@ impl BusControl {
         Arc::clone(&self.shared)
     }
 
+    /// Appends a filter to the bus's chain, which runs on the sum before its fader.
+    /// Allocates the filter here; the mixer installs it at the start of its next block.
+    ///
+    /// # Errors
+    /// As [`InputControl::add_filter`].
+    pub fn add_filter(&self, spec: FilterSpec) -> Result<FilterControl, AudioError> {
+        self.insert_filter(usize::MAX, spec)
+    }
+
+    /// [`Self::add_filter`] at `index` in the chain (clamped to its end).
+    ///
+    /// # Errors
+    /// As [`InputControl::add_filter`].
+    pub fn insert_filter(
+        &self,
+        index: usize,
+        spec: FilterSpec,
+    ) -> Result<FilterControl, AudioError> {
+        let target = ChainTarget::Bus {
+            slot: self.id.slot,
+            id: self.id.id,
+        };
+        insert_filter(&self.plane, target, index, spec)
+    }
+
     /// This bus's id, for [`InputControl::set_send`].
     pub fn id(&self) -> BusId {
         self.id
@@ -281,4 +392,103 @@ pub struct BusStats {
     /// Engine frames skipped because the mixer fell more than half a ring behind the
     /// clock. Counted on the master bus only; every bus skips the same frames.
     pub skipped_frames: u64,
+}
+
+/// The master chain (docs/adr/0027-program-master-and-output-chains.md): its filters run
+/// on every bus that feeds an output, the master bus and every bus an output tap reads,
+/// after that bus's own chain and fader. Monitoring ([`Mixer::bus_block`]) is before it.
+/// Each such bus runs its own copy, so filter state never mixes buses. Cheap to clone.
+///
+/// [`Mixer::bus_block`]: crate::Mixer::bus_block
+#[derive(Clone, Debug)]
+pub struct MasterControl {
+    plane: Arc<ControlPlane>,
+}
+
+impl MasterControl {
+    pub(crate) fn new(plane: Arc<ControlPlane>) -> Self {
+        Self { plane }
+    }
+
+    /// Adds a filter at the end of the master chain, one copy per bus. Allocates the
+    /// copies on the caller; a bus added later gets its own copy with the filter's
+    /// current settings.
+    ///
+    /// # Errors
+    /// The same as [`InputControl::add_filter`].
+    pub fn add_filter(&self, spec: FilterSpec) -> Result<FilterControl, AudioError> {
+        self.insert_filter(usize::MAX, spec)
+    }
+
+    /// Adds a filter at `index` in the master chain (clamped to the end).
+    ///
+    /// # Errors
+    /// The same as [`InputControl::add_filter`].
+    pub fn insert_filter(
+        &self,
+        index: usize,
+        spec: FilterSpec,
+    ) -> Result<FilterControl, AudioError> {
+        insert_filter(&self.plane, ChainTarget::Master, index, spec)
+    }
+}
+
+/// One mixer's output tap. Opaque: [`OutputTapControl::id`] produces one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct OutputTapId(pub(crate) u64);
+
+/// Controls one output tap: an output's own view of one bus after the master chain,
+/// through the tap's own filter chain (ADR-0027's per-output audio chain). An output
+/// with a tap encodes its audio from [`Mixer::output_block`] instead of sharing the
+/// master bus's encode. Cheap to clone.
+///
+/// [`Mixer::output_block`]: crate::Mixer::output_block
+#[derive(Clone, Debug)]
+pub struct OutputTapControl {
+    id: OutputTapId,
+    bus: BusId,
+    plane: Arc<ControlPlane>,
+}
+
+impl OutputTapControl {
+    pub(crate) fn new(id: OutputTapId, bus: BusId, plane: Arc<ControlPlane>) -> Self {
+        Self { id, bus, plane }
+    }
+
+    /// This tap's id, for [`Mixer::output_block`](crate::Mixer::output_block).
+    pub fn id(&self) -> OutputTapId {
+        self.id
+    }
+
+    /// The bus it reads.
+    pub fn bus(&self) -> BusId {
+        self.bus
+    }
+
+    /// Adds a filter at the end of the tap's chain. Its latency moves the tap's blocks'
+    /// presentation time, not the other outputs'.
+    ///
+    /// # Errors
+    /// The same as [`InputControl::add_filter`].
+    pub fn add_filter(&self, spec: FilterSpec) -> Result<FilterControl, AudioError> {
+        self.insert_filter(usize::MAX, spec)
+    }
+
+    /// Adds a filter at `index` in the tap's chain (clamped to the end).
+    ///
+    /// # Errors
+    /// The same as [`InputControl::add_filter`].
+    pub fn insert_filter(
+        &self,
+        index: usize,
+        spec: FilterSpec,
+    ) -> Result<FilterControl, AudioError> {
+        insert_filter(&self.plane, ChainTarget::OutputTap(self.id.0), index, spec)
+    }
+
+    /// Removes the tap; its filters go with it. False when it was already removed, or
+    /// the command queue is full (the tap stays).
+    pub fn remove(&self) -> bool {
+        self.plane.remove_tap(self.id.0)
+    }
 }

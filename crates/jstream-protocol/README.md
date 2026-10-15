@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:1e8df0fbc198149d", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Commands list is F3's with item.set_source; version line says 0.14 for references and clones, 0.13 encoder profiles; parity bullet merges encoder profiles with clone and dangling duplicated_from" }
+verified = { hash = "b3:b0ab2649efe3d49f", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: PROTOCOL_VERSION now 0.17 for scene.create's optional role; version history line names 0.16 for B10's scene.switch/studio" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -40,7 +40,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `output.create`, `output.set_target`, `output.set_encoder`, `output.delete`,
   `encoder.create`, `encoder.update`, `encoder.delete`), with `ItemTransform`
   (deprecated), `Crop`, `SourceKind` and `SceneRole`;
-  `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
+  `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
+  `scene.switch`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
@@ -53,8 +54,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   and `EncoderSessionInfo`, the per-output sharing `output.status` reports
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `encoder.list`, `video.snapshot`, `kind.list` and `kind.describe`,
-  with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo` and `ItemInfo`
+  `output.list`, `output.status`, `encoder.list`, `video.snapshot`, `kind.list`, `kind.describe`,
+  `delete.plan` (with its `DeleteTarget`) and `studio.get`, with `QueryResult` and the `SceneSummary`,
+  `SceneInfo`, `SourceInfo` and `ItemInfo`
   shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
   mix as a PNG.
@@ -66,10 +68,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No kind is defined here.
-- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `events.dropped` and
-  `stats.tick`.
+- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
+  `events.dropped` and `stats.tick`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
-  codes, and `WireError`, its wire form with a message.
+  codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
+  form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs, `Rev`, and
   `PROTOCOL_VERSION`.
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
@@ -83,8 +86,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.14 because of
-  references and clones (`item.set_source`, `duplicated_from`); 0.13 added encoder
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.17 because of
+  `scene.create`'s optional `role`; 0.16 added `scene.switch`, `studio.get` and
+  `studio.changed`, 0.15 `delete.plan` and the
+  `blockers` detail on `invalid_argument`, 0.14 references
+  and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
   `item.move`, a scene's `role` and the placement edits' `scene_id`), 0.11 the canvas
   and the geometry wire surface ([Item geometry](#design)), 0.10 the `history` calls,
@@ -115,7 +121,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:1b5b1d4bc6777520", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; references paragraph marks item.set_source 0.14; F3's encoder sections hold beside it" }
+verified = { hash = "b3:f923ef8b515be15c", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r at 0.17: Groups paragraph marks scene.create's role as protocol 0.17; inverse text holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -135,8 +141,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":11},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":11},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":15},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":15},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -180,8 +186,8 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
 - **Edit** (`Edit`): changes the collection state, the data that is saved in the
   collection file and that `rev` counts. Undoable, batchable, atomic.
 - **Action** (`Action`): has effects outside the collection state, such as network,
-  devices, files, secrets or time (starting an output, going live, storing a stream
-  key, OAuth). Never undoable or
+  devices, files, secrets, time or runtime state (starting an output, going live,
+  storing a stream key, OAuth, switching the program scene). Never undoable or
   batchable. The response only says the action was accepted; progress arrives as
   events (`output.state_changed`).
 
@@ -223,18 +229,18 @@ order with 0 at the bottom.
 ### Groups and placement addressing
 
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
-`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`, and
-`scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
+`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`. `scene.create` takes
+an optional `role` (omitted means `scene`; protocol 0.17), and `scene.set_role { scene_id, role }`
+changes it; the role changes no engine behaviour.
 `scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.11 reader sees
 no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
 to a position in another scene, keeping its ID and every placement property, under the
 same cycle check as `item.add` (field `scene_id`). `index` is the item's position after
 the move: up to the number of items already there for another scene, and below it for
 the item's own scene, where the move is a reorder. Grouping is a client-built batch:
-`scene.create`, `scene.set_role` to `group`, `source.create` of a `scene` source,
+`scene.create` with `role: group`, `source.create` of a `scene` source,
 `item.add` of it with `item.move` to the lowest selected index, then an `item.move` of
-each selected item into the group, bottom first. `scene.create` doesn't take a `role`
-yet.
+each selected item into the group, bottom first.
 
 The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
 `item.set_visible`) take an
@@ -286,8 +292,15 @@ never a type per kind.
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
   `source.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
-  scene `a`). `scene.delete` and `source.delete` are rejected while a setting refers to the
-  target, naming each `<source>.settings.<param>`. Asset references are not edges.
+  scene `a`). Asset references are not edges.
+- **Deletes are refused while anything refers to the target**, with no cascading edit
+  ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
+  `source.delete` is refused while an item places the source, and `scene.delete` while a
+  `scene` source shows the scene; either is refused while a setting refers to its
+  target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
+  `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
+  or the source whose setting refers to it (`settings.<param>`). `delete.plan` returns
+  the batch that removes them with the target (see [Queries](#design)).
 
 `SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
 parameters), so a reader of 0.7 messages sees no change for those.
@@ -388,6 +401,21 @@ Queries read and never change `rev`. Those that read the collection state carry 
   so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
+- `studio.get`: the scene on program (`program_scene`, omitted only while the collection
+  has no scene). Runtime state, not collection state
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
+  Added in 0.16.
+- `delete.plan {target}`: the batch that deletes a scene or source (`target` is
+  `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
+  everything that refers to it, as `edits` and the `rev` it was planned at, or
+  `not_found` for a missing target. In order, the edits remove the items that place a
+  deleted source, set every settings reference to a deleted object to `null` (one
+  `source.set_settings` per source, which keeps the source), delete the `scene` sources
+  that show a deleted scene, and last delete the target. Deleting a scene deletes the
+  `scene` sources that show it, and the cascade stops there, since deleting a source
+  deletes no scene. A target nothing refers to plans just its own delete. The client
+  shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
+  refused if the state moved on, and its undo is the batch's inverse.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
@@ -427,9 +455,9 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop` and
-`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
-`scene.reorder` unless it was last, `scene.set_role` for a group, and each item's
-restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`
+with the scene's `role` (omitted for `scene`), `scene.reorder` unless it was last, and
+each item's restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings and its
 `duplicated_from`, undoing `item.set_source` is `item.set_source` back, and undoing
@@ -494,6 +522,14 @@ After `welcome`, the server pushes every event to every client.
   to `rev`, a gap shows that an event was missed.
 - `output.state_changed {output_id, state}` reports runtime state, which is not part of
   the collection, so it carries no `rev`.
+- `studio.changed {program_scene?, client_id, request_id?}` reports a new scene on
+  program, with the request that caused it: a `scene.switch`, or a batch, undo or redo
+  that created
+  the collection's first scene (it goes on program) or deleted the program scene
+  (program moves to the first scene left, or to none). For edits it follows their
+  `state.changed`. A switch to the scene already on program emits nothing.
+  Program is runtime state, so it carries no `rev`
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). Added in 0.16.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -539,7 +575,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `rev_conflict` | `expected_rev` is stale; nothing applied | `expected`, `current` |
 | `not_found` | A command named a missing object | `entity`, `id` |
 | `already_exists` | A creating edit reused an ID | `entity`, `id` |
-| `invalid_argument` | A field's value was rejected | `field`, `reason` |
+| `invalid_argument` | A field's value was rejected | `field`, `reason`, and `blockers` for a refused delete |
 | `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
 | `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
@@ -690,9 +726,10 @@ described above.
    R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
    (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are not
    built yet.
-5. **Actions that change collection state.** `studio.transition` changes the program
-   scene, which is saved in the collection. Is it an action that also bumps `rev`, or an
-   edit plus a separate "run transition" action?
+5. **Actions that change collection state.** Settled by
+   [ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md): the program
+   scene is runtime state, not collection state, so `scene.switch` is an action that
+   changes no `rev`, and no action changes collection state.
 6. **Idempotency.** How long the engine remembers keys (count or time), and whether a
    reused key with a different batch is an error (`idempotency_key_reused`).
 7. **Event subscriptions.** Every client gets every event in this cut, including
@@ -717,8 +754,7 @@ described above.
     absolute path under a known root in relative form, and kind versions on stored
     settings, which come with persistence.
 12. **Deleting referenced objects.** Settled by
-    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md): rejection stays
-    the only delete, with no cascading edit. The error will list every blocker as a
-    structured detail, and a `delete.plan` query will return the batch that removes the
-    target and its blockers. Not built yet: today the error's `reason` names the
-    blockers, and the client removes them itself.
+    [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) and built:
+    rejection stays the only delete, with no cascading edit. The error lists every
+    blocker in `blockers`, and the `delete.plan` query returns the batch that removes
+    the target and its blockers ([Edits, actions and queries](#design)).

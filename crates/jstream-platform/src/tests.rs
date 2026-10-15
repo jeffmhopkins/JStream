@@ -11,10 +11,11 @@ use jstream_media::{
 use crate::fake::{self, FakeAudioIo, FakeClock, FakeVcamSink};
 use crate::{
     AudioEncoder, AudioEncoderConfig, AudioInputHandler, AudioInputTarget, AudioIo,
-    AudioOutputHandler, AudioOutputTarget, AudioPacket, AudioRenderBuffer, AudioStream, Backends,
-    Capture, CaptureStream, CaptureTarget, Codecs, DeviceId, FrameSync, GpuContext, GpuFrame,
-    GpuInterop, HardwarePreference, MediaClock, PlatformError, RateControl, VcamFormat, VcamSink,
-    VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    AudioOutputHandler, AudioOutputTarget, AudioPacket, AudioProcess, AudioRenderBuffer,
+    AudioStream, Backends, Capture, CaptureStream, CaptureTarget, Codecs, DeviceId, FrameSync,
+    GpuContext, GpuFrame, GpuInterop, HardwarePreference, MediaClock, PlatformError, RateControl,
+    VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
+    VideoSurface,
 };
 
 fn assert_send<T: Send + ?Sized>() {}
@@ -199,24 +200,53 @@ fn audio_unplug_reports_once_and_closes() {
 }
 
 #[test]
-fn audio_rejects_unknown_and_unsupported_targets() {
+fn audio_rejects_unknown_targets() {
     let (_, b) = setup();
-    let err = b
-        .audio
-        .open_input(
-            &AudioInputTarget::ProcessLoopback { pid: 4 },
-            Box::new(Recorder::default()),
-        )
-        .err();
-    assert!(matches!(err, Some(PlatformError::Unsupported { .. })));
-    let err = b
-        .audio
-        .open_input(
-            &AudioInputTarget::Input(DeviceId::new("nope")),
-            Box::new(Recorder::default()),
-        )
-        .err();
-    assert!(matches!(err, Some(PlatformError::NotFound { .. })));
+    for target in [
+        AudioInputTarget::ProcessLoopback { pid: 4 },
+        AudioInputTarget::Input(DeviceId::new("nope")),
+    ] {
+        let err = b
+            .audio
+            .open_input(&target, Box::new(Recorder::default()))
+            .err();
+        assert!(
+            matches!(err, Some(PlatformError::NotFound { .. })),
+            "{target:?}"
+        );
+        let err = b.audio.input_format(&target).err();
+        assert!(
+            matches!(err, Some(PlatformError::NotFound { .. })),
+            "{target:?}"
+        );
+    }
+}
+
+#[test]
+fn audio_lists_processes_and_records_a_listed_one() {
+    let clock = FakeClock::new(Timebase::MILLIS);
+    let io = FakeAudioIo::new(clock, 48_000, ChannelLayout::Stereo).unwrap();
+    let shared: Arc<dyn AudioIo> = Arc::new(io.clone());
+    assert_eq!(shared.processes().unwrap(), vec![]);
+    let game = AudioProcess {
+        pid: 40,
+        parent_pid: Some(4),
+        exe: "game.exe".into(),
+    };
+    io.set_processes(vec![game.clone()]);
+    assert_eq!(shared.processes().unwrap(), vec![game]);
+    let target = AudioInputTarget::ProcessLoopback { pid: 40 };
+    let format = shared.input_format(&target).unwrap();
+    let stream = shared
+        .open_input(&target, Box::new(Recorder::default()))
+        .unwrap();
+    assert_eq!(stream.format(), format);
+    assert_eq!(io.input_targets(), vec![target]);
+    // The process exits; its stream stays open until the engine drops it.
+    io.set_processes(vec![]);
+    assert_eq!(io.open_streams(), 1);
+    drop(stream);
+    assert_eq!(io.input_targets(), vec![]);
 }
 
 fn size() -> FrameSize {
