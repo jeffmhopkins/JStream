@@ -43,14 +43,14 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | Milestone | Progress | Merged | In review | Planned |
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
-| [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `████████░░` 83% | 15 | 2 | 1 |
+| [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `█████████░` 89% | 16 | 1 | 1 |
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 86% | 30 | 2 | 3 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 30% | 6 | 8 | 6 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 11% | 1 | 2 | 6 |
 
-75 of 108 items are merged; 7 of those still wait on a run on Windows hardware.
+76 of 108 items are merged; 8 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -72,7 +72,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M1a</b> Thin slice to YouTube: 15 of 18 merged</summary>
+<summary><b>M1a</b> Thin slice to YouTube: 16 of 18 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -88,7 +88,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | A6 | Daemon --collection and audit log | ✅ merged | #232 |
 | A4 | Go-live runbook and smoke | 🧪 merged, Windows run pending: smoke script run | #234 |
 | E3a | GPU capture frames | ✅ merged | #173 |
-| E3b | Render takes GPU frames | 🔍 in review | #219 |
+| E3b | Render takes GPU frames | 🧪 merged, Windows run pending: windows_gpu hardware test (#334) | #219 |
 | Y1 | jstream-youtube crate | ✅ merged | #167 |
 | Y2 | OAuth token store | ✅ merged | #169 |
 | YA | ADR-0041 one sign-in | ✅ merged | #214 |
