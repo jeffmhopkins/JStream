@@ -26,14 +26,18 @@ jstream-sources = { path = "../crates/jstream-sources" }
 serde_json = "1"
 
 # A standalone workspace can't inherit the root `[workspace.lints]`, so the lints that
-# apply to test harness code are restated here (R-RS-004, R-RS-005, R-RS-009). Targets
-# panic on purpose (`expect`, `assert!`): a panic is how libFuzzer reports a finding.
-# `unsafe_code` is not forbidden: `fuzz_target!` expands to a `#[no_mangle]` entry point.
+# apply to test harness code are restated here (R-UNSAFE-001, R-UNSAFE-002, R-RS-004,
+# R-RS-005, R-RS-009). Targets panic on purpose (`expect`, `assert!`): a panic is how
+# libFuzzer reports a finding.
+[lints.rust]
+unsafe_code = "forbid"
+
 [lints.clippy]
 unwrap_used = "deny"
 print_stdout = "deny"
 print_stderr = "deny"
 allow_attributes_without_reason = "deny"
+undocumented_unsafe_blocks = "deny"
 
 # Debug assertions on, so overflow checks run while fuzzing.
 [profile.release]

@@ -1,7 +1,7 @@
 //! AMF0 decode, as RTMP command messages from a server arrive.
 //!
-//! Decoding must never panic. Whatever decodes must encode, and encoding is a fixed
-//! point: decoding the encoded bytes and encoding again gives the same bytes. (Bytes are
+//! Decoding must never panic. When what decodes also encodes, encoding is a fixed point:
+//! decoding the encoded bytes and encoding again gives the same bytes. (Bytes are
 //! compared rather than values, because a NaN number is not equal to itself.)
 
 #![no_main]

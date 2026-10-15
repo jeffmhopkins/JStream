@@ -5,7 +5,8 @@
 //!   exactly by the inverse's inverse; a batch that fails changes nothing.
 //! - **Delete rejection:** after every batch, no reference dangles, and a plain delete of
 //!   each scene, source and encoder profile is refused exactly when something still
-//!   refers to it, naming every referrer, and changes nothing when refused.
+//!   refers to it and changes nothing when refused; a scene's or source's refusal names
+//!   every referrer as a blocker.
 //!
 //! Edits are drawn from small ID pools, so they often hit existing objects, collide with
 //! them or miss them, with names, numbers and settings values drawn freely. The seed is

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:056bf3408afae0d0", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1: added the tests/properties.rs proptest paragraph (start graph, inverse and redo, no dangling references, delete refusal with independently computed blockers, fixed seed); src/** text unchanged" }
+verified = { hash = "b3:a12dc49002f6400a", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r3 (N1): blockers clause now scoped to scene and source deletes; encoder deletes checked refused-iff-used only, as encoder.rs returns no blockers" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -229,7 +229,8 @@ minimal batch sequence) start from a graph holding every sort of reference and a
 random batches with free-form names, numbers and settings values: a batch that applies
 must undo and redo exactly and a failed one change nothing; and after every batch no
 reference may dangle, and each scene, source and encoder profile delete must be refused
-exactly when something refers to it, with the blockers the test works out itself. The
+exactly when something refers to it, a scene's or source's with the blockers the test
+works out itself. The
 seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
