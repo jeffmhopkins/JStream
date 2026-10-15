@@ -486,9 +486,10 @@ when a snapshot references them and destroyed after the frame fence that last us
 
 The **render snapshot** is built. After every applied batch, undo and redo, every stored
 source frame and a collection file's load, the control side re-plans the program mix
-under the collection lock: the reachable scenes, the frames they show and the passes
-that draw them. It publishes that as the next render generation only when it draws
-something new, so a batch that touches nothing on program publishes nothing. The render
+and the scene each video mix shows under the collection lock: the reachable scenes, the
+frames they show and the passes that draw them. It publishes that as the next render
+generation only when it draws something new, so a batch that touches nothing on program
+or any mix publishes nothing. The render
 thread loads it without the lock. `video.snapshot` reads it together with `rev` under
 the lock on the control path, and its thread only receives the snapshot. The render
 thread draws through a `jstream-render` resource cache keyed by source and by nested
