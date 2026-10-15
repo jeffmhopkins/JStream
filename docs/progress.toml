@@ -1,0 +1,789 @@
+# Roadmap progress: the source of the generated `progress` block in README.md
+# (docs/DOCS.md#generated). Edit this file, then run `cargo xtask docs generate`;
+# `docs check` fails while the README differs from it.
+#
+# A PR that delivers or advances an item updates its entry here: its number in `prs`,
+# and `status` once it is true on main. The weekly sweep runs `cargo xtask docs progress`
+# and lists entries that the merged history contradicts.
+#
+# status: done (merged) | hardware (merged; a run on Windows hardware is still pending,
+#         named by `note`) | review (a PR is open) | planned
+# Item IDs are the roadmap board's; PR titles name them in parentheses, e.g. "(A5)".
+
+[[milestone]]
+id = "M0"
+title = "Foundation and risk spikes"
+roadmap = "ROADMAP.md#m0"
+
+[[milestone]]
+id = "M1a"
+title = "Thin slice to YouTube"
+roadmap = "ROADMAP.md#m1"
+
+[[milestone]]
+id = "M1b"
+title = "Scenes and mixing"
+roadmap = "ROADMAP.md#m1"
+
+[[milestone]]
+id = "M1c"
+title = "Virtual camera"
+roadmap = "ROADMAP.md#m1"
+
+[[milestone]]
+id = "M1d"
+title = "Hardening"
+roadmap = "ROADMAP.md#m1"
+
+[[milestone]]
+id = "M2"
+title = "UI"
+roadmap = "ROADMAP.md#m2"
+
+[[milestone]]
+id = "M3"
+title = "Depth and reach"
+roadmap = "ROADMAP.md#m3"
+
+# M0
+
+[[item]]
+id = "R1"
+milestone = "M0"
+title = "Workspace, CI checks and the review gate"
+status = "done"
+prs = [3, 6, 7, 8]
+
+[[item]]
+id = "R2"
+milestone = "M0"
+title = "Docs checker: check, verify, for, back-references"
+status = "done"
+prs = [9, 10, 11, 13, 14, 15]
+
+[[item]]
+id = "R3"
+milestone = "M0"
+title = "lint-deps and governance checks"
+status = "done"
+prs = [16, 17]
+
+[[item]]
+id = "R4"
+milestone = "M0"
+title = "Foundation crates: types, media, protocol, control"
+status = "done"
+prs = [19, 23, 27]
+
+[[item]]
+id = "S1"
+milestone = "M0"
+title = "Spike S1: GPU interop"
+status = "done"
+prs = [18, 52]
+
+[[item]]
+id = "S2"
+milestone = "M0"
+title = "Spike S2: virtual camera"
+status = "done"
+prs = [25, 52]
+
+[[item]]
+id = "S3"
+milestone = "M0"
+title = "Spike S3: clock and drift"
+status = "done"
+prs = [24, 53]
+
+[[item]]
+id = "C7"
+milestone = "M0"
+title = "Spike S4: CEF browser source"
+status = "hardware"
+prs = [178, 190]
+note = "S4 spike run"
+
+[[item]]
+id = "I3"
+milestone = "M0"
+title = "docs log and docs review"
+status = "done"
+prs = [145]
+
+[[item]]
+id = "H7"
+milestone = "M0"
+title = "Docs stamp conflicts (merge-main, ADR-0042)"
+status = "done"
+prs = [181, 182, 187]
+
+[[item]]
+id = "H6"
+milestone = "M0"
+title = "Doc follow-ups (#102)"
+status = "done"
+prs = [230]
+
+# M1a
+
+[[item]]
+id = "L1"
+milestone = "M1a"
+title = "Capture, compositor, MF encode, FLV and RTMPS pipeline"
+status = "done"
+prs = [58, 61, 66, 68, 111, 118]
+
+[[item]]
+id = "L2"
+milestone = "M1a"
+title = "Engine, daemon, CLI and MCP first cut"
+status = "done"
+prs = [33, 35, 47, 65, 70]
+
+[[item]]
+id = "L3"
+milestone = "M1a"
+title = "video.snapshot and stats.tick"
+status = "done"
+prs = [113, 121]
+
+[[item]]
+id = "I1"
+milestone = "M1a"
+title = "MCP over HTTP"
+status = "done"
+prs = [153]
+
+[[item]]
+id = "A1"
+milestone = "M1a"
+title = "Outputs in the collection"
+status = "done"
+prs = [142]
+
+[[item]]
+id = "A2a"
+milestone = "M1a"
+title = "Credential store (Windows)"
+status = "done"
+prs = [141]
+
+[[item]]
+id = "A2b"
+milestone = "M1a"
+title = "Stream key actions"
+status = "done"
+prs = [142]
+
+[[item]]
+id = "A5"
+milestone = "M1a"
+title = "Outputs in CLI and mock"
+status = "done"
+prs = [166]
+
+[[item]]
+id = "A3"
+milestone = "M1a"
+title = "Daemon goes live on Windows"
+status = "done"
+prs = [226]
+
+[[item]]
+id = "A6"
+milestone = "M1a"
+title = "Daemon --collection and audit log"
+status = "done"
+prs = [232]
+
+[[item]]
+id = "A4"
+milestone = "M1a"
+title = "Go-live runbook and smoke"
+status = "hardware"
+prs = [234]
+note = "smoke script run"
+
+[[item]]
+id = "E3a"
+milestone = "M1a"
+title = "GPU capture frames"
+status = "done"
+prs = [173]
+
+[[item]]
+id = "E3b"
+milestone = "M1a"
+title = "Render takes GPU frames"
+status = "review"
+prs = [219]
+
+[[item]]
+id = "Y1"
+milestone = "M1a"
+title = "jstream-youtube crate"
+status = "done"
+prs = [167]
+
+[[item]]
+id = "Y2"
+milestone = "M1a"
+title = "OAuth token store"
+status = "done"
+prs = [169]
+
+[[item]]
+id = "YA"
+milestone = "M1a"
+title = "ADR-0041 one sign-in"
+status = "done"
+prs = [214]
+
+[[item]]
+id = "Y3"
+milestone = "M1a"
+title = "YouTube in the engine"
+status = "review"
+prs = [223]
+
+[[item]]
+id = "A6b"
+milestone = "M1a"
+title = "Daemon YouTube wiring"
+status = "planned"
+
+# M1b
+
+[[item]]
+id = "B4"
+milestone = "M1b"
+title = "Kind descriptors and settings"
+status = "done"
+prs = [155]
+
+[[item]]
+id = "B3"
+milestone = "M1b"
+title = "Canvas and item geometry"
+status = "done"
+prs = [183]
+
+[[item]]
+id = "B8"
+milestone = "M1b"
+title = "Audit log"
+status = "done"
+prs = [171]
+
+[[item]]
+id = "B2"
+milestone = "M1b"
+title = "Per-client undo and redo"
+status = "done"
+prs = [176, 198, 203, 239]
+
+[[item]]
+id = "B5"
+milestone = "M1b"
+title = "References and clones"
+status = "done"
+prs = [196]
+
+[[item]]
+id = "B9"
+milestone = "M1b"
+title = "delete.plan and blockers"
+status = "done"
+prs = [197]
+
+[[item]]
+id = "B1"
+milestone = "M1b"
+title = "Collection persistence"
+status = "done"
+prs = [205]
+
+[[item]]
+id = "B6"
+milestone = "M1b"
+title = "Groups and item.move"
+status = "done"
+prs = [184]
+
+[[item]]
+id = "B10"
+milestone = "M1b"
+title = "Program scene switching"
+status = "done"
+prs = [201]
+
+[[item]]
+id = "B6-f"
+milestone = "M1b"
+title = "Groups in mock and CLI"
+status = "done"
+prs = [210]
+
+[[item]]
+id = "B6-r"
+milestone = "M1b"
+title = "scene.create role"
+status = "done"
+prs = [211]
+
+[[item]]
+id = "B7"
+milestone = "M1b"
+title = "Opacity, blend, filters"
+status = "review"
+prs = [252]
+
+[[item]]
+id = "C6"
+milestone = "M1b"
+title = "Nested scene rendering"
+status = "done"
+prs = [147]
+
+[[item]]
+id = "C4a"
+milestone = "M1b"
+title = "Video device trait"
+status = "done"
+prs = [158]
+
+[[item]]
+id = "C4b"
+milestone = "M1b"
+title = "Media Foundation webcam backend"
+status = "done"
+prs = [177, 225, 227]
+
+[[item]]
+id = "C1a"
+milestone = "M1b"
+title = "Sources crate: color, image"
+status = "done"
+prs = [179, 217]
+
+[[item]]
+id = "C1b"
+milestone = "M1b"
+title = "Sources render live"
+status = "done"
+prs = [222]
+
+[[item]]
+id = "C2"
+milestone = "M1b"
+title = "Text source"
+status = "done"
+prs = [221]
+
+[[item]]
+id = "C5"
+milestone = "M1b"
+title = "Audio sources"
+status = "hardware"
+prs = [238]
+note = "audio hardware tests"
+
+[[item]]
+id = "C3"
+milestone = "M1b"
+title = "Display and window capture sources"
+status = "planned"
+
+[[item]]
+id = "C8"
+milestone = "M1b"
+title = "Browser source (CEF)"
+status = "planned"
+
+[[item]]
+id = "D1"
+milestone = "M1b"
+title = "Live mixer inputs"
+status = "done"
+prs = [149, 199]
+
+[[item]]
+id = "D3"
+milestone = "M1b"
+title = "Loudness meters"
+status = "done"
+prs = [152]
+
+[[item]]
+id = "D7a"
+milestone = "M1b"
+title = "Filter kernels"
+status = "done"
+prs = [159]
+
+[[item]]
+id = "D2"
+milestone = "M1b"
+title = "Buses and send matrix"
+status = "done"
+prs = [192]
+
+[[item]]
+id = "D4"
+milestone = "M1b"
+title = "No-allocation test"
+status = "done"
+prs = [191]
+
+[[item]]
+id = "D7b"
+milestone = "M1b"
+title = "Filter chains in the mixer"
+status = "done"
+prs = [231]
+
+[[item]]
+id = "D5"
+milestone = "M1b"
+title = "Audio in the protocol"
+status = "review"
+prs = [240]
+
+[[item]]
+id = "D6"
+milestone = "M1b"
+title = "when_shown activity gain"
+status = "planned"
+
+[[item]]
+id = "E1"
+milestone = "M1b"
+title = "Render snapshots, GPU lifetime"
+status = "done"
+prs = [172, 215]
+
+[[item]]
+id = "F1"
+milestone = "M1b"
+title = "fMP4 muxer"
+status = "done"
+prs = [151]
+
+[[item]]
+id = "F2a"
+milestone = "M1b"
+title = "Recording file sink"
+status = "done"
+prs = [156]
+
+[[item]]
+id = "F2b"
+milestone = "M1b"
+title = "Record output kind"
+status = "done"
+prs = [170]
+
+[[item]]
+id = "F3"
+milestone = "M1b"
+title = "Encoder profiles and sharing"
+status = "done"
+prs = [208]
+
+[[item]]
+id = "I2"
+milestone = "M1b"
+title = "Live values"
+status = "review"
+prs = [244]
+
+# M1c
+
+[[item]]
+id = "G1"
+milestone = "M1c"
+title = "vcam protocol crate"
+status = "done"
+prs = [144]
+
+[[item]]
+id = "G2"
+milestone = "M1c"
+title = "vcam media source DLL"
+status = "hardware"
+prs = [174, 195, 200, 229]
+note = "pacing rerun"
+
+[[item]]
+id = "G3a"
+milestone = "M1c"
+title = "vcam producer (engine side)"
+status = "done"
+prs = [194]
+
+[[item]]
+id = "G3b"
+milestone = "M1c"
+title = "VirtualCam output kind"
+status = "review"
+prs = [213]
+
+[[item]]
+id = "G3c"
+milestone = "M1c"
+title = "--register-vcam"
+status = "hardware"
+prs = [235]
+note = "registration check with UAC"
+
+[[item]]
+id = "P1"
+milestone = "M1c"
+title = "Portable Windows zip"
+status = "planned"
+
+# M1d
+
+[[item]]
+id = "H0"
+milestone = "M1d"
+title = "RTMP reconnect, rotating logs and crash reports"
+status = "done"
+prs = [126, 127, 131]
+
+[[item]]
+id = "H1"
+milestone = "M1d"
+title = "N-edition detection"
+status = "done"
+prs = [148]
+
+[[item]]
+id = "H2"
+milestone = "M1d"
+title = "Deny duplicate crate versions"
+status = "done"
+prs = [157]
+
+[[item]]
+id = "H3"
+milestone = "M1d"
+title = "Weekly sweep job"
+status = "done"
+prs = [160, 165]
+
+[[item]]
+id = "H4"
+milestone = "M1d"
+title = "Flaky shutdown tests"
+status = "done"
+prs = [150]
+
+[[item]]
+id = "H5"
+milestone = "M1d"
+title = "Server hardening"
+status = "done"
+prs = [140]
+
+[[item]]
+id = "F4"
+milestone = "M1d"
+title = "Keyframe on demand"
+status = "done"
+prs = [146]
+
+[[item]]
+id = "Q1"
+milestone = "M1d"
+title = "Fuzz and property tests"
+status = "planned"
+
+[[item]]
+id = "Q2"
+milestone = "M1d"
+title = "Headless end-to-end test"
+status = "review"
+prs = [269]
+
+# M2
+
+[[item]]
+id = "U0"
+milestone = "M2"
+title = "Leptos UI skeleton"
+status = "done"
+prs = [250]
+
+[[item]]
+id = "U2a"
+milestone = "M2"
+title = "ADR-0044 pairing"
+status = "done"
+prs = [248]
+
+[[item]]
+id = "U2"
+milestone = "M2"
+title = "Serve the UI"
+status = "review"
+prs = [246, 247]
+
+[[item]]
+id = "U2b"
+milestone = "M2"
+title = "Device pairing"
+status = "review"
+prs = [265]
+
+[[item]]
+id = "U3a"
+milestone = "M2"
+title = "Scenes, sources, properties"
+status = "review"
+prs = [256]
+
+[[item]]
+id = "U3b"
+milestone = "M2"
+title = "Outputs and go-live panel"
+status = "done"
+prs = [254]
+
+[[item]]
+id = "U3c"
+milestone = "M2"
+title = "Mixer panel"
+status = "planned"
+
+[[item]]
+id = "U4"
+milestone = "M2"
+title = "Canvas editing"
+status = "done"
+prs = [255]
+
+[[item]]
+id = "U4p"
+milestone = "M2"
+title = "Live preview on canvas"
+status = "planned"
+
+[[item]]
+id = "U1"
+milestone = "M2"
+title = "Preview stream"
+status = "review"
+prs = [251]
+
+[[item]]
+id = "U5"
+milestone = "M2"
+title = "Tauri desktop app"
+status = "hardware"
+prs = [258]
+note = "desktop app check"
+
+[[item]]
+id = "T1"
+milestone = "M2"
+title = "Studio mode and transitions"
+status = "review"
+prs = [260]
+
+[[item]]
+id = "T1u"
+milestone = "M2"
+title = "Studio-mode UI"
+status = "planned"
+
+[[item]]
+id = "E2"
+milestone = "M2"
+title = "Video mixes"
+status = "review"
+prs = [259]
+
+[[item]]
+id = "D8"
+milestone = "M2"
+title = "Master and output audio chains"
+status = "done"
+prs = [249]
+
+[[item]]
+id = "D8p"
+milestone = "M2"
+title = "Audio chain protocol fields"
+status = "planned"
+
+[[item]]
+id = "C9"
+milestone = "M2"
+title = "Media file source"
+status = "review"
+prs = [245]
+
+[[item]]
+id = "W1"
+milestone = "M2"
+title = "Audio waveform and spectrum sources"
+status = "planned"
+
+[[item]]
+id = "K1"
+milestone = "M2"
+title = "Keyframe scenes, folders, organisation metadata and hotkeys"
+status = "planned"
+
+# M3
+
+[[item]]
+id = "F5"
+milestone = "M3"
+title = "Enhanced RTMP (HEVC/AV1)"
+status = "done"
+prs = [163]
+
+[[item]]
+id = "E3c"
+milestone = "M3"
+title = "Encode from GPU frames"
+status = "planned"
+
+[[item]]
+id = "X1"
+milestone = "M3"
+title = "Full 3D transforms and WGSL effect packs"
+status = "planned"
+
+[[item]]
+id = "Y4"
+milestone = "M3"
+title = "YouTube chat, metadata, health and audience stats"
+status = "planned"
+
+[[item]]
+id = "CL1"
+milestone = "M3"
+title = "CLAP plugin host"
+status = "planned"
+
+[[item]]
+id = "WA1"
+milestone = "M3"
+title = "WASM automation plugins"
+status = "planned"
+
+[[item]]
+id = "MAC1"
+milestone = "M3"
+title = "macOS platform crate"
+status = "planned"
+
+[[item]]
+id = "LNX1"
+milestone = "M3"
+title = "Linux codec path and platform crate"
+status = "planned"

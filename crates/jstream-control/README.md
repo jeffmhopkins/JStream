@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:4761663d397dd04b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: Contents now lists WS_PATH, WS_PROTOCOL and WS_TOKEN_PROTOCOL_PREFIX as shared names in lib.rs outside the ws feature; purpose holds" }
+verified = { hash = "b3:6cbe7266e0595b0d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 241 N2/N6: mock cycle reasons now name the path and apply's rustdoc names item.move; purpose's mock bullet unaffected; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:fd0751706606e1fe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: subprotocol constants moved from ws_config.rs to lib.rs, ungated; WebSocket client connection text unchanged; holds" }
+verified = { hash = "b3:d5e33f4c65df90a1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 241 N2/N6: Mock list already names nesting cycles from item.add, item.set_source and item.move with graph codes and paths; reason wording isn't described; holds" }
 -->
 
 ### The trait
