@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:60e167a551e03614", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "Stale only via ARCH#packaging, which gained the browser helper exe beside the CEF runtime; the vcam registration, HKLM and session-namespace findings this section cites are unchanged, so it holds" }
+verified = { hash = "b3:fd4266ae54a03d8b", by = "agent:claude", note = "Merge of main into #180: main only restamped this section; re-read Trust and Tests paragraphs against trust.rs, win/session.rs and Mapping::owner_sid; holds" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -78,7 +78,7 @@ and the example on Windows.
 <!-- @section
 covers = ["crates/jstream-vcam-windows/examples/**"]
 depends_on = ["docs/ARCHITECTURE.md#packaging"]
-verified = { hash = "b3:5f72b2d453c31890", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "Stale only via ARCH#packaging (browser helper exe added); the vcam_smoke steps and DLL registration it relies on are unchanged, so it holds" }
+verified = { hash = "b3:6eb98f3fbaed2d14", by = "agent:claude", note = "Added the expected-no-refused-line step for the session-block trust rule (review N2 on #200); vcam_smoke steps otherwise unchanged" }
 -->
 
 `examples/vcam_smoke` stands in for the engine side: it publishes the ring, the fence and
@@ -101,4 +101,6 @@ root:
 
 The report's `verdict` line says whether shared frames reached the camera. The DLL's log
 is `C:\Windows\ServiceProfiles\LocalService\AppData\Local\JStream\vcam\vcam.log`, readable
-from an elevated prompt.
+from an elevated prompt. Run from a normal, non-elevated session, it should have no
+`refused` line: one means the session-block trust rule turned the smoke test's own block
+away.
