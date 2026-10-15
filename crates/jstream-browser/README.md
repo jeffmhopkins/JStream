@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:4acaf8888268f80f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2: RequestPolicy bullet, the OnBeforeResourceLoad hookup, denied_requests and the page check's refused-request line, checked against request.rs, cef/handlers.rs, fake.rs and the example" }
+verified = { hash = "b3:1c750e8ec6879048", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 round 1 B1/N2: RequestPolicy bullet now says file paths are compared by name before anything is opened (other servers and devices refused untouched), then again with links resolved; checked against request.rs" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
@@ -52,11 +52,13 @@ page closes it.
   no file access beyond the source's own file). Web URLs (`http`, `https`, `ws`,
   `wss`), `data:`, `blob:`, `about:blank` and `about:srcdoc` are allowed for every
   page. `file:` URLs are allowed only for a page loaded from a local file, and only for
-  files in its folder or below, compared after resolving links and `..` on both sides,
-  so a link inside the folder can't reach out; a missing file is refused. Every other
-  scheme is refused. Each refusal is counted. The folder is trusted as an asset root
-  is: something that can write in it could swap a file for a link between the check
-  and the load.
+  files in its folder or below. The path is compared by name first, with `..` applied,
+  and only a path inside the folder is ever opened, so a URL naming another server (an
+  SMB connection on Windows) or a device is refused untouched. It is compared again
+  after resolving links on both sides, so a link inside the folder can't reach out; a
+  missing file is refused. Every other scheme is refused. Each refusal is counted. The
+  folder is trusted as an asset root is: something that can write in it could swap a
+  file for a link between the check and the load.
 - `fake` (feature `fake`, and in tests): `FakeBrowser`, a backend that records the
   pages it opens, their CSS changes and whether they were closed, never paints, and can
   be told to refuse. `FakePageState::request` plays a request through the page's
