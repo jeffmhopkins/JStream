@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d46a278a46d73d8a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; crate shape unchanged" }
+verified = { hash = "b3:1c4cf0facd099307", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: re-read; apps/** gains only the CLI item.set_source form; diagram holds" }
 -->
 
 ```
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:dfe3957b0f391551", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Built so far says canvas at protocol 0.11; rest holds" }
+verified = { hash = "b3:f49e76b07fba3575", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: Built so far merged: B3's placement/canvas sentence and B5's item.set_source/duplicated_from; Not yet drops both B5 items and keeps 3D geometry" }
 -->
 
 ```
@@ -507,7 +507,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:415e020d4c5b0d5c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; Edits bullet (canvas.set_size/item.set_geometry at 0.11) and History bullet hold" }
+verified = { hash = "b3:5e4b82ccc3f1b4a8", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: re-read; B2/B3 bullets from main hold; new edit is additive" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -611,7 +611,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:f87823856265c90a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: grouped tools list includes canvas and history; tools.snap now about 102 KB, so the text says about 100 KB" }
+verified = { hash = "b3:47ff46fcf5616cb0", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: tools.snap is now about 109 KB with B5's item.set_source and duplicated_from on top of B2/B3, so the text says about 110 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -625,7 +625,7 @@ verified = { hash = "b3:f87823856265c90a", by = "agent:claude@session_01SS5BBdaw
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 100 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 110 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:674ea2e696582794", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: tool table nouns now canvas and history together; tools.snap regenerated, mcp tests count 12 tools" }
+verified = { hash = "b3:86bd8d07c7df7299", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2, B3) into B5: stale through ARCH#mcp's size line; tools grouped by noun hold, item.set_source lands in the item tool by schema" }
 -->
 
 ### Tools

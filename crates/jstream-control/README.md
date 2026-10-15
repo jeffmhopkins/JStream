@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:03b5a5e95e7b2c05", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; call() now covers history calls (B2) and the mock keeps canvas/geometry (B3); holds" }
+verified = { hash = "b3:fc9d39cac1ac7adc", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: re-read; mock bullet holds with B3 geometry and B5 set_source/duplicated_from" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:21a987fc74e7a497", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; mock reads bullet (canvas, placement forms, outputs) and B2's history text hold against mock.rs" }
+verified = { hash = "b3:939e47983bd5cbf3", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: mock rules list keeps B3's geometry checks and B5's item.set_source cycle and duplicated_from rules; tests updated for the fixture's new i4" }
 -->
 
 ### The trait

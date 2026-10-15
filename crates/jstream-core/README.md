@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:776be5d7a3dab550", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; History bullet (B2) and Snapshot/canvas text (B3) both hold; history.rs now also handles item.set_geometry and canvas.set_size" }
+verified = { hash = "b3:ce49ff270aa4b838", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: re-read; history bullet unaffected beyond the Design text" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:47f70b5587157701", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; core prose unchanged by the merge; Snapshots canvas/placement and undo touched-set (placement, canvas size) text hold against snapshot.rs and history.rs" }
+verified = { hash = "b3:be6ace8828b5d3d0", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: history paragraph now lists item.set_source: both sources used and the item's source as a property, matching history.rs Prop::Source and its test" }
 -->
 
 ### Engine and sessions
