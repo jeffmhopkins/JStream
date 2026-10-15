@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:7543c4dfe15938d8", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240 squashed) into D6: main's text plus D6's set_activity_gain bullet and activity-gain line; holds against handle.rs and rt/mixer.rs" }
+verified = { hash = "b3:6db1aae17b72a124", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "merge-only (main at d813d07): text is main's (activity gain, mixer-tagged buses); stale only via this PR's crate-map plugin-clap row, which this section doesn't describe; insert_host_filter bullet unchanged; holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
