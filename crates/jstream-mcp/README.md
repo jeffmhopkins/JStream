@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:53376b85650efcc8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N2): Session and identity now says a hello unanswered within 3 s (OPEN_EARLY_TIMEOUT) doesn't hold initialize/server-discover and the next tool call retries; Async section still true (timer thread, no runtime); rest holds" }
+verified = { hash = "b3:1fb43a9396a5c4f4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "B1: Async and transports now says handle awaits the Control futures and with_timeout's timer, which its own thread wakes (server.rs open_early), so any executor and serve_stdio's block_on still drive it; Session and identity's 3 s hello wait holds" }
 -->
 
 ### Tools
@@ -215,8 +215,9 @@ buffer and page sizes, so agents don't need this page.
 
 ### Async and transports
 
-`Server::handle` is an `async fn` whose future is `Send` and only awaits the `Control`
-futures, so any executor can run it, and `jstream-server` can mount it inside axum.
+`Server::handle` is an `async fn` whose future is `Send` and awaits only the `Control`
+futures and the hello wait's timer, which its own thread wakes, so any executor can run
+it, and `jstream-server` can mount it inside axum.
 `serve_stdio` needs none: it reads a line, drives that message's future on the calling
 thread with a small `block_on` (park until woken, built on `std::task::Wake`), writes the
 reply line and flushes. That works for any `Control` whose futures are woken by their

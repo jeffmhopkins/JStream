@@ -652,7 +652,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:6b841edd4ddfb24c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N2): re-read against the open-early timeout in server.rs; section covers tools, events, access, nothing about hello timing; holds" }
+verified = { hash = "b3:7143bda21fa6463d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale through jstream-mcp's README edit (B1: handle also awaits the hello wait's timer); ARCH MCP covers tools, events and access and says nothing about executors or hello timing; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
