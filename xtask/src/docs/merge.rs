@@ -1,5 +1,6 @@
-//! `docs merge-main`: merges `origin/main` and resolves conflicts that are only between
-//! stamps, by taking main's side (docs/DOCS.md#verification).
+//! `docs merge-main`: merges `origin/main` (or, with `--from`, the wave branch a PR targets;
+//! ADR-0055) and resolves conflicts that are only between stamps, by taking that branch's
+//! side (docs/DOCS.md#verification).
 //!
 //! Parallel PRs that re-verify the same input of a section conflict on its ledger entry
 //! (ADR-0053). Neither side re-read the combination, so after the merge the section has to
@@ -17,9 +18,9 @@ use anyhow::{Context, Result, bail};
 
 use super::{hash, is_tracked, ledger, load, parse};
 
-/// The branch `merge-main` merges, and the remote it is fetched from.
+/// The remote `merge-main` fetches from, and the branch it merges unless given `--from`.
 const REMOTE: &str = "origin";
-const BRANCH: &str = "main";
+pub(crate) const BRANCH: &str = "main";
 
 /// What `docs merge-main` did.
 #[derive(Debug, Default)]
@@ -57,9 +58,13 @@ fn git_ok(root: &Path, args: &[&str]) -> Result<Vec<u8>> {
     Ok(out.stdout)
 }
 
-/// Fetches and merges `origin/main` into the current branch, resolves stamp-only
-/// conflicts, and commits the merge when nothing else conflicts.
-pub(crate) fn merge_main(root: &Path) -> Result<Merge> {
+/// Fetches and merges `origin/<branch>` into the current branch, resolves stamp-only
+/// conflicts, and commits the merge when nothing else conflicts. `branch` is `main`, or a
+/// `wave/*` branch for a PR into a wave.
+pub(crate) fn merge_main(root: &Path, branch: &str) -> Result<Merge> {
+    if branch != BRANCH && !branch.strip_prefix("wave/").is_some_and(|w| !w.is_empty()) {
+        bail!("can only merge `{BRANCH}` or a `wave/<name>` branch, not `{branch}`");
+    }
     if git(root, &["rev-parse", "-q", "--verify", "MERGE_HEAD"])?
         .status
         .success()
@@ -69,8 +74,8 @@ pub(crate) fn merge_main(root: &Path) -> Result<Merge> {
     if !git_ok(root, &["status", "--porcelain", "--untracked-files=no"])?.is_empty() {
         bail!("the working tree has uncommitted changes; commit or stash them first");
     }
-    git_ok(root, &["fetch", "-q", REMOTE, BRANCH])?;
-    let upstream = format!("{REMOTE}/{BRANCH}");
+    git_ok(root, &["fetch", "-q", REMOTE, branch])?;
+    let upstream = format!("{REMOTE}/{branch}");
     // A fixed conflict style, whatever the user's config, so the markers parse.
     let out = git(
         root,
