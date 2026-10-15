@@ -1,0 +1,36 @@
+[package]
+name = "jstream-youtube"
+version = "0.0.0"
+description = "Google OAuth for installed apps (loopback redirect with PKCE) and the YouTube Live API client: broadcasts, streams, binding, transitions and stream health."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; ADR-0034). No media code."
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[features]
+# The `fake` module: an in-memory `HttpTransport` that replays canned responses and
+# records requests, for tests here and in crates that drive this one. Off by default.
+fake = []
+
+[dependencies]
+# `Secret`, the one type tokens travel in (R-SEC-001).
+jstream-platform.workspace = true
+# SHA-256 for the PKCE challenge, and the OS random source for the verifier and `state`.
+ring.workspace = true
+rustls.workspace = true
+rustls-native-certs.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rcgen.workspace = true

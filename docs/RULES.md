@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:080fea9002e1d852", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: rule text unchanged; ARCH#threading only combines main's collector text and F2b's recording write path, both within R-RT-003/R-RT-004" }
+verified = { hash = "b3:892f22ab2f9a07aa", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: R-RT rules unchanged; render and mixer collectors still satisfy R-RT-003" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:43d7d8d32da08e92", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: cascade from ARCH#protocol; re-read R-API-001..: scene.create's optional role is additive, a minor bump" }
+verified = { hash = "b3:a575b34bf9377fe7", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main: R-API-001..003 text unchanged; collection file still versioned with its v1 fixture" }
 -->
 
 <a id="R-API-001"></a>

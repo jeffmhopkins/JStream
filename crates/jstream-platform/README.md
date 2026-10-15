@@ -11,9 +11,9 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-platform/src/**"]
+covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:910dfda0dfda06b9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (F2b #170, G2 #174) into E3a: E3a's Not yet (Windows capture delivers GPU frames; consumers missing) kept; main's changes are ARCH#threading's recording sink and the crate-map vcam row, which change no platform trait" }
+verified = { hash = "b3:ac2dc8828f4a211b", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: platform traits text unchanged; holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -127,7 +127,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:c3d24539251a03a3", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: section is main's (WgcCapture::on_gpu delivers GPU frames); B3 changes nothing in platform; holds" }
+verified = { hash = "b3:344950a70125a10e", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH gpu-pipeline after merging B3: the interop design is unchanged; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
