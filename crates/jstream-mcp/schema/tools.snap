@@ -725,7 +725,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Copies a source under a new ID: a separate instance with the same kind,\nsettings, audio settings, sends and filters (with the same filter IDs), which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
+                "description": "Copies a source under a new ID: a separate instance with the same kind, settings,\nfilters (with the same filter IDs), audio settings and sends, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
                 "properties": {
                   "name": {
                     "description": "The copy's display name.",
@@ -4589,7 +4589,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Copies a source under a new ID: a separate instance with the same kind,\nsettings, audio settings, sends and filters (with the same filter IDs), which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
+                "description": "Copies a source under a new ID: a separate instance with the same kind, settings,\nfilters (with the same filter IDs), audio settings and sends, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
                 "properties": {
                   "name": {
                     "description": "The copy's display name.",

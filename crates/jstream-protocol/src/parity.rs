@@ -24,22 +24,13 @@ use crate::{AudioFollow, BusId, BusInfo, SendInfo, SourceAudio};
 /// applied to it: the batch is applied as one batch, so exactly one revision later.
 pub const COLLECTION_REV: Rev = Rev(1);
 
-/// The kinds an implementation must describe for [`collection`] to apply: `webcam`, a
-/// video kind, and `mic` and `desktop_audio`, audio kinds with no video, all without
-/// parameters, so every implementation reports their settings as an empty map, and the
-/// audio filter kind `gain`, whose one parameter the collection always sets, so its
-/// settings read back as given.
+/// The kinds an implementation must describe for [`collection`] to apply: the source
+/// kinds `webcam`, a video kind, and `desktop_audio` and `mic`, audio kinds with no
+/// video, all without parameters, so every implementation reports their settings as an
+/// empty map; and the audio filter kind `gain`, whose one parameter the collection
+/// always sets, so its settings read back as given.
 pub fn kinds() -> Vec<KindDescriptor> {
     vec![
-        KindDescriptor {
-            kind_id: "mic".into(),
-            category: KindCategory::Source,
-            name: "Microphone".into(),
-            version: 1,
-            video: false,
-            audio: true,
-            params: vec![],
-        },
         KindDescriptor {
             kind_id: "webcam".into(),
             category: KindCategory::Source,
@@ -53,6 +44,15 @@ pub fn kinds() -> Vec<KindDescriptor> {
             kind_id: "desktop_audio".into(),
             category: KindCategory::Source,
             name: "Desktop audio".into(),
+            version: 1,
+            video: false,
+            audio: true,
+            params: vec![],
+        },
+        KindDescriptor {
+            kind_id: "mic".into(),
+            category: KindCategory::Source,
+            name: "Microphone".into(),
             version: 1,
             video: false,
             audio: true,
@@ -1242,9 +1242,8 @@ fn buses() -> Vec<BusInfo> {
     ]
 }
 
-/// The collection's sends, ordered by bus, then by source: `desk` keeps the master send
-/// it was created with, and the copy keeps `mic`'s send into `vod` and lost its master
-/// send.
+/// The collection's sends, ordered by bus, then by source: the copy keeps `mic`'s send
+/// into `vod`, and lost its master send; `desk` keeps its default master send.
 fn sends() -> Vec<SendInfo> {
     let send = |source: &str, bus: BusId, gain_db: f32| SendInfo {
         source_id: SourceId::new(source),

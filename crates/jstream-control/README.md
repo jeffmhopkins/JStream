@@ -168,8 +168,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   transform view of it), crop, visibility, opacity and blend, each scene's role and
   each item's scene after an `item.move`, each output's kind, target and encoder
   profile, each profile, each source's audio, and the buses and sends.
-  `video.snapshot` is not one of those reads: the mock has no compositor and answers it
-  with `internal`, as it does for any protocol variant it does not implement;
+  `video.snapshot` is not one of those reads: the mock has no compositor and answers
+  it with `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
@@ -193,9 +193,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   opacity and blend, a deleted scene at its position with its role and items, `item.move`
   back to the item's previous scene and index, `scene.set_role` back to the previous
   role, a deleted source with its
-  settings, `duplicated_from` and filters, each filter edit to the chain as it was, `item.set_source` back to the item's previous source,
-  a deleted bus with its fader and sends, a deleted source's audio and sends, and each
-  audio edit back to the values it replaced; a placement, crop or
+  settings, `duplicated_from` and filters, each filter edit to the chain as it was,
+  `item.set_source` back to the item's previous source, a deleted bus with its fader
+  and sends, a deleted source's audio and sends, and each audio edit back to the values
+  it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
   back with its encoder profile and filters, encoder profile edits undo to the profile as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then

@@ -633,10 +633,10 @@ fn apply_edit(
                 Some(source_id.clone()),
                 None,
             )?;
-            audio::copied(state, source_id, new_source_id);
             if let Some(copy) = state.sources.get_mut(new_source_id) {
                 copy.filters = filters;
             }
+            audio::copied(state, source_id, new_source_id);
             Ok(inverse)
         }
         Edit::SourceRename { source_id, name } => {

@@ -1234,11 +1234,11 @@ impl Collection {
                     settings,
                     Some(source_id.clone()),
                 )?;
-                self.audio_copied(&source_id, &new_source_id);
                 // A duplicate keeps its original's filter IDs (ADR-0026 §2).
                 if let Some(copy) = self.sources.get_mut(&new_source_id) {
                     copy.filters = filters;
                 }
+                self.audio_copied(&source_id, &new_source_id);
                 inverse
             }
             Edit::SourceDelete { source_id } => {

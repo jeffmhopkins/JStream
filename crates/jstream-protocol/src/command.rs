@@ -289,8 +289,8 @@ pub enum Edit {
         /// Parameter ID to new value, or `null` for the default.
         patch: Settings,
     },
-    /// Copies a source under a new ID: a separate instance with the same kind,
-    /// settings, audio settings, sends and filters (with the same filter IDs), which changes independently from then on. The copy's `duplicated_from`
+    /// Copies a source under a new ID: a separate instance with the same kind, settings,
+    /// filters (with the same filter IDs), audio settings and sends, which changes independently from then on. The copy's `duplicated_from`
     /// names the source it was copied from. Placing the *same* source again is `item.add`
     /// with its existing `source_id`. Inverse: `source.delete` of the copy.
     #[serde(rename = "source.duplicate")]

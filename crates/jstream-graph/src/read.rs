@@ -404,7 +404,7 @@ mod tests {
             panic!("kind.describe");
         };
         assert_eq!(settings_schema, kind.settings_schema());
-        assert_eq!(kind, parity::kinds()[1]);
+        assert_eq!(kind, parity::kinds()[0]);
         assert!(matches!(
             describe("ghost"),
             Some(Err(ProtocolError::InvalidArgument { field, .. })) if field == "kind_id"

@@ -396,12 +396,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
   others with their faders, and the post-fader sends, a new channel source sending to
-  the master at 0 dB. A send always runs from a source to a bus, and no built-in filter
-  takes a key yet, so no edit can close an audio cycle. The engine routes these into
+  the master at 0 dB. A send always runs from a source to a bus, and filters have no
+  sidechain keys yet, so no edit can close an audio cycle. The engine routes these into
   the program stage's mixer while it runs.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), video filter kinds, blend modes other than `normal`,
-  keys, bus monitors, per-placement effects, the transition fields, 3D
+  bus monitors, per-placement effects, the transition fields, 3D
   geometry, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, audio buses and chains, the

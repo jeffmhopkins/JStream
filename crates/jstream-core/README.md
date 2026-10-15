@@ -459,16 +459,17 @@ stage starts, its `AudioInputs` opens one mixer input per audio source that is o
 `MixerControl` (D1's live API). A source's input opens muted and is listed in
 `audio_sources::Routed`, where the audio routing finds it (see *Audio routing*) and
 sets it up as the collection says; the default microphone and desktop inputs send to
-the master bus at unity, as every new input does. Each source's input runs the source's audio
-filter chain ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)): `sync` also
-records each source's enabled filters of a built-in kind, in order (`filters::chain_of`;
-a disabled filter or a pack kind is left out, so bypassed), and on every pass the
-thread brings the input's filters in line (`filters::Chain::apply`). When only
-settings changed, each changed filter is updated in place (`FilterControl::set`), so a
-gate's envelope or a delay line carries on; a new kind, a reorder, or a limiter's
-look-ahead (its latency) rebuilds the chain. A filter the mixer refuses is bypassed and
-logged at `warn`, never an edit failure, and a reopened input gets its chain again.
-Each input is opened by asking the platform
+the master bus at unity, as every new input does. Each source's input runs the
+source's audio filter chain ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
+`sync` also records each source's enabled filters of a built-in kind, in order
+(`filters::chain_of`; a disabled filter or a pack kind is left out, so bypassed), and
+on every pass the thread brings the input's filters in line (`filters::Chain::apply`).
+The filters run before the fader and sends the routing sets, which leave them alone.
+When only settings changed, each changed filter is updated in place
+(`FilterControl::set`), so a gate's envelope or a delay line carries on; a new kind, a
+reorder, or a limiter's look-ahead (its latency) rebuilds the chain. A filter the mixer
+refuses is bypassed and logged at `warn`, never an edit failure, and a reopened input
+gets its chain again. Each input is opened by asking the platform
 for the format the device delivers (`AudioIo::input_format`), adding the mixer input
 in that format, and opening the stream with the input's producer as its handler; a
 stream that opens in another format is closed and tried again. An `audio_input`
