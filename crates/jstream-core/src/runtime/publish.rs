@@ -11,6 +11,7 @@ use jstream_outputs::rtmp::{
     Clock, ReconnectPolicy, ReconnectingPublisher, RtmpError, RtmpUrl, SessionTimeouts, StreamKey,
     Transport, connect_publisher, rtmp_connector,
 };
+use jstream_protocol::OutputId;
 
 use crate::lock;
 
@@ -83,6 +84,14 @@ pub trait LivePublish: Send {
         0
     }
 }
+
+/// Opens the publish target of one `output.start`, for the output it names. The
+/// engine calls it on the thread that runs the start, after `starting` and outside
+/// the engine's locks, so it may block on the network (as [`connect_rtmp`] does). An
+/// error fails the start; its text becomes the `action_failed` reason and the
+/// `failed` log line, so it must not contain a stream key (R-SEC-001).
+pub type OpenPublish =
+    Arc<dyn Fn(&OutputId) -> Result<Box<dyn LivePublish>, PublishError> + Send + Sync>;
 
 /// Keeps every tag in memory, in send order. Clones share the buffer, so a test
 /// can read tags after the publish target has moved onto the output thread.
@@ -222,7 +231,7 @@ fn connect_rtmp_with(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{LinkState, LivePublish, connect_rtmp, connect_rtmp_with};
     use jstream_mux::amf0::Amf0Value;
     use jstream_mux::flv::{FlvTag, TagType};
@@ -267,8 +276,9 @@ mod tests {
 
     /// A server that answers the handshake and then `connect` only after `delay`,
     /// then accepts the stream. A thread drains what the client sends until it hangs
-    /// up; it is returned, so the caller can wait for it or hang up first.
-    fn serve(mut io: TcpStream, delay: Duration) -> thread::JoinHandle<()> {
+    /// up, and returns how many bytes that was; it is returned, so the caller can wait
+    /// for it or hang up first. The engine's tests publish to it too.
+    pub(crate) fn serve(mut io: TcpStream, delay: Duration) -> thread::JoinHandle<u64> {
         let mut c0c1 = vec![0; 1 + HANDSHAKE];
         io.read_exact(&mut c0c1).expect("C0C1");
         thread::sleep(delay);
@@ -283,7 +293,11 @@ mod tests {
             let mut io = io.try_clone().expect("clone");
             thread::spawn(move || {
                 let mut buf = [0u8; 4096];
-                while matches!(io.read(&mut buf), Ok(n) if n > 0) {}
+                let mut total = 0;
+                while let Ok(n @ 1..) = io.read(&mut buf) {
+                    total += n as u64;
+                }
+                total
             })
         };
         // The client has sent Set Chunk Size and `connect` by now; answer it late.

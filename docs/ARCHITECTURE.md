@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:267675ddd305d215", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#133 review N1: add_input rustdoc now says to keep the InputControl until the stream is closed and the mixer dropped, else the free moves to an RT thread; doc comment only, no code change; re-read the section and its keep-alive / no-collector wording still matches" }
+verified = { hash = "b3:fe52194806f9b48a", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#135 publish opener) into #133: prose is main's; re-read the section: the Collector row and 'the collector thread ... still the rows above, not this cut' hold with #133's InputControl keep-alive (rings freed on the control plane, no collector), the output-pipeline paragraph's 'publish target' covers #135's opener on the control thread, and the SeqCst handover paragraph is untouched" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from

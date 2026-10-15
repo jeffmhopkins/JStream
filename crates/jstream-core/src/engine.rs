@@ -12,7 +12,8 @@ use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
-    Gate, LivePublish, MediaHost, OutputStats, Pending, PipelineEvent, Running, launch, parts_from,
+    Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent, Running,
+    launch, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
@@ -123,8 +124,9 @@ impl Engine {
     /// instead of the placeholder state machine. Configure this before
     /// [`connect`](Self::connect); clones made earlier do not see it.
     ///
-    /// A start still needs a publish target ([`with_publish`](Self::with_publish)).
-    /// Without one it fails with `action_failed` and changes no output state.
+    /// A start still needs a publish target ([`with_publish`](Self::with_publish))
+    /// or an opener ([`with_publish_opener`](Self::with_publish_opener)). Without
+    /// either it fails with `action_failed` and changes no output state.
     #[must_use]
     pub fn with_backends(mut self, backends: Backends) -> Self {
         let host = self.host();
@@ -139,6 +141,21 @@ impl Engine {
     pub fn with_publish(self, publish: Box<dyn LivePublish>) -> Self {
         if let Some(host) = &self.media {
             *lock(&host.publish) = Some(publish);
+        }
+        self
+    }
+
+    /// Stores how `output.start` opens its publish target when no one-shot target
+    /// ([`with_publish`](Self::with_publish)) is waiting: every start calls `open`
+    /// once, after `starting` and outside the engine's locks, so a host that is live
+    /// (with [`connect_rtmp`](crate::connect_rtmp)) connects on each start and can
+    /// start again after a stop or a failure. An `open` error fails that start with
+    /// `action_failed`. Requires [`with_backends`](Self::with_backends) first;
+    /// otherwise it is not kept.
+    #[must_use]
+    pub fn with_publish_opener(self, open: OpenPublish) -> Self {
+        if let Some(host) = &self.media {
+            *lock(&host.open_publish) = Some(open);
         }
         self
     }
@@ -385,16 +402,22 @@ impl Engine {
                     reason: "another output is already running".into(),
                 });
             }
-            let Some(publish) = lock(&host.publish).take() else {
-                return Err(ProtocolError::ActionFailed {
-                    reason: "output.start has no publish target".into(),
-                });
+            let publish = match lock(&host.publish).take() {
+                Some(publish) => Target::Ready(publish),
+                None => match lock(&host.open_publish).as_ref() {
+                    Some(open) => Target::Open(Arc::clone(open)),
+                    None => {
+                        return Err(ProtocolError::ActionFailed {
+                            reason: "output.start has no publish target".into(),
+                        });
+                    }
+                },
             };
             let parts = {
                 let backends = lock(&host.backends);
                 let Some(backends) = backends.as_ref() else {
                     drop(backends);
-                    *lock(&host.publish) = Some(publish);
+                    publish.give_back(host);
                     return Err(not_implemented("output.start"));
                 };
                 parts_from(
@@ -413,7 +436,7 @@ impl Engine {
                 Ok(step) => emit_output(&mut state, &output_id, step, &mut wake),
                 Err(err) => {
                     gate.pending = None;
-                    *lock(&host.publish) = Some(publish);
+                    publish.give_back(host);
                     return Err(err);
                 }
             }
@@ -428,8 +451,10 @@ impl Engine {
             armed: true,
         };
         let (fail_tx, fail_rx) = mpsc::channel();
-        let launched =
-            launch(parts, publish, output_id.clone(), generation, fail_tx).map(|mut running| {
+        let launched = publish
+            .open(&output_id)
+            .and_then(|publish| launch(parts, publish, output_id.clone(), generation, fail_tx))
+            .map(|mut running| {
                 running.arm_stats(self);
                 running
             });
@@ -680,6 +705,33 @@ struct SettleOnDrop<'a> {
 impl Drop for SettleOnDrop<'_> {
     fn drop(&mut self) {
         self.engine.settle(self.output_id, self.state);
+    }
+}
+
+/// The publish target a start took: a one-shot one the host set, or the opener it
+/// calls once the locks are released.
+enum Target {
+    Ready(Box<dyn LivePublish>),
+    Open(OpenPublish),
+}
+
+impl Target {
+    /// Puts a one-shot target back for the next start, when this one refused
+    /// before `starting`. An opener was never taken out of the host.
+    fn give_back(self, host: &MediaHost) {
+        if let Target::Ready(publish) = self {
+            *lock(&host.publish) = Some(publish);
+        }
+    }
+
+    /// The target to publish into. Runs the opener, outside the engine's locks.
+    fn open(self, output_id: &OutputId) -> Result<Box<dyn LivePublish>, String> {
+        match self {
+            Target::Ready(publish) => Ok(publish),
+            Target::Open(open) => {
+                open(output_id).map_err(|err| format!("opening the publish target: {err}"))
+            }
+        }
     }
 }
 
