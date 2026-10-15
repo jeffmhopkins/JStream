@@ -54,6 +54,14 @@ pub(crate) struct CollectionFile {
 }
 
 impl CollectionFile {
+    /// The folder the file is in, which `collection` asset references are relative to.
+    pub(crate) fn folder(&self) -> Option<&Path> {
+        match self.path.parent() {
+            Some(parent) if parent.as_os_str().is_empty() => Some(Path::new(".")),
+            parent => parent,
+        }
+    }
+
     /// Loads the collection at `path` into a copy of `graph` (whose kinds check its
     /// sources), or, when there is no file there, saves `graph` to it.
     pub(crate) fn open(
