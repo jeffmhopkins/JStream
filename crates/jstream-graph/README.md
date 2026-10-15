@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:9144a917868e13cd", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Scene bullet has role, Item bullet B3's Placement; tests text lists both; Not yet keeps B7 blend modes and keyframes, drops the done ADR-0022 bullet" }
+verified = { hash = "b3:69708ec0315d4fe2", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Round 6 B5 follow-up: Groups and moves bullet's placement-edit list now names item.set_geometry, which takes scene_id after the B3 merge (apply.rs placement_mut)" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -98,7 +98,8 @@ goes up by exactly one, and the result carries the **inverse batch**.
   `scene.set_role` changes a scene's role and is undone by the previous role.
   `item.move` moves an item to an index in another scene (up to one past its top) or
   within its own (a reorder), keeping the whole item, and is undone by `item.move`
-  back. The placement edits (`item.set_transform`, `item.set_crop`, `item.set_visible`)
+  back. The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
+  `item.set_visible`)
   take an optional `scene_id`: absent or the item's own scene changes the item, another
   scene is `invalid_argument` until keyframe scenes exist, and the inverse keeps the
   addressing. No keyframe overrides exist yet, so no edit drops any

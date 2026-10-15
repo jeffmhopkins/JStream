@@ -104,7 +104,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:3e3b71a78a8bc553", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Groups subsection says protocol 0.12 and a 0.11 reader sees no change; B3's Item geometry text kept; set_geometry takes scene_id like the other placement edits" }
+verified = { hash = "b3:c31fe2b045ea1f33", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Round 6 B5 follow-up: Groups subsection's placement-edit list now names item.set_geometry, matching command.rs's scene_id field on it" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -216,7 +216,8 @@ the item's own scene, where the move is a reorder. Grouping is a client-built ba
 each selected item into the group, bottom first. `scene.create` doesn't take a `role`
 yet.
 
-The placement edits (`item.set_transform`, `item.set_crop`, `item.set_visible`) take an
+The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
+`item.set_visible`) take an
 optional `scene_id`, fixed now so that keyframe scenes can arrive additively (ADR-0024
 §2). Absent, or the item's own scene, changes the item. Until keyframe scenes exist,
 any other existing scene is `invalid_argument` on `edits.N.scene_id`, and a missing one

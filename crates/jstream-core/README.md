@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:416be8a2780880ed", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Conflicts bullet merges B3 (placement as transform or geometry, canvas size) and B6 (role, item.move index, both scenes); matches Touched::add" }
+verified = { hash = "b3:70c31576c9df4796", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Cascade from protocol#design (placement-edit list gains item.set_geometry); re-read, Conflicts bullet unchanged and holds" }
 -->
 
 ### Engine and sessions
