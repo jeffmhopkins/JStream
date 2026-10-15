@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:73e78a15981937b9", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: daemon host row now says the first cut serves WebSocket and MCP over HTTP (not the UI or --collection) and on Windows links jstream-platform-windows to go live over RTMP(S); diagram unchanged" }
+verified = { hash = "b3:29b7e26b41a721a7", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6: daemon host row now says the first cut loads and saves --collection, not the UI yet; table row ends with its pipe; diagram unchanged" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:73e78a15981937b9", by = "agent:claude@session_01YKRrREb5
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI or `--collection` yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S) ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S) ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>

@@ -7,7 +7,9 @@
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
 //! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
 //! pipeline on the Windows backends and publishes over RTMP(S), after checking that
-//! Media Foundation is installed. Not yet: the web UI and `--collection`.
+//! Media Foundation is installed. With `--collection` it loads the collection from a file
+//! and saves every change there, and it records every call in an audit log next to its
+//! log files. Not yet: the web UI.
 //!
 //! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-daemon/README.md#purpose, apps/jstream-daemon/README.md#usage, apps/jstream-daemon/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0006-mcp-full-access.md
 
@@ -24,6 +26,7 @@ mod token;
 
 use anyhow::Context;
 use args::{Invocation, Options};
+use jstream_core::AuditFile;
 use jstream_protocol::PROTOCOL_VERSION;
 use std::io::{Write, stderr, stdout};
 use std::path::{Path, PathBuf};
@@ -208,9 +211,14 @@ fn run(options: Options) -> Result<(), Failure> {
         },
     };
     let filter = log_filter(&options)?;
-    init_logging(&log_dir(&options)?, filter)?;
+    let logs = log_dir(&options)?;
+    init_logging(&logs, filter)?;
     #[cfg(windows)]
     check_media_foundation()?;
+    // Next to the log files: every batch, undo, redo and action, without their
+    // arguments (R-SEC-001).
+    let audit = AuditFile::open(&logs)
+        .with_context(|| format!("could not open the audit log in `{}`", logs.display()))?;
     let (token, provenance) = token::load_or_create(&path)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -218,7 +226,7 @@ fn run(options: Options) -> Result<(), Failure> {
         .context("could not start the async runtime")?;
     runtime.block_on(async {
         let stop = serve::shutdown_signal().context("could not install the Ctrl-C handler")?;
-        let engine = serve::engine(&options)?;
+        let engine = serve::engine(&options, Arc::new(audit))?;
         let server = serve::bind(engine, options.port, token)
             .await
             .map_err(anyhow::Error::from)?;
