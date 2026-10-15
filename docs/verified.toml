@@ -102,7 +102,7 @@ stamp = { hash = "b3:24cef673281620f5" }
 stamp = { hash = "b3:dba3adb97afc2dd5" }
 
 ["ARCH#data-model"."body"]
-stamp = { hash = "b3:f4010467c57cf0b1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:f4010467c57cf0b1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Source filters { video[], audio[] } with Filter rows, Master and Output filters { video[], audio[] }, Filters and effects bullet covers source chains and master/output owners (audio only, no references); dep ADR-0026 added; graph model/mod.rs State::master and Output::filters match; holds" }
 
 ["ARCH#data-model"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -117,7 +117,7 @@ stamp = { hash = "b3:47bc0da49dc24556" }
 stamp = { hash = "b3:b655210653447199" }
 
 ["ARCH#data-model"."dep:docs/adr/0026-source-filter-chains.md"]
-stamp = { hash = "b3:10fc5503702046a4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:10fc5503702046a4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Source filters { video[], audio[] } with Filter rows, Master and Output filters { video[], audio[] }, Filters and effects bullet covers source chains and master/output owners (audio only, no references); dep ADR-0026 added; graph model/mod.rs State::master and Output::filters match; holds" }
 
 ["ARCH#data-model"."dep:docs/adr/0027-program-master-and-output-chains.md"]
 stamp = { hash = "b3:af6388c6d1da14e9" }
@@ -135,7 +135,7 @@ stamp = { hash = "b3:b5397b5d6407b040" }
 stamp = { hash = "b3:d63ee0e9a7bb859a" }
 
 ["ARCH#data-model"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:b4eff0d53d48f0c2", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:b4eff0d53d48f0c2", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Source filters { video[], audio[] } with Filter rows, Master and Output filters { video[], audio[] }, Filters and effects bullet covers source chains and master/output owners (audio only, no references); dep ADR-0026 added; graph model/mod.rs State::master and Output::filters match; holds" }
 
 ["ARCH#gpu-pipeline"."body"]
 stamp = { hash = "b3:6412cfa1dc90c301", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
@@ -198,7 +198,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:f63197b907ffca0c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; 19 tools with filter among the nouns, tools.snap 212,398 bytes is about 212 KB; holds" }
+stamp = { hash = "b3:f63197b907ffca0c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter among the nouns, about 212 KB; tools.snap is 212,398 bytes; mcp README and tests.rs say 19 tools; holds" }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:8eea55b34b97d6a9" }
@@ -213,10 +213,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:920316bc3cb61a9a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; 19 tools with filter among the nouns, tools.snap 212,398 bytes is about 212 KB; holds" }
+stamp = { hash = "b3:920316bc3cb61a9a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter among the nouns, about 212 KB; tools.snap is 212,398 bytes; mcp README and tests.rs say 19 tools; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:5ca3896883387d4b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; 19 tools with filter among the nouns, tools.snap 212,398 bytes is about 212 KB; holds" }
+stamp = { hash = "b3:5ca3896883387d4b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter among the nouns, about 212 KB; tools.snap is 212,398 bytes; mcp README and tests.rs say 19 tools; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -237,7 +237,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:14e314618efd4433", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; 19 tools with filter among the nouns, tools.snap 212,398 bytes is about 212 KB; holds" }
+stamp = { hash = "b3:14e314618efd4433", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter among the nouns, about 212 KB; tools.snap is 212,398 bytes; mcp README and tests.rs say 19 tools; holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -249,7 +249,7 @@ stamp = { hash = "b3:1c343ec4bf85722c", by = "agent:claude@session_01D6iWjpMkoHb
 stamp = { hash = "b3:febfe552adc09d5b" }
 
 ["ARCH#persistence"."body"]
-stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filters saved with versions checked, opacity/blend written only when not default, effects empty; persist mod.rs saves master and outputs[].filters, v1.json carries m1 and o1, old-file test loads empty chains; holds" }
 
 ["ARCH#persistence"."dep:docs/RULES.md#R-API-003"]
 stamp = { hash = "b3:f17cde9b0d3da07c" }
@@ -261,13 +261,13 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:b655210653447199" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/fixtures/v1.json"]
-stamp = { hash = "b3:8c9bbbe0bd456bb5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:8c9bbbe0bd456bb5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filters saved with versions checked, opacity/blend written only when not default, effects empty; persist mod.rs saves master and outputs[].filters, v1.json carries m1 and o1, old-file test loads empty chains; holds" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:1ddd5df2b4800d3d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:1ddd5df2b4800d3d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filters saved with versions checked, opacity/blend written only when not default, effects empty; persist mod.rs saves master and outputs[].filters, v1.json carries m1 and o1, old-file test loads empty chains; holds" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:44bd446382ac85bf", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:44bd446382ac85bf", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filters saved with versions checked, opacity/blend written only when not default, effects empty; persist mod.rs saves master and outputs[].filters, v1.json carries m1 and o1, old-file test loads empty chains; holds" }
 
 ["ARCH#principles"."body"]
 stamp = { hash = "b3:5af84c5cc7c0a12d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited principle 8: listeners require a token and check Host, and Origin when present, matching R-SEC-002's new wording; other principles unchanged" }
@@ -282,7 +282,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:68208be304729b88", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:68208be304729b88", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -294,7 +294,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:07915c072e50c894" }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:dd47f3899d375c12", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:dd47f3899d375c12", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:e55527bc3d425ace" }
@@ -306,13 +306,13 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:022626fe6484ad99", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:022626fe6484ad99", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/filter.rs"]
-stamp = { hash = "b3:3bee1ac63fed302f", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:3bee1ac63fed302f", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
@@ -327,19 +327,19 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:c28ad268802f8af5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:efcccfd58df69d59", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:e389cf2ba2118b7a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:e389cf2ba2118b7a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:a6ca641c07f49575", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:a6ca641c07f49575", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:7c9cf48296eb7b35", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:7c9cf48296eb7b35", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -348,19 +348,19 @@ stamp = { hash = "b3:241d371850f187f6" }
 stamp = { hash = "b3:63616c6985c48822" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:10724f2931274e05", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:10724f2931274e05", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/filter.rs"]
-stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/finite.rs"]
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:cdbe5176ef6f24e4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:cdbe5176ef6f24e4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -369,22 +369,22 @@ stamp = { hash = "b3:91ec5275ab3c5e9f" }
 stamp = { hash = "b3:abc973f4355bada5" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/id.rs"]
-stamp = { hash = "b3:0d6e314ab06fcc65", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:0d6e314ab06fcc65", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
 stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:168cd2f567318018", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:168cd2f567318018", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:f33ad5d4cf05e5d7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:f33ad5d4cf05e5d7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:4f6cc3b322eba942", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:4f6cc3b322eba942", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:4c453e0de779144a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:4c453e0de779144a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: filter.* on source, master and output owners, item.set_opacity/blend, SourceInfo/OutputInfo filters and state.get master; files: control mock/filter.rs, protocol filter.rs, output.rs, query.rs, parity.rs and snapshots match; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -747,13 +747,13 @@ stamp = { hash = "b3:3e63f714aef88590" }
 stamp = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:71d5641d70e38b6a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): re-read; B7's item.set_opacity/set_blend in args.rs and the help text, filter edits listed as needing JSON args; tests gain opacity/blend fields; holds" }
+stamp = { hash = "b3:71d5641d70e38b6a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "args.rs and run/tests.rs: B7's opacity/blend edits; dep control design gains the mock's filter edits for source, master and output owners and opacity/blend; CLI design names no mock checks; holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:ebdf5f7efb5c5f79", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): re-read; B7's item.set_opacity/set_blend in args.rs and the help text, filter edits listed as needing JSON args; tests gain opacity/blend fields; holds" }
+stamp = { hash = "b3:ebdf5f7efb5c5f79", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "args.rs and run/tests.rs: B7's opacity/blend edits; dep control design gains the mock's filter edits for source, master and output owners and opacity/blend; CLI design names no mock checks; holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -771,7 +771,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c7379cddeb275056" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:781a7b7f8a754e20", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): re-read; B7's item.set_opacity/set_blend in args.rs and the help text, filter edits listed as needing JSON args; tests gain opacity/blend fields; holds" }
+stamp = { hash = "b3:781a7b7f8a754e20", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "args.rs and run/tests.rs: B7's opacity/blend edits; dep control design gains the mock's filter edits for source, master and output owners and opacity/blend; CLI design names no mock checks; holds" }
 
 ["CRATE-jstream-cli#purpose"."body"]
 stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's, the CLI's commands are unchanged by D5; holds" }
@@ -780,7 +780,7 @@ stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:194117bebc81240c" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:ebdf5f7efb5c5f79", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): re-read; B7's item.set_opacity/set_blend in args.rs and the help text, filter edits listed as needing JSON args; tests gain opacity/blend fields; holds" }
+stamp = { hash = "b3:ebdf5f7efb5c5f79", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "args.rs gains B7's item.set_opacity/item.set_blend parsing and opacity/blend None on item.add; run/tests.rs literals gain opacity and blend; purpose describes the binary and its edit grammar generally, unaffected; holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -798,13 +798,13 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c7379cddeb275056" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:781a7b7f8a754e20", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): re-read; B7's item.set_opacity/set_blend in args.rs and the help text, filter edits listed as needing JSON args; tests gain opacity/blend fields; holds" }
+stamp = { hash = "b3:781a7b7f8a754e20", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "args.rs gains B7's item.set_opacity/item.set_blend parsing and opacity/blend None on item.add; run/tests.rs literals gain opacity and blend; purpose describes the binary and its edit grammar generally, unaffected; holds" }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:39045e95b8973f2c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): re-read; B7's item.set_opacity/set_blend in args.rs and the help text, filter edits listed as needing JSON args; tests gain opacity/blend fields; holds" }
+stamp = { hash = "b3:39045e95b8973f2c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body adds B7's item.set_opacity and item.set_blend lines (engine accepts only normal) and lists the filter.* edits among those needing a JSON form; checked against args.rs's help text and arity; holds" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:ebdf5f7efb5c5f79", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): re-read; B7's item.set_opacity/set_blend in args.rs and the help text, filter edits listed as needing JSON args; tests gain opacity/blend fields; holds" }
+stamp = { hash = "b3:ebdf5f7efb5c5f79", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body adds B7's item.set_opacity and item.set_blend lines (engine accepts only normal) and lists the filter.* edits among those needing a JSON form; checked against args.rs's help text and arity; holds" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
 stamp = { hash = "b3:16e79b530b6f8e0a" }
@@ -816,10 +816,10 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c7379cddeb275056" }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:71d5641d70e38b6a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:71d5641d70e38b6a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: mock checks list filter rules for all three owners, keeps chains, opacity and blend, inverses restore filters for source.delete and output.delete; parity covers chains on source, master and output with filter rejections; dep ARCH protocol gains filter.* and item.set_opacity/blend; checked against mock.rs and mock/filter.rs; holds" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:68208be304729b88", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:68208be304729b88", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: mock checks list filter rules for all three owners, keeps chains, opacity and blend, inverses restore filters for source.delete and output.delete; parity covers chains on source, master and output with filter rejections; dep ARCH protocol gains filter.* and item.set_opacity/blend; checked against mock.rs and mock/filter.rs; holds" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -840,13 +840,13 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:022626fe6484ad99", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:022626fe6484ad99", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: mock checks list filter rules for all three owners, keeps chains, opacity and blend, inverses restore filters for source.delete and output.delete; parity covers chains on source, master and output with filter rejections; dep ARCH protocol gains filter.* and item.set_opacity/blend; checked against mock.rs and mock/filter.rs; holds" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/filter.rs"]
-stamp = { hash = "b3:3bee1ac63fed302f", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:3bee1ac63fed302f", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: mock checks list filter rules for all three owners, keeps chains, opacity and blend, inverses restore filters for source.delete and output.delete; parity covers chains on source, master and output with filter rejections; dep ARCH protocol gains filter.* and item.set_opacity/blend; checked against mock.rs and mock/filter.rs; holds" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
@@ -858,7 +858,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Failures bullet matches ws_web.rs (onerror handler ends the session via end_reason, State::close keeps the first reason; connect reason mentions CSP); test paragraph matches connect.spec.js and ws_config.rs tests. Edited open question 3 so it no longer implies the browser client is untested (e2e via jstream-ui now covers it)." }
 
 ["CRATE-jstream-control#purpose"."body"]
-stamp = { hash = "b3:a03ad963aeb2bd63", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:a03ad963aeb2bd63", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Mock bullet names mock/filter.rs; mock.rs and mock/filter.rs add filter edits on source, master and output owners (master/output audio only, output must carry audio, no references, reference checked before index) and opacity/blend; holds" }
 
 ["CRATE-jstream-control#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-control"]
 stamp = { hash = "b3:107caa6f41f5bf25" }
@@ -873,13 +873,13 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:022626fe6484ad99", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:022626fe6484ad99", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Mock bullet names mock/filter.rs; mock.rs and mock/filter.rs add filter edits on source, master and output owners (master/output audio only, output must carry audio, no references, reference checked before index) and opacity/blend; holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/filter.rs"]
-stamp = { hash = "b3:3bee1ac63fed302f", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:3bee1ac63fed302f", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Mock bullet names mock/filter.rs; mock.rs and mock/filter.rs add filter edits on source, master and output owners (master/output audio only, output must carry audio, no references, reference checked before index) and opacity/blend; holds" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
@@ -891,16 +891,16 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:f455904e3349c17c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:f455904e3349c17c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:71d5641d70e38b6a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:71d5641d70e38b6a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:0134e39ea4564681", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:4e1de01f220bc8e7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:68208be304729b88", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:68208be304729b88", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -909,16 +909,16 @@ stamp = { hash = "b3:2d6cfa635e9b2786" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/Cargo.toml"]
-stamp = { hash = "b3:f0ea4834a5dcb3c8", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:f0ea4834a5dcb3c8", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/activity.rs"]
-stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio.rs"]
-stamp = { hash = "b3:2bf7ac18925abb73", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:2bf7ac18925abb73", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:3e8de6cd3e185bb2", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:3e8de6cd3e185bb2", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -930,22 +930,22 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:c07874c21fc7010a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:c07874c21fc7010a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/filters.rs"]
-stamp = { hash = "b3:5e3e3e4871fb67e6", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:5e3e3e4871fb67e6", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:7378eab81da1ba15" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/kinds.rs"]
-stamp = { hash = "b3:d42333c6e2afe010", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:d42333c6e2afe010", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:2d96d206466126ca", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:2d96d206466126ca", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:9ceafdfcc04ac858" }
@@ -954,10 +954,10 @@ stamp = { hash = "b3:9ceafdfcc04ac858" }
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/mod.rs"]
-stamp = { hash = "b3:7dbab6b680029c84", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:7dbab6b680029c84", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:84dce04a58edc724", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:84dce04a58edc724", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -975,19 +975,19 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:547d1e16675e891a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:547d1e16675e891a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:e19f6710dbd7e3bd", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:e19f6710dbd7e3bd", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio_routing.rs"]
-stamp = { hash = "b3:5c2c4f8e666cb776", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:5c2c4f8e666cb776", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Audio routing covers source chains before the fader (B7), the master chain on MixerControl::master and output taps added at start, removed at stop, live chain edits, chains added while running wait for restart (D8); files audio.rs, engine.rs, filters.rs (FilterHost), pipeline.rs match; deps: control design adds mock filter owners, protocol design adds master/output owners and timing, ARCH protocol adds filter.* and opacity/blend, none contradict core; holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
@@ -999,19 +999,19 @@ stamp = { hash = "b3:c9688aabcb558c82" }
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:a2bec4eeaf98733a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:a2bec4eeaf98733a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/activity.rs"]
-stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:9c0293aee70c356c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio.rs"]
-stamp = { hash = "b3:2bf7ac18925abb73", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:2bf7ac18925abb73", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:3e8de6cd3e185bb2", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:3e8de6cd3e185bb2", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -1023,22 +1023,22 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:c07874c21fc7010a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:c07874c21fc7010a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/filters.rs"]
-stamp = { hash = "b3:5e3e3e4871fb67e6", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:5e3e3e4871fb67e6", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:7378eab81da1ba15" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/kinds.rs"]
-stamp = { hash = "b3:d42333c6e2afe010", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:d42333c6e2afe010", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:2d96d206466126ca", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:2d96d206466126ca", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:9ceafdfcc04ac858" }
@@ -1047,10 +1047,10 @@ stamp = { hash = "b3:9ceafdfcc04ac858" }
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/mod.rs"]
-stamp = { hash = "b3:7dbab6b680029c84", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:7dbab6b680029c84", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:84dce04a58edc724", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:84dce04a58edc724", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1068,19 +1068,19 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:547d1e16675e891a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:547d1e16675e891a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/studio.rs"]
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:e19f6710dbd7e3bd", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:e19f6710dbd7e3bd", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio_routing.rs"]
-stamp = { hash = "b3:5c2c4f8e666cb776", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:5c2c4f8e666cb776", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: Runtime bullet says one master-bus audio session per encoder profile shared by outputs with no audio chain, one per chained output (Program::shared_audio per EncodeKey); Audio filters and routing bullets cover B7 source chains and D8 master chain and output taps; files: audio.rs, engine.rs, filters.rs, pipeline.rs, audio_routing.rs carry that; activity.rs/kinds.rs/snapshot.rs/tests.rs only B7 fields; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
@@ -1098,7 +1098,7 @@ stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:993e780364d6f4d3" }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:f2b623fe7bef8955", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:c5b393a32a064656", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: encode threads: one video session per profile, per profile one master-bus audio session for outputs with no audio chain, own session fed from the tap for a chained output (rewrapped per review N10); runtime/mod.rs and pipeline.rs launch, OwnAudio and mixer_loop output_block match; holds" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
@@ -1107,10 +1107,10 @@ stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:f2c3ac9292e67cf2" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/mod.rs"]
-stamp = { hash = "b3:7dbab6b680029c84", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:7dbab6b680029c84", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: encode threads: one video session per profile, per profile one master-bus audio session for outputs with no audio chain, own session fed from the tap for a chained output (rewrapped per review N10); runtime/mod.rs and pipeline.rs launch, OwnAudio and mixer_loop output_block match; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:84dce04a58edc724", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3: master chain on MixerControl::master, output taps, shared master-bus audio encode per encoder profile, D6 activity gain; re-read against audio.rs, engine.rs, pipeline.rs; holds" }
+stamp = { hash = "b3:84dce04a58edc724", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: encode threads: one video session per profile, per profile one master-bus audio session for outputs with no audio chain, own session fed from the tap for a chained output (rewrapped per review N10); runtime/mod.rs and pipeline.rs launch, OwnAudio and mixer_loop output_block match; holds" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1128,13 +1128,13 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:f455904e3349c17c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:f455904e3349c17c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "dep core design gains the master chain on the mixer and output taps with their own audio encode; dep ARCH persistence saves filter chains, opacity and blend; the daemon text only passes the collection file and audit log to the engine and names neither; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "dep core design gains the master chain on the mixer and output taps with their own audio encode; dep ARCH persistence saves filter chains, opacity and blend; the daemon text only passes the collection file and audit log to the engine and names neither; holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
 stamp = { hash = "b3:9d6ffbf45d26a653" }
@@ -1398,7 +1398,7 @@ stamp = { hash = "b3:1ac237caa31707d0", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:984f333744172f87" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#data-model"]
-stamp = { hash = "b3:f4010467c57cf0b1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:f4010467c57cf0b1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "dep ARCH data-model: Source, Master and Output now carry filters { video[], audio[] }; encode purpose's sharing rule (an output with a video chain gets its own session) still holds since master/output video chains are refused; holds" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
@@ -1428,70 +1428,70 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:21668f51b28f0233" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:db3eeaa284b0e5c5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:db3eeaa284b0e5c5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:0134e39ea4564681", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:4e1de01f220bc8e7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#data-model"]
-stamp = { hash = "b3:f4010467c57cf0b1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:f4010467c57cf0b1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/apply.rs"]
-stamp = { hash = "b3:dc63107ecf290ef4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:dc63107ecf290ef4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/audio.rs"]
 stamp = { hash = "b3:3a5dcf3b621fc077" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/deps.rs"]
-stamp = { hash = "b3:75a36587d0753bc9", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:75a36587d0753bc9", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/encoder.rs"]
 stamp = { hash = "b3:42485db0e5133b45" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/filter.rs"]
-stamp = { hash = "b3:1a35c2cabc45d2b6", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:1a35c2cabc45d2b6", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/lib.rs"]
-stamp = { hash = "b3:88e0f9188f593a86", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:88e0f9188f593a86", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:b4eff0d53d48f0c2", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:b4eff0d53d48f0c2", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/fixtures/v1.json"]
-stamp = { hash = "b3:8c9bbbe0bd456bb5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:8c9bbbe0bd456bb5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:1ddd5df2b4800d3d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:1ddd5df2b4800d3d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:44bd446382ac85bf", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:44bd446382ac85bf", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/plan.rs"]
-stamp = { hash = "b3:8c058ced95267ce0", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:8c058ced95267ce0", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/read.rs"]
-stamp = { hash = "b3:dc0a826c874c8a7b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:dc0a826c874c8a7b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/target.rs"]
 stamp = { hash = "b3:675f46eea33b1c83", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
-stamp = { hash = "b3:09c60db6c5601015", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:09c60db6c5601015", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests/filters.rs"]
-stamp = { hash = "b3:fb675b94813826df", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:fb675b94813826df", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/touched.rs"]
-stamp = { hash = "b3:d072c384ffecc594", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:d072c384ffecc594", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body and files: B7 source chains, opacity/blend; D8 master and output owners, check order, output.delete inverse, Touched by owner, file saves master and outputs[].filters, old-file test (a_file_without_master_or_output_filters_loads); deps protocol design and ARCH data-model add the same owners and Filter rows; checked against filter.rs, apply.rs, persist; holds" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:e5e8878b9ce27e16", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; 19 tools with filter among the nouns, tools.snap 212,398 bytes is about 212 KB; holds" }
+stamp = { hash = "b3:e5e8878b9ce27e16", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body adds filter to the noun table; tests.rs asserts 19 tools; dep ARCH mcp lists filter and about 212 KB (tools.snap 212,398 bytes); holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:f63197b907ffca0c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; 19 tools with filter among the nouns, tools.snap 212,398 bytes is about 212 KB; holds" }
+stamp = { hash = "b3:f63197b907ffca0c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body adds filter to the noun table; tests.rs asserts 19 tools; dep ARCH mcp lists filter and about 212 KB (tools.snap 212,398 bytes); holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1524,7 +1524,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:14e314618efd4433", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; 19 tools with filter among the nouns, tools.snap 212,398 bytes is about 212 KB; holds" }
+stamp = { hash = "b3:14e314618efd4433", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body adds filter to the noun table; tests.rs asserts 19 tools; dep ARCH mcp lists filter and about 212 KB (tools.snap 212,398 bytes); holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1554,7 +1554,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:14e314618efd4433", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; 19 tools with filter among the nouns, tools.snap 212,398 bytes is about 212 KB; holds" }
+stamp = { hash = "b3:14e314618efd4433", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "tests.rs: tool count 19 with the filter noun and item literals gain opacity/blend; purpose names no tool count; holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1956,7 +1956,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:0134e39ea4564681", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:4e1de01f220bc8e7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -1974,16 +1974,16 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:e389cf2ba2118b7a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:e389cf2ba2118b7a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:a6ca641c07f49575", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:a6ca641c07f49575", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:7c9cf48296eb7b35", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:7c9cf48296eb7b35", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -1992,19 +1992,19 @@ stamp = { hash = "b3:241d371850f187f6" }
 stamp = { hash = "b3:63616c6985c48822" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:10724f2931274e05", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:10724f2931274e05", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/filter.rs"]
-stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/finite.rs"]
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:cdbe5176ef6f24e4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:cdbe5176ef6f24e4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2013,22 +2013,22 @@ stamp = { hash = "b3:91ec5275ab3c5e9f" }
 stamp = { hash = "b3:abc973f4355bada5" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/id.rs"]
-stamp = { hash = "b3:0d6e314ab06fcc65", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:0d6e314ab06fcc65", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
 stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:168cd2f567318018", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:168cd2f567318018", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:f33ad5d4cf05e5d7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:f33ad5d4cf05e5d7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:4f6cc3b322eba942", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:4f6cc3b322eba942", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:4c453e0de779144a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:4c453e0de779144a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: master/output owners with audio chains only, vcam refused, no references, own audio encode from next start with live edits, FilterInfo.filter_id unique per owner; rewrapped per N10; snapshots regenerated from filter.rs/output.rs/query.rs; holds" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -2040,7 +2040,7 @@ stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c594f42e1b065295" }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:77d6843dd5eefc67", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:745e6522599cffce", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: parity paragraph names master and output gain filters and rejections (vcam audio filter, master reference before index); files: filter.rs owners Master/Output, output.rs OutputInfo.filters, query.rs MasterInfo, parity.rs and fixtures.rs match; B7 opacity/blend and filter edits in command.rs/error.rs/id.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -2049,7 +2049,7 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:7c9cf48296eb7b35", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:7c9cf48296eb7b35", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: parity paragraph names master and output gain filters and rejections (vcam audio filter, master reference before index); files: filter.rs owners Master/Output, output.rs OutputInfo.filters, query.rs MasterInfo, parity.rs and fixtures.rs match; B7 opacity/blend and filter edits in command.rs/error.rs/id.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
@@ -2058,19 +2058,19 @@ stamp = { hash = "b3:241d371850f187f6" }
 stamp = { hash = "b3:63616c6985c48822" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:10724f2931274e05", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:10724f2931274e05", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: parity paragraph names master and output gain filters and rejections (vcam audio filter, master reference before index); files: filter.rs owners Master/Output, output.rs OutputInfo.filters, query.rs MasterInfo, parity.rs and fixtures.rs match; B7 opacity/blend and filter edits in command.rs/error.rs/id.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/filter.rs"]
-stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:35df088d7d9c7756", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: parity paragraph names master and output gain filters and rejections (vcam audio filter, master reference before index); files: filter.rs owners Master/Output, output.rs OutputInfo.filters, query.rs MasterInfo, parity.rs and fixtures.rs match; B7 opacity/blend and filter edits in command.rs/error.rs/id.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/finite.rs"]
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:cdbe5176ef6f24e4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:cdbe5176ef6f24e4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: parity paragraph names master and output gain filters and rejections (vcam audio filter, master reference before index); files: filter.rs owners Master/Output, output.rs OutputInfo.filters, query.rs MasterInfo, parity.rs and fixtures.rs match; B7 opacity/blend and filter edits in command.rs/error.rs/id.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2079,22 +2079,22 @@ stamp = { hash = "b3:91ec5275ab3c5e9f" }
 stamp = { hash = "b3:abc973f4355bada5" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/id.rs"]
-stamp = { hash = "b3:0d6e314ab06fcc65", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:0d6e314ab06fcc65", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: parity paragraph names master and output gain filters and rejections (vcam audio filter, master reference before index); files: filter.rs owners Master/Output, output.rs OutputInfo.filters, query.rs MasterInfo, parity.rs and fixtures.rs match; B7 opacity/blend and filter edits in command.rs/error.rs/id.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
 stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:168cd2f567318018", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:168cd2f567318018", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: parity paragraph names master and output gain filters and rejections (vcam audio filter, master reference before index); files: filter.rs owners Master/Output, output.rs OutputInfo.filters, query.rs MasterInfo, parity.rs and fixtures.rs match; B7 opacity/blend and filter edits in command.rs/error.rs/id.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:f33ad5d4cf05e5d7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:f33ad5d4cf05e5d7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: parity paragraph names master and output gain filters and rejections (vcam audio filter, master reference before index); files: filter.rs owners Master/Output, output.rs OutputInfo.filters, query.rs MasterInfo, parity.rs and fixtures.rs match; B7 opacity/blend and filter edits in command.rs/error.rs/id.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
-stamp = { hash = "b3:4f6cc3b322eba942", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:4f6cc3b322eba942", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: parity paragraph names master and output gain filters and rejections (vcam audio filter, master reference before index); files: filter.rs owners Master/Output, output.rs OutputInfo.filters, query.rs MasterInfo, parity.rs and fixtures.rs match; B7 opacity/blend and filter edits in command.rs/error.rs/id.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:4c453e0de779144a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:4c453e0de779144a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "body: parity paragraph names master and output gain filters and rejections (vcam audio filter, master reference before index); files: filter.rs owners Master/Output, output.rs OutputInfo.filters, query.rs MasterInfo, parity.rs and fixtures.rs match; B7 opacity/blend and filter edits in command.rs/error.rs/id.rs; holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -2226,10 +2226,10 @@ stamp = { hash = "b3:eaa109533b8798d8" }
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:71d5641d70e38b6a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:71d5641d70e38b6a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "deps: control design gains mock filter owners and opacity/blend, ARCH protocol gains filter.* edits and item.set_opacity/blend; server design forwards calls and names neither; holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:68208be304729b88", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:68208be304729b88", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "deps: control design gains mock filter owners and opacity/blend, ARCH protocol gains filter.* edits and item.set_opacity/blend; server design forwards calls and names neither; holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:9bcfb0336f6adad9" }
@@ -2409,7 +2409,7 @@ stamp = { hash = "b3:ff923b70ae781b73" }
 stamp = { hash = "b3:49945f646dfa549c" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; UI and e2e mock only gain B7's opacity/blend and D8's empty output filters in literals; text unaffected; holds" }
+stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "canvas/model.rs gains B7's opacity/blend fields in item literals; canvas section's model and hit-testing text unaffected; holds" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2421,7 +2421,7 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:263637b2f03e8558", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:71d5641d70e38b6a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; UI and e2e mock only gain B7's opacity/blend and D8's empty output filters in literals; text unaffected; holds" }
+stamp = { hash = "b3:71d5641d70e38b6a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "files: opacity/blend and empty output filters in literals; dep control design gains mock filter owners and opacity/blend; UI design names no mock checks or filters; holds" }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -2433,7 +2433,7 @@ stamp = { hash = "b3:8c1bea968ba0a189" }
 stamp = { hash = "b3:49945f646dfa549c" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; UI and e2e mock only gain B7's opacity/blend and D8's empty output filters in literals; text unaffected; holds" }
+stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "files: opacity/blend and empty output filters in literals; dep control design gains mock filter owners and opacity/blend; UI design names no mock checks or filters; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2454,7 +2454,7 @@ stamp = { hash = "b3:b0fabe46ab68dffb" }
 stamp = { hash = "b3:ef3e4d543c670393" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:b8eb012f60bf59cd", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; UI and e2e mock only gain B7's opacity/blend and D8's empty output filters in literals; text unaffected; holds" }
+stamp = { hash = "b3:b8eb012f60bf59cd", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "files: opacity/blend and empty output filters in literals; dep control design gains mock filter owners and opacity/blend; UI design names no mock checks or filters; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d" }
@@ -2475,7 +2475,7 @@ stamp = { hash = "b3:8c1bea968ba0a189" }
 stamp = { hash = "b3:49945f646dfa549c" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; UI and e2e mock only gain B7's opacity/blend and D8's empty output filters in literals; text unaffected; holds" }
+stamp = { hash = "b3:06a772ecda20105b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "canvas/model.rs and panels/outputs.rs gain B7 opacity/blend and D8 empty output filters in literals only; purpose text unaffected; holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2496,7 +2496,7 @@ stamp = { hash = "b3:b0fabe46ab68dffb" }
 stamp = { hash = "b3:ef3e4d543c670393" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:b8eb012f60bf59cd", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; UI and e2e mock only gain B7's opacity/blend and D8's empty output filters in literals; text unaffected; holds" }
+stamp = { hash = "b3:b8eb012f60bf59cd", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "canvas/model.rs and panels/outputs.rs gain B7 opacity/blend and D8 empty output filters in literals only; purpose text unaffected; holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d" }
@@ -2514,7 +2514,7 @@ stamp = { hash = "b3:cd1222001aad0cda" }
 stamp = { hash = "b3:e97684fe742d6756" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/mock-daemon/src/main.rs"]
-stamp = { hash = "b3:c87e56364c7518c6", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; UI and e2e mock only gain B7's opacity/blend and D8's empty output filters in literals; text unaffected; holds" }
+stamp = { hash = "b3:c87e56364c7518c6", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "mock-daemon main.rs ItemAdd gains opacity/blend None (B7); harness text unaffected; holds" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/package.json"]
 stamp = { hash = "b3:adf0e4e847f64861", by = "agent:deps-thread", note = "Re-read after @playwright/test 1.56.1 -> 1.64.0: still pinned exactly in package.json and package-lock.json; mock daemon, per-test daemons, console-error rule, global setup and JSTREAM_E2E_CHROMIUM do not depend on the Playwright version" }
@@ -2910,10 +2910,10 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): R-API-003 holds: schema stays 1 and a pre-D5 v1 file now loads with its audio sources' master sends, as it did on main" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:0e8f5dbcf47d5be1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "deps ARCH protocol (filter.* owners, opacity/blend, additive optional fields) and ARCH persistence (new optional file fields, schema stays 1); the R-API rules' text is unaffected and the changes are additive; holds" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:68208be304729b88", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge (ADR-0053 ledger): text as verified at 4ae4051 round 3 (master and output filter owners, checks, persistence, parity rejections) beside main's #320/#400 changes; re-read; holds" }
+stamp = { hash = "b3:68208be304729b88", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "deps ARCH protocol (filter.* owners, opacity/blend, additive optional fields) and ARCH persistence (new optional file fields, schema stays 1); the R-API rules' text is unaffected and the changes are additive; holds" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
@@ -2949,7 +2949,7 @@ stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:39045e95b8973f2c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; steps use no opacity, blend or filter edits, CLI usage change is additive; holds" }
+stamp = { hash = "b3:39045e95b8973f2c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "dep CLI usage adds item.set_opacity/set_blend; smoke steps use none of them; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
@@ -2961,7 +2961,7 @@ stamp = { hash = "b3:a560da0e5768f43e" }
 stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:39045e95b8973f2c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 wave/m1 merge: re-read; steps use no opacity, blend or filter edits, CLI usage change is additive; holds" }
+stamp = { hash = "b3:39045e95b8973f2c", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "dep CLI usage adds item.set_opacity/set_blend and notes filter.* need JSON; go-live steps use none of them; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }

@@ -130,7 +130,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   its send), a renamed and faded bus, a duplicated microphone with a send removed, and
   a disabled nested scene. The rejected batches also cover an audio filter on the
   virtual camera, a reference in a master filter's settings (refused before its
-  index), the bus limit, the master bus, fader ranges, and sources with no audio or no fader of their own.
+  index), the bus limit, the master bus, fader ranges, and sources with no audio or no
+  fader of their own.
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -397,9 +398,10 @@ The master stage and each output own chains too
 `{"type":"master"}` and `{"type":"output","output_id":…}` and the same edits. The
 master's audio chain runs on every bus that feeds an output, after that bus's own chain;
 an output's runs after it, for that output only, and gives the output its own audio
-encode from its next start (edits to a chain it started with apply live). Only their audio chains hold filters so far: a video filter is
-`invalid_argument` on `edits.N.chain` until video mixes run them, and so is an audio
-filter on an output that carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
+encode from its next start (edits to a chain it started with apply live). Only their
+audio chains hold filters so far: a video filter is `invalid_argument` on
+`edits.N.chain` until video mixes run them, and so is an audio filter on an output that
+carries no audio (a `virtual_cam`). A missing output is `not_found` with entity
 `output`. Their filters can't refer to a scene or source yet (`invalid_argument` on the
 parameter), since the delete checks follow only a source's references. `output.delete`'s
 inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s

@@ -1087,11 +1087,10 @@ routing* in Design). Every running output shares that one program stage (capture
 render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same encoder profile share one
-video session, and those of them with no audio chain share one audio session of the
-master bus, and an output with an audio chain has an audio session of its own that the mixer thread
-feeds from the output's tap. The render and mixer threads take a new session's inputs
-from a channel,
-never a lock, and hand a finished session's input to the collector rather than drop
+video session; those of them with no audio chain share one audio session of the master
+bus; an output with an audio chain has an audio session of its own that the mixer
+thread feeds from the output's tap. The render and mixer threads take a new session's
+inputs from a channel, never a lock, and hand a finished session's input to the collector rather than drop
 it. While the stage has no session and no virtual camera it
 draws nothing but still adopts the latest render snapshot. Each output but a virtual
 camera has its own output thread that muxes; a virtual camera's thread converts and
