@@ -365,7 +365,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:92eb867695f2637b", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; prose is main's collector sentences plus F2b's recording output-thread sentence; both hold for runtime/sink.rs and audio rt cmd/retire" }
+verified = { hash = "b3:93e9be3cc81f6b6f", by = "agent:claude", note = "#189: test-only change to the RTMP reconnect test and its send_until helper in runtime/publish.rs; re-read, no prose describes that test or its budget; still holds" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:776be5d7a3dab550", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; History bullet (B2) and Snapshot/canvas text (B3) both hold; history.rs now also handles item.set_geometry and canvas.set_size" }
+verified = { hash = "b3:6b00b92fe44d07dc", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fa86bd19ba047798", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#183) into B2-f3 (control mock changed): re-read Undo and redo and the differential-script paragraph; nothing compares history calls; B3's canvas conflict rule unaffected" }
+verified = { hash = "b3:35252def9891785f", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
 -->
 
 ### Engine and sessions
