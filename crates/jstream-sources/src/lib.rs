@@ -7,7 +7,7 @@
 //! WebP and GIF, animated GIF and WebP included, decoded with pure-Rust crates) and
 //! `text` (a string drawn with a TrueType or OpenType font, read with `skrifa`), and
 //! `browser` (a web page rendered off screen by the injected
-//! [`BrowserBackend`](jstream_browser::BrowserBackend) from [`Context::browser`], its
+//! [`BrowserBackend`] from [`Context::browser`], its
 //! frames on the GPU and its audio a [`SourceAudio`]). The
 //! audio-only kinds (`audio_input`, `desktop_audio` and `app_audio`) make no frames: the
 //! engine records the [`AudioTarget`] their settings name. The other built-in kinds are

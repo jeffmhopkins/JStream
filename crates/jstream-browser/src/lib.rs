@@ -8,7 +8,7 @@
 //! [`BrowserPage`]. The platform-neutral parts are built everywhere: the page's location
 //! and custom CSS ([`PageLocation`], [`css_script`]), the audio hand-off ([`PageAudio`])
 //! and, with the `fake` feature, an in-memory backend for tests. The CEF backend
-//! ([`CefBackend`]) is built on Windows with the `cef` feature only, so no other build
+//! (`CefBackend`) is built on Windows with the `cef` feature only, so no other build
 //! downloads or compiles CEF.
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-browser/README.md#purpose, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md

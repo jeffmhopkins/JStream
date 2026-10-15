@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:10e6612e2e97fad8", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: browser kind, Context.browser, Source::gpu_frame/audio, SourceAudio, new deps and tests/browser.rs described; checked against browser.rs, source.rs, error.rs" }
+verified = { hash = "b3:669d8b7830e40419", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 doc fix: lib.rs link to BrowserBackend uses the re-export; README text unaffected" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every

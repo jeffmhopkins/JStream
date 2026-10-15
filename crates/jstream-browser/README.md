@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:05868cec3a73feaf", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: new README re-read against page.rs, audio.rs, fake.rs, cef/{mod,gpu,handlers}.rs and the page_check example" }
+verified = { hash = "b3:dee8be93f154a517", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 doc fix: crate docs no longer intra-link CefBackend (cfg'd out of rustdoc); README text unaffected" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
