@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ffeb76b8de905c81", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the apps/* row against apps/jstream-daemon/Cargo.toml: still layer 6 with unsafe_allowed false; the new direct deps tracing and blake3 are external crates (no new jstream crate edge), so the row text holds" }
+verified = { hash = "b3:1866d0ba10ec12ca", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#141 review N1: platform-windows package description now names the Credential Manager store; re-read the crate map: the row (layer 2, unsafe yes, Credential Manager store listed) still matches the manifest summary, no dependency edge changed" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -141,7 +141,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0034](adr/0034-youtube-interaction-scope-v2.md)). No media code. | no |
-| 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
+| 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:2a23f997fce1180e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main into #135: re-read the section; the #132/#139 handover text is main's and unchanged, and #135's runtime change (OpenPublish opener held in MediaHost, called on the control thread that runs output.start, outside the engine locks) fits 'once the host has injected platform backends and a publish target'; no thread, RT or failure-path change" }
+verified = { hash = "b3:c155fb3f4532ab9e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#135) into #136: prose is main's; re-read the section: the output-pipeline paragraph's 'publish target' covers #135's opener, it claims nothing about stop duration so #136's 2 s drain bound fits, the panic-boundary and watcher text matches rt_panic_is_reported, and the SeqCst handover paragraph is untouched" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from

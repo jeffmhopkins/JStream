@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:63e7f5a6967567fe", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via ARCH#threading's handover paragraph; capture mailbox, audio handlers and vcam aren't snapshot readers, so the rule doesn't apply" }
+verified = { hash = "b3:0ea935c5788237e5", by = "agent:claude@session_01Q6eRwxiAzJidNbXNzEDHVJ", note = "F4: Codecs bullet now names VideoEncoder::request_keyframe and its refusing default; FakeCodecs restarts its keyframe pattern at a forced keyframe; on-demand keyframes dropped from Not yet" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -63,7 +63,9 @@ Contents:
 - **Codecs:** `Codecs` (`Send + Sync`) lists the OS codecs (`CodecInfo`) and opens
   `VideoEncoder`, `AudioEncoder` and `VideoDecoder` sessions (each `Send`). The call
   pattern is spike S1's Media Foundation one: `can_accept`, then `encode` (or
-  `decode`), then a non-blocking `poll` for ready output, and `finish` to drain. A full
+  `decode`), then a non-blocking `poll` for ready output, and `finish` to drain.
+  `VideoEncoder::request_keyframe` forces the next frame to be a keyframe; its default
+  refuses with `Unsupported`, and an encoder that refuses keeps its regular cadence. A full
   encoder returns `PlatformError::Busy`, so the caller drops and counts the frame
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). Packets keep their frame's `pts` on the
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
@@ -81,7 +83,7 @@ Contents:
 - **Fakes** (`fake.rs`, feature `fake`): deterministic in-memory backends for engine and
   scenario tests ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): `FakeClock` (time moves
   only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and
-  keyframe pattern, placeholder payloads; the decoder returns frames in presentation
+  keyframe pattern, a forced keyframe restarting that pattern, placeholder payloads; the decoder returns frames in presentation
   order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
   (dropping it stops it; a test watches it through a `FakeVcamProbe`), plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI) and
@@ -92,13 +94,13 @@ Contents:
 **Not yet:** a platform that delivers or consumes GPU frames (the Windows
 `GpuInterop` opens the device and encode targets; its capture and encoders don't use them
 yet), webcam capture (an MJPEG `Codec` variant and a
-camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapter.
+camera `CaptureTarget`), and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:418109e505e0d384", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read GpuFrame, FrameSync and the unsafe-import split against the gpu-pipeline sentence that names legacy_quad. Render still uses this device when present, opens its own otherwise, and does not write the NV12 encode target." }
+verified = { hash = "b3:50567723fbd8bd89", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only through ARCH#crate-map: the platform-windows row gained the credential store; the wgpu-types-in-jstream-platform point this section cites from the crate map is unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

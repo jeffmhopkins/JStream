@@ -171,15 +171,16 @@ mod encoder {
     use windows::Win32::Media::MediaFoundation::{
         CODECAPI_AVEncCommonMaxBitRate, CODECAPI_AVEncCommonMeanBitRate,
         CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVDefaultBPictureCount,
-        CODECAPI_AVEncMPVGOPSize, CODECAPI_AVLowLatencyMode, ICodecAPI, IMFMediaEventGenerator,
-        IMFMediaType, IMFTransform, METransformDrainComplete, METransformHaveOutput,
-        METransformNeedInput, MF_E_NO_EVENTS_AVAILABLE, MF_E_NOTACCEPTING, MF_EVENT_FLAG_NO_WAIT,
-        MF_EVENT_TYPE, MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE,
-        MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE,
-        MF_MT_VIDEO_NOMINAL_RANGE, MF_MT_YUV_MATRIX, MF_TRANSFORM_ASYNC, MF_TRANSFORM_ASYNC_UNLOCK,
-        MFCreateMediaType, MFMediaType_Video, MFNominalRange_16_235, MFT_CATEGORY_VIDEO_ENCODER,
-        MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_LOCALMFT, MFT_ENUM_FLAG_SORTANDFILTER,
-        MFT_ENUM_FLAG_SYNCMFT, MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
+        CODECAPI_AVEncMPVGOPSize, CODECAPI_AVEncVideoForceKeyFrame, CODECAPI_AVLowLatencyMode,
+        ICodecAPI, IMFMediaEventGenerator, IMFMediaType, IMFTransform, METransformDrainComplete,
+        METransformHaveOutput, METransformNeedInput, MF_E_NO_EVENTS_AVAILABLE, MF_E_NOTACCEPTING,
+        MF_EVENT_FLAG_NO_WAIT, MF_EVENT_TYPE, MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE,
+        MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE,
+        MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_MT_VIDEO_NOMINAL_RANGE, MF_MT_YUV_MATRIX,
+        MF_TRANSFORM_ASYNC, MF_TRANSFORM_ASYNC_UNLOCK, MFCreateMediaType, MFMediaType_Video,
+        MFNominalRange_16_235, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE,
+        MFT_ENUM_FLAG_LOCALMFT, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
+        MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
         MFT_MESSAGE_NOTIFY_END_OF_STREAM, MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFVideoFormat_H264,
         MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFVideoTransferMatrix_BT709,
         eAVEncCommonRateControlMode_CBR, eAVEncCommonRateControlMode_PeakConstrainedVBR,
@@ -509,6 +510,27 @@ mod encoder {
             }
             out.append(&mut self.pending);
             Ok(())
+        }
+
+        /// `CODECAPI_AVEncVideoForceKeyFrame`: the encoder makes the next input it
+        /// processes an IDR frame. An encoder without `ICodecAPI`, or one that refuses
+        /// the property, reports `Unsupported` and keeps its GOP cadence.
+        fn request_keyframe(&mut self) -> Result<(), PlatformError> {
+            if self.finished {
+                return Err(PlatformError::InvalidState {
+                    what: "H.264 keyframe request",
+                    state: "the encoder is finished",
+                });
+            }
+            let refused = |why: String| PlatformError::Unsupported {
+                what: format!("forcing a keyframe on {} ({why})", self.info.name),
+            };
+            let api = self
+                .mft
+                .transform
+                .cast::<ICodecAPI>()
+                .map_err(|e| refused(format!("no ICodecAPI: {e}")))?;
+            set_u32(&api, &CODECAPI_AVEncVideoForceKeyFrame, 1).map_err(|e| refused(e.to_string()))
         }
 
         fn finish(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {

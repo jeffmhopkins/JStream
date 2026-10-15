@@ -1,29 +1,43 @@
-//! R-RT-004: under overload the stages drop and count, and `stats.tick` reports the
-//! totals. This drives the stages and fakes directly, and publishes capture, render
-//! and output counts by hand beside them. `output.start` registers the same kinds of
-//! sources on the live pipeline, where the render thread publishes the capture skips
-//! and the render ticks it skipped to keep up with the clock.
+//! Engine scenarios on fake devices and a fake clock.
+//!
+//! R-RT-004 (`overload_drops_and_counts`): under overload the stages drop and count,
+//! and `stats.tick` reports the totals. This drives the stages and fakes directly, and
+//! publishes capture, render and output counts by hand beside them. `output.start`
+//! registers the same kinds of sources on the live pipeline, where the render thread
+//! publishes the capture skips and the render ticks it skipped to keep up with the
+//! clock.
+//!
+//! R-RT-006 (`rt_panic_is_reported`): a panic on the render or mixer thread of a
+//! running pipeline is caught at the thread boundary and reported to every client as
+//! the output settling `failed`, and the engine keeps serving calls. The render thread
+//! composites on the CPU (`Engine::with_cpu_compositor`), so no wgpu adapter is needed.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::task::{Context, Poll, Waker};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use jstream_audio::{Mixer, MixerConfig};
 use jstream_control::{Control, EventStream};
 use jstream_core::{
-    AudioBusDrops, AudioInputDrops, DropSnapshot, Engine, VideoEncodeDrops, audio_bus_drops,
-    audio_input_drops, capture_drops, output_packet_drops, render_tick_drops, video_encode_drops,
+    AudioBusDrops, AudioInputDrops, DropSnapshot, Engine, RecordingPublish, VideoEncodeDrops,
+    audio_bus_drops, audio_input_drops, capture_drops, output_packet_drops, render_tick_drops,
+    video_encode_drops,
 };
 use jstream_encode::{SessionOptions, VideoSession};
-use jstream_platform::fake::FakeCodecs;
+use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
 use jstream_platform::media::{
     AudioFormat, ChannelLayout, Codec, ColorInfo, FrameSize, MediaTime, PixelFormat, SampleFormat,
     Timebase, VideoFrame, VideoFrameInfo,
 };
 use jstream_platform::{
-    CaptureStats, HardwarePreference, RateControl, VideoEncoderConfig, VideoSurface,
+    Backends, Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
+    HardwarePreference, MediaClock, PlatformError, RateControl, VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
-    Batch, Call, CallResult, Edit, Event, Hello, OutputId, PROTOCOL_VERSION, Rev, SceneId,
+    Action, Batch, Call, CallResult, Edit, Event, Hello, OutputId, OutputState, PROTOCOL_VERSION,
+    Rev, SceneId,
 };
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
@@ -211,4 +225,197 @@ fn overload_drops_and_counts() {
     ));
 
     drop(slow);
+}
+
+/// A capture whose stream panics when the render thread reads it, once armed. The read
+/// is part of a render tick, so this is a panic inside the tick.
+struct PanickingCapture {
+    inner: FakeCapture,
+    armed: Arc<AtomicBool>,
+}
+
+struct PanickingStream {
+    inner: Box<dyn CaptureStream>,
+    armed: Arc<AtomicBool>,
+}
+
+impl Capture for PanickingCapture {
+    fn targets(&self) -> Result<Vec<CaptureTargetInfo>, PlatformError> {
+        self.inner.targets()
+    }
+
+    fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        Ok(Box::new(PanickingStream {
+            inner: self.inner.start(target)?,
+            armed: Arc::clone(&self.armed),
+        }))
+    }
+}
+
+impl CaptureStream for PanickingStream {
+    fn latest(&mut self) -> Result<Option<VideoSurface>, PlatformError> {
+        if self.armed.swap(false, Ordering::AcqRel) {
+            panic!("scenario: the render tick blew up");
+        }
+        self.inner.latest()
+    }
+
+    fn stats(&self) -> CaptureStats {
+        self.inner.stats()
+    }
+}
+
+/// A clock that panics when the mixer thread reads it, once armed.
+struct PanickingMixerClock {
+    inner: FakeClock,
+    armed: Arc<AtomicBool>,
+}
+
+impl MediaClock for PanickingMixerClock {
+    fn timebase(&self) -> Timebase {
+        self.inner.timebase()
+    }
+
+    fn now(&self) -> MediaTime {
+        if thread::current().name() == Some("jstream-mixer")
+            && self.armed.swap(false, Ordering::AcqRel)
+        {
+            panic!("scenario: the mixer blew up");
+        }
+        self.inner.now()
+    }
+}
+
+fn output_call(start: bool) -> Call {
+    let output_id = OutputId::new("yt");
+    Call::Action {
+        action: if start {
+            Action::OutputStart { output_id }
+        } else {
+            Action::OutputStop { output_id }
+        },
+    }
+}
+
+/// The output states among `events`; `stats.tick` is skipped.
+fn output_steps(events: Vec<Event>) -> Vec<OutputState> {
+    events
+        .into_iter()
+        .filter_map(|event| match event {
+            Event::OutputStateChanged { state, .. } => Some(state),
+            Event::StatsTick { .. } => None,
+            other => panic!("unexpected event {other:?}"),
+        })
+        .collect()
+}
+
+/// Feeds the audio inputs and moves the clock on by 50 ms until the output reports
+/// a state, for at most ten seconds. The states it reported, in order.
+fn pump_until_reported(
+    clock: &FakeClock,
+    audio: &FakeAudioIo,
+    events: &mut EventStream,
+) -> Vec<OutputState> {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut steps = Vec::new();
+    while steps.is_empty() && Instant::now() < deadline {
+        audio.deliver(2400, 0.2);
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(10));
+        steps = output_steps(drain(events));
+    }
+    steps
+}
+
+/// R-RT-006: a panic inside a render tick, and then one on the mixer thread, are each
+/// caught at their thread's boundary instead of killing the thread silently. Both
+/// clients see the output settle `failed`, the error event the protocol has for a
+/// fatal pipeline error, and the engine still runs a later command.
+#[test]
+fn rt_panic_is_reported() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let render_armed = Arc::new(AtomicBool::new(false));
+    let mixer_armed = Arc::new(AtomicBool::new(false));
+    let backends = Backends {
+        clock: Arc::new(PanickingMixerClock {
+            inner: clock.clone(),
+            armed: Arc::clone(&mixer_armed),
+        }),
+        capture: Arc::new(PanickingCapture {
+            inner: FakeCapture::new(clock.clone(), FrameSize::new(64, 36).expect("size")),
+            armed: Arc::clone(&render_armed),
+        }),
+        audio: Arc::new(audio.clone()),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_cpu_compositor();
+
+    let user = engine.connect();
+    block_on(user.hello(Hello {
+        protocol: PROTOCOL_VERSION,
+        client_name: "user".into(),
+    }))
+    .expect("user hello");
+    let agent = engine.connect();
+    block_on(agent.hello(Hello {
+        protocol: PROTOCOL_VERSION,
+        client_name: "agent".into(),
+    }))
+    .expect("agent hello");
+    let mut user_events = user.events();
+    let mut agent_events = agent.events();
+
+    for (thread_name, armed) in [("render", &render_armed), ("mixer", &mixer_armed)] {
+        // Each start consumes its publish target.
+        let publish = RecordingPublish::new();
+        let _ = engine.clone().with_publish(Box::new(publish.clone()));
+        block_on(user.call(output_call(true))).expect("output.start");
+        assert_eq!(
+            output_steps(drain(&mut agent_events)),
+            vec![OutputState::Starting, OutputState::Active]
+        );
+        drain(&mut user_events);
+        // Let media flow before the panic, so it hits a running pipeline.
+        let flowing = Instant::now() + Duration::from_secs(10);
+        while publish.tags().len() < 4 && Instant::now() < flowing {
+            audio.deliver(2400, 0.2);
+            clock.advance(50_000);
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            publish.tags().len() >= 4,
+            "no media flowed before the {thread_name} panic"
+        );
+
+        armed.store(true, Ordering::Release);
+        let steps = pump_until_reported(&clock, &audio, &mut agent_events);
+        assert!(
+            !armed.load(Ordering::Acquire),
+            "the {thread_name} thread never panicked"
+        );
+        assert_eq!(
+            steps,
+            vec![OutputState::Failed],
+            "a {thread_name} panic was not reported"
+        );
+        assert_eq!(
+            output_steps(drain(&mut user_events)),
+            vec![OutputState::Failed],
+            "the other client did not see the {thread_name} panic"
+        );
+    }
+
+    // The control plane still runs a command after both panics.
+    let applied = block_on(agent.call(Call::Batch(Batch::single(Edit::SceneCreate {
+        scene_id: SceneId::new("main"),
+        name: "Main".into(),
+    }))))
+    .expect("batch");
+    assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
 }
