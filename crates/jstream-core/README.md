@@ -952,7 +952,7 @@ history and idempotency keys are not saved.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:9cb93b65cd929904", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (C5 audio sources, B9) into D7b: kept C5's audio-sources sentences and D7b's mixer-collector sentence (rings, removed buses' state, filter chains and filters, per retire.rs); re-read; holds" }
+verified = { hash = "b3:604723c7a58c44ee", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of D7b: took D7b's collector sentence; re-read, the audio sources thread still takes no engine lock (only its own, wanted and Routed); holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

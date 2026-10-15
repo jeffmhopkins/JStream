@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:ddedda1543b1de0a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b N4: mixer.rs Time line now names MixerConfig::latency_frames for poll's arrival latency; Purpose's API bullet already calls it latency (default 1440); re-read; holds" }
+verified = { hash = "b3:5739d4a36b0e25f1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of D7b: Purpose keeps D7b's filter chains and latency compensation and D5's note that core runs the meters on the master block; mixer tag bullet holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -149,7 +149,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:b0999c43d802e557", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b N4: module doc wording only (arrival latency vs chain latency); re-read; this section's Latency compensation and poll text hold" }
+verified = { hash = "b3:2a0d8b32945112f8", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of D7b: took D7b's text; re-read, the ControlPlane tag paragraph holds beside chains; tag checks in add_bus/bus_block and the handles survive the merge" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
