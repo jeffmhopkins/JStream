@@ -272,7 +272,8 @@ impl Youtube {
         }
         auth.pending = None;
         let mut client = lock(&self.client);
-        match outcome {
+        // Logged once the locks are released.
+        let failure = match outcome {
             Ok(grant) => match self.setup.tokens.set(TOKEN_ACCOUNT, &grant.refresh) {
                 Ok(()) => {
                     *client = Some(LiveClient::from_grant(
@@ -280,14 +281,15 @@ impl Youtube {
                         self.setup.oauth(),
                         grant,
                     ));
-                    tracing::info!("YouTube sign-in finished");
+                    None
                 }
-                Err(err) => {
-                    tracing::error!(error = %err, "the credential store did not keep the YouTube token");
-                }
+                Err(err) => Some(format!(
+                    "the credential store did not keep the YouTube token: {err}"
+                )),
             },
-            Err(err) => tracing::warn!(error = %err, "YouTube sign-in did not finish"),
-        }
+            Err(err) => Some(err.to_string()),
+        };
+        // A failed new sign-in leaves the account that was signed in, if any.
         auth.state = if client.is_some() {
             YoutubeAuth::SignedIn
         } else {
@@ -296,6 +298,10 @@ impl Youtube {
         let state = auth.state;
         drop(client);
         drop(auth);
+        match failure {
+            None => tracing::info!("YouTube sign-in finished"),
+            Some(reason) => tracing::warn!(error = %reason, "YouTube sign-in did not finish"),
+        }
         (self.emit)(Event::YoutubeStatusChanged { auth: state });
     }
 
@@ -333,18 +339,19 @@ impl Youtube {
     /// Google no longer accepts the account's token: forget it, as a sign-out would,
     /// without calling Google.
     fn lost_sign_in(&self) {
-        let state = {
+        let (state, cleared) = {
             let mut auth = lock(&self.auth);
             *lock(&self.client) = None;
-            if let Err(err) = self.setup.tokens.clear(TOKEN_ACCOUNT) {
-                tracing::error!(error = %err, "removing the refused YouTube token");
-            }
+            let cleared = self.setup.tokens.clear(TOKEN_ACCOUNT);
             if auth.pending.is_none() {
                 auth.state = YoutubeAuth::SignedOut;
             }
-            auth.state
+            (auth.state, cleared)
         };
         tracing::warn!("YouTube no longer accepts the sign-in");
+        if let Err(err) = cleared {
+            tracing::error!(error = %err, "removing the refused YouTube token");
+        }
         (self.emit)(Event::YoutubeStatusChanged { auth: state });
     }
 

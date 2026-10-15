@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:9077e3c3a2817ff4", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the YouTube ADR link in protocol README#design (0034 -> 0041); main's text kept; holds" }
+verified = { hash = "b3:48349c816d51a635", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; Output and Outputs bullets name the youtube target and its broadcast_id check (target.rs, apply.rs check_target)" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -40,8 +40,8 @@ codes, so the engine passes them to clients unchanged.
   one of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two forms: a
   `Geometry` (a box on the canvas) or a `Legacy` 0.3 `ItemTransform`, kept exactly as
   written. Only an edit changes the form.
-- `Output`: an ID and an `OutputKind` (so far RTMP to a generic URL, or a recording
-  to an MP4 file). Whether it
+- `Output`: an ID and an `OutputKind` (so far RTMP to a generic URL or to a YouTube
+  broadcast by its ID, or a recording to an MP4 file). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -85,7 +85,9 @@ goes up by exactly one, and the result carries the **inverse batch**.
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
   name, and one that could carry a credential (`user:password@`, a query or a
-  fragment). A recording's `path` is rejected (field `kind.path`) when it is empty,
+  fragment). A `youtube` target's `broadcast_id` is rejected (field
+  `kind.target.broadcast_id`, or `target.broadcast_id` in `output.set_target`) when it is empty, over 128 bytes, or has anything but ASCII
+  letters, digits, `-` and `_`. A recording's `path` is rejected (field `kind.path`) when it is empty,
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
   `\…`, `C:\…` or `C:/…`, the same on every platform, as for an absolute asset), or
   doesn't end in a file name; whether it is absolute on the engine's own machine, and

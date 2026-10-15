@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:a3aadf552505069e", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Covered src/oauth.rs changed: OAuthClient::authorize's rustdoc now says JStream asks for Scope::Manage once (ADR-0041 §4), matching the Scopes bullet (review N3); no behavior change" }
+verified = { hash = "b3:10b7393038b15bb3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; list_broadcasts_of_type documented, Not yet trimmed to chat, stats and quota, engine wiring noted" }
 -->
 
 Layer-2 client for Google sign-in and the
@@ -69,7 +69,9 @@ Contents:
   the access token when less than `REFRESH_MARGIN` (60 s) of it is left, retries a call
   once with a new token after a 401, and reports a second 401 as `SignInRequired`. It
   refuses a call whose scope the grant lacks before sending it. Calls:
-  `list_broadcasts` (mine, by status, or by up to 50 IDs; paged), `broadcast`,
+  `list_broadcasts` (mine, by status, or by up to 50 IDs; paged; `list_broadcasts_of_type`
+  adds the `broadcastType` filter, without which the API leaves the persistent "Stream
+  now" broadcast out), `broadcast`,
   `insert_broadcast`, `bind` (or unbind), `transition` (testing, live, complete),
   `list_streams`, `stream`, `insert_stream` and `stream_health` (`streamStatus`,
   `healthStatus` and its configuration issues).
@@ -99,7 +101,9 @@ column, never quoted. The refresh token is kept in the OS credential store throu
 `Grant` and through `LiveClient::take_rotated_refresh_token`, and never writes it
 anywhere itself.
 
+The engine (`jstream-core`, roadmap Y3) holds one `LiveClient`, keeps its refresh token
+in the `OAuthTokenStore` and exposes these calls as protocol commands, and so as MCP
+tools.
+
 **Not yet:** chat (reading, sending as the channel, the featured message) and audience
-stats from ADR-0041, quota accounting, the protocol commands and MCP tools that expose
-all of this, and the engine wiring (including saving the refresh token in the
-`OAuthTokenStore`).
+stats from ADR-0041, and quota accounting.

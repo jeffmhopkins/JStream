@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:0b37bf85a0c9c88d", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#protocol, whose only change is the YouTube bullet's ADR link (0034 -> 0041); R-API-001..004 text unchanged and holds" }
+verified = { hash = "b3:18e42d879ab4376b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: stale through ARCH#protocol (YouTube bullet); R-API-001..004 text unchanged and holds" }
 -->
 
 <a id="R-API-001"></a>

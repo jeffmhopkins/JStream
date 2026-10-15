@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:280a330c50e3e9fe", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: re-read; resolved Kinds bullet: descriptors taken from jstream-sources' registry (kinds.rs) plus E1's display-capture exception; E1's Snapshot bullet kept; Not here yet keeps E1's audio/outputs snapshots with C1a's rendering from the source registry in place of real source kinds" }
+verified = { hash = "b3:618a4964cb4dc328", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read against youtube.rs, engine.rs and tests/youtube.rs; with_youtube, the YouTube bullet and the test list match" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -31,8 +31,8 @@ The control plane is the scene graph, the sessions and `video.snapshot`.
 state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
-  `with_publish_opener`, `with_key_store`, `with_audit`, `with_history_limit` and
-  `with_collection_file`;
+  `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
+  `with_history_limit` and `with_collection_file`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads the running pipeline; `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
@@ -40,6 +40,18 @@ state machine. Contents:
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys, the undo
   history and the subscribers behind one lock, and the drop ledger behind another, and executes
   batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
+- **YouTube** (`youtube.rs`, [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)):
+  `with_youtube(YoutubeSetup)` gives the engine the app's OAuth client, the HTTPS
+  transport and the `OAuthTokenStore`. It holds one `jstream-youtube` `LiveClient`
+  (one account, its refresh token stored under the fixed opaque ID `TOKEN_ACCOUNT`, so
+  no email or other personal detail names the credential) and runs the `youtube.*`
+  actions and queries with no engine lock held. `youtube.sign_in` asks for the full
+  `youtube` scope alone, returns the consent URL, and finishes on its own thread when
+  the loopback redirect arrives (or after `SIGN_IN_TIMEOUT`). Starting an output with
+  a `youtube` target reads the broadcast's bound stream and connects to its `rtmps://`
+  ingest with its key, which goes only to the connection; while it runs, a thread reads
+  the stream's health every `HEALTH_INTERVAL` and emits `youtube.health_changed` when
+  it changes. A refresh token Google refuses signs the engine out.
 - **Audit log** (`audit.rs`): one `AuditEntry` per executed batch, undo, redo and action, sent to
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
@@ -115,7 +127,11 @@ state machine. Contents:
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
   outputs, refused files left
   as they were, a failed save that the next change recovers, and concurrent sessions
-  leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
+  leaving the latest collection and no temporary file), YouTube on `jstream-youtube`'s
+  `FakeTransport` and fixtures (`src/tests/youtube.rs`: sign-in through a real loopback
+  redirect, sign-out, the broadcast actions and lists, quota and refused tokens, and a
+  `youtube` output publishing to its broadcast's ingest on the CPU stand-in, with the
+  key and tokens in no event or response), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
 Not here yet: live values, rendering from the source registry, the audio and outputs
@@ -131,7 +147,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3003b5047d1bc0e9", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the YouTube ADR link in ARCH#protocol and protocol README#design (0034 -> 0041); main's E1 text kept; holds" }
+verified = { hash = "b3:a92b1e4107659d98", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; YouTube paragraph matches youtube.rs (Scope::Manage alone, TOKEN_ACCOUNT, sign-out order, lost sign-in, health thread), Calls bullet, deps and the lock order note" }
 -->
 
 ### Engine and sessions
@@ -172,7 +188,8 @@ the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its d
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
 publisher and the recording file sink), `jstream-sources` (the built-in kind
-descriptors), `png`
+descriptors), `jstream-youtube` (Google sign-in and the Live API client behind the
+YouTube commands and `youtube` outputs), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
@@ -180,7 +197,7 @@ descriptors), `png`
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
-`tests/scenarios.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
+`tests/scenarios.rs`), `jstream-youtube`'s `fake` feature (`src/tests/youtube.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
 values and saved collection files in `src/tests.rs`, `src/tests/` and `tests/mcp.rs`). All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
@@ -227,6 +244,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below), and
   `output.set_key` and `output.clear_key` (see *Stream keys* below).
+- **YouTube** actions and queries (`youtube.*`) run with no engine lock held, since
+  most call the Live API (see *YouTube* under *Outputs*). Without `with_youtube`,
+  `youtube.status` answers `unavailable` and the others `action_failed`.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -450,6 +470,39 @@ the call's arguments, and no response, event or query carries it. The crate-root
 `output.status`, the events, every span and event the engine traces, and the audit
 entries.
 
+**YouTube.** `with_youtube(YoutubeSetup)` gives the engine the app's OAuth client, the
+HTTPS transport and an `OAuthTokenStore` (`youtube.rs`,
+[ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)). JStream holds one
+account: its refresh token sits under the fixed account ID `TOKEN_ACCOUNT`
+(`youtube`), which names no person, so no email ends up in a credential's name. A
+token found there at setup signs the engine in.
+- `youtube.sign_in` binds `jstream-youtube`'s loopback redirect, asks
+  `OAuthClient::authorize` for `Scope::Manage` alone (one consent screen, ADR-0041 §4),
+  answers the consent URL and emits `signing_in`. A thread waits for the redirect (up
+  to `SIGN_IN_TIMEOUT`, 5 minutes), exchanges the code, stores the refresh token and
+  emits `signed_in`; a declined or timed-out sign-in goes back to the state before it.
+  A second `sign_in` while one waits answers the same URL. `youtube.sign_out` clears
+  the store first (its failure is `action_failed` and changes nothing), abandons a
+  waiting sign-in, emits `signed_out`, then revokes the token at Google, logging a
+  failure.
+- Each Live API call runs on the one `LiveClient` under its own mutex, so YouTube
+  calls run one at a time; a rotated refresh token is stored after the call. A refresh
+  Google refuses (`SignInRequired`) drops the client and the stored token and emits
+  `signed_out`. `jstream-youtube` errors become `action_failed`, prefixed "YouTube's
+  API quota is used up" for quota reasons (ADR-0041 §5); none carries a token.
+- An output whose target is `youtube { broadcast_id }` needs a signed-in client, which
+  `output.start` checks before `starting` (`action_failed` otherwise, no event). In
+  the start's open step, outside the locks, the engine reads the broadcast's bound
+  stream and that stream's `rtmps://` ingest address and key, then connects to it
+  with `connect_rtmp`; the host's publish target and opener are not used. A broadcast
+  with no bound stream fails the start with a reason naming `youtube.bind_broadcast`.
+  The key goes only to the connection ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+- Once such an output is `active`, a `jstream-youtube-health` thread reads the
+  stream's health every `HEALTH_INTERVAL` (15 s, one quota unit each) and emits
+  `youtube.health_changed` on the first reading and whenever the status, rating or
+  issues change. It ends when the output stops, fails or the engine goes away.
+  Issue text is cut to 512 characters with control characters replaced.
+
 **Placeholder.** With no backends, the actions only move a state machine, as
 `jstream-control`'s mock does. The protocol defines an action's response as "accepted"
 and reports progress as events, so that is what the engine does:
@@ -632,7 +685,9 @@ collection lock; session counters the host reads
 sit on their own mutex. A poisoned lock is recovered rather than propagated:
 `Graph::apply` changes a working copy and replaces the state only on success, and the
 engine's other changes are single inserts or assignments, so the data stays
-consistent. Nothing is logged while a lock is held.
+consistent. Nothing is logged while a lock is held. The YouTube side has two more
+mutexes, the sign-in state and then the `LiveClient`, taken in that order and never
+under the collection lock; the client's is held across its blocking Live API calls.
 
 ### Logging
 

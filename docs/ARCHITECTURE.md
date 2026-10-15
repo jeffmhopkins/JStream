@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:0ec40aba8ca53527", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Review B3: jstream-sources' manifest summary now cites ADR-0041 for the YouTube chat message source, matching its row; re-read every row against its manifest's jstream-meta view, and the youtube and sources rows (both re-pointed 0034 -> 0041) match their summaries" }
+verified = { hash = "b3:85352c8483e98a84", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; core now depends on jstream-youtube (layer 2 under 5), rows hold" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:b1fa4484ef1c0a26", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: stamp-only; E1's text taken as is; C1a's kinds sentence holds" }
+verified = { hash = "b3:679bba68fc815aef", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: YouTube { broadcast_binding } renamed to YouTube { broadcast_id }, the wire field" }
 -->
 
 ```
@@ -194,7 +194,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ├── master         Master { video_filters[], audio_filters[] }   applies to everything leaving JStream
 ├── privacy        Privacy { look: Blur { strength } | Slate { color | image }, muted_sources: [source_id] }
 └── outputs        Output { id, kind, video_mix, audio_buses: [bus_id], encoder_profile, video_filters[], audio_filters[] }
-                   kind: Rtmp { target: Generic { url } | YouTube { broadcast_binding } } | Record { path, container } | VirtualCam
+                   kind: Rtmp { target: Generic { url } | YouTube { broadcast_id } } | Record { path, container } | VirtualCam
 ```
 
 - `Program` and `Preview` are mixes driven by the studio state. `Program` shows
@@ -505,7 +505,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:4699930e0491f2e1", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the YouTube bullet's ADR link; ADR-0041 §1-3 restate the chat.send, chat.feature and youtube.stats design word for word, so the bullet holds" }
+verified = { hash = "b3:c6c78f692bf8d16e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: YouTube bullet describes what 0.13 builds; chat and stats stay planned for M3" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -571,7 +571,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)); the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).
-- **YouTube** (planned for M3, [ADR-0041](adr/0041-youtube-interaction-scope-v3.md)):
+- **YouTube** ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)): since protocol 0.13
+  the actions `youtube.sign_in` (returns Google's consent URL; the loopback redirect
+  finishes the sign-in in the engine, and no token ever crosses the protocol),
+  `youtube.sign_out`, `youtube.create_broadcast`, `youtube.bind_broadcast` and
+  `youtube.transition_broadcast`; the queries `youtube.status`, `youtube.list_broadcasts`
+  and `youtube.list_streams` (never a stream key); the events `youtube.status_changed`
+  and `youtube.health_changed` (a running YouTube output's stream health); and the RTMP
+  target `youtube { broadcast_id }`, which `output.start` resolves to the bound stream's
+  `rtmps://` ingest and key through the Live API. Planned for M3:
   the actions `youtube.chat.send { text }`, which posts to the bound broadcast's chat as
   the channel and goes to the audit log, and `youtube.chat.feature { message_id }`, which
   sets or clears the featured message (runtime state, reported by an event) that the chat
@@ -611,11 +619,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:3520026dd573c7fb", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: tools.snap is 115 KB after B3 and B6, so the text says about 115 KB" }
+verified = { hash = "b3:dae6bc9bcd7804f4", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: youtube moved to the current tool nouns; tools.snap is about 130 KB now" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `video` and `youtube` so far; `audio` and `studio`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -625,7 +633,7 @@ verified = { hash = "b3:3520026dd573c7fb", by = "agent:claude@session_01Vy4KuKBC
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 115 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 130 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:a312cbb31b9ce11a", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; contents list holds; CLI gains neither B3's nor B6's commands" }
+verified = { hash = "b3:20be40c1aafa66d7", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; contents hold, the CLI gains no YouTube commands" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:ce7283c86927a586", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Edits bullet keeps B3's 0.11 canvas/geometry note and says 0.12's set_role/item.move/scene_id aren't in the CLI" }
+verified = { hash = "b3:2021efcee40f5e0f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: says the CLI has none of 0.13's YouTube commands or the youtube target, and that other output kinds list as JSON (run.rs other arm); Action with result None still prints accepted" }
 -->
 
 ```sh
@@ -112,7 +112,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
   which is the whole target of a generic RTMP output. The CLI has no form for a
-  recording output yet. An argument without an `rtmp` or `rtmps` scheme is a usage
+  recording output or a YouTube-bound one yet, and none of protocol 0.13's YouTube
+  actions and queries. An argument without an `rtmp` or `rtmps` scheme is a usage
   error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
   the URL.
@@ -140,7 +141,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   that set them; for an item placed with a geometry, those columns show the
   protocol's deprecated transform view of it, and only `--json` shows its `geometry`
   and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
-  server URL, as `output.create` takes it). `state get` prints the sources, then each
+  server URL, as `output.create` takes it; for any other output, its kind as JSON).
+  `state get` prints the sources, then each
   scene in display order with its items, then the outputs. `output status` prints
   `<id>: <state>, stream key set` (or `not set`). An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
@@ -213,7 +215,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ba6b3375fe9da05d", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; parsing and writers hold with scene_id: None on the placement constructors" }
+verified = { hash = "b3:c6c1ef0a7f57fb01", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3: re-read; only change is CallResult::Action { result: None } in write_response, parsing and writers hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
