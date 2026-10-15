@@ -34,7 +34,7 @@ and how to take outside contributions.
 ## How changes land
 <!-- @section
 depends_on = ["docs/RULES.md#R-GIT-001", "docs/RULES.md#R-GIT-002", "docs/RULES.md#R-GOV-003", "docs/RULES.md#R-GOV-005"]
-verified = { hash = "b3:6ae1ffd1144e50b4", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-GIT-001 (protected main, squash), R-GIT-002 (Conventional Commit titles), R-GOV-003 (reviewer gate, auto-merge) and R-GOV-005 (Tier-1 is the maintainer's); every bullet matches" }
+verified = { hash = "b3:97ce4842c1b3fce3", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read against R-GIT-001/002, R-GOV-003 and the narrowed R-GOV-005 (ADR-0043); the decisions bullet now names the five maintainer areas" }
 -->
 
 This is how the maintainer and the agents work. It also tells an issue reporter what
@@ -49,9 +49,11 @@ happens to a report.
   once every required check, including the review gate, is green.
 - **Builder agents** start at [CLAUDE.md](CLAUDE.md). It points to the rules, docs and
   ADRs that govern each file, and to the PR loop they follow.
-- **Product, platform and process decisions belong to the maintainer**
-  ([R-GOV-005](docs/RULES.md#R-GOV-005)). They are recorded as ADRs in
-  [docs/adr/](docs/adr/), and an agent may only propose them.
+- **Product-level decisions belong to the maintainer**
+  ([R-GOV-005](docs/RULES.md#R-GOV-005)): scope, licensing, security and privacy,
+  public compatibility promises and spending. They are recorded as ADRs in
+  [docs/adr/](docs/adr/), and an agent may only propose them. Agents decide and record
+  everything else.
 - **Docs are checked like code.** [docs/DOCS.md](docs/DOCS.md) explains the
   hash-verified sections and `cargo xtask docs check`.
 
