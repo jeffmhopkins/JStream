@@ -3,8 +3,10 @@
 //! the engine's time line on its own audio thread; the [`Mixer`] runs each input's
 //! filter chain and fader, sums the inputs through a send matrix into stereo buses (the
 //! master and up to 15 more, each with its chain and fader) in fixed-size blocks stamped
-//! on the engine clock with their latency compensated, and meters inputs and buses. Layer 2: no I/O, no platform code; inputs plug into the
-//! `jstream-platform` audio handler.
+//! on the engine clock with their latency compensated, and meters inputs and buses. On
+//! each bus that feeds an output it runs the master chain, and output taps give an output
+//! its own chain after it (ADR-0027's audio half). Layer 2: no I/O, no platform code;
+//! inputs plug into the `jstream-platform` audio handler.
 //!
 //! ```
 //! use jstream_audio::{Mixer, MixerConfig};
@@ -26,7 +28,7 @@
 //! # Ok::<(), jstream_audio::AudioError>(())
 //! ```
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-audio/README.md#purpose, crates/jstream-audio/README.md#realtime, crates/jstream-audio/README.md#meters, crates/jstream-audio/README.md#filters, docs/adr/0028-audio-model-v2.md, docs/adr/0014-media-clock.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-audio/README.md#purpose, crates/jstream-audio/README.md#realtime, crates/jstream-audio/README.md#meters, crates/jstream-audio/README.md#filters, docs/adr/0028-audio-model-v2.md, docs/adr/0027-program-master-and-output-chains.md, docs/adr/0014-media-clock.md
 
 #![forbid(unsafe_code)]
 
@@ -39,6 +41,7 @@ mod rt;
 pub use error::AudioError;
 pub use handle::{
     BusControl, BusId, BusStats, FilterControl, FilterId, InputControl, InputId, InputStats,
+    MasterControl, OutputTapControl, OutputTapId,
 };
 pub use rt::chain::{FilterParams, FilterSpec};
 pub use rt::input::InputProducer;

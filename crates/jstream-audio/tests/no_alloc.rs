@@ -8,11 +8,12 @@
 //! drift fit fills, the controller settles). After that, each simulated 10 ms tick does
 //! what the real-time threads do inside a checked scope: every input's audio callback
 //! (`AudioInputHandler::on_packet`), then `Mixer::poll` until no block is due (which runs
-//! the input and bus filter chains), then a keyed compressor and the meters on each
-//! mixed block, as the mixer thread will run them (ADR-0028; sidechain keys and meters
-//! aren't in the mixer yet). Control-plane work (adding and removing inputs, buses,
-//! sends and filters, filter edits, gain and mute changes) runs between ticks, outside
-//! the scope, as it does on the control thread.
+//! the input, bus, master and output-tap filter chains) and a read of each output tap's
+//! block, then a keyed compressor and the meters on each mixed block, as the mixer
+//! thread will run them (ADR-0028; sidechain keys and meters aren't in the mixer yet).
+//! Control-plane work (adding and removing inputs, buses, output taps, sends and
+//! filters, filter edits, gain and mute changes) runs between ticks, outside the scope,
+//! as it does on the control thread.
 //!
 //! The checked phase walks through the paths a session hits besides plain steady state:
 //! drift, jitter, timestamp outliers and missing stamps, lost packets, a discontinuity,
@@ -20,8 +21,9 @@
 //! mapping, silent and non-finite packets, a stalled mixer (overrun and skipped
 //! frames), an input added and another removed while the mixer runs, a bus added, sent
 //! to, filtered and removed, filters added, edited and removed (changing the chains'
-//! latency, so the compensation delays move). The test asserts afterwards that each
-//! path actually ran.
+//! latency, so the compensation delays move), master filters added to every bus's copy,
+//! edited and removed, and output taps added (one with its own chain, on a bus that is
+//! later removed) and removed. The test asserts afterwards that each path actually ran.
 //!
 //! Dropping an input's producer frees its resampler state, so a producer is dropped
 //! outside the checked scope: that is stream teardown, not steady state.
@@ -29,7 +31,9 @@
 use assert_no_alloc::{AllocDisabler, assert_no_alloc, reset_violation_count, violation_count};
 use jstream_audio::filter::{AudioFilter, Compressor, CompressorParams, GateParams, LimiterParams};
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
-use jstream_audio::{FilterParams, FilterSpec, InputControl, InputProducer, Mixer, MixerConfig};
+use jstream_audio::{
+    FilterParams, FilterSpec, InputControl, InputProducer, Mixer, MixerConfig, OutputTapId,
+};
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, SampleFormat, Timebase};
 use jstream_platform::{AudioInputHandler, AudioPacket, AudioPacketFlags};
 
@@ -257,6 +261,9 @@ struct Sim {
     removed: Vec<Device>,
     out: Vec<f32>,
     chain: BusChain,
+    /// The output taps an encoder reads after each block, and how many blocks it read.
+    taps: Vec<OutputTapId>,
+    tap_blocks: u64,
     /// The mixer thread does not run until this tick (a stall).
     mixer_stalled_until: u64,
 }
@@ -278,6 +285,12 @@ impl Sim {
             .is_some()
         {
             self.chain.process(&mut self.out);
+            for &tap in &self.taps {
+                if let Some((_, block)) = self.mixer.output_block(tap) {
+                    std::hint::black_box(block);
+                    self.tap_blocks += 1;
+                }
+            }
         }
     }
 }
@@ -334,6 +347,8 @@ mod rt {
             ],
             removed: Vec::new(),
             chain: BusChain::new(),
+            taps: Vec::new(),
+            tap_blocks: 0,
             mixer_stalled_until: 0,
         };
         let control = sim.mixer.control();
@@ -361,6 +376,16 @@ mod rt {
             })
             .expect("valid delay");
         bus.add_filter(limiter(5.0)).expect("valid limiter");
+        // The master chain, one copy per bus that feeds an output.
+        let master = sim.mixer.master();
+        let master_gain_db = master
+            .add_filter(FilterSpec::Gain { gain_db: -1.0 })
+            .expect("valid gain");
+        master.add_filter(limiter(3.0)).expect("valid limiter");
+        let mut master_comp = None;
+        let mut aux_tap = None;
+        let mut tap_gain = None;
+        let mut master_tap = None;
         let mut aux = None;
         let mut aux_limiter = None;
         let mut extra = None;
@@ -417,6 +442,38 @@ mod rt {
                     "removal queued"
                 ),
                 2_700 => assert!(aux.as_ref().expect("added").remove(), "removal queued"),
+                // An output tap on the aux bus, with its own chain: the master chain now
+                // runs on the aux bus too. The tap outlives its bus and reads silence.
+                1_560 => {
+                    let tap = control
+                        .add_output_tap(aux.as_ref().expect("added").id())
+                        .expect("room for a tap");
+                    tap_gain = Some(
+                        tap.add_filter(FilterSpec::Gain { gain_db: -2.0 })
+                            .expect("valid gain"),
+                    );
+                    tap.add_filter(limiter(4.0)).expect("valid limiter");
+                    sim.taps.push(tap.id());
+                    aux_tap = Some(tap);
+                }
+                // A master filter added while two buses feed outputs: one copy each.
+                1_575 => {
+                    master_comp = Some(
+                        master
+                            .insert_filter(0, FilterSpec::Compressor(CompressorParams::default()))
+                            .expect("valid compressor"),
+                    );
+                }
+                2_550 => {
+                    let tap = control.add_output_tap(bus.id()).expect("room for a tap");
+                    sim.taps.push(tap.id());
+                    master_tap = Some(tap);
+                }
+                2_620 => assert!(
+                    master_comp.take().expect("added").remove(),
+                    "removal queued"
+                ),
+                2_650 => assert!(master_tap.take().expect("added").remove(), "removal queued"),
                 _ => {}
             }
             if tick % 50 == 0 {
@@ -438,6 +495,24 @@ mod rt {
                         delay_ms: if tick % 100 == 0 { 20.0 } else { 0.0 },
                     })
                     .expect("valid delay");
+                master_gain_db
+                    .set(FilterParams::Gain {
+                        gain_db: if tick % 100 == 0 { -1.0 } else { -2.0 },
+                    })
+                    .expect("valid gain");
+                if let Some(comp) = &master_comp {
+                    comp.set(FilterParams::Compressor(CompressorParams {
+                        threshold_db: if tick % 100 == 0 { -18.0 } else { -24.0 },
+                        ..CompressorParams::default()
+                    }))
+                    .expect("valid compressor");
+                }
+                if let Some(gain) = &tap_gain {
+                    gain.set(FilterParams::Gain {
+                        gain_db: -2.0 - (tick % 200) as f32 / 100.0,
+                    })
+                    .expect("valid gain");
+                }
             }
             latencies.insert(sim.mixer.latency_frames());
             if tick % 100 == 0 {
@@ -494,6 +569,10 @@ mod rt {
         assert!(aux.blocks > 400, "{aux:?}");
         // No latency, the master limiter's, plus the aux limiter's, plus the input one's.
         assert!(latencies.len() >= 3, "{latencies:?}");
+        // The aux tap from 15.6 s to the end (its bus removed at 27 s), the master
+        // tap for a second; minus the stall's.
+        assert!(sim.tap_blocks > 1_300, "{}", sim.tap_blocks);
+        assert!(aux_tap.expect("added").remove(), "removal queued");
         // 45 s of 1024-frame blocks at 48 kHz, minus the stall's.
         assert!(bus.blocks > 2_000, "{bus:?}");
     }

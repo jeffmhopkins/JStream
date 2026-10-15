@@ -93,10 +93,12 @@ fn populated() -> MockEngine {
             Edit::SceneCreate {
                 scene_id: SceneId::new("main"),
                 name: "Main".into(),
+                role: None,
             },
             Edit::SceneCreate {
                 scene_id: SceneId::new("brb"),
                 name: "Be right back".into(),
+                role: None,
             },
             Edit::SourceCreate {
                 source_id: SourceId::new("cam"),
@@ -776,6 +778,40 @@ fn stream_keys_golden() {
             r#"{"type":"output.status","output_id":"yt","state":"stopped","key_set":false,"encoder_sessions":0,"hardware_sessions":0}}}"#,
             "\n"
         ))
+    );
+}
+
+#[test]
+fn program_scene_golden() {
+    let engine = populated();
+    assert_eq!(
+        run_on(&engine, &["--mock", "studio", "get"]),
+        ok("program: main\n")
+    );
+    let control = session(&engine);
+    let events = control.events();
+    assert_eq!(
+        run_on(&engine, &["--mock", "scene", "switch", "brb"]),
+        ok("scene.switch accepted for brb (req_1)\n")
+    );
+    assert_eq!(
+        run_on(&engine, &["--json", "--mock", "studio", "get"]),
+        ok(concat!(
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"studio.get","#,
+            r#""program_scene":"brb"}}}"#,
+            "\n"
+        ))
+    );
+    assert_eq!(engine.rev(), Rev(1), "a switch is not an edit");
+    let mut out = Vec::new();
+    stream_events(events, Some(1), false, &mut out).expect("one event");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "studio.changed program brb by mock_4 (req_1)\n"
+    );
+    assert_eq!(
+        run_on(&MockEngine::new(), &["--mock", "studio", "get"]),
+        ok("program: none (no scenes)\n")
     );
 }
 
