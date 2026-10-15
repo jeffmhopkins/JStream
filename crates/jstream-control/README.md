@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:0fa0b670a63bf7dc", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: mock.rs gains unsupported arms only; contents list holds" }
+verified = { hash = "b3:e4dac7c08ec34c45", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (e1e2a94) into pairing: main took protocol 0.18 for virtual_cam, so pairing ships as 0.19; re-read main's text beside this PR's pairing text and checked every pairing version mention says 0.19 and virtual_cam's stays 0.18; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -35,9 +35,10 @@ Contents (a first cut; [Design](#design) explains the choices):
   implementation; its tests hold it to the mock's answers.
 - **WebSocket client** (feature `ws`): `WsControl`, the `Control` trait over the
   engine's WebSocket API, natively (`ws.rs`) and in the browser (`ws_web.rs`, `wasm32`);
-  `WsConfig` and the handshake pieces both share (`ws_config.rs`); `WS_PATH`, the API's
-  path, shared with `jstream-server`; and `WS_PROTOCOL` and `WS_TOKEN_PROTOCOL_PREFIX`,
-  the subprotocols a browser offers.
+  `WsConfig` and the handshake pieces both share (`ws_config.rs`).
+- **Shared names** (`lib.rs`, no feature): `WS_PATH`, the API's path, and
+  `WS_PROTOCOL` and `WS_TOKEN_PROTOCOL_PREFIX`, the subprotocols a browser offers;
+  `jstream-server` uses the same constants, so client and server can't drift.
 - `jstream_control::protocol` re-exports `jstream-protocol`.
 
 <a id="design"></a>
@@ -123,7 +124,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
-    reasons), `output.set_target` on a recording output, and an `unknown` output kind,
+    reasons), `output.set_target` on a recording or virtual-camera output (the mock
+    accepts a `virtual_cam` output, as the engine does), and an `unknown` output kind,
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`

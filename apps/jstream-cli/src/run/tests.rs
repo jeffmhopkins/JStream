@@ -437,7 +437,8 @@ fn groups_geometry_and_canvas_golden() {
         failed(
             17,
             "error: invalid `edits.0.scene_id`: moving item `grp_1` (source `grp_src`) into \
-             scene `grp` would create a cycle (invalid_argument)\n"
+             scene `grp` would create a cycle: scene `grp` -> source `grp_src` -> scene `grp` \
+             (invalid_argument)\n"
         )
     );
 }

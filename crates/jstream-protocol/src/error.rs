@@ -174,8 +174,8 @@ pub enum EntityKind {
     Output,
     /// An encoder profile.
     Encoder,
-    /// A paired device (0.18). Only an error answering `device.revoke` names it, so a
-    /// client older than 0.18, which sends none, never reads it.
+    /// A paired device (0.19). Only an error answering `device.revoke` names it, so a
+    /// client older than 0.19, which sends none, never reads it.
     Device,
 }
 

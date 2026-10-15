@@ -63,6 +63,7 @@ use crate::devices::{Devices, LAPSE};
 use crate::error::ServerError;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use jstream_control::WS_TOKEN_PROTOCOL_PREFIX;
 use jstream_protocol::DeviceId;
 use std::net::{Ipv6Addr, SocketAddr};
 use std::sync::Arc;
@@ -528,14 +529,6 @@ fn has_port(authority: &str) -> bool {
     }
 }
 
-/// The subprotocol a browser's WebSocket client offers, and the server selects, when it
-/// carries the token in `Sec-WebSocket-Protocol` (`jstream_control`'s `WS_PROTOCOL`).
-pub(crate) const WS_PROTOCOL: &str = "jstream";
-
-/// The prefix of the offered subprotocol that carries the token, `jstream.token.<token>`
-/// (`jstream_control`'s `WS_TOKEN_PROTOCOL_PREFIX`). It is never selected, so never echoed.
-const TOKEN_PROTOCOL_PREFIX: &str = "jstream.token.";
-
 /// Whether any offered subprotocol is a token's (`jstream.token.…`), valid or not.
 fn offers_token_subprotocol(headers: &HeaderMap) -> bool {
     headers
@@ -545,21 +538,22 @@ fn offers_token_subprotocol(headers: &HeaderMap) -> bool {
             value.as_bytes().split(|&b| b == b',').any(|offered| {
                 offered
                     .trim_ascii()
-                    .starts_with(TOKEN_PROTOCOL_PREFIX.as_bytes())
+                    .starts_with(WS_TOKEN_PROTOCOL_PREFIX.as_bytes())
             })
         })
 }
 
 /// The token a browser offers as the subprotocol `jstream.token.<token>`, used only when
 /// the request has no `Authorization`. Every `Sec-WebSocket-Protocol` line counts, and
-/// exactly one offered subprotocol may carry a token.
+/// exactly one offered subprotocol may carry a token. The prefix is `jstream_control`'s, so
+/// client and server can't drift; that subprotocol is never selected, so never echoed.
 fn subprotocol_token(headers: &HeaderMap) -> Option<Vec<u8>> {
     let mut tokens = headers
         .get_all(header::SEC_WEBSOCKET_PROTOCOL)
         .iter()
         .filter_map(|value| value.to_str().ok())
         .flat_map(|value| value.split(','))
-        .filter_map(|offered| offered.trim().strip_prefix(TOKEN_PROTOCOL_PREFIX));
+        .filter_map(|offered| offered.trim().strip_prefix(WS_TOKEN_PROTOCOL_PREFIX));
     let token = tokens.next()?;
     tokens.next().is_none().then(|| token.as_bytes().to_vec())
 }

@@ -219,3 +219,19 @@ relied_on = "trunk builds a Rust wasm32 binary into a static site (index.html, t
 review_every = "180d"
 status = "unverified"
 checked_note = "Release v0.21.14's linux binary built jstream-ui with a wasm-bindgen 0.2.129 CLI on PATH; the page itself was not reachable from the session"
+
+[[external]]
+id = "cargo-fuzz-book"
+url = "https://rust-fuzz.github.io/book/cargo-fuzz.html"
+relied_on = "cargo-fuzz is installed with `cargo install cargo-fuzz`, needs a nightly toolchain, and runs a target with `cargo fuzz run <target>` (fuzz/README.md)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not fetched from the PR's environment (proxy refused the host); the commands were run against cargo-fuzz 0.13.2"
+
+[[external]]
+id = "playwright"
+url = "https://playwright.dev/"
+relied_on = "@playwright/test drives Chromium headless from a test runner with fixtures, HTTP Basic credentials per browser context (httpCredentials), a launch executablePath and expected failures (test.fail); the web UI's end-to-end tests (crates/jstream-ui/tests/e2e/README.md)"
+review_every = "180d"
+status = "unverified"
+checked_note = "@playwright/test 1.56.1 ran the e2e suite with Chromium 141 headless shell and full build; the page itself was not re-read from the session"

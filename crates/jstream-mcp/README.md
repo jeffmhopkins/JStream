@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:b3b7ba5a56b878b1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through ARCH#mcp tool list (device, pairing), which matches this section's list; holds" }
+verified = { hash = "b3:af9c7b0e96179cf4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (e1e2a94) into pairing: main took protocol 0.18 for virtual_cam, so pairing ships as 0.19; re-read main's text beside this PR's pairing text and checked every pairing version mention says 0.19 and virtual_cam's stays 0.18; holds" }
 -->
 
 ### Tools
@@ -79,7 +79,7 @@ names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-ro
 diff agents will see. After an intended change, regenerate it with
 `INSTA_UPDATE=always cargo test -p jstream-mcp` and review the diff.
 
-The `pairing` and `device` tools (protocol 0.18) need no code here either: the session
+The `pairing` and `device` tools (protocol 0.19) need no code here either: the session
 `jstream-server` hands this crate answers them
 ([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)), so an agent can
 pair and revoke devices as any client can (ADR-0006), and gets `unsupported` from a

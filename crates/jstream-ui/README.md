@@ -135,7 +135,7 @@ verified = { hash = "b3:e9290c25a31a3a53", by = "agent:claude@session_01WbL3WRbc
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:50bd20b4a20be791", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Review N1/N2: resize follows pointer movement (no jump), aspect-locked corners scale by the axis that changed more so inward drags shrink, nudges and new drags build on the pending geometry; section's claims re-read, hold" }
+verified = { hash = "b3:8120b6e7a0057203", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: Styles bullet now says the test refuses any style attribute, static or set at run time (style=move, attr:style), outside test modules; matches sets_style_attribute in lib.rs" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
@@ -174,14 +174,18 @@ scene and sends the edits. These three are pure and tested natively against
   the protocol yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
   while the canvas has focus) are `history.undo` and `history.redo`; the buttons grey
   out when the engine reports nothing left, and an `undo_conflict` is explained.
-- **Styles** are inline, since the shell's stylesheet belongs to the shell.
+- **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
+  `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
+  run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos
+  `style:` binding, which sets it through the CSSOM. A test fails on any `style`
+  attribute in the crate's sources outside test modules, or in `index.html`.
 
 <a id="build"></a>
 ## Build
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:755c311fa103cf2c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: dropped 'until jstream-server accepts the token subprotocol'; trunk-served page still needs an extra origin; holds" }
+verified = { hash = "b3:5a04a748741bf41a", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: added the pointer to CI's ui-e2e job and tests/e2e/README.md; trunk build steps unchanged and still what CI runs" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
@@ -208,3 +212,6 @@ clippy for `wasm32` over `jstream-control` (with `ws`) and `jstream-ui`.
 
 A page served by trunk is on a different port from the engine, so the engine refuses
 its `Origin` unless it is configured as an extra origin.
+
+The built page is tested in a browser by CI's `ui-e2e` job: Playwright against a mock
+daemon ([end-to-end tests](tests/e2e/README.md)).

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:b82fb75e7f8ccaaa", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: daemon main.rs passes the device file beside the token; diagram and hosts table hold" }
+verified = { hash = "b3:127da1ea200bd47e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (e1e2a94) into pairing: main took protocol 0.18 for virtual_cam, so pairing ships as 0.19; re-read main's text beside this PR's pairing text and checked every pairing version mention says 0.19 and virtual_cam's stays 0.18; holds" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:b82fb75e7f8ccaaa", by = "agent:claude@session_01WbL3WRbc
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:427df7ea39ba3f91", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: new apps/jstream-desktop manifest, layer 6, links core and server and platform-windows on Windows, as the apps/* row already says; lint-deps passes" }
+verified = { hash = "b3:b565e139a0c83a2b", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: re-read; added the jstream-ui-e2e row (layer 6, test-only harness under crates/jstream-ui/tests/e2e/mock-daemon, depends on control+server, no unsafe); lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -132,7 +132,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 |---|---|---|---|
 | 0 | `jstream-types` | IDs, math (Vec/Mat/Transform3D), color, rational time, units | no |
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
-| 0 | `jstream-plugin-proto` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): the versioned `repr(C)` shared-memory contract (audio rings, parameter-event ring, status block) between the mixer and the CLAP plugin host | no |
+| 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`. The **single owner** of the encoder and decoder traits. | no |
@@ -155,6 +155,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
+| 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
@@ -166,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:19704361cfc23bd4", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took main's Built-so-far (encoder profiles, sources), dropped scene.create's role from Not yet; role set by scene.create or scene.set_role" }
+verified = { hash = "b3:bddcc7ef355104c7", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: Outputs list now includes VirtualCam (no settings, ignores its profile); Not-yet list drops VirtualCam, keeps YouTube; master/output chain note holds" }
 -->
 
 ```
@@ -366,7 +367,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   while an output runs, the engine records each as a mixer input sent to master.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
-  container: mp4 }`, the path checked to be absolute and to end in a file name. A stream
+  container: mp4 }`, the path checked to be absolute and to end in a file name, or
+  `VirtualCam`, which has no settings and ignores its profile. A stream
   key is never collection state: it lives in the OS credential store
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
   H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
@@ -379,7 +381,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   geometry, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses and chains, the
-  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
+  `YouTube` kind, and everything outside `sources`, `scenes`,
   `outputs` and `encoders`. The collection file saves everything built so
   far, encoder profiles, each output's profile and `duplicated_from` included
   ([Persistence](#persistence)).
@@ -390,7 +392,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:4fed165b737c2267", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (#231 D7b): kept #231's mixer-collector wording (removed buses' state, filter chains, filters); only diff from main is the render-snapshot paragraph, still matching Engine::video_snapshot and RenderReader::adopt" }
+verified = { hash = "b3:6012cce52fa65794", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; main's render-snapshot paragraph (render thread loads lock-free, video.snapshot reads under the lock) kept as is; this PR's CLAP hosts paragraph (shared block and mixer side built, host/restarts/stats.tick not yet, dry-signal bypass) checked against rt/host.rs" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -417,14 +419,17 @@ mixer threads in [`jstream-audio`'s real-time design](../crates/jstream-audio/RE
 ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)). Neither may contradict this
 model; a change that would edits it in the same PR.
 
-**CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
+**CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), M3, in progress: the shared block
+(`jstream-plugin-proto`) and the mixer's side of it (`jstream-audio`) are built; the
+host process, its restarts and the `stats.tick` count are not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
 processes read from the same OS counter. Audio crosses through shared-memory rings, and
 the mixer never waits on the host: it writes block *n* and reads the processed block
 *n − d* (by default *d* is two engine blocks), with no syscall or lock for the plugin
-([R-RT-001](RULES.md#R-RT-001)). A late block is bypassed with a short crossfade and
-counted in `stats.tick`. The filter's latency is *d* plus the plugin's own, and latency
+([R-RT-001](RULES.md#R-RT-001)). A late block is bypassed with a short crossfade, by
+the dry signal delayed the same amount, and counted in the shared block for
+`stats.tick`. The filter's latency is *d* plus the plugin's own, and latency
 compensation keeps audio and video in sync. A host that dies is restarted by the control
 thread with backoff while the mixer bypasses it.
 
@@ -543,7 +548,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
+  `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
@@ -560,7 +566,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
-- **Pairing** (protocol 0.18, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
+- **Pairing** (protocol 0.19, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
   action `pairing.start` answers a one-time code (an action result, the one place it is
   sent), which a device trades at `POST /api/v1/pair` for a device token of its own;
   `device.list` and the action `device.revoke` manage the paired devices. They concern
@@ -661,7 +667,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:c327a4133ce81fd7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: tools.snap regenerated for the SecretString description only; tool list with device and pairing holds" }
+verified = { hash = "b3:d6d01d331cfe0d27", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (e1e2a94) into pairing: main took protocol 0.18 for virtual_cam, so pairing ships as 0.19; re-read main's text beside this PR's pairing text and checked every pairing version mention says 0.19 and virtual_cam's stays 0.18; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -862,7 +868,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:042c342d215b5bc4", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: rebuild passes the role on scene.create; Collections bullet holds" }
+verified = { hash = "b3:adc7282f515bad14", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: re-read; collection file saves a virtual_cam output as its bare kind (a_virtual_camera_round_trips); schema version unchanged; holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

@@ -121,7 +121,9 @@ so it offers two subprotocols in `Sec-WebSocket-Protocol`: `jstream` and
 way, on any `Sec-WebSocket-Protocol` line, in exactly one offered subprotocol; with
 `Authorization` present, only that counts. The upgrade selects `jstream` (browsers
 fail a connection whose offered subprotocols none were selected), never the token's,
-so the answer doesn't echo it, and like every header it is never logged.
+so the answer doesn't echo it, and like every header it is never logged. Both names
+are `jstream-control`'s constants, shared with the client
+([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
 
 **Extra hosts.** Each configured extra host must be `name:port` with one port from 1
 to 65535, and an IPv6 address must be in brackets (`[::1]:4455`), as it is in a

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:8edd9b77c39086ec", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: args.rs gains pair and device commands mapped onto protocol calls, run.rs prints them; contents list still accurate" }
+verified = { hash = "b3:2a296fcd9aa57c89", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (e1e2a94) into pairing: main took protocol 0.18 for virtual_cam, so pairing ships as 0.19; re-read main's text beside this PR's pairing text and checked every pairing version mention says 0.19 and virtual_cam's stays 0.18; holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -247,7 +247,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6c48cdff02231792", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through control design (mock answers pairing calls unsupported); CLI design's mock text holds, usage documents the exit 20" }
+verified = { hash = "b3:e58ea0f769ac73c7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (e1e2a94) into pairing: main took protocol 0.18 for virtual_cam, so pairing ships as 0.19; re-read main's text beside this PR's pairing text and checked every pairing version mention says 0.19 and virtual_cam's stays 0.18; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
