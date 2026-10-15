@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:776be5d7a3dab550", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; History bullet (B2) and Snapshot/canvas text (B3) both hold; history.rs now also handles item.set_geometry and canvas.set_size" }
+verified = { hash = "b3:6b00b92fe44d07dc", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Ported #202's fix for the #189 flake (RTMP reconnect test and send_until helper in runtime/publish.rs, test-only) so this PR's CI can go green; re-read, no prose describes that test; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:47f70b5587157701", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; core prose unchanged by the merge; Snapshots canvas/placement and undo touched-set (placement, canvas size) text hold against snapshot.rs and history.rs" }
+verified = { hash = "b3:35252def9891785f", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Ported #202's fix for the #189 flake (RTMP reconnect test and send_until helper in runtime/publish.rs, test-only) so this PR's CI can go green; re-read, no prose describes that test; holds" }
 -->
 
 ### Engine and sessions
