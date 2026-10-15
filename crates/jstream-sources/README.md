@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:aa7736453174613a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge-only round (main merged in): re-read against main's changes and this PR's browser additions; both hold together" }
+verified = { hash = "b3:29306359ad6ebbe3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1 N3: browser bullet says update replaces CSS in place but the engine still rebuilds (reloads) on a css edit until core's live-update open item lands; gpu_frame/audio/SourceAudio seam and Context.browser re-checked" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -109,8 +109,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
   `Context.browser` ([`jstream-browser`](../jstream-browser/README.md)). An empty URL
   with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
-  background transparent) is the one live setting: a change replaces the page's custom
-  CSS without reloading it. The page's picture is only on the GPU (`gpu_frame`), so
+  background transparent) is the one live setting: `update` replaces the page's custom
+  CSS without reloading it. Through the engine a `css` edit still reloads the page, until
+  the engine updates live settings in place (core's README › Open items). The page's picture is only on the GPU (`gpu_frame`), so
   `frame` is a transparent frame of the page's size, and the page's audio is the
   source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a
   backend's failure is `SourceError::Browser`. Dropping the source closes the page.

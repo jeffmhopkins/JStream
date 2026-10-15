@@ -26,8 +26,10 @@ download and build it ([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.m
 into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageSpec` (a
 location, a size, a frame-rate cap and the custom CSS) and returns a `BrowserPage`:
 its latest frame as a `GpuFrame`, its audio, a way to replace its custom CSS while it
-runs, and how many of its requests were refused (`denied_requests`). `use_device` gives the backend the engine's GPU device, which pages copy their
-paints onto; without one a page renders and plays but delivers no frames. Dropping the
+runs, and how many of its requests were refused (`denied_requests`). `use_device` gives
+the backend a GPU device to copy the pages' paints onto. Today that is one the host
+opens on the media adapter, since the engine doesn't hand out its own device yet;
+without one a page renders and plays but delivers no frames. Dropping the
 page closes it.
 
 **Built everywhere:**
