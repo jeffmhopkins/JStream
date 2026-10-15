@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:f5466514d68278a7", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b B1: re-read; tests list adds the delay-stamp test; pts = first frame minus compensated latency, which a Delay doesn't add to" }
+verified = { hash = "b3:89963002812469c5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b B2/N2: mixer.rs module doc only (Time line pts now minus compensated latency; Delay stamp sentence); Purpose's pts wording already says first frame minus Mixer::latency_frames; holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -145,7 +145,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:dc68a6d18d0b8dc5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b B1: re-read latency paragraph against mixer.rs mix(): Delay counts 0, so input media time t lands in the block stamped t + delay (ADR-0028 'stamped later by its delay'), proven by a_delay_filter_is_stamped_later_by_its_delay" }
+verified = { hash = "b3:e925d92a3e67d2cc", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b B2/N2: mixer.rs module doc now matches this section's Latency compensation paragraph (pts minus compensated latency, Delay stamped later by its delay); re-read; holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

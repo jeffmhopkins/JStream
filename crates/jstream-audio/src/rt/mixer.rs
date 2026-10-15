@@ -9,12 +9,15 @@
 //! **Latency compensation.** After its chain, each input is delayed to the longest
 //! input chain's latency and each bus to the longest bus chain's, so the paths line up.
 //! A block's `pts` is the media time of the input it was computed from: its first frame
-//! minus that total latency ([`Mixer::latency_frames`]). The master bus (slot 0) is the block [`Mixer::mix`] writes out; every
-//! bus's last block is also readable with [`Mixer::bus_block`].
+//! minus that total latency ([`Mixer::latency_frames`]). A `Delay` filter adds no
+//! latency, so its audio from media time `t` is stamped `t` plus its delay: ADR-0028's
+//! deliberate shift. The master bus (slot 0) is the block [`Mixer::mix`] writes out;
+//! every bus's last block is also readable with [`Mixer::bus_block`].
 //!
 //! **Time line.** Engine frame `n` is media time `n / rate` (the media clock's zero,
 //! docs/adr/0014-media-clock.md). A block is the frames `[n, n + block)`; its pts is `n`
-//! ticks of `1 / rate` seconds. The mixer produces a block once the clock has passed
+//! minus the compensated latency above (so `n` when no chain has any), in ticks of
+//! `1 / rate` seconds. The mixer produces a block once the clock has passed
 //! its end by `latency` frames ([`Mixer::poll`]), so every input's audio for that window
 //! has had `latency` to arrive (device period, the resampler's look-ahead, and jitter).
 //! Inputs that missed it read as silence and are counted as underrun.
