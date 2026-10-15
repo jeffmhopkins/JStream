@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:0ee612671fc29c55", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (Y2 OAuth tokens bullet, F5 Hevc/Av1 note) into C4b: re-read Codecs, Video capture devices, Stream keys, OAuth tokens, Fakes and Not yet; Not yet names MfVideoDevices/MfMjpegDecoder and leaves the Backends field, CaptureStats decode count and MJPEG Codec variant; crate-map row now lists every trait the bullets describe" }
+verified = { hash = "b3:31c9f7565b3f4ea4", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (#149 D1, #166 A5) into C4b: section text unchanged by main; re-read Video capture devices and Not yet (MfVideoDevices/MfMjpegDecoder exist; Backends field, CaptureStats decode count, MJPEG Codec variant remain); crate-map row it depends on lists the same traits" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
