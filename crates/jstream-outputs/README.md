@@ -20,7 +20,8 @@ first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, writte
 as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) requires and needed for the
 generic RTMP/RTMPS output of [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md). The
 second is the **recording file sink** in the `record` module (below). The `Output` trait
-and the virtual-camera output come later. Its JStream dependencies are `jstream-media`
+comes later. The virtual-camera output is not here: it runs in `jstream-core`'s runtime
+([jstream-core › Runtime](../jstream-core/README.md#runtime)). Its JStream dependencies are `jstream-media`
 (for `MediaTime` and `Packet`) and the layer-2 `jstream-mux`, whose public `amf0` codec
 and `flv::to_ms` conversion the client uses, and whose `fmp4` muxer the recorder
 uses. Its third-party dependencies are `thiserror`, `tracing` for logging
