@@ -547,6 +547,7 @@ mod tests {
             rev: Rev(1),
             client_id: ClientId::new(client),
             request_id: Some(RequestId::new(request)),
+            cause: None,
         }
     }
 

@@ -16,22 +16,17 @@ use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use jstream_graph::{Graph, State};
+use jstream_graph::{Graph, Placement as GraphPlacement, State};
 use jstream_media::FrameSize;
 use jstream_protocol::{
-    Crop as ProtocolCrop, ItemTransform, ProtocolError, QueryResult, Rev, SceneId, SourceId,
-    SourceKind,
+    Canvas, Crop as ProtocolCrop, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind,
 };
 use jstream_render::{
-    Color, Compositor, Crop, Image, Item, OpenOptions, Placement, RenderError, Scene, Snapshot,
+    Color, Compositor, Crop, Image, Item, LegacyTransform, OpenOptions, Placement, RenderError,
+    Scene, Snapshot,
 };
 
 use crate::lock;
-
-/// ADR-0022's default canvas. `canvas.set_size` is not in the protocol yet, so every
-/// snapshot uses this size.
-const CANVAS_WIDTH: u32 = 1920;
-const CANVAS_HEIGHT: u32 = 1080;
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
@@ -123,6 +118,8 @@ struct Placed {
 /// Everything `draw` needs, owned so the collection lock can be dropped first.
 pub(crate) struct Shot {
     rev: Rev,
+    /// The collection's canvas: the size every scene, nested ones included, is drawn at.
+    canvas: Canvas,
     /// The scene on program (ADR-0030). `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
@@ -141,6 +138,7 @@ pub(crate) fn plan(
     let program = program.cloned();
     let mut shot = Shot {
         rev: graph.rev(),
+        canvas: state.canvas(),
         program: program.clone(),
         scenes: BTreeMap::new(),
         frames: BTreeMap::new(),
@@ -188,7 +186,7 @@ fn collect(
             };
             placed.push(Placed {
                 source,
-                placement: placement(item.transform()),
+                placement: placement(item.placement()),
                 crop: crop(item.crop()),
             });
         }
@@ -299,11 +297,21 @@ fn last_uses(passes: &[Pass]) -> Vec<usize> {
     last
 }
 
-fn placement(transform: &ItemTransform) -> Placement {
-    Placement {
-        position: [transform.position.x.get(), transform.position.y.get()],
-        scale: [transform.scale.x.get(), transform.scale.y.get()],
-        rotation_deg: transform.rotation_deg.get(),
+/// The compositor's placement for an item's stored one, in the same form (ADR-0022): a
+/// legacy transform is evaluated against the frame's size when it is drawn.
+fn placement(placement: &GraphPlacement) -> Placement {
+    match placement {
+        GraphPlacement::Geometry(geometry) => Placement::Geometry(*geometry),
+        GraphPlacement::Legacy(transform) => Placement::Legacy(LegacyTransform {
+            position: [transform.position.x.get(), transform.position.y.get()],
+            scale: [transform.scale.x.get(), transform.scale.y.get()],
+            rotation_deg: transform.rotation_deg.get(),
+        }),
+        // A placement form newer than this engine draws nothing rather than guessing.
+        _ => Placement::Legacy(LegacyTransform {
+            scale: [0.0, 0.0],
+            ..LegacyTransform::IDENTITY
+        }),
     }
 }
 
@@ -544,7 +552,7 @@ fn reply_pair() -> (ReplyTx, SnapshotReply) {
 fn draw(shot: &Shot, compositor: &mut Compositor) -> Result<QueryResult, ProtocolError> {
     let full = match &shot.program {
         Some(id) => render(compositor, shot, &schedule(shot, id))?,
-        None => paint(compositor, Color::BLACK, &[])?,
+        None => paint(compositor, shot.canvas, Color::BLACK, &[])?,
     };
     let (width, height) = fit(full.width(), full.height());
     let rgba = scale_down(full.width(), full.height(), full.rgba(), width, height);
@@ -597,10 +605,10 @@ fn render(
             })
             .collect();
         if index + 1 == passes.len() {
-            return paint(compositor, Color::BLACK, &items);
+            return paint(compositor, shot.canvas, Color::BLACK, &items);
         }
         let image = compositor
-            .render_image(&scene(Color::TRANSPARENT, &items)?)
+            .render_image(&scene(shot.canvas, Color::TRANSPARENT, &items)?)
             .map_err(from_render)?;
         drop(items);
         images.push(Some(image));
@@ -610,7 +618,7 @@ fn render(
             }
         }
     }
-    paint(compositor, Color::BLACK, &[])
+    paint(compositor, shot.canvas, Color::BLACK, &[])
 }
 
 fn upload(
@@ -624,9 +632,13 @@ fn upload(
         .map_err(from_render)
 }
 
-/// A canvas-sized scene.
-fn scene<'a>(background: Color, items: &'a [Item<'a>]) -> Result<Scene<'a>, ProtocolError> {
-    let canvas = FrameSize::new(CANVAS_WIDTH, CANVAS_HEIGHT).map_err(|_| RenderError::Invalid {
+/// A scene the size of the collection's canvas.
+fn scene<'a>(
+    canvas: Canvas,
+    background: Color,
+    items: &'a [Item<'a>],
+) -> Result<Scene<'a>, ProtocolError> {
+    let canvas = FrameSize::new(canvas.width, canvas.height).map_err(|_| RenderError::Invalid {
         what: "canvas",
         detail: "the canvas size is zero".into(),
     });
@@ -639,11 +651,12 @@ fn scene<'a>(background: Color, items: &'a [Item<'a>]) -> Result<Scene<'a>, Prot
 
 fn paint(
     compositor: &mut Compositor,
+    canvas: Canvas,
     background: Color,
     items: &[Item<'_>],
 ) -> Result<Snapshot, ProtocolError> {
     let output = compositor
-        .render(&scene(background, items)?, true)
+        .render(&scene(canvas, background, items)?, true)
         .map_err(from_render)?;
     output
         .pixels()
@@ -813,18 +826,18 @@ mod tests {
         SourceFrameError, SourceRef, base64, decode_base64, decode_png, draw, encode_png, fit,
         is_no_adapter, last_uses, schedule,
     };
-    use jstream_protocol::{ProtocolError, QueryResult, Rev, SceneId, SourceId};
-    use jstream_render::{Compositor, Crop, OpenOptions, Placement};
+    use jstream_protocol::{Canvas, ProtocolError, QueryResult, Rev, SceneId, SourceId};
+    use jstream_render::{Compositor, Crop, LegacyTransform, OpenOptions, Placement};
     use std::collections::BTreeMap;
     use std::io::Write;
     use std::time::{Duration, Instant};
 
     /// A 16x9 frame, scaled by 120 to cover the 1920x1080 canvas.
-    const FULL: Placement = Placement {
+    const FULL: Placement = Placement::Legacy(LegacyTransform {
         position: [0.0, 0.0],
         scale: [120.0, 120.0],
         rotation_deg: 0.0,
-    };
+    });
 
     const RED: [u8; 4] = [255, 0, 0, 255];
     const GREEN: [u8; 4] = [0, 255, 0, 255];
@@ -856,6 +869,7 @@ mod tests {
         let program = scenes.first().map(|(id, _)| SceneId::new(*id));
         Shot {
             rev: Rev(1),
+            canvas: Canvas::DEFAULT,
             program,
             scenes: scenes
                 .into_iter()
@@ -898,10 +912,10 @@ mod tests {
     /// one depth is composited once.
     #[test]
     fn nested_scenes_are_scheduled_inside_out_once_per_depth() {
-        let half = Placement {
+        let half = Placement::Legacy(LegacyTransform {
             scale: [0.5, 0.5],
-            ..Placement::IDENTITY
-        };
+            ..LegacyTransform::IDENTITY
+        });
         let shot = shot(vec![
             (
                 "program",
@@ -1006,10 +1020,12 @@ mod tests {
     /// transparent where they draw nothing, so red shows around the green.
     #[test]
     fn nested_scenes_composite_through_two_levels() {
-        let half = |x: f32, y: f32| Placement {
-            position: [x, y],
-            scale: [0.5, 0.5],
-            rotation_deg: 0.0,
+        let half = |x: f32, y: f32| {
+            Placement::Legacy(LegacyTransform {
+                position: [x, y],
+                scale: [0.5, 0.5],
+                rotation_deg: 0.0,
+            })
         };
         let shot = shot(vec![
             ("program", vec![fill("red"), nest("a", half(0.0, 0.0))]),
@@ -1042,14 +1058,15 @@ mod tests {
     /// A scene placed twice shows in both places, and a cycle still draws.
     #[test]
     fn a_scene_placed_twice_and_a_cycle_both_draw() {
-        let left = Placement {
+        let left = LegacyTransform {
             scale: [0.5, 1.0],
-            ..Placement::IDENTITY
+            ..LegacyTransform::IDENTITY
         };
-        let right = Placement {
+        let right = Placement::Legacy(LegacyTransform {
             position: [960.0, 0.0],
             ..left
-        };
+        });
+        let left = Placement::Legacy(left);
         let shot = shot(vec![
             ("program", vec![nest("a", left), nest("a", right)]),
             (

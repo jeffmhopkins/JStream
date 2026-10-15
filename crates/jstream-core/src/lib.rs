@@ -1,6 +1,7 @@
 //! The JStream engine. [`Engine`] owns the collection's scene graph (`jstream-graph`)
 //! and executes protocol calls against it: atomic edit batches with `expected_rev` and
-//! idempotency keys, queries, and output actions, with every event fanned out to every
+//! idempotency keys, per-client undo and redo, queries, and output actions, with every
+//! event fanned out to every
 //! subscription. [`InProcessControl`] serves it through the `Control` trait in the same
 //! process, one session per [`Engine::connect`] (ADR-0001). Layer 5.
 //!
@@ -9,16 +10,19 @@
 //! [`Engine::with_publish`](engine::Engine::with_publish) (or
 //! [`Engine::with_publish_opener`](engine::Engine::with_publish_opener)) run the media pipeline on
 //! `output.start` instead. That pipeline registers the drop sources a `stats.tick`
-//! sums and emits one about once a second while it runs. There is no undo, audit log
-//! or persistence yet.
+//! sums and emits one about once a second while it runs. With
+//! [`Engine::with_audit`](engine::Engine::with_audit), every batch, undo, redo and action
+//! is recorded in an [`AuditSink`]. There is no persistence yet.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0030-studio-state-and-scene-switching.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0030-studio-state-and-scene-switching.md, docs/adr/0032-live-edits-and-undo.md
 
 #![forbid(unsafe_code)]
 
+mod audit;
 mod drops;
 mod engine;
 mod events;
+mod history;
 mod kinds;
 mod outputs;
 mod runtime;
@@ -28,6 +32,10 @@ mod studio;
 #[cfg(test)]
 mod tests;
 
+pub use audit::{
+    AUDIT_FILE, AUDIT_FILE_OLD, AuditEntry, AuditFile, AuditMemory, AuditSink,
+    DEFAULT_MAX_FILE_BYTES, MAX_CLIENT_NAME_BYTES, QUEUE_ENTRIES,
+};
 pub use drops::{
     AudioBusDrops, AudioEncodeDrops, AudioInputDrops, DropSnapshot, DropSource, DropSourceId,
     FnDropSource, VideoEncodeDrops, audio_bus_drops, audio_encode_drops, audio_input_drops,

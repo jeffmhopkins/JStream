@@ -43,7 +43,7 @@ The forces:
 state, not in the collection. It is not counted by `rev`, not undoable, and not part of
 `state.get`.
 
-**Protocol (0.10):**
+**Protocol (0.12):**
 - Action `scene.switch { scene_id }` puts a scene on program with a cut. It fails with
   `not_found` for a scene not in the collection. Switching to the scene already on
   program succeeds and emits nothing. ADR-0029's optional `preset` is added with the
@@ -55,10 +55,13 @@ state, not in the collection. It is not counted by `rev`, not undoable, and not 
 
 **Rules that keep program valid:**
 - The collection's first scene goes on program when it is created.
-- A batch that deletes the program scene moves program to the first scene left in
-  display order, or to none when no scene is left.
+- Edits that delete the program scene, whether a batch, an undo or a redo, move program
+  to the first scene left in display order, or to none when no scene is left.
 - Reordering scenes never moves program.
-- A batch that moves program emits its `state.changed` first, then `studio.changed`.
+- Edits that move program emit their `state.changed` first, then `studio.changed`.
+- Undo and redo never restore a program scene: undoing a `scene.switch` is not
+  possible (it is an action), and undoing a `scene.delete` brings the scene back
+  without putting it on program.
 
 **What follows program:** `video.snapshot` composites the program scene, and so does
 every output that renders a scene once the render thread composites scenes (E1, C1b). A

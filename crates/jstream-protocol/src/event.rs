@@ -1,5 +1,6 @@
 //! Events: what the server pushes to every connected client after the handshake.
 
+use crate::history::HistoryDirection;
 use crate::id::{ClientId, OutputId, RequestId, Rev, SceneId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,9 @@ pub enum Event {
         /// That client's request ID, so it can match the event to its own response.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<RequestId>,
+        /// `undo` or `redo` when a history call made the change; absent for a batch.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cause: Option<HistoryDirection>,
     },
     /// An output changed state, for example after `output.start`.
     #[serde(rename = "output.state_changed")]
@@ -33,10 +37,10 @@ pub enum Event {
         /// Its new state.
         state: OutputState,
     },
-    /// The scene on program changed: after a `scene.switch`, or after a batch deleted
-    /// the program scene (program moves to the first remaining scene) or created the
-    /// collection's first scene (it goes on program). Studio state is runtime state
-    /// (ADR-0030), so the event carries no `rev`; a `state.changed` for the same batch
+    /// The scene on program changed: after a `scene.switch`, or after a batch, undo or
+    /// redo deleted the program scene (program moves to the first remaining scene) or
+    /// created the collection's first scene (it goes on program). Studio state is runtime state
+    /// (ADR-0030), so the event carries no `rev`; a `state.changed` for the same edits
     /// comes first.
     #[serde(rename = "studio.changed")]
     StudioChanged {
