@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:ba52f5f3dcaeb8c8", by = "agent:claude@session_01PZRAdnkMzURQaUtof2W6W2", note = "Round 1 B1: Tests bullet now says WS sets the key and starts the stream, MCP starts the recording (matches e2e.rs); rest of Purpose re-read, holds" }
+verified = { hash = "b3:8042ae2c04dc88ec", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into --ui-dir PR: main's text kept; this PR's --ui-dir flag, ui: line and Web UI bullet still match args.rs and main.rs" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -195,7 +195,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:bbe355fa0a69d257", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; daemon backends still vcam: None" }
+verified = { hash = "b3:6bc8626009d87cff", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into --ui-dir PR: main's text kept; Listening says port, MCP and the UI directory change, matching serve.rs:177-179; Not-here-yet drops serving the web UI, which --ui-dir now does" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

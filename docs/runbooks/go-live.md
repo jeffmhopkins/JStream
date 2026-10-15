@@ -36,7 +36,7 @@ verified = { hash = "b3:2bd24eb35d4b24f3", by = "agent:claude@session_01WbL3WRbc
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:4e5c9b92b95bb380", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: stale through server design, where only a citation was added; steps unchanged; holds" }
+verified = { hash = "b3:71b402b45f3e6d81", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into --ui-dir PR: stale through daemon Usage (--ui-dir, ui: line); go-live steps use the token on loopback with unchanged commands; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:16b8dbc81732feb1", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
+verified = { hash = "b3:e08d870ce2697c54", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into --ui-dir PR: stale through daemon Usage; the smoke script doesn't pass --ui-dir; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
