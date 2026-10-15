@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:39db8525fc3bb04d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against core reconnect: Outputs bullet now names active->reconnecting->active and give-up settling failed, Drop counts bullet adds the muxer and publish-link sources (link_drops in arm_stats), Tests bullet adds the FlakyLink CPU-pipeline tests and the hang-up loopback test for connect_rtmp; Engine/Runtime/Session bullets unchanged" }
+verified = { hash = "b3:1a2812067f12d5e1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against pipeline.rs: only comments and the OpenedAudio binding order changed (controls bound first so they drop after the streams); Engine, Runtime, Drop counts and Tests bullets unchanged" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -79,7 +79,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1dbb29951dc6e275", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the whole Design against the reconnect wiring: Outputs/failed paragraphs (reconnecting from active and back, give-up fails from reconnecting), the new lost-connection paragraph matches output_loop report_link and watch_publish link_changed, drop table Publish link row matches link_drops in output_packets, connect_rtmp paragraph matches RtmpPublish/connect_rtmp_with (first session synchronous, rtmp_connector with the same timeouts), Locking paragraph matches the watcher's weak pointers between messages" }
+verified = { hash = "b3:04580ed21cd8a313", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against pipeline.rs: Running keeps mic/desktop after _streams and launch binds the controls before the streams, which only changes where input rings are freed; Outputs, drop table, mixer handle sharing (R-RT-003 atomics) and Locking paragraphs still hold; collector thread still listed as not yet" }
 -->
 
 ### Engine and sessions

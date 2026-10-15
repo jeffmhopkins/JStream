@@ -191,8 +191,8 @@ impl Mixer {
             shared: Arc::clone(&shared),
             gain_now: shared.gain.effective(),
         });
-        let producer = InputProducer::new(format, engine, ring, Arc::clone(&shared));
-        Ok((producer, InputControl::new(shared)))
+        let producer = InputProducer::new(format, engine, Arc::clone(&ring), Arc::clone(&shared));
+        Ok((producer, InputControl::new(shared, ring)))
     }
 
     /// The bus's control handle.
@@ -428,6 +428,31 @@ mod tests {
             let f =
                 AudioFormat::new(rate, ChannelLayout::Mono, SampleFormat::F32Interleaved).unwrap();
             assert!(m.add_input(f).is_ok(), "{rate}");
+        }
+    }
+
+    /// Whichever of the producer (audio thread) and the mixer (mixer thread) is dropped
+    /// last, the input's ring and counters outlive both while a control handle is
+    /// held, so the control plane frees them (R-RT-003).
+    #[test]
+    fn control_handle_holds_the_last_shared_reference() {
+        for mixer_first in [true, false] {
+            let mut m = Mixer::new(config(480)).unwrap();
+            let (p, control) = m.add_input(stereo48()).unwrap();
+            let ring = Arc::downgrade(&m.inputs[0].ring);
+            let shared = Arc::downgrade(&m.inputs[0].shared);
+            if mixer_first {
+                drop(m);
+                drop(p);
+            } else {
+                drop(p);
+                drop(m);
+            }
+            assert!(ring.upgrade().is_some(), "ring freed by an RT handle");
+            assert!(shared.upgrade().is_some(), "counters freed by an RT handle");
+            drop(control);
+            assert!(ring.upgrade().is_none());
+            assert!(shared.upgrade().is_none());
         }
     }
 

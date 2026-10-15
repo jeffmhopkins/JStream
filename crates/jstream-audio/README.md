@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:977191839c2f49ee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading edit: the core mixer thread still calls Mixer::poll on the media clock and pushes blocks; catching its panic is in core. Mixer API, counters and tests unchanged." }
+verified = { hash = "b3:17047740bbb4b746", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ring keep-alive: the API bullet now says the control plane keeps an InputControl until the stream is closed and the mixer dropped (InputControl holds the ring and counters); add_input, poll, gains, meters, counters and tests unchanged; the new unit test is under the mixer's tests" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -42,7 +42,9 @@ stamped on the clock, and no device is the master.
   interleaved `f32`; 8 to 192 kHz at a 48 kHz engine) and returns an `InputProducer`, which
   implements `jstream_platform::AudioInputHandler` and goes to `AudioIo::open_input` as
   the stream's handler, and an `InputControl` for the control plane. It allocates, so it
-  is called while setting up.
+  is called while setting up. The control plane keeps an `InputControl` until the
+  stream is closed and the mixer is dropped, so the input's shared state is freed there
+  (see [Real-time design](#realtime)).
 - `Mixer::poll(now, out)` mixes the next block once the media clock `now` has passed its
   end by the latency, into `out` (interleaved stereo), and returns its `Block` (first
   frame, length, and `pts` in ticks of `1 / rate`). The first call starts the time line
@@ -92,7 +94,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:23faab52b0086dd9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading edit: the Not yet bullet still holds, since catching a panic at the thread boundary is the engine job and core now does it for the mixer thread. Rings, poll and allocation notes unchanged." }
+verified = { hash = "b3:e438800679eb9ff3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against handle.rs/mixer.rs: InputControl now holds Arc<FrameRing> and Arc<InputShared>, so with a control kept past the stream and mixer the last reference is dropped on the control plane; the rewritten R-RT-003 bullet says so and that there is still no collector thread; producer and mixer own buffers still freed as their threads end" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -183,9 +185,13 @@ non-negative floats.
 - CPU cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 - Catching a panic at the thread boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) is the engine's job, where the threads are.
-- A producer is dropped when its platform stream is. That is teardown, not steady
-  state, and the collector hand-off ([R-RT-003](../../docs/RULES.md#R-RT-003)) comes with
-  adding and removing inputs while running.
+- There is no collector thread yet ([R-RT-003](../../docs/RULES.md#R-RT-003)). Instead,
+  each `InputControl` holds a reference to its input's ring and counters, so as long as
+  the control plane keeps one until the input's stream is closed and the mixer is
+  dropped, the last reference is released on the control plane, never on the audio or
+  mixer thread. The producer's and the mixer's own buffers are freed on their threads
+  as those threads end. The collector hand-off comes with adding and removing inputs
+  while running.
 
 <a id="follow-ups"></a>
 ## Not yet
