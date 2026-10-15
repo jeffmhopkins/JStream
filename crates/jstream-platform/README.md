@@ -127,7 +127,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:a4c909bef3a9b168", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (G2 #174) into E3a: E3a's intro (Windows capture delivers frames in a shared BGRA ring; encoders' GPU input next) kept; stale via ARCH#crate-map's vcam-windows logging clause only, which leaves the GpuInterop/GpuFrame design unchanged" }
+verified = { hash = "b3:c3d24539251a03a3", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: section is main's (WgcCapture::on_gpu delivers GPU frames); B3 changes nothing in platform; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

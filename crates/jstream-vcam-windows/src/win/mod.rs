@@ -1,7 +1,8 @@
 //! The COM objects Frame Server loads, and what they need: the DLL exports and panic
 //! guard (`dll`), the registered activator (`activate`), the media source and its stream
 //! (`source`, `stream`), where the pixels come from (`frames`), the control-block mapping
-//! (`shared`), the log (`log`) and the self-registration (`reg`).
+//! (`shared`), the session queries behind the trust rule (`session`), the log (`log`) and
+//! the self-registration (`reg`).
 
 mod activate;
 mod attrs;
@@ -9,6 +10,7 @@ mod dll;
 mod frames;
 mod log;
 mod reg;
+mod session;
 mod shared;
 mod source;
 mod stream;
