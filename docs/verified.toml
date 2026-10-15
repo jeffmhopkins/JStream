@@ -978,7 +978,7 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:1f16e7c29b94cb9b", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: added that a media input also gets D6's activity gain (when_shown, agreeing with the feeder's audible-while-shown); Audio sources and Live sources text otherwise holds against audio_sources.rs, live.rs, activity.rs; re-read" }
+stamp = { hash = "b3:76dfa0625086f4f3", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245 (fad0128: main f0cb974 + wave/m2) into C9b: main's #293 test change swaps the by-itself animation test onto a FakeClock via set_source_clock; re-read the section, the clock-swap and media-audio text still hold, including C9b's B2 wording" }
 
 ["CRATE-jstream-core#purpose"."body"]
 stamp = { hash = "b3:96a96f90904787c8", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's live-source sound bullet beside D6's activity gain text; re-read against audio_sources.rs, holds" }
@@ -1068,7 +1068,7 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:1f16e7c29b94cb9b", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's live-source sound bullet beside D6's activity gain text; re-read against audio_sources.rs, holds" }
+stamp = { hash = "b3:76dfa0625086f4f3", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245 (fad0128: main f0cb974 + wave/m2) into C9b: main's #293 test change swaps the by-itself animation test onto a FakeClock via set_source_clock; re-read the section, the clock-swap and media-audio text still hold, including C9b's B2 wording" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/tests/mcp.rs"]
 stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: tests/mcp.rs change is only block_on's doc comment (hello wait's timer never starts when hello is ready); crate purpose unaffected" }
