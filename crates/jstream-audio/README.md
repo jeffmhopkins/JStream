@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:11e4f87a35f39754", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading handover addition (stopped RT threads count as caught up): this section describes the built mixer API, which has no generations or live-value release yet; nothing here contradicts it" }
+verified = { hash = "b3:6075abda3536d3f7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via ARCH#threading's handover paragraph; the built mixer API has no generations or live-value release, so the SeqCst/stopped-marker rule contradicts nothing here" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -92,7 +92,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:382d0247108a7386", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading handover addition: State snapshots bullet (gains are atomics, arc-swap snapshot comes with live input changes) still fits; the generation counter and stopped marker are unbuilt and not claimed here" }
+verified = { hash = "b3:afa31a9a7d486795", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Realtime against the ARCH#threading handover text (stopped marker, SeqCst fence): this section claims only rings and atomics for the mixer's shared state (R-RT-003) and no generation counter or marker, which stay unbuilt; it holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

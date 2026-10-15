@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:2fe95b1d54d6f074", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-RT-001..006 against the ARCH#threading handover addition: the stopped marker is one atomic store on the RT thread and the control side polls it, so no allocation, lock or wait on the control plane; R-RT-003's snapshots/parameter channels unchanged. No rule text changed" }
+verified = { hash = "b3:e33b2a7a9766038f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-RT-001..006 against the handover text: a SeqCst store, load or fence allocates, locks and waits on nothing, so the rules hold unchanged" }
 -->
 
 <a id="R-RT-001"></a>
