@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:499d62ea784f470c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 round 2: re-read; purpose bullets unchanged by the subprotocol token, hold" }
+verified = { hash = "b3:edf5009f933857d6", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (U0, U3b, U4, U5, B6-r, B10) into U2: purpose unchanged by main; web UI and token bullets hold" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:19d88928ddc8f227", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Round 1 N1/N3/N4/N5: Authorization at most once unless subprotocol carries token (gate.rs credentials/subprotocol_token); extra origins trusted with cached Basic; outside symlink never served (404 or root index for dotless name, ui.rs resolve); MCP preflight comes from post's application/json check (mcp.rs:206)" }
+verified = { hash = "b3:314257ada7701e51", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: main's studio.changed mapping kept; open question 2 now cites ADR-0045 (on main) for the subprotocol; UI, Basic and subprotocol text match gate.rs/ui.rs; holds" }
 -->
 
 ### Listening and admission
@@ -214,13 +214,13 @@ task speaks the envelope
   readable. Binary frames get `malformed` too, until binary streams are designed.
   Messages over 4 MiB close the connection.
 - **Request IDs.** A `Control` session assigns its own IDs, which appear in the
-  `state.changed` events its calls cause. The task maps them back to the client's wire
+  `state.changed` and `studio.changed` events its calls cause. The task maps them back to the client's wire
   IDs, so a client matches its event to its response by the ID it chose, as in the
   protocol README's example. An event can arrive before the answer that reveals the
   mapping, so while calls are in flight it is held back, with every event after it to
   keep the order, until the answer arrives or nothing is left in flight (or 1024 events
-  are held). The last 1024 pairs are remembered. Other clients' `state.changed` events
-  pass unchanged: their IDs mean nothing to this client.
+  are held). The last 1024 pairs are remembered. Other clients' events pass unchanged:
+  their IDs mean nothing to this client.
 - **Slow clients.** The connection task never waits on the socket: what it sends goes
   into an outbox, and a writer that owns the socket's sending half sends it, one message
   at a time, while the task keeps reading the client and draining the session's events.
@@ -346,8 +346,9 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
 2. **Browser token.** Settled and built (see *`Basic` credentials* and *The token as
    a subprotocol*): a page load presents the token as `Basic` credentials, and the
    UI's upgrade either carries the same credentials (checked in Chromium) or offers
-   `jstream.token.<token>`. Pairing a remote browser with a short code instead of
-   pasting the token is a maintainer-tier decision of its own (ADR-0044, proposed).
+   `jstream.token.<token>` ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
+   Pairing a remote browser with a short code instead of pasting the token is a
+   maintainer-tier decision of its own (ADR-0044, proposed).
 3. **UI assets.** Settled and built (see *The web UI*). Open: caching with `ETag`s
    instead of `no-cache`, and compressed variants, if the bundle grows enough to
    matter. MCP over streamable HTTP is settled and built (see *MCP over streamable

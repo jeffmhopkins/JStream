@@ -14,7 +14,7 @@
 
 use crate::lock;
 use jstream_protocol::{
-    Action, Call, CallResult, ClientId, OutputId, ProtocolError, RequestId, Rev,
+    Action, Call, CallResult, ClientId, OutputId, ProtocolError, RequestId, Rev, SceneId,
 };
 use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
@@ -47,6 +47,8 @@ pub struct AuditEntry {
     pub edits: Vec<&'static str>,
     /// The output an action names.
     pub output_id: Option<OutputId>,
+    /// The scene an action names (`scene.switch`).
+    pub scene_id: Option<SceneId>,
     /// The collection `rev` before the call.
     pub rev_before: Rev,
     /// The collection `rev` after it. Equal to `rev_before` unless a batch was applied.
@@ -86,6 +88,10 @@ impl AuditEntry {
         if let Some(output_id) = &self.output_id {
             line.push_str(",\"output_id\":");
             json_string(&mut line, output_id.as_str());
+        }
+        if let Some(scene_id) = &self.scene_id {
+            line.push_str(",\"scene_id\":");
+            json_string(&mut line, scene_id.as_str());
         }
         let _ = write!(
             line,
@@ -357,6 +363,7 @@ pub(crate) struct Pending {
     call: &'static str,
     edits: Vec<&'static str>,
     output_id: Option<OutputId>,
+    scene_id: Option<SceneId>,
     rev_before: Rev,
 }
 
@@ -365,21 +372,28 @@ impl Pending {
     /// between that read and the call, so for an applied batch the entry uses the
     /// batch's own `rev` minus one instead.
     pub(crate) fn new(call: &Call, rev_before: Rev, client_name: String) -> Self {
-        let (name, edits, output_id) = match call {
+        let (name, edits, output_id, scene_id) = match call {
             Call::Batch(batch) => (
                 "batch",
                 batch.edits.iter().map(|e| e.name()).collect(),
                 None,
+                None,
             ),
-            Call::History(history) => (history.op.name(), Vec::new(), None),
-            Call::Action { action } => (action.name(), Vec::new(), action_output(action)),
-            _ => ("unknown", Vec::new(), None),
+            Call::History(history) => (history.op.name(), Vec::new(), None, None),
+            Call::Action { action } => (
+                action.name(),
+                Vec::new(),
+                action_output(action),
+                action_scene(action),
+            ),
+            _ => ("unknown", Vec::new(), None, None),
         };
         Self {
             client_name,
             call: name,
             edits,
             output_id,
+            scene_id,
             rev_before,
         }
     }
@@ -413,6 +427,7 @@ impl Pending {
             call: self.call,
             edits: self.edits,
             output_id: self.output_id,
+            scene_id: self.scene_id,
             rev_before,
             rev_after,
             error: result.as_ref().err().map(ProtocolError::code),
@@ -427,6 +442,13 @@ fn action_output(action: &Action) -> Option<OutputId> {
         | Action::OutputStop { output_id }
         | Action::OutputSetKey { output_id, .. }
         | Action::OutputClearKey { output_id } => Some(output_id.clone()),
+        _ => None,
+    }
+}
+
+fn action_scene(action: &Action) -> Option<SceneId> {
+    match action {
+        Action::SceneSwitch { scene_id } => Some(scene_id.clone()),
         _ => None,
     }
 }
@@ -505,6 +527,7 @@ mod tests {
             call: "output.set_key",
             edits: Vec::new(),
             output_id: Some(OutputId::new("out_yt")),
+            scene_id: None,
             rev_before: Rev(n),
             rev_after: Rev(n),
             error: None,

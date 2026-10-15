@@ -1,0 +1,8 @@
+# `trunk build` (see README.md#build). The output goes to `dist/`.
+
+[build]
+target = "index.html"
+dist = "dist"
+# trunk's inline loader script carries a `{{__TRUNK NONCE__}}` placeholder, which the
+# server replaces with each response's Content-Security-Policy nonce.
+create_nonce = true

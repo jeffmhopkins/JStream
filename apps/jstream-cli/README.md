@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:cac7e37dcf08f749", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239, #221, #235, #197, #238) into B6-f: re-read; contents list holds" }
+verified = { hash = "b3:50bc892eab491877", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (B6-f CLI groups): args.rs keeps B6-f's scene.set_role/item.move/set_geometry and adds scene.create's optional trailing role:; purpose holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:00552cf966cc5c18", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: re-read; this branch's Edits/Reads text holds; main's B9 changes touch no CLI command" }
+verified = { hash = "b3:d87d877168335337", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took B6-f's Edits bullet and added scene.create's optional role:group/role:scene; grouping batch now creates the scene as a group" }
 -->
 
 ```sh
@@ -83,6 +83,8 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `hello` | the `hello`/`welcome` handshake |
 | `state get` | query `state.get` |
 | `scene list` | query `scene.list` |
+| `scene switch <scene-id>` | action `scene.switch` (a cut to that scene) |
+| `studio get` | query `studio.get` (the scene on program) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |
@@ -99,7 +101,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 `jstream-cli`.
 
 - **Edits** are written as their protocol command name followed by its arguments, in a
-  fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
+  fixed order (`scene.create <scene-id> <name> [role:scene|role:group]`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
   protocol is supported except settings, encoder profiles and `source.create`'s
   `duplicated_from`. `source.set_settings`,
@@ -114,8 +116,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `canvas.set_size <width> <height>` sets the canvas. Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
-  <index>`: grouping is one batch that creates a scene, makes it a group, places it
-  through a `scene:` source, and moves the items into it. The placement edits'
+  <index>`, and `scene.create` takes an optional trailing `role:group` or `role:scene`:
+  grouping is one batch that creates a scene as a group, places it through a `scene:`
+  source, and moves the items into it. The placement edits'
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
   the item's own scene, which omitting it already means.
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
@@ -144,7 +147,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
-  the `state.changed` event it causes; an event an undo or redo caused ends with
+  the `state.changed` (or `studio.changed`) event it causes; an event an undo or redo caused ends with
   `undo` or `redo`. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
@@ -232,11 +235,12 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:851560252e2a8f3c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (#210 B6-f CLI edits) into U2: stale through control design; CLI design text is main's; holds" }
+verified = { hash = "b3:a34fd13265bd97a8", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server/control design; WsControl and MCP test text unchanged; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
-  most, a sequence of fixed-arity edits named by their protocol command names, doesn't
+  most, a sequence of fixed-arity edits (only `scene.create` takes one optional trailing
+  `role:`) named by their protocol command names, doesn't
   fit a derive-based parser: with `clap` it would be a trailing list of raw strings
   parsed by hand anyway. A parser crate would add a dependency tree (and a review under
   [R-DEP-004](../../docs/RULES.md#R-DEP-004)) for the few global options and the help

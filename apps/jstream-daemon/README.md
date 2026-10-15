@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:a767aeb32840483f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Round 1 B1: 'Not here yet' now says jstream-server serves the UI from ServerConfig::ui_dir and the daemon has no flag yet; rest unchanged" }
+verified = { hash = "b3:483779712b0c3581", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: round 1 B1 wording kept (server serves ui_dir, daemon has no flag yet); holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -185,7 +185,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:beb7702fe7bf73f9", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through server design; re-read MCP, Listening and logging bullets: unchanged gate, holds" }
+verified = { hash = "b3:3a96a34d64883427", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server design; MCP, Listening and token bullets unchanged; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

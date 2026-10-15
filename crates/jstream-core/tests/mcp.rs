@@ -105,6 +105,23 @@ fn an_mcp_agent_drives_the_engine_in_process() {
     assert_eq!(body["result"]["result"]["rev"], 1);
     assert_eq!(body["result"]["result"]["items"][0]["item_id"], "itm_1");
 
+    // The first scene went on program; switching to it again changes nothing.
+    let studio = call_tool(&server, "studio", json!({"op": {"type": "studio.get"}}));
+    let (failed, body) = content(&studio);
+    assert!(!failed, "{studio}");
+    assert_eq!(
+        body["result"]["result"],
+        json!({"type": "studio.get", "program_scene": "scn_1"})
+    );
+    let switched = call_tool(
+        &server,
+        "scene",
+        json!({"op": {"type": "scene.switch", "scene_id": "scn_1"}}),
+    );
+    let (failed, body) = content(&switched);
+    assert!(!failed, "{switched}");
+    assert_eq!(body["result"], json!({"kind": "action"}));
+
     let started = call_tool(
         &server,
         "output",
@@ -114,7 +131,8 @@ fn an_mcp_agent_drives_the_engine_in_process() {
     assert!(!failed, "{started}");
     assert_eq!(body["result"], json!({"kind": "action"}));
 
-    // The session's own subscription saw the batch and the output's placeholder steps.
+    // The session's own subscription saw the batch, the first scene going on program and
+    // the output's placeholder steps.
     let mut seen = Vec::new();
     while let Poll::Ready(Some(event)) = events
         .as_mut()
@@ -127,6 +145,7 @@ fn an_mcp_agent_drives_the_engine_in_process() {
             seen.as_slice(),
             [
                 Event::StateChanged { rev: Rev(1), .. },
+                Event::StudioChanged { .. },
                 Event::OutputStateChanged {
                     state: OutputState::Starting,
                     ..

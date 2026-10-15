@@ -36,6 +36,9 @@ Commands:
   hello                            handshake with the engine and print the session
   state get                        print the whole collection state (query state.get)
   scene list                       list the scenes (query scene.list)
+  scene switch <scene-id>          put a scene on program, with a cut (action
+                                   scene.switch)
+  studio get                       print the scene on program (query studio.get)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   output list                      list the configured outputs (query output.list)
@@ -58,7 +61,7 @@ Commands:
   help                             print this help
 
 Edits (each is its protocol command name followed by its arguments):
-  scene.create <scene-id> <name>
+  scene.create <scene-id> <name> [role:scene|role:group]
   scene.rename <scene-id> <name>
   scene.delete <scene-id>
   scene.reorder <scene-id> <index>
@@ -253,6 +256,10 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["hello"] => Command::Hello,
         ["state", "get"] => Command::Query(Query::StateGet),
         ["scene", "list"] => Command::Query(Query::SceneList),
+        ["scene", "switch", id] => Command::Action(Action::SceneSwitch {
+            scene_id: SceneId::new(*id),
+        }),
+        ["studio", "get"] => Command::Query(Query::StudioGet),
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -278,7 +285,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         [word, ..] => {
             let known = [
                 "help", "version", "hello", "state", "scene", "source", "item", "output", "video",
-                "edit", "events", "mcp",
+                "studio", "edit", "events", "mcp",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -394,12 +401,23 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
             if n == 1 { "" } else { "s" }
         )));
     }
-    let (a, rest) = rest.split_at(n);
+    let (a, mut rest) = rest.split_at(n);
     let edit = match (name, a) {
-        ("scene.create", [id, name]) => Edit::SceneCreate {
-            scene_id: SceneId::new(*id),
-            name: (*name).to_owned(),
-        },
+        ("scene.create", [id, name]) => {
+            // An optional trailing `role:<role>`; no edit name has that prefix.
+            let role = match rest.split_first() {
+                Some((arg, after)) if arg.starts_with("role:") => {
+                    rest = after;
+                    Some(scene_role(arg)?)
+                }
+                _ => None,
+            };
+            Edit::SceneCreate {
+                scene_id: SceneId::new(*id),
+                name: (*name).to_owned(),
+                role,
+            }
+        }
         ("scene.rename", [id, name]) => Edit::SceneRename {
             scene_id: SceneId::new(*id),
             name: (*name).to_owned(),
@@ -548,6 +566,16 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         _ => return Err(usage(format!("cannot parse `{name}`"))),
     };
     Ok((edit, rest))
+}
+
+fn scene_role(text: &str) -> Result<SceneRole, CliError> {
+    match text.strip_prefix("role:") {
+        Some("scene") => Ok(SceneRole::Scene),
+        Some("group") => Ok(SceneRole::Group),
+        _ => Err(usage(format!(
+            "scene role `{text}` must be `role:scene` or `role:group`"
+        ))),
+    }
 }
 
 fn source_kind(text: &str) -> Result<SourceKind, CliError> {
@@ -711,6 +739,17 @@ mod tests {
             ok(&["output", "clear-key", "o"]).command,
             Command::Action(Action::OutputClearKey { output_id: id() })
         );
+        assert_eq!(
+            ok(&["scene", "switch", "s"]).command,
+            Command::Action(Action::SceneSwitch {
+                scene_id: SceneId::new("s")
+            })
+        );
+        assert_eq!(
+            ok(&["studio", "get"]).command,
+            Command::Query(Query::StudioGet)
+        );
+        assert!(err(&["studio"]).starts_with("wrong arguments for `"));
     }
 
     #[test]
@@ -794,6 +833,48 @@ mod tests {
     }
 
     #[test]
+    fn scene_create_takes_an_optional_role() {
+        let Command::Edit(batch) = ok(&[
+            "edit",
+            "scene.create",
+            "g",
+            "Lower third",
+            "role:group",
+            "scene.create",
+            "s",
+            "Main",
+            "scene.delete",
+            "x",
+        ])
+        .command
+        else {
+            panic!("not an edit");
+        };
+        assert_eq!(
+            batch.edits,
+            vec![
+                Edit::SceneCreate {
+                    scene_id: SceneId::new("g"),
+                    name: "Lower third".into(),
+                    role: Some(SceneRole::Group),
+                },
+                Edit::SceneCreate {
+                    scene_id: SceneId::new("s"),
+                    name: "Main".into(),
+                    role: None,
+                },
+                Edit::SceneDelete {
+                    scene_id: SceneId::new("x"),
+                },
+            ]
+        );
+        assert_eq!(
+            err(&["edit", "scene.create", "s", "Main", "role:folder"]),
+            "scene role `role:folder` must be `role:scene` or `role:group`"
+        );
+    }
+
+    #[test]
     fn edits_parse_in_sequence_into_one_batch() {
         let line = [
             "edit",
@@ -839,6 +920,7 @@ mod tests {
                     Edit::SceneCreate {
                         scene_id: SceneId::new("s1"),
                         name: "Main scene".into(),
+                        role: None,
                     },
                     Edit::SourceCreate {
                         source_id: SourceId::new("cam"),
