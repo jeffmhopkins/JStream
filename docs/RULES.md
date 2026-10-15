@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:080fea9002e1d852", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: rule text unchanged; ARCH#threading only combines main's collector text and F2b's recording write path, both within R-RT-003/R-RT-004" }
+verified = { hash = "b3:951c2ba617a74cae", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D2 cascade from ARCH#threading (now: buses also change through the audio command queue; collector also frees removed buses' state): re-read; rule text unchanged, bus state retired via the collector is within R-RT-003" }
 -->
 
 <a id="R-RT-001"></a>

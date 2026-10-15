@@ -1,8 +1,9 @@
 //! The JStream real-time audio mixer. Each input (a microphone, desktop loopback) is
 //! downmixed to stereo and adaptively resampled from its device's rate and clock onto
-//! the engine's time line on its own audio thread; the [`Mixer`] sums the inputs, each
-//! with its gain, into one stereo bus in fixed-size blocks stamped on the engine clock,
-//! and meters inputs and bus. Layer 2: no I/O, no platform code; inputs plug into the
+//! the engine's time line on its own audio thread; the [`Mixer`] applies each input's
+//! fader, sums the inputs through a send matrix into stereo buses (the master and up to
+//! 15 more, each with its fader) in fixed-size blocks stamped on the engine clock, and
+//! meters inputs and buses. Layer 2: no I/O, no platform code; inputs plug into the
 //! `jstream-platform` audio handler.
 //!
 //! ```
@@ -36,7 +37,7 @@ pub mod meter;
 mod rt;
 
 pub use error::AudioError;
-pub use handle::{BusControl, BusStats, InputControl, InputId, InputStats};
+pub use handle::{BusControl, BusId, BusStats, InputControl, InputId, InputStats};
 pub use rt::input::InputProducer;
 pub use rt::mixer::{Block, Mixer, MixerConfig, MixerControl};
 pub use rt::shared::MeterReading;

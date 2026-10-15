@@ -364,7 +364,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:92eb867695f2637b", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; prose is main's collector sentences plus F2b's recording output-thread sentence; both hold for runtime/sink.rs and audio rt cmd/retire" }
+verified = { hash = "b3:1beced53c030723a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D2: re-read; edited the in-engine paragraph to say buses also change through the command queue and the collector sentence to include removed buses' state; mixer row (sends, buses) still matches, rest unaffected" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -410,7 +410,7 @@ before stop, a render or mixer panic) is a channel message to a watcher the cont
 thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
 encoder session queues. Arc-swap snapshots and a GPU encode target are still the
 rows above, not this cut. The collector so far is the mixer's own, and frees only
-input rings and their counters.
+input rings and their counters, and removed buses' state.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
@@ -443,8 +443,8 @@ in 20 minutes, haven't been measured.
 **In the engine:** `jstream-audio` runs S3's drift fit and PI loop with S3's tuning on
 each input's audio thread, resampling into a per-input ring indexed by engine frame
 that the mixer reads on the engine clock
-([its real-time design](../crates/jstream-audio/README.md#realtime)). Inputs are added
-and removed through a lock-free command queue while the mixer runs, and a ring released
+([its real-time design](../crates/jstream-audio/README.md#realtime)). Inputs and buses
+are added and removed through a lock-free command queue while the mixer runs, and a ring released
 by the mixer or the audio thread is freed on the collector thread. It differs from
 what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, and the
 timing error is absolute, so inputs line up with each other. That combination has been

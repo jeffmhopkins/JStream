@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:dc0131f96856cecc", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose unchanged; ARCH#threading change is the recording sink on the output thread, not the encoders" }
+verified = { hash = "b3:4dbbc14eae3be249", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D2 cascade from ARCH#threading (now: buses also change through the audio command queue; collector also frees removed buses' state): re-read; prose unchanged, the mixer side still pushes one bus per audio encoder session" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
