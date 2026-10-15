@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:0b01dcb5a8795296", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (D5 #240): re-read; text is main's; contents list unchanged; holds" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +44,6 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:7a16ba2545dc98e0", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; noun table includes filter (master/output owners ride the generic edit tool) and D5's nouns; 19 tools; holds" }
 -->
 
 ### Tools
@@ -145,7 +143,9 @@ client introduces itself: at `initialize` (handshake-based revisions) with
 `jstream-server` closes a connection that hasn't completed its handshake within its
 handshake timeout ([jstream-server › Design](../jstream-server/README.md#design)), so the
 session must open before the agent goes idle, not at its first tool call. If that
-`hello` fails, the request still succeeds, and a client that skips both (a stateless
+`hello` fails, or isn't answered within 3 s (well under that handshake timeout, so an
+engine that accepted the connection and then hangs doesn't hold `initialize` until it
+closes), the request still succeeds, and a client that skips both (a stateless
 client going straight to `tools/call`) gets its `hello` before the next tool call that
 needs the engine, which reports a failure. Later names don't change the session.
 `describe_api`, argument errors and `events` reads never call the engine
@@ -215,8 +215,9 @@ buffer and page sizes, so agents don't need this page.
 
 ### Async and transports
 
-`Server::handle` is an `async fn` whose future is `Send` and only awaits the `Control`
-futures, so any executor can run it, and `jstream-server` can mount it inside axum.
+`Server::handle` is an `async fn` whose future is `Send` and awaits only the `Control`
+futures and the hello wait's timer, which its own thread wakes, so any executor can run
+it, and `jstream-server` can mount it inside axum.
 `serve_stdio` needs none: it reads a line, drives that message's future on the calling
 thread with a small `block_on` (park until woken, built on `std::task::Wake`), writes the
 reply line and flushes. That works for any `Control` whose futures are woken by their

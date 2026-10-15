@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:0a0e675ca8016216", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3 N4: persist tests list now names a file without master or outputs[].filters loading with empty chains (a_file_without_master_or_output_filters_loads); holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -149,7 +148,7 @@ the batch **touched**.
   name, and one that could carry a credential (`user:password@`, a query or a
   fragment). A recording's `path` is rejected (field `kind.path`) when it is empty,
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
-  `\…`, `C:\…` or `C:/…`, the same on every platform, as for an absolute asset), or
+  `\…`, `C:\…` or `C:/…`, the same on every platform), or
   doesn't end in a file name; whether it is absolute on the engine's own machine, and
   whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
   `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and

@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:b3ed18a43dbd626d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3 B2: the shared master-bus audio encode is one per encoder profile in use (Program::shared_audio on Encoders, one per EncodeKey), as pipeline.rs:373-401 opens it; checked Runtime bullet, Audio routing output-tap paragraph and runtime threads; N9 comment only; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -195,7 +194,6 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f5662c094c39afaa", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3 B2: the shared master-bus audio encode is one per encoder profile in use (Program::shared_audio on Encoders, one per EncodeKey), as pipeline.rs:373-401 opens it; checked Runtime bullet, Audio routing output-tap paragraph and runtime threads; N9 comment only; holds" }
 -->
 
 ### Engine and sessions
@@ -1068,7 +1066,6 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:6ce1c95e4cfb8099", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "#303 round 3 B2: the shared master-bus audio encode is one per encoder profile in use (Program::shared_audio on Encoders, one per EncodeKey), as pipeline.rs:373-401 opens it; checked Runtime bullet, Audio routing output-tap paragraph and runtime threads; N9 comment only; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
