@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:ecc8e83688272d34", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; contents list holds" }
+verified = { hash = "b3:a3db2c72a9fa1c29", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: re-read; contents hold" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:619fb179490614ee", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; Edits bullet (0.12 not in CLI) and no-undo bullet hold" }
+verified = { hash = "b3:0ec9d9e6a5f7f132", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: Edits bullet now names both 0.11/0.12 edits and encoder edits as not in the CLI; output status line keeps the encoder suffix after main's geometry text" }
 -->
 
 ```sh
@@ -101,9 +101,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings. `source.set_settings`, and `source.create`
-  with settings, need a JSON argument form the CLI doesn't have yet, so a source it
-  creates gets its kind's defaults. Protocol 0.11's `canvas.set_size`,
+  protocol is supported except settings and encoder profiles. `source.set_settings`,
+  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
+  and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
+  source it creates gets its kind's defaults and an output it creates the engine's
+  default encoder (MCP and the WebSocket API take them). Protocol 0.11's `canvas.set_size`,
   `item.set_geometry` and `item.add`'s `geometry`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
   yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
@@ -147,7 +149,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
   server URL, as `output.create` takes it). `state get` prints the sources, then each
   scene in display order with its items, then the outputs. `output status` prints
-  `<id>: <state>, stream key set` (or `not set`). An empty list prints `no scenes`,
+  `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
+  `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
@@ -218,7 +221,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9faa5f5b0da298f0", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; parser, connector and mcp design hold" }
+verified = { hash = "b3:cb1dabf06c3c3056", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: re-read; design bullets hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -1,0 +1,60 @@
+{
+  "kind": "youtube#liveBroadcastListResponse",
+  "etag": "fixture-etag-list",
+  "nextPageToken": "CAEQAA",
+  "pageInfo": { "totalResults": 3, "resultsPerPage": 2 },
+  "items": [
+    {
+      "kind": "youtube#liveBroadcast",
+      "etag": "fixture-etag-1",
+      "id": "dQw4w9WgXcQ",
+      "snippet": {
+        "publishedAt": "2026-10-14T18:00:00Z",
+        "channelId": "UCfixturechannel000000000",
+        "title": "Friday stream",
+        "description": "Weekly build session",
+        "thumbnails": { "default": { "url": "https://i.ytimg.com/vi/dQw4w9WgXcQ/default_live.jpg", "width": 120, "height": 90 } },
+        "scheduledStartTime": "2026-10-16T19:00:00Z",
+        "liveChatId": "KicKGFVDZml4dHVyZWNoYW5uZWwwMDAwMDAwMDA"
+      },
+      "status": {
+        "lifeCycleStatus": "ready",
+        "privacyStatus": "unlisted",
+        "recordingStatus": "notRecording",
+        "madeForKids": false,
+        "selfDeclaredMadeForKids": false
+      },
+      "contentDetails": {
+        "boundStreamId": "UCfixturechannel000000000fixturestream1",
+        "boundStreamLastUpdateTimeMs": "2026-10-14T18:00:05Z",
+        "monitorStream": { "enableMonitorStream": true, "broadcastStreamDelayMs": 0, "embedHtml": "<iframe></iframe>" },
+        "enableEmbed": true,
+        "enableDvr": true,
+        "recordFromStart": true,
+        "enableClosedCaptions": false,
+        "closedCaptionsType": "closedCaptionsDisabled",
+        "projection": "rectangular",
+        "enableLowLatency": false,
+        "latencyPreference": "normal",
+        "enableAutoStart": false,
+        "enableAutoStop": false
+      }
+    },
+    {
+      "kind": "youtube#liveBroadcast",
+      "etag": "fixture-etag-2",
+      "id": "oHg5SJYRHA0",
+      "snippet": {
+        "channelId": "UCfixturechannel000000000",
+        "title": "Late-night test",
+        "description": "",
+        "scheduledStartTime": "2026-10-17T02:00:00Z"
+      },
+      "status": {
+        "lifeCycleStatus": "someFutureStatus",
+        "privacyStatus": "private"
+      },
+      "contentDetails": {}
+    }
+  ]
+}

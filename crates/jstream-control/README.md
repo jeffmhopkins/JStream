@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:96677b86eb3c80ef", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; contents list holds, mock still lacks set_role/item.move" }
+verified = { hash = "b3:93ba8331b08319a8", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: re-read; bullets hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:016dc02e9c8393b9", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; undo bullet now says placement/crop/visible inverses keep the edit's scene_id, as jstream-graph's do; rest holds" }
+verified = { hash = "b3:66e5d7c217a903b9", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#214 ADR-0041): #214 only repoints ADR-0034 links to ADR-0041 here; re-read against F3's merged text (encoder profiles, protocol 0.13, shared program stage), both hold" }
 -->
 
 ### The trait
@@ -94,7 +94,7 @@ its own, and is used with default features off.
 ### Mock
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
-`dev-dependencies`) keeps scenes, items, sources and outputs in memory, with an
+`dev-dependencies`) keeps scenes, items, sources, outputs and encoder profiles in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
@@ -120,7 +120,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
     reasons), `output.set_target` on a recording output, and an `unknown` output kind,
-    RTMP target or container.
+    RTMP target or container;
+  - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
+    `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
+    naming a missing output, then a missing profile.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind, stores settings as sent without
@@ -130,17 +133,19 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
-  scene) and `output.list` (ordered by ID), each at the current `rev`. So it keeps
-  everything an edit sets: the canvas, source names, kinds and settings, each item's
-  placement (its transform, or its geometry and the transform view of it), crop and
-  visibility, and each output's kind and target. `video.snapshot` is not one of those
-  reads: the mock has no compositor and answers it with `internal`, as it does for any
-  protocol variant it does not implement;
+  scene), `output.list` and `encoder.list` (ordered by ID), each at the current `rev`.
+  So it keeps everything an edit sets: the canvas, source names, kinds and settings,
+  each item's placement (its transform, or its geometry and the transform view of it),
+  crop and visibility, each output's kind, target and encoder profile, and each
+  profile. `video.snapshot` is not one of those reads: the mock has no compositor and
+  answers it with `internal`, as it does for any protocol variant it does not
+  implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
   `output.status`, but it is not in the collection, so `output.list` and `state.get`
-  don't report it and `output.set_key` answers `not_found` for it;
+  don't report it and `output.set_key` answers `not_found` for it. It runs no
+  encoders, so `output.status` reports no encoder session and zero sessions;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty, over-long or whitespace key; `output.clear_key` always succeeds.
@@ -154,8 +159,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   from the same inverse edits `jstream-graph` returns: a removed item comes back at its
   index with its placement in its own form (transform or geometry), crop and
   visibility, a deleted scene at its position with its items, a placement, crop or
-  visibility edit undoes with the `scene_id` it was sent with, and `canvas.set_size`
-  undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
+  visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
+  back with its encoder profile, encoder profile edits undo to the profile as it was,
+  and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with
   the graph's `invalid_argument` and keeps the step, the history is bounded

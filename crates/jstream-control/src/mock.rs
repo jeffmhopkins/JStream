@@ -20,12 +20,13 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EntityKind, Event,
-    GeometryError, Hello, HistoryCall, HistoryDirection, IdempotencyKey, ItemGeometry, ItemId,
-    ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION,
-    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
-    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings,
-    SourceId, SourceInfo, SourceKind, Welcome,
+    Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
+    EncoderProfileId, EncoderProfileInfo, EntityKind, Event, GeometryError, Hello, HistoryCall,
+    HistoryDirection, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId,
+    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
+    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
+    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind,
+    Welcome,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -383,6 +384,10 @@ struct Collection {
     sources: BTreeMap<SourceId, Source>,
     /// The configured outputs, ordered by ID, as `output.list` reports them.
     outputs: BTreeMap<OutputId, OutputKind>,
+    /// The encoder profile each output uses, for those that chose one.
+    output_encoders: BTreeMap<OutputId, EncoderProfileId>,
+    /// The encoder profiles, ordered by ID: name and encoding.
+    encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
 }
 
 /// A source: its name, what it shows, and its settings. The mock describes no kinds, so
@@ -654,10 +659,14 @@ impl State {
                 let Some(&state) = self.outputs.get(&output_id) else {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 };
+                // The mock opens no encoders, so it reports no sessions.
                 QueryResult::OutputStatus {
                     key_set: self.keys.contains_key(&output_id),
                     output_id,
                     state,
+                    encoder: None,
+                    encoder_sessions: 0,
+                    hardware_sessions: 0,
                 }
             }
             Query::SourceList => QueryResult::SourceList {
@@ -688,10 +697,15 @@ impl State {
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
+                encoders: self.collection.encoder_infos(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
                 outputs: self.collection.output_infos(),
+            },
+            Query::EncoderList => QueryResult::EncoderList {
+                rev: self.collection.rev,
+                encoders: self.collection.encoder_infos(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -1107,7 +1121,99 @@ impl Collection {
                 let Some(kind) = self.outputs.remove(&output_id) else {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 };
-                vec![Edit::OutputCreate { output_id, kind }]
+                let mut inverse = vec![Edit::OutputCreate {
+                    output_id: output_id.clone(),
+                    kind,
+                }];
+                if let Some(profile_id) = self.output_encoders.remove(&output_id) {
+                    inverse.push(Edit::OutputSetEncoder {
+                        output_id,
+                        profile_id: Some(profile_id),
+                    });
+                }
+                inverse
+            }
+            Edit::OutputSetEncoder {
+                output_id,
+                profile_id,
+            } => {
+                if !self.outputs.contains_key(&output_id) {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                }
+                let old = match profile_id {
+                    Some(id) => {
+                        if !self.encoders.contains_key(&id) {
+                            return Err(not_found(EntityKind::Encoder, id.as_str()));
+                        }
+                        self.output_encoders.insert(output_id.clone(), id)
+                    }
+                    None => self.output_encoders.remove(&output_id),
+                };
+                vec![Edit::OutputSetEncoder {
+                    output_id,
+                    profile_id: old,
+                }]
+            }
+            Edit::EncoderCreate {
+                profile_id,
+                name,
+                profile,
+            } => {
+                check_id(profile_id.as_str(), at, "profile_id")?;
+                if self.encoders.contains_key(&profile_id) {
+                    return Err(already_exists(EntityKind::Encoder, profile_id.as_str()));
+                }
+                check_name(&name, at)?;
+                check_profile(&profile, at)?;
+                self.encoders.insert(profile_id.clone(), (name, profile));
+                vec![Edit::EncoderDelete { profile_id }]
+            }
+            Edit::EncoderUpdate {
+                profile_id,
+                name,
+                profile,
+            } => {
+                if !self.encoders.contains_key(&profile_id) {
+                    return Err(not_found(EntityKind::Encoder, profile_id.as_str()));
+                }
+                check_name(&name, at)?;
+                check_profile(&profile, at)?;
+                let Some((old_name, old_profile)) =
+                    self.encoders.insert(profile_id.clone(), (name, profile))
+                else {
+                    return Err(not_found(EntityKind::Encoder, profile_id.as_str()));
+                };
+                vec![Edit::EncoderUpdate {
+                    profile_id,
+                    name: old_name,
+                    profile: old_profile,
+                }]
+            }
+            Edit::EncoderDelete { profile_id } => {
+                if !self.encoders.contains_key(&profile_id) {
+                    return Err(not_found(EntityKind::Encoder, profile_id.as_str()));
+                }
+                if let Some((user, _)) = self
+                    .output_encoders
+                    .iter()
+                    .find(|(_, id)| **id == profile_id)
+                {
+                    return Err(invalid(
+                        at,
+                        "profile_id",
+                        format!(
+                            "encoder profile `{profile_id}` is used by output `{user}`; point it elsewhere first"
+                        ),
+                    ));
+                }
+                let Some((name, profile)) = self.encoders.remove(&profile_id) else {
+                    return Err(not_found(EntityKind::Encoder, profile_id.as_str()));
+                };
+                vec![Edit::EncoderCreate {
+                    profile_id,
+                    name,
+                    profile,
+                }]
             }
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -1169,6 +1275,19 @@ impl Collection {
             .map(|(id, kind)| OutputInfo {
                 output_id: id.clone(),
                 kind: kind.clone(),
+                encoder_profile: self.output_encoders.get(id).cloned(),
+            })
+            .collect()
+    }
+
+    /// Every encoder profile, ordered by ID, as queries report them.
+    fn encoder_infos(&self) -> Vec<EncoderProfileInfo> {
+        self.encoders
+            .iter()
+            .map(|(id, (name, profile))| EncoderProfileInfo {
+                profile_id: id.clone(),
+                name: name.clone(),
+                profile: *profile,
             })
             .collect()
     }
@@ -1428,6 +1547,14 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
 }
 
 /// Checks an RTMP target; `name` is its field path within the edit (`kind.target`).
+/// Checks an encoder profile as the engine does.
+fn check_profile(profile: &EncoderProfile, at: usize) -> Result<(), ProtocolError> {
+    match profile.problem() {
+        Some((name, reason)) => Err(invalid(at, &format!("profile.{name}"), reason)),
+        None => Ok(()),
+    }
+}
+
 fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), ProtocolError> {
     match target {
         RtmpTarget::Generic { url } => match rtmp_url_problem(url) {
@@ -1620,11 +1747,11 @@ mod tests {
     use super::MockEngine;
     use crate::{Control, ControlError, EventStream};
     use jstream_protocol::{
-        Action, Batch, Call, CallResult, Canvas, ClientId, Edit, EntityKind, Event, Hello,
-        HistoryCall, HistoryDirection, HistoryOp, IdempotencyKey, ItemId, ItemTransform, OutputId,
-        OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion,
-        Query, QueryResult, Rev, RtmpTarget, SceneId, SecretString, Settings, SourceId, SourceKind,
-        parity,
+        Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
+        EncoderProfileId, EntityKind, Event, Hello, HistoryCall, HistoryDirection, HistoryOp,
+        IdempotencyKey, ItemId, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
+        PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, Rev, RtmpTarget,
+        SceneId, SecretString, Settings, SourceId, SourceKind, parity,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -1973,6 +2100,7 @@ mod tests {
                 sources,
                 scenes,
                 outputs,
+                encoders,
                 ..
             } => QueryResult::StateGet {
                 rev: Rev(0),
@@ -1980,6 +2108,7 @@ mod tests {
                 sources,
                 scenes,
                 outputs,
+                encoders,
             },
             other => panic!("not a state: {other:?}"),
         }
@@ -1988,8 +2117,10 @@ mod tests {
     /// Undo and redo restore the shared parity collection exactly, through the same
     /// inverse edits `jstream-graph` builds: a removed item comes back at its index with
     /// its placement (in its own form, transform or geometry), crop and visibility, a
-    /// deleted scene with its items and its position, a source with its settings, and
-    /// the canvas size.
+    /// deleted scene with its items and its position, a source with its settings, an
+    /// output with its encoder profile, the encoder profiles, and the canvas size. Its
+    /// placement, crop and visibility edits name the item's own scene, and their
+    /// inverses do too.
     #[test]
     fn undo_and_redo_restore_the_parity_collection() {
         let (_engine, control) = parity_engine();
@@ -2003,11 +2134,27 @@ mod tests {
                     width: Canvas::DEFAULT.width,
                     height: Canvas::DEFAULT.height,
                 },
-                // `i4` is placed by a geometry: its inverse sets the geometry back.
+                // `i4` is placed by a geometry: its inverse sets the geometry back. These
+                // name `i4`'s own scene, and so do their inverses.
                 Edit::ItemSetTransform {
                     item_id: ItemId::new("i4"),
-                    scene_id: None,
+                    scene_id: Some(SceneId::new("b")),
                     transform: ItemTransform::IDENTITY,
+                },
+                Edit::ItemSetVisible {
+                    item_id: ItemId::new("i4"),
+                    scene_id: Some(SceneId::new("b")),
+                    visible: false,
+                },
+                Edit::ItemSetCrop {
+                    item_id: ItemId::new("i4"),
+                    scene_id: Some(SceneId::new("b")),
+                    crop: Crop {
+                        left: 1,
+                        top: 2,
+                        right: 3,
+                        bottom: 4,
+                    },
                 },
                 Edit::SourceRename {
                     source_id: SourceId::new("cam"),
@@ -2032,6 +2179,15 @@ mod tests {
                 Edit::SourceDelete {
                     source_id: SourceId::new("cam"),
                 },
+                Edit::OutputSetEncoder {
+                    output_id: OutputId::new("yt"),
+                    profile_id: Some(EncoderProfileId::new("hq")),
+                },
+                Edit::EncoderUpdate {
+                    profile_id: EncoderProfileId::new("hq"),
+                    name: "Draft".into(),
+                    profile: EncoderProfile::DEFAULT,
+                },
                 Edit::OutputDelete {
                     output_id: OutputId::new("tw"),
                 },
@@ -2040,6 +2196,12 @@ mod tests {
                 },
                 Edit::OutputDelete {
                     output_id: OutputId::new("rec"),
+                },
+                Edit::EncoderDelete {
+                    profile_id: EncoderProfileId::new("low"),
+                },
+                Edit::EncoderDelete {
+                    profile_id: EncoderProfileId::new("hq"),
                 },
             ],
             expected_rev: None,
@@ -2055,6 +2217,7 @@ mod tests {
                 sources: vec![],
                 scenes: vec![],
                 outputs: vec![],
+                encoders: vec![],
             }
         );
         drain(&mut events);
@@ -2535,6 +2698,9 @@ mod tests {
                     output_id: OutputId::new("yt"),
                     state: OutputState::Active,
                     key_set: false,
+                    encoder: None,
+                    encoder_sessions: 0,
+                    hardware_sessions: 0,
                 }
             }
         );
@@ -2592,6 +2758,7 @@ mod tests {
                 outputs: vec![OutputInfo {
                     output_id: OutputId::new("yt"),
                     kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+                    encoder_profile: None,
                 }],
             })
         );
