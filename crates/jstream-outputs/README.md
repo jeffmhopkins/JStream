@@ -112,9 +112,10 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   checks whether one has finished or is due, so the caller's thread never waits for
   a reconnect. While the link is down, media is dropped and counted (`ReconnectStats`),
   never queued ([R-RT-004](../../docs/RULES.md#R-RT-004)). The last `onMetaData`, video
-  sequence header (AVC, or the enhanced RTMP `SequenceStart` of HEVC and AV1; never a
-  `SequenceEnd`) and AAC sequence header are kept as they pass through. After a
-  reconnect, video and audio are dropped (and counted) until the next video keyframe;
+  sequence header (AVC, or the enhanced RTMP `SequenceStart` of HEVC and AV1; never an
+  end of sequence) and AAC sequence header are kept as they pass through. After a
+  reconnect, video and audio are dropped (and counted) until the next video keyframe
+  (coded frames only: an AVC or enhanced RTMP end-of-sequence tag is not one);
   `onMetaData` and the video sequence header go out just before it, and the AAC
   sequence header just before the next audio packet, each at that packet's
   timestamp. An audio-only stream resumes at once. Timestamps continue from the lost
@@ -213,8 +214,9 @@ second connection, and the state sequence; a write that fails over an in-memory 
 (the failed packet counted, audio-only resuming at once); giving up after
 `max_attempts` and at the outage limit; a session that drops again at once
 continuing its outage, and one that stayed up starting a new one; an HEVC and an AV1
-stream of enhanced RTMP tags re-sending their `SequenceStart` and resuming at the
-keyframe after a drop, with a `SequenceEnd` dropped rather than kept as the header.
+stream of enhanced RTMP tags, and an AVC stream, re-sending their sequence header and
+resuming at the keyframe after a drop, with an end of sequence dropped rather than
+kept as the header or taken as the keyframe.
 Nothing contacts a
 real ingest server or reads the OS trust store. AMF0 tests live
 in `jstream-mux`. Recorder tests write to a directory under the system temp dir:
