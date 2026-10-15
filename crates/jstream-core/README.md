@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b1390806ba97cbf1", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#177 C4b, #225) into B5: re-read; text unchanged by the merge; history paragraph keeps item.set_source and item.move" }
+verified = { hash = "b3:e1d9f27170d4ff77", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; B5's Conflicts wording (item.set_source) from main kept; the mock references (differential script, internal) hold against the control Mock change" }
 -->
 
 ### Engine and sessions

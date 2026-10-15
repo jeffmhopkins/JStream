@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:2625f47b7e5a9809", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; mock contents hold" }
+verified = { hash = "b3:fb6654585c0e8adc", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; contents list holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:3e1ca5f158d1ed96", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: mock bullet keeps nesting cycles from item.add/item.set_source and the duplicated_from rules beside F3's encoder checks, matching mock.rs" }
+verified = { hash = "b3:c9db94df2b9b9a37", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read the merged Mock section; B5's item.set_source and duplicated_from text kept; undo bullet now says a deleted source comes back with its duplicated_from and item.set_source undoes to the previous source, as jstream-graph's inverses do" }
 -->
 
 ### The trait
