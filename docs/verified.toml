@@ -153,7 +153,7 @@ stamp = { hash = "b3:1f10a420e9f6a9bc" }
 stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:99bce65cb31e7d4f", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
+stamp = { hash = "b3:47d78ccae6c3ccc8", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: stale via the render README file (main's benchmarks paragraph); re-read the as-built paragraph and steps 1-6, still match render and core; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
@@ -2187,7 +2187,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:d6b297a7651495df", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph matches benches/composite.rs (every item rotated, CI panics without an adapter)" }
+stamp = { hash = "b3:d2dc1d36012c166b", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (#361 benchmarks) into #219: re-read; main's criterion Benchmarks paragraph sits beside E3b's GPU-frames-through-the-cache test text; benches compile against E3b's compositor (workspace clippy --all-targets clean); holds" }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }
