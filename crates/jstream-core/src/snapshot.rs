@@ -439,7 +439,25 @@ pub(crate) enum GpuKey {
     Layer(SceneId, usize),
     /// The program scene at the canvas size, when the output is another size.
     Program,
+    /// One step of the privacy blur at that width and height: the output itself, then
+    /// halved until it is at most [`PRIVACY_SIDE`] on its longest side (ADR-0027 §4).
+    Privacy(u32, u32),
 }
+
+/// What [`compose`] draws: which mix, and whether the privacy stage applies.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct View<'a> {
+    /// The mix to draw; `None` for the program.
+    pub(crate) mix: Option<&'a VideoMixId>,
+    /// `None` off the output path (`video.snapshot`, the editing view), where there is
+    /// no privacy stage. On it, `Some` with whether the privacy screen is on: its blur
+    /// layers are kept either way, so turning it on allocates nothing.
+    pub(crate) privacy: Option<bool>,
+}
+
+/// The longest side the privacy blur halves the picture down to before scaling it back
+/// up: a 1920×1080 output becomes 30×17, which hides faces and text.
+const PRIVACY_SIDE: u32 = 32;
 
 /// One composite in a frame: a scene at a nesting depth (the program scene is 0).
 #[derive(Debug, PartialEq)]
@@ -805,7 +823,7 @@ fn draw(
         compositor,
         cache,
         shot,
-        None,
+        View::default(),
         None,
         shot.canvas().map_err(from_render)?,
         true,
@@ -870,7 +888,7 @@ pub(crate) fn compose(
     compositor: &mut Compositor,
     cache: &mut ResourceCache<GpuKey>,
     shot: &Shot,
-    mix: Option<&VideoMixId>,
+    view: View<'_>,
     capture: Option<&CaptureFrame<'_>>,
     output: FrameSize,
     readback: bool,
@@ -888,7 +906,7 @@ pub(crate) fn compose(
             )?;
         }
     }
-    let passes = shot.passes_of(mix);
+    let passes = shot.passes_of(view.mix);
     let capture = match capture {
         Some(capture) if shot.uses_capture || passes.is_empty() => {
             cache.upload(
@@ -903,12 +921,16 @@ pub(crate) fn compose(
         }
         _ => None,
     };
+    if view.privacy.is_some() {
+        privacy_layers(compositor, cache, output)?;
+    }
     let Some((root, nested)) = passes.split_last() else {
         let items: Vec<Item<'_>> = match (cache.get(&GpuKey::Capture), capture) {
             (Some(image), Some(size)) => vec![fitted(image, size, output)],
             _ => Vec::new(),
         };
-        return compositor.render(&scene(output, Color::BLACK, &items), readback);
+        let shown = scene(output, Color::BLACK, &items);
+        return present(compositor, cache, &shown, view.privacy, readback);
     };
     let direct = output == canvas;
     for pass in nested {
@@ -939,12 +961,101 @@ pub(crate) fn compose(
     }
     fill_items(&mut items, cache, root);
     if direct {
-        return compositor.render(&scene(output, Color::BLACK, &items), readback);
+        let shown = scene(output, Color::BLACK, &items);
+        return present(compositor, cache, &shown, view.privacy, readback);
     }
     let layer = image(&GpuKey::Program)?;
     compositor.render_into(&scene(canvas, Color::BLACK, &items), layer)?;
     let placed = [fitted(layer, canvas, output)];
+    let shown = scene(output, Color::BLACK, &placed);
+    present(compositor, cache, &shown, view.privacy, readback)
+}
+
+/// Draws `shown`, the finished picture at the output size: as it is, or with the
+/// privacy screen on, blurred by halving it step by step into the [`GpuKey::Privacy`]
+/// layers and scaling the smallest back up. An error here fails the frame, and the
+/// render thread then sends black, never the picture (ADR-0027 §4: it fails closed).
+fn present(
+    compositor: &mut Compositor,
+    cache: &ResourceCache<GpuKey>,
+    shown: &Scene<'_>,
+    privacy: Option<bool>,
+    readback: bool,
+) -> Result<Output, RenderError> {
+    if privacy != Some(true) {
+        return compositor.render(shown, readback);
+    }
+    let layer = |size: FrameSize| {
+        cache
+            .get(&GpuKey::Privacy(size.width(), size.height()))
+            .ok_or_else(|| RenderError::Invalid {
+                what: "cache",
+                detail: format!("no privacy layer at {size:?}"),
+            })
+    };
+    let output = shown.canvas;
+    compositor.render_into(shown, layer(output)?)?;
+    let mut from = output;
+    for to in privacy_steps(output) {
+        let placed = [stretched(layer(from)?, from, to)];
+        compositor.render_into(&scene(to, Color::BLACK, &placed), layer(to)?)?;
+        from = to;
+    }
+    let placed = [stretched(layer(from)?, from, output)];
     compositor.render(&scene(output, Color::BLACK, &placed), readback)
+}
+
+/// Keeps the privacy blur's layers for an output of `output`'s size in the cache, so
+/// they are there, and allocated, before the screen is turned on.
+fn privacy_layers(
+    compositor: &Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    output: FrameSize,
+) -> Result<(), RenderError> {
+    for at in std::iter::once(output).chain(privacy_steps(output)) {
+        cache.layer(
+            compositor,
+            &GpuKey::Privacy(at.width(), at.height()),
+            at.width(),
+            at.height(),
+        )?;
+    }
+    Ok(())
+}
+
+/// The sizes the privacy blur halves the output through after the output itself: at
+/// least one step, then on until one is at most [`PRIVACY_SIDE`] on its longest side.
+fn privacy_steps(output: FrameSize) -> impl Iterator<Item = FrameSize> {
+    std::iter::successors(half(output), |size| {
+        if size.width().max(size.height()) > PRIVACY_SIDE {
+            half(*size)
+        } else {
+            None
+        }
+    })
+}
+
+/// Half of `size`, rounded up; `None` for a single pixel.
+fn half(size: FrameSize) -> Option<FrameSize> {
+    let half = FrameSize::new(size.width().div_ceil(2), size.height().div_ceil(2)).ok()?;
+    (half != size).then_some(half)
+}
+
+/// `image`, of size `from`, scaled to cover `into` exactly, each side on its own.
+fn stretched(image: &jstream_render::Image, from: FrameSize, into: FrameSize) -> Item<'_> {
+    Item {
+        image,
+        placement: Placement::Legacy(LegacyTransform {
+            scale: [
+                into.width() as f32 / from.width() as f32,
+                into.height() as f32 / from.height() as f32,
+            ],
+            ..LegacyTransform::IDENTITY
+        }),
+        crop: Crop::NONE,
+        opacity: OPAQUE,
+        visible: true,
+    }
 }
 
 /// Replaces `items` with the layers of `pass`. A layer whose image is not cached (a
@@ -1155,7 +1266,7 @@ pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
 pub(crate) mod tests {
     use super::{
         CaptureFrame, FIRST_RETRY, Frame, GpuKey, MAX_NESTING, MAX_RETRY, OpenBackoff, Placed,
-        Shot, SourceFrameError, SourceRef, base64, compose, decode_base64, decode_png, draw,
+        Shot, SourceFrameError, SourceRef, View, base64, compose, decode_base64, decode_png, draw,
         encode_png, fit, is_no_adapter, schedule,
     };
     use jstream_media::FrameSize;
@@ -1517,7 +1628,16 @@ pub(crate) mod tests {
         size: FrameSize,
     ) -> jstream_render::Snapshot {
         cache.begin_frame();
-        let output = compose(compositor, cache, shot, None, capture, size, true).expect("compose");
+        let output = compose(
+            compositor,
+            cache,
+            shot,
+            View::default(),
+            capture,
+            size,
+            true,
+        )
+        .expect("compose");
         drop(cache.end_frame(compositor));
         output.pixels().expect("invariant: read back").clone()
     }
@@ -1600,8 +1720,16 @@ pub(crate) mod tests {
 
         let mut draw = |mix: Option<&VideoMixId>| {
             cache.begin_frame();
-            let output = compose(&mut compositor, &mut cache, &shot, mix, None, square, true)
-                .expect("compose");
+            let output = compose(
+                &mut compositor,
+                &mut cache,
+                &shot,
+                View { mix, privacy: None },
+                None,
+                square,
+                true,
+            )
+            .expect("compose");
             drop(cache.end_frame(&compositor));
             output.pixels().expect("invariant: read back").clone()
         };
@@ -1614,6 +1742,59 @@ pub(crate) mod tests {
         let cam = draw(Some(&side));
         assert_eq!(cam.pixel(16, 16), Some(RED));
         assert_eq!(cam.pixel(16, 0), Some([0, 0, 0, 255]));
+    }
+
+    /// The privacy screen blurs the whole picture: the letterbox's sharp edge becomes a
+    /// ramp, while flat areas keep their colour. Off, it draws exactly what no screen
+    /// does (ADR-0027 §4).
+    #[test]
+    fn the_privacy_screen_blurs_the_picture() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let square = FrameSize::new(256, 256).expect("invariant: non-zero");
+        let shot = shot(vec![("program", vec![fill("green")])]);
+        let mut draw = |privacy| {
+            cache.begin_frame();
+            let output = compose(
+                &mut compositor,
+                &mut cache,
+                &shot,
+                View { mix: None, privacy },
+                None,
+                square,
+                true,
+            )
+            .expect("compose");
+            drop(cache.end_frame(&compositor));
+            output.pixels().expect("invariant: read back").clone()
+        };
+        let plain = draw(None);
+        assert_eq!(draw(Some(false)), plain);
+        // 1920x1080 fitted into 256x256 is 256x144, centred: rows 56 to 199.
+        assert_eq!(plain.pixel(128, 50), Some([0, 0, 0, 255]));
+        assert_eq!(plain.pixel(128, 60), Some(GREEN));
+
+        let covered = draw(Some(true));
+        assert_ne!(covered, plain);
+        assert_eq!(
+            covered.pixel(128, 128),
+            Some(GREEN),
+            "flat areas keep their colour"
+        );
+        assert_eq!(covered.pixel(128, 0), Some([0, 0, 0, 255]));
+        let ramp: Vec<u8> = (48..64)
+            .filter_map(|y| covered.pixel(128, y))
+            .map(|[_, g, _, _]| g)
+            .collect();
+        assert!(
+            ramp.windows(2).all(|w| w[0] <= w[1]),
+            "the edge rises steadily: {ramp:?}"
+        );
+        assert!(
+            ramp.iter().filter(|g| **g > 0 && **g < 255).count() >= 4,
+            "the edge is soft: {ramp:?}"
+        );
     }
 
     /// Frame after frame of the same shot reuses every texture: the nested-scene layers

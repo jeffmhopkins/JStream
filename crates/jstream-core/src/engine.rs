@@ -16,6 +16,7 @@ use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
+use crate::privacy::Privacy;
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
     OutputStats, Pending, PipelineEvent, RenderHub, Running, launch, launch_program, parts_from,
@@ -483,9 +484,12 @@ impl Engine {
     }
 
     /// Opens an event subscription: the stream, and the weak handle its session keeps
-    /// to end it.
+    /// to end it. While the privacy screen is on, the stream starts with
+    /// `privacy.changed`, so a new client never shows an uncovered picture (ADR-0027 §4).
     pub(crate) fn subscribe(&self) -> (Subscription, QueueRef) {
-        lock(&self.shared.state).subscribers.subscribe()
+        let mut state = lock(&self.shared.state);
+        let first = state.privacy.replay();
+        state.subscribers.subscribe(first)
     }
 
     /// Executes `call` for `client_id`, whose request it is, and wakes the subscribers
@@ -704,6 +708,7 @@ impl Engine {
                     .map(|(id, _)| id.clone())
                     .collect(),
                 hardware: own.hardware(),
+                dedicated: own.dedicated(),
             });
         (encoder, count(sessions.len()), hardware)
     }
@@ -796,6 +801,7 @@ impl Engine {
                     *lock(&host.open_timeout),
                     Arc::clone(&state.render),
                     state.audio.wanted(),
+                    state.privacy.flag(),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -1127,9 +1133,10 @@ impl Drop for SettleOnDrop<'_> {
 }
 
 /// Which encoder sessions `output_id` shares: the video mix it shows with that mix's
-/// size and rate now, and its profile with that profile's encoding now. An output with
-/// no mix, or one the host declared, gets the program at the capture size and base
-/// rate; one with no profile the engine's default.
+/// size and rate now, its profile with that profile's encoding now, and the output
+/// itself when it has its own video chain, so it shares with no one (ADR-0027 §3). An
+/// output with no mix, or one the host declared, gets the program at the capture size
+/// and base rate; one with no profile the engine's default.
 fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
     let state = graph.state();
     let output = state.output(output_id);
@@ -1148,9 +1155,13 @@ fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
                 size: jstream_media::FrameSize::new(spec.resolution.width, spec.resolution.height)
                     .ok(),
                 divisor: spec.fps_divisor,
+                owner: None,
             }
         });
-    (mix, profile_id, profile)
+    let owner = output
+        .filter(|output| output.has_video_chain())
+        .map(|_| output_id.clone());
+    (MixKey { owner, ..mix }, profile_id, profile)
 }
 
 /// Where a recording output in the collection records to, or `None` when the output
@@ -1484,6 +1495,8 @@ struct State {
     stats_seq: u64,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
+    /// The privacy screen. Runtime state, like `studio`: not part of `rev`.
+    privacy: Privacy,
 }
 
 impl State {
@@ -1716,6 +1729,20 @@ impl State {
                 }
                 return Ok(CallResult::Action {});
             }
+            Action::PrivacySet { on } => {
+                // The render thread covers the next frame it draws: it reads the flag.
+                if self.privacy.set(on, client_id) {
+                    self.subscribers.emit(
+                        &Event::PrivacyChanged {
+                            on,
+                            client_id: client_id.clone(),
+                            request_id: Some(request_id.clone()),
+                        },
+                        wake,
+                    );
+                }
+                return Ok(CallResult::Action {});
+            }
             other => return Err(not_implemented(other.name())),
         };
         for state in self.outputs.transition(&output_id, start)? {
@@ -1730,8 +1757,8 @@ impl State {
         Ok(CallResult::Action {})
     }
 
-    /// Collection reads go to `Graph::query`; `output.status` reads the outputs and
-    /// `studio.get` the studio state.
+    /// Collection reads go to `Graph::query`; `output.status` reads the outputs,
+    /// `studio.get` the studio state and `privacy.get` the privacy screen.
     fn query(&self, query: &Query) -> Result<CallResult, ProtocolError> {
         let result = match self.graph.query(query) {
             Some(result) => result?,
@@ -1748,6 +1775,9 @@ impl State {
                 },
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
+                },
+                Query::PrivacyGet => QueryResult::PrivacyGet {
+                    on: self.privacy.on(),
                 },
                 other => return Err(not_implemented(other.name())),
             },

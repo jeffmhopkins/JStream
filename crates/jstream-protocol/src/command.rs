@@ -518,6 +518,18 @@ pub enum Action {
         /// The scene to put on program.
         scene_id: SceneId,
     },
+    /// Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's
+    /// video is covered from the next frame: a heavy blur of the outgoing picture, or
+    /// black when the blur can't be drawn, never the picture itself. It is runtime
+    /// state, not collection state: it changes no `rev`, is never undone, goes to the
+    /// audit log, and the engine starts with it off. A change emits `privacy.changed`,
+    /// which `privacy.get` reads back; setting the state it already has succeeds and
+    /// emits nothing.
+    #[serde(rename = "privacy.set")]
+    PrivacySet {
+        /// Whether the privacy screen covers the outputs.
+        on: bool,
+    },
 }
 
 impl Action {
@@ -529,6 +541,7 @@ impl Action {
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
             Action::SceneSwitch { .. } => "scene.switch",
+            Action::PrivacySet { .. } => "privacy.set",
         }
     }
 }

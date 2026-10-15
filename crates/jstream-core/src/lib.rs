@@ -30,6 +30,7 @@ mod history;
 mod kinds;
 mod live;
 mod outputs;
+mod privacy;
 mod runtime;
 mod session;
 mod snapshot;

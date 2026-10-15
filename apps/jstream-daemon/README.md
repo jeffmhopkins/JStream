@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:8d152d2b8c43c8ac", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:115dcc074304b770", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; daemon passes the engine through, audit log text still holds (privacy lines are audit entries like any action)" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

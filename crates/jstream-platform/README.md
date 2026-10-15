@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:d622dbe750d3a37f", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:1af5cd57035c68cc", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; platform unchanged" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -137,7 +137,7 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:8c428570e20f0cf1", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 cascade from ARCH#crate-map: re-read; only the jstream-plugin-proto row changed (now built, L0, no unsafe); GPU frame design untouched; holds" }
+verified = { hash = "b3:1dafb77ac31d1ced", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; GPU frame hand-off unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

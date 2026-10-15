@@ -179,7 +179,19 @@ impl Control for MockControl {
 
     fn events(&self) -> EventStream {
         let queue = Arc::new(Mutex::new(Queue::default()));
-        lock(&self.shared).subscribers.push(Arc::downgrade(&queue));
+        {
+            let mut shared = lock(&self.shared);
+            // A subscriber that arrives while the privacy screen is on learns it first,
+            // as from the engine.
+            if let Some(by) = &shared.privacy {
+                lock(&queue).events.push_back(Event::PrivacyChanged {
+                    on: true,
+                    client_id: by.clone(),
+                    request_id: None,
+                });
+            }
+            shared.subscribers.push(Arc::downgrade(&queue));
+        }
         let mut mine = lock(&self.subscriptions);
         mine.retain(|weak| weak.strong_count() > 0);
         mine.push(Arc::downgrade(&queue));
@@ -224,6 +236,9 @@ struct State {
     /// rules (ADR-0030): the first scene created goes on program, and a deleted program
     /// scene gives way to the first scene left.
     program: Option<SceneId>,
+    /// Whether the privacy screen is on, as the client that turned it on: runtime
+    /// state, never undone (ADR-0027 §4).
+    privacy: Option<ClientId>,
 }
 
 /// How many undo steps each client keeps unless [`MockEngine::with_history_limit`]
@@ -639,6 +654,17 @@ impl State {
                 }
                 return Ok(CallResult::Action {});
             }
+            Action::PrivacySet { on } => {
+                if on != self.privacy.is_some() {
+                    self.privacy = on.then(|| client_id.clone());
+                    self.emit(Event::PrivacyChanged {
+                        on,
+                        client_id: client_id.clone(),
+                        request_id: Some(request_id.clone()),
+                    });
+                }
+                return Ok(CallResult::Action {});
+            }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
             Action::OutputSetKey { output_id, key } => {
@@ -749,6 +775,9 @@ impl State {
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
                 outputs: self.collection.output_infos(),
+            },
+            Query::PrivacyGet => QueryResult::PrivacyGet {
+                on: self.privacy.is_some(),
             },
             Query::StudioGet => QueryResult::StudioGet {
                 program_scene: self.program.clone(),
@@ -2148,6 +2177,64 @@ mod tests {
 
     fn code(error: &ControlError) -> Option<&'static str> {
         error.protocol().map(ProtocolError::code)
+    }
+
+    /// `privacy.set` is an action: no `rev`, an event only when the state changes, read
+    /// back by `privacy.get`, and replayed to a subscriber that arrives while it is on.
+    #[test]
+    fn privacy_is_runtime_state_replayed_to_new_subscribers() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let mut events = control.events();
+        let set = |on| {
+            let call = Call::Action {
+                action: Action::PrivacySet { on },
+            };
+            block_on(control.call(call)).expect("privacy.set");
+        };
+        let privacy = || match block_on(control.call(Call::Query {
+            query: Query::PrivacyGet,
+        }))
+        .expect("privacy.get")
+        .result
+        {
+            CallResult::Query {
+                result: QueryResult::PrivacyGet { on },
+            } => on,
+            other => panic!("not privacy.get: {other:?}"),
+        };
+        assert!(!privacy());
+        set(true);
+        set(true);
+        assert!(privacy());
+        let changed = drain(&mut events);
+        assert_eq!(changed.len(), 1, "{changed:?}");
+        assert!(matches!(
+            &changed[0],
+            Event::PrivacyChanged {
+                on: true,
+                request_id: Some(_),
+                ..
+            }
+        ));
+        assert_eq!(scene_list(&*control).0, Rev(0), "no rev");
+
+        let mut late = control.events();
+        assert!(matches!(
+            drain(&mut late).as_slice(),
+            [Event::PrivacyChanged {
+                on: true,
+                request_id: None,
+                ..
+            }]
+        ));
+        set(false);
+        assert!(!privacy());
+        assert!(matches!(
+            drain(&mut late).as_slice(),
+            [Event::PrivacyChanged { on: false, .. }]
+        ));
+        assert!(drain(&mut control.events()).is_empty(), "nothing to replay");
     }
 
     #[test]

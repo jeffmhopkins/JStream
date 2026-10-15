@@ -63,7 +63,7 @@ use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::{
     Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
 };
-use crate::snapshot::{self, CaptureFrame, GpuKey, Shot};
+use crate::snapshot::{self, CaptureFrame, GpuKey, Shot, View};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
 const FRAME_NUM: u32 = 1;
@@ -110,8 +110,13 @@ pub(crate) struct MixFrame {
     pub(crate) size: FrameSize,
     /// It is drawn on every `divisor`th base tick.
     pub(crate) divisor: u32,
+    /// The output whose own video chain it runs through, or `None` when it is shared.
+    /// It is drawn on its own even when another frame shows the same mix.
+    pub(crate) owner: Option<OutputId>,
     /// Whether this tick draws it.
     pub(crate) due: bool,
+    /// Whether the privacy screen covers it on this tick (ADR-0027 §4).
+    pub(crate) privacy: bool,
     /// Where it is drawn: RGBA8 at `size` once a draw succeeds.
     pub(crate) out: Vec<u8>,
 }
@@ -123,7 +128,8 @@ pub(crate) type OpenDraw = Arc<dyn Fn() -> Result<DrawFn, String> + Send + Sync>
 
 /// A CPU stand-in for [`gpu_draw`]: each due frame copies the captured RGBA8 frame when
 /// it is the capture's size, or fills black, which is what the GPU path draws for a
-/// collection with no scene. It ignores the scenes. Tests use it to run the pipeline
+/// collection with no scene. It ignores the scenes, and it can't blur, so under the
+/// privacy screen it draws black, as the GPU path does when its blur fails. Tests use it to run the pipeline
 /// without a wgpu adapter
 /// ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenDraw {
@@ -133,7 +139,7 @@ pub(crate) fn cpu_draw() -> OpenDraw {
                 for frame in frames.iter_mut().filter(|frame| frame.due) {
                     frame.out.clear();
                     match capture {
-                        Some(capture) if capture.size == frame.size => {
+                        Some(capture) if capture.size == frame.size && !frame.privacy => {
                             frame.out.extend_from_slice(capture.rgba);
                         }
                         _ => frame.out.resize(
@@ -310,6 +316,9 @@ pub(crate) struct MixKey {
     pub(crate) size: Option<FrameSize>,
     /// Frames are drawn on every `divisor`th base tick.
     pub(crate) divisor: u32,
+    /// The output whose own video chain the picture runs through, or `None` when the
+    /// output has no chain and shares the picture with every output on the same mix.
+    pub(crate) owner: Option<OutputId>,
 }
 
 impl MixKey {
@@ -318,13 +327,13 @@ impl MixKey {
         mix: None,
         size: None,
         divisor: 1,
+        owner: None,
     };
 }
 
-/// The key that decides which outputs share an encoder session: the mix they show, and
-/// the profile they name (`None` for the engine's default) with its encoding when the
-/// session opened. No output has a video chain yet, so the chain part of ADR-0027's key
-/// is the same for all of them.
+/// The key that decides which outputs share an encoder session (ADR-0027 §3): the mix
+/// they show, the profile they name (`None` for the engine's default) with its encoding
+/// when the session opened, and, for an output with its own video chain, that output.
 pub(crate) type EncodeKey = (MixKey, Option<EncoderProfileId>, EncoderProfile);
 
 /// The stage every running output shares: capture, the render thread compositing the
@@ -378,6 +387,7 @@ impl Program {
                 mix: key.0.mix.clone(),
                 size: key.0.size.unwrap_or(self.size),
                 divisor: key.0.divisor,
+                owner: key.0.owner.clone(),
             };
             let video = Arc::new(open_video(self.codecs.as_ref(), &feed, &key.2)?);
             let audio = Arc::new(open_audio_encoder(
@@ -546,6 +556,8 @@ struct Feed {
     mix: Option<VideoMixId>,
     size: FrameSize,
     divisor: u32,
+    /// The output whose own chain it runs through; `None` is shared.
+    owner: Option<OutputId>,
 }
 
 /// One video and one audio encoder session, shared by every running output with the
@@ -576,6 +588,12 @@ impl Encoders {
     /// The profile the sessions were opened with, or `None` for the default.
     pub(crate) fn profile_id(&self) -> Option<&EncoderProfileId> {
         self.key.1.as_ref()
+    }
+
+    /// Whether the sessions belong to one output because it has its own video chain,
+    /// rather than being shared by every output with the same mix and profile.
+    pub(crate) fn dedicated(&self) -> bool {
+        self.key.0.owner.is_some()
     }
 
     /// Whether the video encoder is a hardware one.
@@ -751,6 +769,9 @@ pub(crate) struct Parts {
     open_timeout: Duration,
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
+    /// Whether the privacy screen is on: the engine sets it, the render thread reads it
+    /// every tick, with no lock (ADR-0027 §4).
+    privacy: Arc<AtomicBool>,
 }
 
 pub(crate) fn parts_from(
@@ -759,6 +780,7 @@ pub(crate) fn parts_from(
     open_timeout: Duration,
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
+    privacy: Arc<AtomicBool>,
 ) -> Parts {
     Parts {
         clock: Arc::clone(&backends.clock),
@@ -769,6 +791,7 @@ pub(crate) fn parts_from(
         open_timeout,
         render,
         audio_sources,
+        privacy,
     }
 }
 
@@ -784,11 +807,15 @@ pub(crate) fn gpu_draw() -> OpenDraw {
             // nested-scene layers they share are kept for all of them.
             cache.begin_frame();
             for frame in frames.iter_mut().filter(|frame| frame.due) {
+                let view = View {
+                    mix: frame.mix.as_ref(),
+                    privacy: Some(frame.privacy),
+                };
                 snapshot::compose(
                     &mut compositor,
                     &mut cache,
                     shot,
-                    frame.mix.as_ref(),
+                    view,
                     capture,
                     frame.size,
                     true,
@@ -920,6 +947,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             size,
             period,
             stop: Arc::clone(&stop),
+            privacy: Arc::clone(&parts.privacy),
             ready: ready_tx,
             readbacks: Arc::clone(&readbacks),
             drops: capture_drops.clone(),
@@ -1236,6 +1264,8 @@ struct RenderJob {
     size: FrameSize,
     period: MediaTime,
     stop: Arc<AtomicBool>,
+    /// Whether the privacy screen is on, read at every tick.
+    privacy: Arc<AtomicBool>,
     ready: mpsc::Sender<Result<(), String>>,
     readbacks: Arc<AtomicU64>,
     drops: DropSnapshot,
@@ -1298,11 +1328,26 @@ impl Frames {
         self.capture = capture.stats();
     }
 
+    /// Turns the last drawn frame of every due mix opaque black, in place, so a tick
+    /// that could not draw under the privacy screen repeats nothing it showed before.
+    fn blacken_due(&mut self) {
+        for (frame, shown) in self.mixes.iter().zip(&mut self.shown) {
+            if frame.due {
+                for pixel in shown.chunks_exact_mut(4) {
+                    pixel.copy_from_slice(&[0, 0, 0, 255]);
+                }
+            }
+        }
+    }
+
     /// Feeds `input` the frames of `feed`, drawn alongside an existing session's with
     /// the same feed.
     fn add(&mut self, feed: Feed, input: VideoInput) {
         let found = self.mixes.iter().position(|frame| {
-            frame.mix == feed.mix && frame.size == feed.size && frame.divisor == feed.divisor
+            frame.mix == feed.mix
+                && frame.size == feed.size
+                && frame.divisor == feed.divisor
+                && frame.owner == feed.owner
         });
         match found {
             Some(at) => self.targets[at].push(input),
@@ -1311,7 +1356,9 @@ impl Frames {
                     mix: feed.mix,
                     size: feed.size,
                     divisor: feed.divisor,
+                    owner: feed.owner,
                     due: false,
+                    privacy: false,
                     out: Vec::new(),
                 });
                 self.shown.push(Vec::new());
@@ -1335,10 +1382,12 @@ impl Frames {
         }
     }
 
-    /// Marks the mixes due on base tick `index`, and returns how many are.
-    fn schedule(&mut self, index: u64) -> u64 {
+    /// Marks the mixes due on base tick `index`, each covered by the privacy screen when
+    /// `privacy`, and returns how many are due.
+    fn schedule(&mut self, index: u64, privacy: bool) -> u64 {
         let mut due = 0;
         for frame in &mut self.mixes {
+            frame.privacy = privacy;
             frame.due = index.is_multiple_of(u64::from(frame.divisor.max(1)));
             due += u64::from(frame.due);
         }
@@ -1404,6 +1453,7 @@ fn render_loop(job: RenderJob) {
         size,
         period,
         stop,
+        privacy,
         ready,
         readbacks,
         drops,
@@ -1469,8 +1519,11 @@ fn render_loop(job: RenderJob) {
         };
         skipped = skipped.saturating_add(missed);
         index = index.saturating_add(missed);
-        let drawn = frames.schedule(index);
+        let private = privacy.load(Ordering::Acquire);
+        let drawn = frames.schedule(index, private);
         index = index.saturating_add(1);
+        // Whether this tick's due frames were drawn; if not, the last ones repeat.
+        let mut fresh = false;
         if !broken && drawn > 0 {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
                 frames.read_capture(capture.as_mut(), size);
@@ -1479,6 +1532,7 @@ fn render_loop(job: RenderJob) {
             }));
             match tick {
                 Ok(Ok(freed)) => {
+                    fresh = true;
                     draw_errors = 0;
                     readbacks.fetch_add(drawn, Ordering::Relaxed);
                     if let Some(freed) = freed {
@@ -1515,10 +1569,15 @@ fn render_loop(job: RenderJob) {
             reader.adopt();
         }
         drops.publish(capture_drops(frames.capture).saturating_add(render_tick_drops(skipped)));
+        if private && !fresh {
+            // The privacy screen fails closed: a frame it didn't cover is never repeated,
+            // black goes out instead (ADR-0027 §4).
+            frames.blacken_due();
+        }
         for ((frame, shown), targets) in frames
             .mixes
             .iter()
-            .zip(&frames.shown)
+            .zip(&mut frames.shown)
             .zip(&mut frames.targets)
         {
             if frame.due && !shown.is_empty() {
@@ -1933,8 +1992,8 @@ mod tests {
     use jstream_media::{FrameSize, MediaTime, Timebase};
     use jstream_platform::{HardwarePreference, RateControl};
     use jstream_protocol::{
-        EncoderProfile, HardwarePreference as ProfileHardware, RateControl as ProfileRate,
-        VideoMixId,
+        EncoderProfile, HardwarePreference as ProfileHardware, OutputId,
+        RateControl as ProfileRate, VideoMixId,
     };
 
     /// Every target is pushed once; exactly the ones that refuse are taken out and
@@ -1968,6 +2027,7 @@ mod tests {
             mix: None,
             size: FrameSize::new(64, 36).expect("size"),
             divisor: 1,
+            owner: None,
         };
         let config = video_config(size, &EncoderProfile::DEFAULT).expect("default");
         assert_eq!(config.rate_control, RateControl::Cbr { kbps: 2500 });
@@ -2007,6 +2067,7 @@ mod tests {
             mix: Some(VideoMixId::new("half")),
             size: FrameSize::new(1280, 720).expect("size"),
             divisor: 2,
+            owner: None,
         };
         let config = video_config(&feed, &EncoderProfile::DEFAULT).expect("default");
         assert_eq!(config.size, feed.size);
@@ -2034,6 +2095,7 @@ mod tests {
             mix: mix.map(VideoMixId::new),
             size,
             divisor,
+            owner: None,
         };
         let mut frames = Frames {
             source: Vec::new(),
@@ -2057,10 +2119,11 @@ mod tests {
         frames.add(feed(None, 1), input());
         assert_eq!(frames.mixes.len(), 2);
         assert_eq!(frames.targets[0].len(), 2);
-        assert_eq!(frames.schedule(0), 2);
-        assert_eq!(frames.schedule(1), 1);
+        assert_eq!(frames.schedule(0, false), 2);
+        assert_eq!(frames.schedule(1, false), 1);
         assert!(frames.mixes[0].due && !frames.mixes[1].due);
-        assert_eq!(frames.schedule(4), 2);
+        assert_eq!(frames.schedule(4, true), 2);
+        assert!(frames.mixes.iter().all(|frame| frame.privacy));
         frames.targets[0].clear();
         let mut freed = 0;
         frames.prune(|_| freed += 1);
@@ -2068,6 +2131,83 @@ mod tests {
         assert_eq!(frames.mixes.len(), 1);
         assert_eq!(frames.mixes[0].mix, Some(VideoMixId::new("half")));
         assert_eq!(frames.shown.len(), 1);
+    }
+
+    /// An output with its own video chain gets its own drawn frame even when another
+    /// session shows the same mix at the same size and rate (ADR-0027 §3).
+    #[test]
+    fn an_owned_feed_is_drawn_on_its_own() {
+        let shared = Feed {
+            mix: None,
+            size: FrameSize::new(64, 36).expect("size"),
+            divisor: 1,
+            owner: None,
+        };
+        let owned = Feed {
+            owner: Some(OutputId::new("rec")),
+            ..shared.clone()
+        };
+        let mut frames = Frames {
+            source: Vec::new(),
+            source_version: 0,
+            mixes: Vec::new(),
+            shown: Vec::new(),
+            targets: Vec::new(),
+            capture: jstream_platform::CaptureStats::default(),
+            warned_format: false,
+            capture_failing: false,
+        };
+        let session = open_video(
+            &jstream_platform::fake::FakeCodecs,
+            &shared,
+            &EncoderProfile::DEFAULT,
+        )
+        .expect("fake session");
+        frames.add(shared.clone(), session.input());
+        frames.add(owned.clone(), session.input());
+        frames.add(owned, session.input());
+        frames.add(shared, session.input());
+        assert_eq!(frames.mixes.len(), 2);
+        assert_eq!(frames.mixes[1].owner, Some(OutputId::new("rec")));
+        assert_eq!((frames.targets[0].len(), frames.targets[1].len()), (2, 2));
+        assert_eq!(frames.schedule(0, false), 2, "both are drawn");
+    }
+
+    /// Under the privacy screen, a tick that could not draw blackens the frames due on
+    /// it rather than repeating what they showed; frames not due keep theirs.
+    #[test]
+    fn the_privacy_screen_fails_closed() {
+        let feed = |divisor| Feed {
+            mix: None,
+            size: FrameSize::new(2, 1).expect("size"),
+            divisor,
+            owner: None,
+        };
+        let mut frames = Frames {
+            source: Vec::new(),
+            source_version: 0,
+            mixes: Vec::new(),
+            shown: Vec::new(),
+            targets: Vec::new(),
+            capture: jstream_platform::CaptureStats::default(),
+            warned_format: false,
+            capture_failing: false,
+        };
+        let session = open_video(
+            &jstream_platform::fake::FakeCodecs,
+            &feed(1),
+            &EncoderProfile::DEFAULT,
+        )
+        .expect("fake session");
+        frames.add(feed(1), session.input());
+        frames.add(feed(2), session.input());
+        for shown in &mut frames.shown {
+            *shown = vec![200; 8];
+        }
+        assert_eq!(frames.schedule(1, true), 1);
+        frames.blacken_due();
+        assert_eq!(frames.shown[0], [0, 0, 0, 255, 0, 0, 0, 255]);
+        assert_eq!(frames.shown[1], [200; 8], "not due, not pushed");
     }
 
     fn us(ticks: i64) -> MediaTime {

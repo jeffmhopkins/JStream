@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:7ae092cc86761fc9", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:2258b520591cc757", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; privacy muting is not built, audio unchanged" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -176,7 +176,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:217b3486ff51b658", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:b2738f16f48eef5f", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; mixer does not read the privacy flag yet, text holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

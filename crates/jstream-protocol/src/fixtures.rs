@@ -384,6 +384,7 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
         },
+        Action::PrivacySet { on: true },
     ]
 }
 
@@ -405,6 +406,7 @@ pub(crate) fn queries() -> Vec<Query> {
         },
         Query::OutputList,
         Query::StudioGet,
+        Query::PrivacyGet,
         Query::EncoderList,
         Query::VideoMixList,
         Query::DeletePlan {
@@ -644,6 +646,20 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 profile_id: None,
                 shared_with: vec![OutputId::new("out_tw")],
                 hardware: false,
+                dedicated: false,
+            }),
+            encoder_sessions: 2,
+            hardware_sessions: 1,
+        },
+        QueryResult::OutputStatus {
+            output_id: OutputId::new("out_rec"),
+            state: OutputState::Active,
+            key_set: false,
+            encoder: Some(EncoderSessionInfo {
+                profile_id: None,
+                shared_with: vec![],
+                hardware: true,
+                dedicated: true,
             }),
             encoder_sessions: 2,
             hardware_sessions: 1,
@@ -718,6 +734,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::StudioGet {
             program_scene: None,
         },
+        QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {
             rev: Rev(12),
             encoders: encoder_infos(),
@@ -796,6 +813,11 @@ pub(crate) fn events() -> Vec<Event> {
         program_scene: None,
         client_id: ClientId::new("cli_8"),
         request_id: None,
+    });
+    events.push(Event::PrivacyChanged {
+        on: true,
+        client_id: ClientId::new("cli_7"),
+        request_id: Some(RequestId::new("r3")),
     });
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::StatsTick {

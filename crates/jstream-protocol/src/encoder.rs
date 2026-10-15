@@ -233,6 +233,12 @@ pub struct EncoderSessionInfo {
     pub shared_with: Vec<OutputId>,
     /// Whether the session's video encoder is a hardware one.
     pub hardware: bool,
+    /// Whether the output has the session to itself by rule: an output with its own
+    /// video chain never shares (ADR-0027 §2), so its picture costs one more GPU pass
+    /// and one more encoder session. Omitted when false, which is every output until
+    /// video chains exist.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub dedicated: bool,
 }
 
 #[cfg(test)]

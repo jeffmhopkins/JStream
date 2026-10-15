@@ -73,6 +73,10 @@ pub enum Query {
     /// collection state (ADR-0030), so the result carries no `rev`.
     #[serde(rename = "studio.get")]
     StudioGet,
+    /// Reads whether the privacy screen is on (ADR-0027 §4). Runtime state, so the
+    /// result carries no `rev`.
+    #[serde(rename = "privacy.get")]
+    PrivacyGet,
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
@@ -125,6 +129,7 @@ impl Query {
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
             Query::StudioGet => "studio.get",
+            Query::PrivacyGet => "privacy.get",
             Query::EncoderList => "encoder.list",
             Query::VideoMixList => "video_mix.list",
             Query::DeletePlan { .. } => "delete.plan",
@@ -258,6 +263,12 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
     },
+    /// The result of `privacy.get`. Runtime state, so it carries no `rev`.
+    #[serde(rename = "privacy.get")]
+    PrivacyGet {
+        /// Whether the privacy screen covers the outputs.
+        on: bool,
+    },
     /// The result of `encoder.list`.
     #[serde(rename = "encoder.list")]
     EncoderList {
@@ -302,6 +313,7 @@ impl QueryResult {
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::StudioGet { .. } => "studio.get",
+            QueryResult::PrivacyGet { .. } => "privacy.get",
             QueryResult::EncoderList { .. } => "encoder.list",
             QueryResult::VideoMixList { .. } => "video_mix.list",
             QueryResult::DeletePlan { .. } => "delete.plan",

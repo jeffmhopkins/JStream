@@ -53,6 +53,20 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<RequestId>,
     },
+    /// The privacy screen was turned on or off with `privacy.set` (ADR-0027 §4). It is
+    /// runtime state, so the event carries no `rev`. A client that subscribes while the
+    /// screen is on gets `privacy.changed` first, naming the client that turned it on
+    /// and no `request_id`, so no client shows it as off.
+    #[serde(rename = "privacy.changed")]
+    PrivacyChanged {
+        /// Whether the privacy screen now covers the outputs.
+        on: bool,
+        /// The client whose request caused it.
+        client_id: ClientId,
+        /// That client's request ID, so it can match the event to its own response.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<RequestId>,
+    },
     /// This connection's queued events were dropped because the client read them too
     /// slowly: the server keeps a bounded buffer per connection and empties it when it
     /// overflows. `state.changed` events may be among those lost, so the client re-reads
@@ -95,6 +109,7 @@ impl Event {
             Event::EventsDropped { .. } => Some("events.dropped"),
             Event::StatsTick { .. } => Some("stats.tick"),
             Event::StudioChanged { .. } => Some("studio.changed"),
+            Event::PrivacyChanged { .. } => Some("privacy.changed"),
             Event::Unknown => None,
         }
     }

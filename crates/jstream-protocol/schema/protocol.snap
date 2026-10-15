@@ -100,6 +100,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             "scene_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "Turns the privacy screen on or off (ADR-0027 §4). While it is on, every output's\nvideo is covered from the next frame: a heavy blur of the outgoing picture, or\nblack when the blur can't be drawn, never the picture itself. It is runtime\nstate, not collection state: it changes no `rev`, is never undone, goes to the\naudit log, and the engine starts with it off. A change emits `privacy.changed`,\nwhich `privacy.get` reads back; setting the state it already has succeeds and\nemits nothing.",
+          "properties": {
+            "on": {
+              "description": "Whether the privacy screen covers the outputs.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "privacy.set",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "on"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -1430,6 +1448,10 @@ source: crates/jstream-protocol/src/fixtures.rs
     "EncoderSessionInfo": {
       "description": "The encoder session a running output uses, as `output.status` reports it.",
       "properties": {
+        "dedicated": {
+          "description": "Whether the output has the session to itself by rule: an output with its own\nvideo chain never shares (ADR-0027 §2), so its picture costs one more GPU pass\nand one more encoder session. Omitted when false, which is every output until\nvideo chains exist.",
+          "type": "boolean"
+        },
         "hardware": {
           "description": "Whether the session's video encoder is a hardware one.",
           "type": "boolean"
@@ -1643,6 +1665,40 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "type",
+            "client_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The privacy screen was turned on or off with `privacy.set` (ADR-0027 §4). It is\nruntime state, so the event carries no `rev`. A client that subscribes while the\nscreen is on gets `privacy.changed` first, naming the client that turned it on\nand no `request_id`, so no client shows it as off.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose request caused it."
+            },
+            "on": {
+              "description": "Whether the privacy screen now covers the outputs.",
+              "type": "boolean"
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RequestId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "That client's request ID, so it can match the event to its own response."
+            },
+            "type": {
+              "const": "privacy.changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "on",
             "client_id"
           ],
           "type": "object"
@@ -2761,6 +2817,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Reads whether the privacy screen is on (ADR-0027 §4). Runtime state, so the\nresult carries no `rev`.",
+          "properties": {
+            "type": {
+              "const": "privacy.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the collection's encoder profiles, ordered by ID.",
           "properties": {
             "type": {
@@ -3138,6 +3207,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `privacy.get`. Runtime state, so it carries no `rev`.",
+          "properties": {
+            "on": {
+              "description": "Whether the privacy screen covers the outputs.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "privacy.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "on"
           ],
           "type": "object"
         },
@@ -4025,5 +4112,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.18"
+  "title": "JStream protocol 0.19"
 }

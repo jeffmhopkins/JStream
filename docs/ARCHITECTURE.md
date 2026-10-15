@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:bfd3c7dc4a7b7241", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:5eb19470cd7fc547", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): encoder sharing and privacy bullets now say what is built (owner key, blur on/off) and what isn't (look, slate, muted sources)" }
 -->
 
 ```
@@ -312,14 +312,19 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   output with a video chain, even one holding only disabled filters, gets its own render
   pass and session, keyed by its output ID. An output's own audio chain gives it its own
   audio encode and never affects video sharing. Hardware session caps differ by GPU
-  vendor, so the engine reports, per output, whether it shares and with which outputs,
-  plus the sessions in use. It does not guess the caps.
+  vendor, so the engine reports, per output, whether it shares and with which outputs
+  and whether its session is its own, plus the sessions in use. It does not guess the
+  caps. Outputs carry no video chain until filters land, so for now every output shares
+  by `(video_mix, encoder_profile)`; the engine already keys and draws an output with a
+  chain on its own.
 - **Privacy screen** ([ADR-0027](adr/0027-program-master-and-output-chains.md)): whether
   it is on is runtime state, set by an action and never stored in the collection; it
   starts off. The collection's `privacy` setting only says how it looks (a blur or a
   slate) and which sources it mutes, by default every audio input-device source,
   independently of each source's own mute. While on, it covers every output and every
-  preview stream of a post-master stage.
+  preview stream of a post-master stage. Built so far: on and off, covering every
+  output's video with the default blur. The look setting, the slate and the muted
+  sources are not built yet.
 - **Audio** ([ADR-0028](adr/0028-audio-model-v2.md)): sources feed buses through the send
   matrix; buses feed outputs and monitors, never other buses. Every audio source gets a
   send to the master bus ("Program output") at 0 dB. Per source: stream → audio filters →
@@ -397,7 +402,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:c966f5af71bac4da", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:b6316996fba9a447", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): privacy flag paragraph rewritten for the atomic flag, preallocated blur layers and fail-closed black" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -523,18 +528,21 @@ alone don't order: the marker and generation stores and reads are `SeqCst`, with
 `SeqCst` fence between each side's store and its load. A fence doesn't allocate, lock
 or wait, so R-RT-001 and R-RT-002 still hold.
 
-The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
-reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
-so it takes effect on the next tick and block. The blur or slate pass exists whenever an
-output does, so turning privacy on allocates nothing on a real-time thread. Not built
-yet.
+The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) reaches the
+render thread as a lock-free atomic flag, not a snapshot rebuild, so it takes effect on
+the next tick: the engine stores it with release ordering under its lock, and the thread
+loads it with acquire ordering at the start of each tick. The blur pass's layers are
+kept whenever a mix is drawn, so turning privacy on allocates nothing on a real-time
+thread. The flag fails closed: a tick under privacy that couldn't draw pushes black,
+never the last frame. The mixer thread will read it the same way once privacy mutes
+sources; not built yet.
 
 <a id="protocol"></a>
 ## Control protocol
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:cf104adf25c6219d", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:e05f90a723a84644", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): privacy screen bullet no longer planned (0.19, get, replay as first event); encoder sessions bullet names dedicated" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -587,19 +595,21 @@ The wire format, versioning, error codes and compatibility policy are designed i
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
   rather than overwrite another client's later change (protocol 0.10).
-- **Privacy screen** (planned): the action `privacy.set { on }` on the master stage, never
-  undoable or batchable and with no `rev` change; every change emits
-  `privacy.changed { on }` to every client and goes to the audit log
-  ([ADR-0027](adr/0027-program-master-and-output-chains.md)). A batch holds only edits,
-  so one naming `privacy.set` is refused whole with the stable code `malformed`, and
-  nothing in it is applied. A client that connects while privacy is on gets
-  `privacy.changed { on: true }` right after its handshake, so no client shows it as
-  off. Preview streams show the pre-master stage (the editing view) by
+- **Privacy screen** (protocol 0.19): the action `privacy.set { on }` on the master
+  stage, never undoable or batchable and with no `rev` change; every change emits
+  `privacy.changed { on }`, naming the client and request, to every client, and every
+  `privacy.set` goes to the audit log with the state it asked for
+  ([ADR-0027](adr/0027-program-master-and-output-chains.md)). `privacy.get` reads it. A
+  batch holds only edits, so one naming `privacy.set` is refused whole with the stable
+  code `malformed`, and nothing in it is applied. A client that connects while privacy is
+  on gets `privacy.changed { on: true }` as the first event of its subscription, so no
+  client shows it as off. Preview streams show the pre-master stage (the editing view) by
   default; a client asks for the post-master stage to see what viewers see, and only
   that stage is covered by the privacy screen.
 - **Encoder sessions** (protocol 0.13): `output.status` reports, per running output,
-  its encoder session's profile and the other outputs sharing it, plus the sessions and
-  hardware sessions in use. A profile's settings and the output's video mix at start
+  its encoder session's profile, the other outputs sharing it and whether the session is
+  dedicated to it because of its own video chain (0.19), plus the sessions and hardware
+  sessions in use. A profile's settings and the output's video mix at start
   count, so an output started after `encoder.update` gets a session of its own, and
   outputs on different mixes never share one. Planned: when the encoder refuses a
   session, `output.start` fails with a stable session-limit error code naming the
@@ -666,11 +676,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:70eaa886969d63fd", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:ca87f89221eab2bd", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): added privacy to the tool nouns; rest re-read and holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio`, `video` and `video_mix` so far; `audio`, `youtube`
+  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `privacy`, `scene`, `source`, `state`, `studio`, `video` and `video_mix` so far; `audio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -710,7 +720,7 @@ verified = { hash = "b3:70eaa886969d63fd", by = "agent:claude@session_01KvbMUfF6
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:dc199b6560c865f5", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
+verified = { hash = "b3:5654c2edc2ddd5ee", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): output path paragraph says the privacy stage and the key's output part are built, chains are not" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -793,7 +803,9 @@ output: mix → master video chain → the output's own video chain → privacy 
 conversion (step 4) → encoder. The render plan has a master node per consumed mix, a
 node per output with a video chain, and a privacy node per output. The privacy stage
 comes last, so no output chain can undo it, and it fails closed: if its pass can't run,
-the output gets a black frame. None of this is built yet.
+the output gets a black frame. Built so far: the privacy stage, as a blur after the
+mix's draw (a chain of half-size downsamples to a small layer, stretched back up), and
+the sharing key's output part. The master and output chains are not built yet.
 
 <a id="browser-source"></a>
 ## Browser source

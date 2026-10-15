@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:a1f50d3313163f2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
+verified = { hash = "b3:00e813668bd2fd0b", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; nothing about events or actions it lists changed" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b3b47fde294c3bc0", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:318f8213f4a20dc7", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): privacy.changed request IDs are rewritten like state/studio.changed (session.rs caused_by)" }
 -->
 
 ### Listening and admission
@@ -216,7 +216,7 @@ task speaks the envelope
   readable. Binary frames get `malformed` too, until binary streams are designed.
   Messages over 4 MiB close the connection.
 - **Request IDs.** A `Control` session assigns its own IDs, which appear in the
-  `state.changed` and `studio.changed` events its calls cause. The task maps them back to the client's wire
+  `state.changed`, `studio.changed` and `privacy.changed` events its calls cause. The task maps them back to the client's wire
   IDs, so a client matches its event to its response by the ID it chose, as in the
   protocol README's example. An event can arrive before the answer that reveals the
   mapping, so while calls are in flight it is held back, with every event after it to

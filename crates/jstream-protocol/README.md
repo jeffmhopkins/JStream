@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:c935ee6cafb73132", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:c2ba1be4af6dad7b", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): added privacy.set/get/changed and dedicated to the module list and version line" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -42,7 +42,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `video_mix.create`, `video_mix.update`, `video_mix.delete`), with `ItemTransform`
   (deprecated), `Crop`, `SourceKind` and `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch`);
+  `scene.switch`, `privacy.set`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
@@ -52,7 +52,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
-  and `EncoderSessionInfo`, the per-output sharing `output.status` reports
+  and `EncoderSessionInfo`, the per-output sharing and cost `output.status` reports
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Video mixes** (`mix.rs`): `VideoMix`, what an output's video shows: a `MixInput`
   (`program`, `preview` or one `scene`), a `MixResolution` and an `fps_divisor` of the
@@ -60,7 +60,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   implementation), and `VideoMixInfo`.
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `video_mix.list`, `video.snapshot`, `kind.list`, `kind.describe`,
-  `delete.plan` (with its `DeleteTarget`) and `studio.get`, with `QueryResult` and the `SceneSummary`,
+  `delete.plan` (with its `DeleteTarget`), `studio.get` and `privacy.get`, with `QueryResult` and the `SceneSummary`,
   `SceneInfo`, `SourceInfo` and `ItemInfo`
   shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
@@ -74,7 +74,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No kind is defined here.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
-  `events.dropped` and `stats.tick`.
+  `privacy.changed`, `events.dropped` and `stats.tick`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
@@ -91,9 +91,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
-  video mixes (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and
-  the mixes in `state.get` and `output.list`); 0.17 added `scene.create`'s optional
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of the
+  privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`) and the `dedicated`
+  flag on an output's encoder session; 0.18 added video mixes (the `video_mix.*` edits,
+  `output.set_video_mix`, `video_mix.list` and the mixes in `state.get` and
+  `output.list`), 0.17 `scene.create`'s optional
   `role`, 0.16 `scene.switch`, `studio.get` and `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
@@ -127,7 +129,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:0e30e079fb40878a", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:0aebb4ab79cfbe6c", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read queries, events and output.status text; privacy.get, privacy.changed (replay on subscribe) and dedicated documented" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -422,8 +424,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the
   credential store holds its key (missing from a pre-0.7 server, it parses as
   `false`). While it runs, `encoder` names its session's profile (absent for the
-  default), the other running outputs that share the session (`shared_with`, by ID)
-  and whether the session is a hardware one; `encoder_sessions` and
+  default), the other running outputs that share the session (`shared_with`, by ID),
+  whether the session is a hardware one, and whether it is `dedicated` to this output
+  because the output has its own video chain (0.19; omitted when false), so it can
+  never be shared; `encoder_sessions` and
   `hardware_sessions` count the video sessions open across every output, since
   hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
   the cap (0.13; missing, they parse as absent and 0). None of it is collection state,
@@ -434,6 +438,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   has no scene). Runtime state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
+- `privacy.get`: whether the privacy screen is on (`on`). Runtime state, so no `rev`.
+  Added in 0.19.
 - `delete.plan {target}`: the batch that deletes a scene or source (`target` is
   `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
   everything that refers to it, as `edits` and the `rev` it was planned at, or
@@ -561,6 +567,12 @@ After `welcome`, the server pushes every event to every client.
   `state.changed`. A switch to the scene already on program emits nothing.
   Program is runtime state, so it carries no `rev`
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). Added in 0.16.
+- `privacy.changed {on, client_id, request_id?}` reports the privacy screen going on or
+  off, with the client and request that did it. A `privacy.set` that changes nothing
+  emits nothing. A client that subscribes while the screen is on gets this event first,
+  naming the client that turned it on and with no `request_id`, so it never shows an
+  uncovered picture. Runtime state, so no `rev`
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). Added in 0.19.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

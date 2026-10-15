@@ -285,6 +285,10 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
         Action::SceneSwitch { scene_id } => {
             writeln!(out, "{} accepted for {scene_id} ({id})", action.name())?;
         }
+        Action::PrivacySet { on } => {
+            let on = if *on { "on" } else { "off" };
+            writeln!(out, "{} {on} accepted ({id})", action.name())?;
+        }
         other => writeln!(out, "{} accepted ({id})", other.name())?,
     }
     Ok(())
@@ -331,6 +335,9 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             let key = if *key_set { "set" } else { "not set" };
             write!(out, "{output_id}: {}, stream key {key}", wire_name(state))?;
             match encoder.as_ref().map(|encoder| &encoder.shared_with) {
+                Some(_) if encoder.as_ref().is_some_and(|encoder| encoder.dedicated) => {
+                    write!(out, ", own encoder (own video chain)")?;
+                }
                 Some(shared) if shared.is_empty() => write!(out, ", own encoder")?,
                 Some(shared) => {
                     let names: Vec<_> = shared.iter().map(ToString::to_string).collect();
@@ -348,6 +355,9 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             Some(scene_id) => writeln!(out, "program: {scene_id}")?,
             None => writeln!(out, "program: none (no scenes)")?,
         },
+        QueryResult::PrivacyGet { on } => {
+            writeln!(out, "privacy: {}", if *on { "on" } else { "off" })?;
+        }
         QueryResult::SourceList { rev, sources } => {
             writeln!(out, "rev {rev}")?;
             write_sources(out, "", sources)?;
@@ -554,6 +564,18 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
                 None => write!(out, "studio.changed program none")?,
             }
             write!(out, " by {client_id}")?;
+            if let Some(request_id) = request_id {
+                write!(out, " ({request_id})")?;
+            }
+            writeln!(out)?;
+        }
+        Event::PrivacyChanged {
+            on,
+            client_id,
+            request_id,
+        } => {
+            let on = if *on { "on" } else { "off" };
+            write!(out, "privacy.changed {on} by {client_id}")?;
             if let Some(request_id) = request_id {
                 write!(out, " ({request_id})")?;
             }

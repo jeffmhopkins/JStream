@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:f98e8397d5ff185c", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:2b39df3e68cdacfb", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): added privacy.rs to the module list" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -72,6 +72,10 @@ state machine. Contents:
 - **Studio** (`studio.rs`): which scene is on program, runtime state under the
   collection lock that `scene.switch` sets and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
+- **Privacy** (`privacy.rs`): whether the privacy screen is on and which client turned
+  it on, runtime state under the collection lock that `privacy.set` sets and
+  `privacy.get` reads, with the atomic flag the render thread reads
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox, composites
   each video mix the running outputs show, on its own ticks, from the render snapshot
@@ -158,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:d9735f02390f7376", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:643cef20e640ac30", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): new Privacy screen subsection; actions/queries, encoder profile sharing (owner, dedicated) and audit field updated" }
 -->
 
 ### Engine and sessions
@@ -253,9 +257,11 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
-  `output.set_key` and `output.clear_key` (see *Stream keys* below), and
-  `scene.switch` (see *Program scene* below).
-- **`studio.get`** reads the program scene under the collection lock.
+  `output.set_key` and `output.clear_key` (see *Stream keys* below),
+  `scene.switch` (see *Program scene* below) and `privacy.set` (see *Privacy screen*
+  below).
+- **`studio.get`** reads the program scene under the collection lock, and
+  **`privacy.get`** the privacy screen.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -331,6 +337,29 @@ with its first scene on program. The program mix, on the render thread and in
 `video.snapshot`, draws the program scene, and a switch re-plans it, so the next frame
 shows the new scene: a cut. Only a cut exists; transitions and the preview scene come
 later.
+
+### Privacy screen
+
+The privacy screen is runtime state in `privacy.rs`, under the collection lock like the
+program scene, never saved and never part of `rev`
+([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). `privacy.set`
+turns it on or off and emits `privacy.changed` naming the client and request; setting
+the state it already has emits nothing. A subscription opened while it is on starts
+with `privacy.changed { on: true }` naming the client that turned it on, with no
+request. Every `privacy.set` is audited with the state it asked for.
+
+The engine stores an atomic flag with release ordering when the state changes; the
+render thread loads it with acquire ordering at the start of each tick and marks every
+mix it draws on that tick covered. A covered mix is drawn as usual, then blurred last,
+after the letterbox: the frame is halved, rounding up, until its longer side is 32
+pixels or less, and the smallest layer is stretched back to the frame (the linear
+sampler makes each halving a box filter). Those layers live in the frame's
+`ResourceCache` whenever a mix is drawn, so turning privacy on allocates nothing on
+the render thread. It fails closed: a covered tick whose draw failed blackens the
+frames due on it instead of repeating them, including after a fatal draw error. The
+CPU stand-in draws covered frames black. `video.snapshot` shows the editing view and is
+never covered. Only the default blur exists: the look setting, the slate and muting
+sources come later.
 
 ### Snapshots
 
@@ -581,13 +610,15 @@ entries.
 `EncoderProfile::DEFAULT` when it has none. Running outputs share an encoder session
 when they have the same key: the video mix (or none, for the program at the capture
 size and base rate), its resolution and rate, and the profile ID and its settings, all
-as they were at start. So `encoder.update`, `output.set_encoder`, a mix's new
+as they were at start. An output with its own video chain adds its ID to the key, so
+its session and its drawn frame are its own; outputs carry no chain yet
+(`Output::has_video_chain` is false), so none does so far. So `encoder.update`, `output.set_encoder`, a mix's new
 resolution or rate, or `output.set_video_mix` on a running output changes nothing until
 it restarts, and an
 output started after the update opens a session of its own rather than joining one
 with stale settings. `output.status` reports, per running output, the profile, the
-other outputs on the same session and whether its video encoder is a hardware one,
-plus the video sessions and hardware sessions open
+other outputs on the same session, whether its video encoder is a hardware one and
+whether the session is `dedicated` to it, plus the video sessions and hardware sessions open
 ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); it does not
 guess a hardware cap. A hardware session limit fails the start with the encoder's own
 error for now, not a session-limit code.
@@ -844,7 +875,7 @@ Every agent action goes to the audit log
 the time, `client_id`, the client's name from its latest `hello` (`client_name`, cut
 to 128 bytes; `client_id`s restart at `client_1` with the engine, so the name is what
 says which agent acted across restarts), the session's `request_id`, the call (`batch`,
-`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id` or `scene_id` (`scene.switch`), the `rev` before and
+`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id` or `scene_id` (`scene.switch`) or the state `privacy.set` asked for (`privacy`), the `rev` before and
 after, the result (`ok` or the error code), and `replayed` for a batch, undo or redo whose
 idempotency key had already been applied. It holds no argument of any call: no names,
 settings, URLs or keys, so `output.set_key` records only that action on that output
@@ -931,7 +962,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:775196038aceef0e", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:d7b16f1e4443c5f1", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): added the owner exception to session sharing and the fail-closed black frame under privacy" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -951,7 +982,7 @@ microphone and the desktop loopback while the collection has none). Every runnin
 output shares that one program stage (capture, render, mixer, audio inputs); the first `output.start` builds it and the
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same video mix and encoder profile
-share one session, and the render and mixer threads take a new session's inputs from a channel,
+share one session (an output with its own video chain would get its own), and the render and mixer threads take a new session's inputs from a channel,
 never a lock, and hand a finished session's input to the collector rather than drop
 it. While the stage has no session, or no mix is due on a tick, it
 draws nothing but still adopts the latest render snapshot. Each output has its own
@@ -972,7 +1003,8 @@ more) goes to the program stage's
 emits `stopped` only after the start has dropped its threads. The render and mixer
 threads catch a panic at their boundary ([R-RT-006](../../docs/RULES.md#R-RT-006)); a
 capture error or a missing frame repeats the last one, and a render panic repeats the
-last frame until teardown. A fatal error on the render, mixer or output thread (a
+last frame until teardown; under the privacy screen a frame that couldn't be drawn is
+black instead (see *Privacy screen* in Design). A fatal error on the render, mixer or output thread (a
 publish or recording write failure, an encoder stream that ends before stop, a render
 or mixer panic) is a channel message to a watcher the control thread started; the
 watcher emits `failed` and stops the pipeline. A program-stage failure reaches every

@@ -49,6 +49,8 @@ pub struct AuditEntry {
     pub output_id: Option<OutputId>,
     /// The scene an action names (`scene.switch`).
     pub scene_id: Option<SceneId>,
+    /// The state `privacy.set` asked for (ADR-0027 §4).
+    pub privacy: Option<bool>,
     /// The collection `rev` before the call.
     pub rev_before: Rev,
     /// The collection `rev` after it. Equal to `rev_before` unless a batch was applied.
@@ -92,6 +94,9 @@ impl AuditEntry {
         if let Some(scene_id) = &self.scene_id {
             line.push_str(",\"scene_id\":");
             json_string(&mut line, scene_id.as_str());
+        }
+        if let Some(on) = self.privacy {
+            let _ = write!(line, ",\"privacy\":{on}");
         }
         let _ = write!(
             line,
@@ -364,6 +369,7 @@ pub(crate) struct Pending {
     edits: Vec<&'static str>,
     output_id: Option<OutputId>,
     scene_id: Option<SceneId>,
+    privacy: Option<bool>,
     rev_before: Rev,
 }
 
@@ -372,6 +378,12 @@ impl Pending {
     /// between that read and the call, so for an applied batch the entry uses the
     /// batch's own `rev` minus one instead.
     pub(crate) fn new(call: &Call, rev_before: Rev, client_name: String) -> Self {
+        let privacy = match call {
+            Call::Action {
+                action: Action::PrivacySet { on },
+            } => Some(*on),
+            _ => None,
+        };
         let (name, edits, output_id, scene_id) = match call {
             Call::Batch(batch) => (
                 "batch",
@@ -394,6 +406,7 @@ impl Pending {
             edits,
             output_id,
             scene_id,
+            privacy,
             rev_before,
         }
     }
@@ -428,6 +441,7 @@ impl Pending {
             edits: self.edits,
             output_id: self.output_id,
             scene_id: self.scene_id,
+            privacy: self.privacy,
             rev_before,
             rev_after,
             error: result.as_ref().err().map(ProtocolError::code),
@@ -528,6 +542,7 @@ mod tests {
             edits: Vec::new(),
             output_id: Some(OutputId::new("out_yt")),
             scene_id: None,
+            privacy: None,
             rev_before: Rev(n),
             rev_after: Rev(n),
             error: None,
@@ -570,6 +585,23 @@ mod tests {
             "{\"time\":\"2025-10-15T00:42:15.007Z\",\"client_id\":\"client_1\",\
              \"client_name\":\"claude-desktop\",\"request_id\":\"req_4\",\"call\":\"output.set_key\",\"output_id\":\"out_yt\",\
              \"rev_before\":4,\"rev_after\":4,\"result\":\"ok\"}"
+        );
+    }
+
+    /// `privacy.set` records the state it asked for, and nothing else of the call.
+    #[test]
+    fn a_privacy_line_records_on_or_off() {
+        let entry = AuditEntry {
+            call: "privacy.set",
+            output_id: None,
+            privacy: Some(true),
+            ..entry(5)
+        };
+        assert_eq!(
+            entry.to_json_line(),
+            "{\"time\":\"2025-10-15T00:42:15.007Z\",\"client_id\":\"client_1\",\
+             \"client_name\":\"claude-desktop\",\"request_id\":\"req_5\",\"call\":\"privacy.set\",\
+             \"privacy\":true,\"rev_before\":5,\"rev_after\":5,\"result\":\"ok\"}"
         );
     }
 

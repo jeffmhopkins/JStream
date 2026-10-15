@@ -39,6 +39,10 @@ Commands:
   scene switch <scene-id>          put a scene on program, with a cut (action
                                    scene.switch)
   studio get                       print the scene on program (query studio.get)
+  privacy on|off                   cover every output with the privacy screen, or
+                                   uncover them (action privacy.set)
+  privacy get                      print whether the privacy screen is on (query
+                                   privacy.get)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   output list                      list the configured outputs (query output.list)
@@ -260,6 +264,9 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
             scene_id: SceneId::new(*id),
         }),
         ["studio", "get"] => Command::Query(Query::StudioGet),
+        ["privacy", "on"] => Command::Action(Action::PrivacySet { on: true }),
+        ["privacy", "off"] => Command::Action(Action::PrivacySet { on: false }),
+        ["privacy", "get"] => Command::Query(Query::PrivacyGet),
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -285,7 +292,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         [word, ..] => {
             let known = [
                 "help", "version", "hello", "state", "scene", "source", "item", "output", "video",
-                "studio", "edit", "events", "mcp",
+                "studio", "privacy", "edit", "events", "mcp",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -750,6 +757,19 @@ mod tests {
             Command::Query(Query::StudioGet)
         );
         assert!(err(&["studio"]).starts_with("wrong arguments for `"));
+        assert_eq!(
+            ok(&["privacy", "on"]).command,
+            Command::Action(Action::PrivacySet { on: true })
+        );
+        assert_eq!(
+            ok(&["privacy", "off"]).command,
+            Command::Action(Action::PrivacySet { on: false })
+        );
+        assert_eq!(
+            ok(&["privacy", "get"]).command,
+            Command::Query(Query::PrivacyGet)
+        );
+        assert!(err(&["privacy", "maybe"]).starts_with("wrong arguments for `"));
     }
 
     #[test]

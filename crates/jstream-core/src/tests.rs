@@ -651,6 +651,67 @@ fn scene_switch_changes_program_without_an_edit() {
     assert_eq!(program(&user), None);
 }
 
+fn privacy_call(on: bool) -> Call {
+    Call::Action {
+        action: Action::PrivacySet { on },
+    }
+}
+
+/// `privacy.set` turns the privacy screen on or off without an edit, tells every
+/// subscriber who did it, and says nothing when nothing changed; `privacy.get` reads it.
+/// A client that subscribes while it is on hears `privacy.changed` first, naming the
+/// client that turned it on (ADR-0027 §4).
+#[test]
+fn privacy_set_covers_outputs_without_an_edit() {
+    let engine = Engine::new();
+    let user = connected(&engine);
+    let agent = connected(&engine);
+    let mut events = user.events();
+    let on = |control: &dyn Control| match query(control, Query::PrivacyGet) {
+        Ok(QueryResult::PrivacyGet { on }) => on,
+        other => panic!("not a privacy result: {other:?}"),
+    };
+    assert!(!on(&user));
+    block_on(user.call(privacy_call(false))).expect("already off");
+    assert_eq!(drain(&mut events), vec![]);
+
+    let set = block_on(agent.call(privacy_call(true))).expect("on");
+    assert_eq!(set.result, CallResult::Action {});
+    assert_eq!(engine.rev(), Rev(0), "privacy is not an edit");
+    let turned_on = Event::PrivacyChanged {
+        on: true,
+        client_id: agent.client_id().expect("connected"),
+        request_id: Some(set.id),
+    };
+    assert_eq!(drain(&mut events), vec![turned_on]);
+    assert!(on(&user));
+    block_on(user.call(privacy_call(true))).expect("already on");
+    assert_eq!(drain(&mut events), vec![]);
+
+    let late = connected(&engine);
+    let mut late_events = late.events();
+    assert_eq!(
+        drain(&mut late_events),
+        vec![Event::PrivacyChanged {
+            on: true,
+            client_id: agent.client_id().expect("connected"),
+            request_id: None,
+        }],
+        "a new subscriber hears the screen is on first"
+    );
+
+    let off = block_on(user.call(privacy_call(false))).expect("off");
+    let turned_off = Event::PrivacyChanged {
+        on: false,
+        client_id: user.client_id().expect("connected"),
+        request_id: Some(off.id),
+    };
+    assert_eq!(drain(&mut events), vec![turned_off.clone()]);
+    assert_eq!(drain(&mut late_events), vec![turned_off]);
+    assert!(!on(&agent));
+    assert_eq!(drain(&mut connected(&engine).events()), vec![]);
+}
+
 #[test]
 fn outputs_move_through_the_placeholder_state_machine() {
     let engine = Engine::new()
@@ -2255,6 +2316,60 @@ mod cpu_pipeline {
         );
     }
 
+    /// `privacy.set` reaches the render thread through its flag, without the
+    /// collection lock: the next ticks draw every mix covered, and uncovered once it is
+    /// off again (ADR-0027 §4).
+    #[test]
+    fn the_render_thread_covers_frames_while_privacy_is_on() {
+        use jstream_protocol::{Action, Call};
+
+        let fakes = fakes();
+        let seen: Arc<Mutex<Vec<bool>>> = Arc::default();
+        let draw: OpenDraw = {
+            let seen = Arc::clone(&seen);
+            Arc::new(move || {
+                let seen = Arc::clone(&seen);
+                let mut inner = (cpu_draw())()?;
+                let draw: DrawFn = Box::new(move |shot, capture, frames| {
+                    seen.lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .extend(frames.iter().filter(|f| f.due).map(|f| f.privacy));
+                    inner(shot, capture, frames)
+                });
+                Ok(draw)
+            })
+        };
+        let engine = engine(
+            share(&fakes.backends),
+            draw,
+            Box::new(RecordingPublish::new()),
+        );
+        let last = || {
+            seen.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .last()
+                .copied()
+        };
+        let privacy = |on| Call::Action {
+            action: Action::PrivacySet { on },
+        };
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(pump_until(&fakes.clock, &fakes.audio, || last() == Some(false)));
+        block_on(control.call(privacy(true))).expect("privacy on");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || last() == Some(true)),
+            "the next ticks are covered"
+        );
+        block_on(control.call(privacy(false))).expect("privacy off");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || last() == Some(false)),
+            "and uncovered once it is off"
+        );
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+    }
+
     /// Feeds both inputs and moves the clock on by 50 ms.
     fn pump(clock: &FakeClock, audio: &FakeAudioIo) {
         audio.deliver(2400, 0.2);
@@ -3757,6 +3872,7 @@ mod cpu_pipeline {
                     profile_id: None,
                     shared_with: vec![OutputId::new(other)],
                     hardware: false,
+                    dedicated: false,
                 }),
                 "{id}"
             );
@@ -4334,6 +4450,37 @@ fn scene_switch_is_audited() {
         entries[1].to_json_line().contains(",\"scene_id\":\"b\","),
         "{:?}",
         entries[1].to_json_line()
+    );
+}
+
+/// `privacy.set` is audited like every action, recording whether it turned the screen
+/// on or off; one that changed nothing is recorded too (ADR-0027 §4).
+#[test]
+fn privacy_set_is_audited() {
+    let audit = Arc::new(crate::AuditMemory::new());
+    let engine = Engine::new().with_audit(audit.clone());
+    let control = connected(&engine);
+    block_on(control.call(privacy_call(true))).expect("on");
+    block_on(control.call(privacy_call(true))).expect("again");
+    block_on(control.call(privacy_call(false))).expect("off");
+
+    let entries = audit.entries();
+    let seen: Vec<_> = entries
+        .iter()
+        .map(|e| (e.call, e.privacy, (e.rev_before.0, e.rev_after.0), e.error))
+        .collect();
+    assert_eq!(
+        seen,
+        [
+            ("privacy.set", Some(true), (0, 0), None),
+            ("privacy.set", Some(true), (0, 0), None),
+            ("privacy.set", Some(false), (0, 0), None),
+        ]
+    );
+    assert!(
+        entries[2].to_json_line().contains(",\"privacy\":false,"),
+        "{:?}",
+        entries[2].to_json_line()
     );
 }
 
