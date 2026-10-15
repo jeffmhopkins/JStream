@@ -36,7 +36,7 @@ verified = { hash = "b3:18cd4472efb91ec3", by = "agent:claude@session_01WbL3WRbc
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:e687f7514b211d3e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through ARCH#protocol's added clause that the desktop app's server pairs nothing; nothing in this section concerns the desktop app's pairing; holds" }
+verified = { hash = "b3:5f0e8316cb765c7f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI

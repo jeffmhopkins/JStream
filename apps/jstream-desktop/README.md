@@ -92,7 +92,7 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:c7f578a5c5e747b1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Engine bullet now says the server pairs nothing (ServerConfig::pairing off): pairing calls answer unsupported, the UI's panel stays hidden, no /pair page or cookie; matches host.rs and admitted.rs" }
+verified = { hash = "b3:7d3e024cb3b64f37", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS

@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:bce32ceb9d2a44d1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through ARCH#protocol's added clause that the desktop app's server pairs nothing; nothing in this section concerns the desktop app's pairing; holds" }
+verified = { hash = "b3:42f8ecdfe5078482", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
 -->
 
 ### The trait

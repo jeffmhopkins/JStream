@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:74e1d843de13982f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: contents gain pairing.rs (Pairing panel, its calls, tests against MockEngine and a server-like stub); other entries unchanged" }
+verified = { hash = "b3:3380d62bcefca09e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -54,7 +54,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e9290c25a31a3a53", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: connecting bullet now says a browser paired on the server's /pair page connects with an empty token via its cookie; new Pairing bullet matches pairing.rs (hidden on unsupported, countdown, 3 s device.list poll to detect use, revoke, code never logged); style.css gains the panel's classes" }
+verified = { hash = "b3:b6caf2a658257e88", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

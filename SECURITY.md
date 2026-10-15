@@ -42,7 +42,7 @@ advisory unless they ask not to be.
 ## What JStream promises
 <!-- @section
 depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002", "docs/RULES.md#R-SEC-003", "docs/RULES.md#R-SEC-004"]
-verified = { hash = "b3:1fce4ca808fcfcad", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the pairing branch and ADR-0047: control API bullet combines both texts (pairing page on TLS, cookie never the control token, device tokens only over loopback or TLS), matching the merged R-SEC-002; other bullets unchanged" }
+verified = { hash = "b3:ff6ba893ff824b19", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
 -->
 
 A report is in scope when it breaks one of these. The rules they cite are the authority.

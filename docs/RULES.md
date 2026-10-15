@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:64f596eed1dffc6f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through ARCH#protocol's added clause that the desktop app's server pairs nothing; nothing in this section concerns the desktop app's pairing; holds" }
+verified = { hash = "b3:6edca89930995a56", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
 -->
 
 <a id="R-API-001"></a>

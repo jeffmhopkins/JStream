@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:f4f710d5d9a4f14c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Configuration bullet names the pairing switch; Admitted bullet says it answers the three calls unless pairing is off; checked against config.rs and admitted.rs" }
+verified = { hash = "b3:7123a0b529574b0d", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -71,7 +71,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b77a481147f8e3da", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "New Pairing off bullet (calls reach the session and answer unsupported, no code, /pair 404, desktop turns it off); pairing-page subsection now needs tls and pairing on; checked against admitted.rs, pair_page.rs, ui.rs challenge" }
+verified = { hash = "b3:7fd418dc826d9f9b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
 -->
 
 ### Listening and admission
