@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:135ea53517eda7dd", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Cascade from CLI usage in B10's merge of main at 0.16: re-read; no step uses a program command; holds" }
+verified = { hash = "b3:2b2bb8114f398c57", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: cascade from CLI usage; re-read, no program step; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:fccfe31558b4424e", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Cascade from CLI usage in B10's merge of main at 0.16: re-read; no step uses a program command; holds" }
+verified = { hash = "b3:3eeafa491d759dc5", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: cascade from CLI usage; re-read, script steps unaffected; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

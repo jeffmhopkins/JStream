@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:57adcafb004f9dd5", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; contents hold with scene switch/studio get beside main's commands" }
+verified = { hash = "b3:889d8fc912b3ef44", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; contents hold with B6-f's commands and scene switch/studio get" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:ab80bb4dfa3cf4ab", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; scene switch and studio get rows hold beside main's new rows" }
+verified = { hash = "b3:a5ec524c34e496eb", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; scene switch and studio get rows hold beside B6-f's set_role/item.move/set_geometry rows" }
 -->
 
 ```sh
@@ -108,11 +108,18 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
   and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
-  default encoder (MCP and the WebSocket API take them). Protocol 0.11's `canvas.set_size`,
-  `item.set_geometry` and `item.add`'s `geometry`
-  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
-  yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
-  the placement edits' optional `scene_id` are not in the CLI either.
+  default encoder (MCP and the WebSocket API take them). `item.add` sends neither
+  placement, so its item is a legacy one; place it with `item.set_geometry <item-id>
+  <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
+  batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
+  are always sent neutral, since the engine refuses anything else until it draws 3D.
+  `canvas.set_size <width> <height>` sets the canvas. Groups
+  ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
+  `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
+  <index>`: grouping is one batch that creates a scene, makes it a group, places it
+  through a `scene:` source, and moves the items into it. The placement edits'
+  optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
+  the item's own scene, which omitting it already means.
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
@@ -144,7 +151,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
   protocol version doesn't know are skipped, as the protocol asks.
-- **Reads** print `rev N` first, then a table per list: scenes with their item counts;
+- **Reads** print `rev N` first, then a table per list: scenes with their `ROLE`
+  (`scene` or `group`) and item counts;
   sources with their kind in the `source.create` spelling (`builtin:webcam`,
   `scene:main`); items bottom first, with `VISIBLE`, `POSITION` (`x,y`), `SCALE`,
   `ROTATION` and `CROP` (`left,top,right,bottom`) in the argument order of the edits
@@ -152,7 +160,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   protocol's deprecated transform view of it, and only `--json` shows its `geometry`
   and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
   server URL, as `output.create` takes it). `state get` prints the sources, then each
-  scene in display order with its items, then the outputs. `output status` prints
+  scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
+  (<name>):` by its role, then the outputs. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
@@ -225,7 +234,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4a3764830fb75062", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; Output bullet's studio.changed note holds" }
+verified = { hash = "b3:8f6199e548006e27", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; B6-f's placement and ROLE text and B10's studio.changed note both hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -410,6 +410,7 @@ struct Source {
 struct Scene {
     id: SceneId,
     name: String,
+    role: SceneRole,
     /// Bottom to top.
     items: Vec<ItemId>,
 }
@@ -691,7 +692,7 @@ impl State {
                     .map(|scene| SceneSummary {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
-                        role: SceneRole::Scene,
+                        role: scene.role,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                     })
                     .collect(),
@@ -733,7 +734,7 @@ impl State {
                     .map(|scene| SceneInfo {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
-                        role: SceneRole::Scene,
+                        role: scene.role,
                         items: self.collection.item_infos(scene),
                     })
                     .collect(),
@@ -829,6 +830,7 @@ impl Collection {
                 self.scenes.push(Scene {
                     id: scene_id.clone(),
                     name,
+                    role: SceneRole::Scene,
                     items: Vec::new(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
@@ -840,6 +842,14 @@ impl Collection {
                 vec![Edit::SceneRename {
                     scene_id,
                     name: old,
+                }]
+            }
+            Edit::SceneSetRole { scene_id, role } => {
+                let index = self.existing_scene(&scene_id)?;
+                let old = std::mem::replace(&mut self.scenes[index].role, role);
+                vec![Edit::SceneSetRole {
+                    scene_id,
+                    role: old,
                 }]
             }
             Edit::SceneDelete { scene_id } => {
@@ -873,6 +883,12 @@ impl Collection {
                     inverse.push(Edit::SceneReorder {
                         scene_id: scene.id.clone(),
                         index: wire_index(index)?,
+                    });
+                }
+                if scene.role != SceneRole::Scene {
+                    inverse.push(Edit::SceneSetRole {
+                        scene_id: scene.id.clone(),
+                        role: scene.role,
                     });
                 }
                 // Re-adding bottom to top puts each item back at its own index.
@@ -958,6 +974,11 @@ impl Collection {
                     index: wire_index(from)?,
                 }]
             }
+            Edit::ItemMove {
+                item_id,
+                scene_id,
+                index,
+            } => self.move_item(item_id, scene_id, index, at)?,
             Edit::ItemSetTransform {
                 item_id,
                 scene_id,
@@ -1275,6 +1296,56 @@ impl Collection {
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
+    }
+
+    /// Applies `item.move` with `jstream-graph`'s checks in its order: the item, the
+    /// scene, the index (one past the top is allowed in another scene), then the cycle.
+    /// Returns its inverse: `item.move` back to its previous scene and index.
+    fn move_item(
+        &mut self,
+        item_id: ItemId,
+        scene_id: SceneId,
+        index: u32,
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let (from_scene_id, source_id) = {
+            let item = self.existing_item(&item_id)?;
+            (item.scene_id.clone(), item.source_id.clone())
+        };
+        let from = self.existing_scene(&from_scene_id)?;
+        let to = self.existing_scene(&scene_id)?;
+        let slots = self.scenes[to].items.len() + usize::from(to != from);
+        let to_index = check_index(index, slots, at, "positions in the scene")?;
+        if let Some(Source {
+            kind: SourceKind::Scene { scene_id: nested },
+            ..
+        }) = self.sources.get(&source_id)
+            && self.contains(nested, &scene_id)
+        {
+            return Err(invalid(
+                at,
+                "scene_id",
+                format!(
+                    "moving item `{item_id}` (source `{source_id}`) into scene `{scene_id}` \
+                     would create a cycle"
+                ),
+            ));
+        }
+        let from_index = self.scenes[from]
+            .items
+            .iter()
+            .position(|id| *id == item_id)
+            .unwrap_or_default();
+        self.scenes[from].items.remove(from_index);
+        self.scenes[to].items.insert(to_index, item_id.clone());
+        if let Some(item) = self.items.get_mut(&item_id) {
+            item.scene_id = scene_id;
+        }
+        Ok(vec![Edit::ItemMove {
+            item_id,
+            scene_id: from_scene_id,
+            index: wire_index(from_index)?,
+        }])
     }
 
     /// Creates a source and returns the edit that undoes it.
@@ -1828,7 +1899,7 @@ mod tests {
         EncoderProfileId, EntityKind, Event, Hello, HistoryCall, HistoryDirection, HistoryOp,
         IdempotencyKey, ItemId, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
         PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query, QueryResult, Rev, RtmpTarget,
-        SceneId, SecretString, Settings, SourceId, SourceKind, parity,
+        SceneId, SceneRole, SecretString, Settings, SourceId, SourceKind, parity,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -2687,6 +2758,226 @@ mod tests {
         };
         assert_eq!(field(duplicate), "edits.0.new_source_id");
         assert_eq!(engine.rev(), Rev(1));
+    }
+
+    /// Protocol 0.12's groups: `scene.set_role` and `item.move`, with the checks
+    /// `jstream-graph` makes in its order.
+    #[test]
+    fn groups_and_item_move_follow_the_graph_rules() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let group = Edit::SourceCreate {
+            source_id: SourceId::new("g_src"),
+            name: "Group".into(),
+            kind: SourceKind::Scene {
+                scene_id: SceneId::new("g"),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        };
+        let setup = Batch {
+            edits: vec![
+                create("a"),
+                create("g"),
+                webcam(),
+                add("a", "i1", "webcam"),
+                add("a", "i2", "webcam"),
+                Edit::SceneSetRole {
+                    scene_id: SceneId::new("g"),
+                    role: SceneRole::Group,
+                },
+                group,
+                add("a", "gi", "g_src"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let roles = |control: &dyn Control| match query(control, Query::SceneList) {
+            Ok(QueryResult::SceneList { scenes, .. }) => scenes
+                .into_iter()
+                .map(|s| (s.scene_id.to_string(), s.role))
+                .collect::<Vec<_>>(),
+            other => panic!("not a scene list: {other:?}"),
+        };
+        assert_eq!(
+            roles(&*control),
+            [
+                ("a".into(), SceneRole::Scene),
+                ("g".into(), SceneRole::Group)
+            ]
+        );
+        let items = |control: &dyn Control, scene: &str| match query(
+            control,
+            Query::ItemList {
+                scene_id: SceneId::new(scene),
+            },
+        ) {
+            Ok(QueryResult::ItemList { items, .. }) => items
+                .into_iter()
+                .map(|i| i.item_id.to_string())
+                .collect::<Vec<_>>(),
+            other => panic!("not an item list: {other:?}"),
+        };
+        let mv = |item: &str, scene: &str, index: u32| Edit::ItemMove {
+            item_id: ItemId::new(item),
+            scene_id: SceneId::new(scene),
+            index,
+        };
+
+        // Grouping: both webcam items into the group; an empty scene takes index 0, and
+        // one past the top of another scene is allowed.
+        let grouped = Batch {
+            edits: vec![mv("i1", "g", 0), mv("i2", "g", 1)],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, grouped), Ok(Rev(2)));
+        assert_eq!(items(&*control, "a"), ["gi"]);
+        assert_eq!(items(&*control, "g"), ["i1", "i2"]);
+
+        // Within its own scene a move is a reorder.
+        assert_eq!(
+            batch(&*control, Batch::single(mv("i2", "g", 0))),
+            Ok(Rev(3))
+        );
+        assert_eq!(items(&*control, "g"), ["i2", "i1"]);
+
+        let rejected = |edit: Edit| {
+            batch(&*control, Batch::single(edit))
+                .expect_err("rejected")
+                .protocol()
+                .cloned()
+        };
+        let field = |edit: Edit| match rejected(edit) {
+            Some(ProtocolError::InvalidArgument { field, .. }) => field,
+            other => panic!("expected invalid_argument, got {other:?}"),
+        };
+        // Within its own scene one past the top is out of range; in another it isn't,
+        // but two past is.
+        assert_eq!(field(mv("i1", "g", 2)), "edits.0.index");
+        assert_eq!(field(mv("i1", "a", 2)), "edits.0.index");
+        // The group's own placement moved into the group would make it contain itself.
+        assert_eq!(field(mv("gi", "g", 0)), "edits.0.scene_id");
+        assert_eq!(
+            rejected(mv("nope", "g", 0)),
+            Some(ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: "nope".into(),
+            })
+        );
+        assert_eq!(
+            rejected(mv("i1", "nope", 0)),
+            Some(ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "nope".into(),
+            })
+        );
+        assert_eq!(
+            rejected(Edit::SceneSetRole {
+                scene_id: SceneId::new("nope"),
+                role: SceneRole::Group,
+            }),
+            Some(ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "nope".into(),
+            })
+        );
+        assert_eq!(engine.rev(), Rev(3));
+
+        // A moved item keeps its ID and properties, and its placement edits now name
+        // its new scene as its own.
+        let hide = Edit::ItemSetVisible {
+            item_id: ItemId::new("i1"),
+            scene_id: Some(SceneId::new("g")),
+            visible: false,
+        };
+        assert_eq!(batch(&*control, Batch::single(hide)), Ok(Rev(4)));
+        let back = Batch {
+            edits: vec![
+                mv("i1", "a", 0),
+                Edit::SceneSetRole {
+                    scene_id: SceneId::new("g"),
+                    role: SceneRole::Scene,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, back), Ok(Rev(5)));
+        assert_eq!(items(&*control, "a"), ["i1", "gi"]);
+        match query(
+            &*control,
+            Query::ItemList {
+                scene_id: SceneId::new("a"),
+            },
+        ) {
+            Ok(QueryResult::ItemList { items, .. }) => assert!(!items[0].visible),
+            other => panic!("not an item list: {other:?}"),
+        }
+        assert_eq!(
+            roles(&*control),
+            [
+                ("a".into(), SceneRole::Scene),
+                ("g".into(), SceneRole::Scene)
+            ]
+        );
+    }
+
+    /// Undo and redo of grouping: `item.move` returns to its scene and index,
+    /// `scene.set_role` to its previous role, and deleting a group scene comes back as a
+    /// group, as `jstream-graph`'s inverses do.
+    #[test]
+    fn undo_and_redo_restore_groups_and_moves() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let setup = Batch {
+            edits: vec![
+                create("a"),
+                create("g"),
+                webcam(),
+                add("a", "i1", "webcam"),
+                add("a", "i2", "webcam"),
+                add("a", "i3", "webcam"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let before = state(&*control);
+        let mv = |item: &str, scene: &str, index: u32| Edit::ItemMove {
+            item_id: ItemId::new(item),
+            scene_id: SceneId::new(scene),
+            index,
+        };
+        let group = Batch {
+            edits: vec![
+                Edit::SceneSetRole {
+                    scene_id: SceneId::new("g"),
+                    role: SceneRole::Group,
+                },
+                // The middle item first, so its inverse names index 1 of three.
+                mv("i2", "g", 0),
+                mv("i1", "g", 0),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, group), Ok(Rev(2)));
+        let grouped = state(&*control);
+        assert_ne!(grouped, before);
+        assert_eq!(undo(&*control), Ok((Rev(3), Rev(2), 1, 1)));
+        assert_eq!(state(&*control), before);
+        assert_eq!(redo(&*control), Ok((Rev(4), Rev(2), 2, 0)));
+        assert_eq!(state(&*control), grouped);
+
+        // Deleting the group scene (and its items) comes back as a group, with its items.
+        let delete = Batch::single(Edit::SceneDelete {
+            scene_id: SceneId::new("g"),
+        });
+        assert_eq!(batch(&*control, delete), Ok(Rev(5)));
+        assert_eq!(undo(&*control), Ok((Rev(6), Rev(5), 2, 1)));
+        assert_eq!(state(&*control), grouped);
     }
 
     #[test]

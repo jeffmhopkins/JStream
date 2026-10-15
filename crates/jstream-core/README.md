@@ -156,7 +156,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f5e8a752697575f2", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; render snapshot paragraph says the program scene is the one scene.switch set and a switch re-plans; Program scene says the mix follows program; Collection file names program among what is not saved (N4)" }
+verified = { hash = "b3:6b5405be7ac9a88b", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; D7b's audio text holds beside Program scene, render snapshot and Collection file; holds" }
 -->
 
 ### Engine and sessions
@@ -908,7 +908,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:b3aa03c26ec8a3f6", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#196 B5, #226 A3, #207, #233, #229, #230): stamp-only conflicts, both sides kept; runtime text has C5's audio-inputs sentences; main's #207 stop wait is in Design; holds" }
+verified = { hash = "b3:9cb93b65cd929904", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (C5 audio sources, B9) into D7b: kept C5's audio-sources sentences and D7b's mixer-collector sentence (rings, removed buses' state, filter chains and filters, per retire.rs); re-read; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -953,7 +953,8 @@ or mixer panic) is a channel message to a watcher the control thread started; th
 watcher emits `failed` and stops the pipeline. A program-stage failure reaches every
 running output. Frame hand-off is the encoder session queues. The audio and outputs
 snapshots and a GPU encode target are still rows of the ARCH thread table, not this
-cut. The mixer also has its own collector, which frees only input rings and their
-counters. The program stage's `jstream-audio-sources` thread opens and closes the audio
-sources' inputs as the collection changes (see *Audio sources* in Design); it takes
-no engine lock and is joined, and every input closed, after the mixer thread stops.
+cut. The mixer also has its own collector, which frees input rings and their counters,
+removed buses' state, and removed filter chains and filters. The program stage's
+`jstream-audio-sources` thread opens and closes the audio sources' inputs as the
+collection changes (see *Audio sources* in Design); it takes no engine lock and is
+joined, and every input closed, after the mixer thread stops.
