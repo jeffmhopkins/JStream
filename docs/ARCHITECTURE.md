@@ -538,7 +538,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1ad8c34476bd993c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#345 round 1 after merging main: re-read the section; it does not describe asset path rules (they live in jstream-protocol Design); version mentions match main's 0.19; no message, error code or version change; holds" }
+verified = { hash = "b3:b3d8528494cbeb80", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Review N4 on #373: settings.rs Asset.path doc comment reworded to match the README Rejections bullet (no : but the drive letter's, and no ? or *); comment only, no code change; section text holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

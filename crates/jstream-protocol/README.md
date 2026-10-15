@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:4c764f3b65f0283e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#345 round 1 after merging main: re-read the Kinds and settings bullet (check_asset_path still a pure per-value check) and the version line (PROTOCOL_VERSION 0.19 for audio, matches version.rs); this PR changes no message; holds" }
+verified = { hash = "b3:184e33b36f2e1477", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Review N4 on #373: settings.rs Asset.path doc comment reworded to match the README Rejections bullet (no : but the drive letter's, and no ? or *); comment only, no code change; section text holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -134,7 +134,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:d867958e853e7d0b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '#345 round 1 (B1) after merging main (#240, 0.19): re-read the Kinds and settings Rejections bullet, now also refusing ? and * under absolute (blocks \??\UNC and \??\GLOBALROOT NT object paths), matching check_asset_path; re-read the record path paragraph and the version mentions (0.19 audio, 0.18 virtual_cam); no message or schema change, protocol stays 0.19; holds' }
+verified = { hash = "b3:b321b12d0bff1b12", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Review N4 on #373: settings.rs Asset.path doc comment reworded to match the README Rejections bullet (no : but the drive letter's, and no ? or *); comment only, no code change; section text holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
