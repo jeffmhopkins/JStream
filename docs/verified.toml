@@ -3,7 +3,7 @@
 # blank line per entry let parallel PRs that re-verify different inputs usually merge.
 
 ["ARCH#browser-source"."body"]
-stamp = { hash = "b3:8cc1b893df3a63f1", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: the intro now says the browser source is built in jstream-browser (ADR-0046, its README) but not yet wired into a host or the program mix, which matches the code; S4's choices and results untouched" }
+stamp = { hash = "b3:9a6b619be12de381", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["ARCH#browser-source"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:4290b482aa8b441c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 against wave/m1: adds the layer-3 jstream-browser row (BrowserBackend seam, page audio and CSS, CEF backend behind feature cef, unsafe yes) and names jstream-browser-helper under apps/*; CEF moves off the jstream-platform-windows row; each matches the crate's jstream metadata and lint-deps; the wave's jstream-outputs row (vcam runs in jstream-core) and jstream-effects row sit unchanged beside them" }
+stamp = { hash = "b3:bc332a2f4c8a4884", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -30,7 +30,7 @@ stamp = { hash = "b3:dbacb2dd7907964d" }
 stamp = { hash = "b3:8bc8c6ff8e57508b" }
 
 ["ARCH#crate-map"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:f7c235327227029b" }
+stamp = { hash = "b3:a521018fc0ccfce8", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["ARCH#crate-map"."file:crates/jstream-anim/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:324421806c43a0e9" }
@@ -432,7 +432,7 @@ stamp = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDH
 stamp = { hash = "b3:0c6fb015c0446730", by = "agent:claude", note = "xtask/src/main.rs only changed the merge-main help line; the layout and the xtask command list still hold." }
 
 ["ARCH#shape"."body"]
-stamp = { hash = "b3:218bcc963a733f5e", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: the hosts table gains the jstream-browser-helper row (not a host; the exe CEF starts its subprocesses as, shipped beside the host's exe), matching its Cargo.toml metadata and main.rs; main's updated daemon row (the UI's built files, --ui-dir) sits above it unchanged" }
+stamp = { hash = "b3:eeb5559c6d7f196e", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["ARCH#shape"."dep:docs/adr/0001-library-first-engine.md"]
 stamp = { hash = "b3:7a1c016d1f87fdaf" }
@@ -459,7 +459,7 @@ stamp = { hash = "b3:8bc8c6ff8e57508b" }
 stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; the daemon row's --ui-dir mention matches main.rs; holds" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:f7c235327227029b" }
+stamp = { hash = "b3:a521018fc0ccfce8", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/src/main.rs"]
 stamp = { hash = "b3:b19eab2b3dd2f7b1" }
@@ -747,7 +747,7 @@ stamp = { hash = "b3:c470e006d8095daa" }
 stamp = { hash = "b3:3e63f714aef88590" }
 
 ["CRATE-jstream-browser#open-items"."body"]
-stamp = { hash = "b3:1ed8360e5359b996", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: open items match what the CEF backend leaves out (no_sandbox, no file request handler, no host wiring, no render import, no visibility hook)" }
+stamp = { hash = "b3:8cf798e440520095", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["CRATE-jstream-browser#open-items"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
@@ -759,7 +759,7 @@ stamp = { hash = "b3:1300403d18de6566" }
 stamp = { hash = "b3:aa231c43fc78de6d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1 (#290 review N1): seam paragraph says use_device gets a device the host opens on the media adapter for now, not the engine's own; rest re-read against page.rs, audio.rs, fake.rs and cef/" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
-stamp = { hash = "b3:8cc1b893df3a63f1" }
+stamp = { hash = "b3:9a6b619be12de381", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-browser"]
 stamp = { hash = "b3:e7a418098a8ef546" }
@@ -798,7 +798,7 @@ stamp = { hash = "b3:c38bcef596eeb573", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:aa231c43fc78de6d" }
 
 ["CRATE-jstream-browser-helper#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:8487582a56fd34f6" }
+stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["CRATE-jstream-browser-helper#purpose"."file:apps/jstream-browser-helper/Cargo.toml"]
 stamp = { hash = "b3:57611c74ae67fa64" }
@@ -849,7 +849,7 @@ stamp = { hash = "b3:0fd49566ae310db7" }
 stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's, the CLI's commands are unchanged by D5; holds" }
 
 ["CRATE-jstream-cli#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:8487582a56fd34f6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale only via the crate-map apps/* row, which now names jstream-browser-helper; the CLI's text names no browser code; holds" }
+stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:5ae0e8dd6e0d9eee" }
@@ -1227,7 +1227,7 @@ stamp = { hash = "b3:5b73caa28ffd99e3" }
 stamp = { hash = "b3:7ec5dfdaae61831f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:8487582a56fd34f6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale only via the crate-map apps/* row, which now names jstream-browser-helper; the daemon creates no browser backend (no with_browser in apps/), and its text names none; holds" }
+stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
@@ -1275,7 +1275,7 @@ stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:5b73caa28ffd99e3" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:c4445af061a77053", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 now excepts GET /pair on a TLS listener and allows a device-token cookie; desktop serves loopback without TLS, pairs nothing and uses its in-memory token, so nothing here changes; holds" }
+stamp = { hash = "b3:00b01a34b3b7f606", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1293,19 +1293,22 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:22c33836996b1c6b" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:c539140aae7561d4" }
+stamp = { hash = "b3:46946d3ef73adbf5", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:f0fe0fb519a068bf" }
+
+["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/browser.rs"]
+stamp = { hash = "b3:6d9ebaeab4249226", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/data.rs"]
 stamp = { hash = "b3:ca2f21dc552ae191" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:9b575597b71027d3" }
+stamp = { hash = "b3:87507502dd985e20", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:47bd5b3369b57d20" }
+stamp = { hash = "b3:7d332860fef7cc2b", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
@@ -1323,25 +1326,28 @@ stamp = { hash = "b3:45624952598c1f3a" }
 stamp = { hash = "b3:558b5c5512b30191" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:ec6f85c97d250939", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
+stamp = { hash = "b3:d279c9bf130da277", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
-stamp = { hash = "b3:8487582a56fd34f6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale only via the crate-map apps/* row, which now names jstream-browser-helper; the desktop app creates no browser backend yet; holds" }
+stamp = { hash = "b3:92704194d392d8e6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:c539140aae7561d4" }
+stamp = { hash = "b3:46946d3ef73adbf5", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:f0fe0fb519a068bf" }
+
+["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/browser.rs"]
+stamp = { hash = "b3:6d9ebaeab4249226", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/data.rs"]
 stamp = { hash = "b3:ca2f21dc552ae191" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:9b575597b71027d3" }
+stamp = { hash = "b3:87507502dd985e20", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:47bd5b3369b57d20" }
+stamp = { hash = "b3:7d332860fef7cc2b", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
@@ -1356,13 +1362,13 @@ stamp = { hash = "b3:ee281b0fbf540f66" }
 stamp = { hash = "b3:45624952598c1f3a" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:4d0cdcc543ce52f7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
+stamp = { hash = "b3:9ccb51f8581fe0c8", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
-stamp = { hash = "b3:9ae316de6772baa9" }
+stamp = { hash = "b3:7261cd248aac926a", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:c539140aae7561d4" }
+stamp = { hash = "b3:46946d3ef73adbf5", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of #283's head (now on wave/m1, with main and ADR-0053/0054) into #290: re-read; this PR's text is unchanged, the other side's edits touch other sentences, and it holds" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/data.rs"]
 stamp = { hash = "b3:ca2f21dc552ae191" }
@@ -1767,7 +1773,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:4290b482aa8b441c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "Stale via ARCH#crate-map only: C8 adds the jstream-browser row and takes CEF off the jstream-platform-windows row, and the wave's jstream-outputs row changed; the jstream-platform row and GPU frame design are untouched, and the browser backend's shared-texture copy uses GpuFrame as described; holds" }
+stamp = { hash = "b3:bc332a2f4c8a4884", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of wave/m1 (with #283 squashed in) into #290: re-read; this PR's desktop/cef sentences are unchanged and the rest is wave/m1's text, which holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
