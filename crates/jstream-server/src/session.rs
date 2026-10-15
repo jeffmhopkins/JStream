@@ -5,7 +5,8 @@
 //! session (several requests may be in flight; answers go back as they complete), and
 //! forwards the session's events once the handshake has succeeded. It ends when the
 //! client closes, the session's event stream ends (the engine went away), the server
-//! shuts down, or the handshake hasn't succeeded by its deadline
+//! shuts down (a message read once it is shutting down is not handled, so no request is
+//! answered after the shutdown), or the handshake hasn't succeeded by its deadline
 //! (`ServerConfig::handshake_timeout`, counted from when the connection was accepted;
 //! close code 1008), even if the client's `hello` is still waiting for the engine's
 //! answer; dropping the session then ends its event streams.
@@ -59,7 +60,7 @@ const REMEMBERED_IDS: usize = 1024;
 const MAX_HELD_EVENTS: usize = 1024;
 
 /// How long a closing connection waits for the client to take what is still queued and
-/// the close frame. A client that has stopped reading would otherwise hold the
+/// the close frame, and to answer it with its own. A client that has stopped reading would otherwise hold the
 /// connection, and its `Control` session, open for good (#108 review N1).
 pub(crate) const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -124,9 +125,7 @@ pub(crate) async fn run(
             break Err(Closed);
         }
         tokio::select! {
-            () = stopping(&mut shutdown) => {
-                break Ok(Some(close(close_code::AWAY, "the server is shutting down")));
-            }
+            () = stopping(&mut shutdown) => break Ok(Some(shutting_down())),
             () = &mut handshake_deadline, if ids.client_id.is_none() => {
                 break Ok(Some(close(close_code::POLICY, "no handshake in time")));
             }
@@ -136,6 +135,13 @@ pub(crate) async fn run(
                 }
             }
             message = incoming.next(), if outbox.reads_requests() => {
+                // `select!` picks among ready branches at random, so a message can be
+                // taken here although the shutdown is ready too. Once the server is
+                // shutting down nothing read is handled: a request is not answered
+                // after `serve_with_shutdown` has returned (#294).
+                if stopped(&shutdown) {
+                    break Ok(Some(shutting_down()));
+                }
                 let text = match message {
                     None | Some(Err(_)) | Some(Ok(Message::Close(_))) => break Err(Closed),
                     Some(Ok(Message::Text(text))) => text,
@@ -238,10 +244,23 @@ pub(crate) async fn run(
     drop(events);
     if let Ok(frame) = end {
         // What is queued (a refused handshake's error, say) goes before the close frame.
-        // Best effort: the client may already be gone, or have stopped reading.
-        let finish = writer.finish(&mut outbox, frame);
-        if tokio::time::timeout(CLOSE_TIMEOUT, finish).await.is_err() {
-            tracing::info!("connection dropped: the client did not read its last messages");
+        // Then the closing handshake: read, and drop, what the client still sends until
+        // its own close frame or the end of the stream. Closing the socket with client
+        // data unread makes the kernel reset the connection, and a reset can discard
+        // what the client hasn't read yet, the close frame and last replies included
+        // (macOS does, #294). Best effort: the client may already be gone, or have
+        // stopped reading.
+        let close = async {
+            writer.finish(&mut outbox, frame).await?;
+            while let Some(Ok(message)) = incoming.next().await {
+                if matches!(message, Message::Close(_)) {
+                    break;
+                }
+            }
+            Ok::<(), Closed>(())
+        };
+        if tokio::time::timeout(CLOSE_TIMEOUT, close).await.is_err() {
+            tracing::info!("connection dropped: the client did not finish the close");
         }
     }
 }
@@ -250,6 +269,16 @@ pub(crate) async fn run(
 async fn stopping(shutdown: &mut watch::Receiver<bool>) {
     // An error means the server was dropped: that stops the connection too.
     let _ = shutdown.wait_for(|stopping| *stopping).await;
+}
+
+/// Whether the server is shutting down (or gone) now: what [`stopping`] waits for.
+fn stopped(shutdown: &watch::Receiver<bool>) -> bool {
+    *shutdown.borrow() || shutdown.has_changed().is_err()
+}
+
+/// The close frame of a connection the server's shutdown ends.
+fn shutting_down() -> CloseFrame {
+    close(close_code::AWAY, "the server is shutting down")
 }
 
 /// The next event, or never if the handshake hasn't subscribed yet.
