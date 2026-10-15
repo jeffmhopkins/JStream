@@ -48,7 +48,7 @@ use super::downmix::Downmix;
 use super::drift::DriftFit;
 use super::retire::Retirer;
 use super::ring::{FrameRing, RingWriter, WriteReport};
-use super::shared::{AtomicF64, Counter, GainParam, Meter};
+use super::shared::{AtomicF32, AtomicF64, Counter, GainParam, Meter};
 use super::sinc::{Output, Resampler};
 
 /// Closed-loop natural frequency of the timing controller (S3's tuning).
@@ -77,6 +77,9 @@ const STAGE_FRAMES: usize = 256;
 pub(crate) struct InputShared {
     /// The input's fader and mute, applied before its sends.
     pub(crate) gain: GainParam,
+    /// The activity gain, 0..=1, applied after the fader and meter and before the sends
+    /// (ADR-0028's audio that follows the program).
+    pub(crate) activity: AtomicF32,
     /// The input's row of the send matrix (post-fader).
     pub(crate) sends: Sends,
     pub(crate) meter: Meter,
@@ -105,6 +108,7 @@ impl InputShared {
     pub(crate) fn new() -> Self {
         Self {
             gain: GainParam::new(),
+            activity: AtomicF32::new(1.0),
             sends: Sends::new(),
             meter: Meter::default(),
             packets: Counter::default(),
