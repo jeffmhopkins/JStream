@@ -47,10 +47,10 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 86% | 30 | 3 | 2 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 26% | 6 | 11 | 6 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 30% | 7 | 10 | 6 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 11% | 1 | 1 | 7 |
 
-75 of 111 items are merged; 7 of those still wait on a run on Windows hardware.
+76 of 111 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -172,7 +172,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M2</b> UI: 6 of 23 merged</summary>
+<summary><b>M2</b> UI: 7 of 23 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -189,7 +189,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U5 | Tauri desktop app | 🧪 merged, Windows run pending: desktop app check | #258 |
 | Q3 | UI end-to-end tests | 🔍 in review | #309 |
 | Q4 | Performance benchmarks | 🔍 in review | #361 |
-| Q5 | Threat model | 🔍 in review | #358 |
+| Q5 | Threat model | ✅ merged | #358 |
 | T1 | Studio mode and transitions | 🔍 in review | #260 |
 | T1u | Studio-mode UI | ⏳ planned |  |
 | E2 | Video mixes | 🔍 in review | #259 |

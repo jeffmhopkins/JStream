@@ -1,6 +1,12 @@
 // The outputs panel: adding outputs, the write-only stream key, start and stop, go-live,
 // the encoder profile and deleting, through a real browser and the WebSocket API.
-import { test, expect, connect } from '../fixtures.js';
+import { test, expect, connect, inspectorPage } from '../fixtures.js';
+
+/** Connects and opens the inspector's Outputs page. */
+async function openOutputs(page, daemon) {
+  await connect(page, daemon);
+  await inspectorPage(page, 'Outputs');
+}
 
 /** The card of output `id`. */
 function card(page, id) {
@@ -16,7 +22,7 @@ async function addOutput(page, kind, target) {
 }
 
 test('a stream goes live once its key is set, and the key is never shown', async ({ page, daemon }) => {
-  await connect(page, daemon);
+  await openOutputs(page, daemon);
   await addOutput(page, 'rtmp', 'rtmp://127.0.0.1/live');
 
   const stream = card(page, 'output-1');
@@ -46,7 +52,7 @@ test('a stream goes live once its key is set, and the key is never shown', async
 });
 
 test('a recording starts and stops on its own buttons', async ({ page, daemon }) => {
-  await connect(page, daemon);
+  await openOutputs(page, daemon);
   await addOutput(page, 'record', '/tmp/show.mp4');
 
   const recording = card(page, 'output-1');
@@ -61,7 +67,7 @@ test('a recording starts and stops on its own buttons', async ({ page, daemon })
 });
 
 test('a server URL edit and an encoder choice reach the engine', async ({ page, daemon }) => {
-  await connect(page, daemon);
+  await openOutputs(page, daemon);
   await addOutput(page, 'rtmp', 'rtmp://127.0.0.1/live');
   const stream = card(page, 'output-1');
 
@@ -73,15 +79,15 @@ test('a server URL edit and an encoder choice reach the engine', async ({ page, 
 
   await stream.getByLabel('Encoder').selectOption({ label: 'High quality' });
   // A fresh page reads both back from the engine.
-  await connect(page, daemon);
+  await openOutputs(page, daemon);
   await expect(stream).toContainText('Stream to rtmps://127.0.0.1/app');
   await expect(stream.getByLabel('Encoder')).toHaveValue('hq');
 });
 
 test('another client sees outputs come and go', async ({ page, context, daemon }) => {
   const other = await context.newPage();
-  await connect(page, daemon);
-  await connect(other, daemon);
+  await openOutputs(page, daemon);
+  await openOutputs(other, daemon);
 
   await addOutput(page, 'record', '/tmp/a.mp4');
   await expect(card(other, 'output-1')).toContainText('Record to /tmp/a.mp4');

@@ -1,7 +1,7 @@
 [package]
 name = "jstream-sources"
 version = "0.0.0"
-description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour, image, text and media file sources."
+description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour, image, text, media file, audio waveform and audio spectrum sources."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -27,6 +27,8 @@ jstream-media.workspace = true
 jstream-platform.workspace = true
 jstream-protocol.workspace = true
 png.workspace = true
+# The spectrum source's FFT (C10).
+realfft.workspace = true
 # Settings values and the kind descriptors' defaults (ADR-0025).
 serde_json.workspace = true
 # Fonts for the text source (ADR-0031: pure-Rust font crates).
@@ -36,5 +38,7 @@ zune-core.workspace = true
 zune-jpeg.workspace = true
 
 [dev-dependencies]
+# Checks that the audio scope and the scope sources draw without allocating (R-RT-001).
+assert_no_alloc.workspace = true
 # Fake media files for the `media` kind's tests (R-TEST-004).
 jstream-platform = { workspace = true, features = ["fake"] }

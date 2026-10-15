@@ -12,10 +12,14 @@
 //! [`snapshot::plan`](crate::snapshot) asks the live source of every item it reaches for
 //! its frame at the current time on the media clock, and when that frame next changes.
 //! The thread re-plans at the earliest such time, so an animated image or a video
-//! advances on the clock; a still frame is planned once. A source that a plan reaches
-//! after plans that didn't is told it is shown again ([`Source::show`]), so a media file
-//! can restart. A source built before plans that didn't reach it (on a scene that isn't
-//! the program yet, or behind a hidden item) counts as shown again when one first does.
+//! advances on the clock; a still frame is planned once. A source that draws its frames
+//! as they come due (a [`Painter`]: the `waveform` and `spectrum` kinds) is painted by
+//! the thread just before it re-plans, holding no engine lock, so asking it for its
+//! frame under the collection lock only hands out the frame painted last. A source that
+//! a plan reaches after plans that didn't is told it is shown again ([`Source::show`]),
+//! so a media file can restart. A source built before plans that didn't reach it (on a
+//! scene that isn't the program yet, or behind a hidden item) counts as shown again when
+//! one first does.
 //!
 //! A source with sound of its own (a media file, [`Source::audio`]) is heard while the
 //! latest plan reaches it ([`LiveSources::end_plan`]). The engine hands its audio to the
@@ -31,7 +35,7 @@ use std::time::{Duration, Instant};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{MediaClock, MediaDecoders};
 use jstream_protocol::{Settings, SourceId, SourceKind};
-use jstream_sources::{Context, MediaAudio, Registry, Source, SourceError};
+use jstream_sources::{AudioScope, Context, MediaAudio, Painter, Registry, Source, SourceError};
 
 use crate::lock;
 use crate::snapshot::Frame;
@@ -176,10 +180,16 @@ impl LiveSources {
         if replan {
             self.start();
         }
+        self.share_painters();
         let mut queue = lock(&self.worker.queue);
         queue.clock = clock;
         queue.wake = replan.then_some(now);
         self.worker.wake.notify_all();
+    }
+
+    /// The program mix's audio, for the `waveform` and `spectrum` sources.
+    pub(crate) fn set_audio_scope(&mut self, scope: Arc<AudioScope>) {
+        self.ctx.audio = Some(scope);
     }
 
     /// The platform's media files, which `media` sources play through. Sources built
@@ -213,6 +223,9 @@ impl LiveSources {
                 .is_some_and(|s| framed(&registry, s.kind()).is_some())
         });
         self.audio_changed |= self.entries.len() != before;
+        if self.entries.len() != before {
+            self.share_painters();
+        }
         let mut jobs = Vec::new();
         for source in state.sources() {
             let Some(kind) = framed(&registry, source.kind()) else {
@@ -259,7 +272,7 @@ impl LiveSources {
         }
         let plan = self.plan;
         self.audio_changed = true;
-        entry.running = match built.result {
+        let running = match built.result {
             Ok(source) => Some(Running {
                 audio: source.audio(),
                 source,
@@ -281,7 +294,30 @@ impl LiveSources {
                 None
             }
         };
+        let painted = running
+            .as_ref()
+            .is_some_and(|r| r.source.painter().is_some())
+            || entry
+                .running
+                .as_ref()
+                .is_some_and(|r| r.source.painter().is_some());
+        entry.running = running;
+        if painted {
+            self.share_painters();
+        }
         true
+    }
+
+    /// Hands the thread every running source's painter and its time zero, after the
+    /// set of painted sources or their timing changed.
+    fn share_painters(&mut self) {
+        let painters = self
+            .entries
+            .values()
+            .filter_map(|e| e.running.as_ref())
+            .filter_map(|r| Some((r.source.painter()?, r.start)))
+            .collect();
+        lock(&self.worker.queue).painters = painters;
     }
 
     /// The current time on the clock sources run on.
@@ -457,6 +493,9 @@ struct Queue {
     wake: Option<MediaTime>,
     /// Builds taken but not installed yet, so `settled` waits for them too.
     building: usize,
+    /// The running sources that draw their frames as they come due, with each one's
+    /// time zero: the thread paints them before every re-plan.
+    painters: Vec<(Arc<dyn Painter>, MediaTime)>,
     clock: Arc<dyn MediaClock>,
     closed: bool,
 }
@@ -468,6 +507,7 @@ impl Worker {
                 jobs: VecDeque::new(),
                 wake: None,
                 building: 0,
+                painters: Vec::new(),
                 clock,
                 closed: false,
             }),
@@ -503,7 +543,8 @@ impl Worker {
 /// What the thread does next.
 enum Next {
     Build(Job),
-    Replan,
+    /// Paint these at this time, then re-plan.
+    Replan(Vec<(Arc<dyn Painter>, MediaTime)>, MediaTime),
     Exit,
 }
 
@@ -531,7 +572,7 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                 let now = queue.clock.now();
                 if now >= due {
                     queue.wake = None;
-                    break Next::Replan;
+                    break Next::Replan(queue.painters.clone(), now);
                 }
                 let wait = until(now, due);
                 queue = worker
@@ -543,10 +584,17 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
         };
         match next {
             Next::Exit => return,
-            Next::Replan => match host.upgrade() {
-                Some(host) => host.replan(),
-                None => return,
-            },
+            Next::Replan(painters, now) => {
+                // Drawing can take milliseconds, so it happens here, before the re-plan
+                // takes the collection lock and asks for the painted frames.
+                for (painter, start) in painters {
+                    painter.paint(since(now, start));
+                }
+                match host.upgrade() {
+                    Some(host) => host.replan(),
+                    None => return,
+                }
+            }
             Next::Build(job) => {
                 let result = job.registry.create(&job.kind, &job.settings, &job.ctx);
                 let built = Built {

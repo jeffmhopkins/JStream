@@ -69,6 +69,7 @@ fn ctx(dir: &Path, fake: &FakeMediaDecoders) -> Context {
             app: None,
         },
         limits: Limits::default(),
+        audio: None,
         media: Some(Arc::new(fake.clone())),
     }
 }
