@@ -3,7 +3,7 @@
 
 use std::fmt;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use jstream_mux::flv::{FlvTag, TagType};
 pub use jstream_outputs::rtmp::LinkState;
@@ -71,6 +71,14 @@ pub trait LivePublish: Send {
     /// When the destination does not close cleanly.
     fn finish(&mut self) -> Result<(), PublishError>;
 
+    /// The output is stopping: every later call should return by `deadline`. A send
+    /// that cannot finish by then fails instead, and `finish` past it closes without
+    /// waiting on the peer. Called once, on the output thread, when the stop's drain
+    /// starts. The default does nothing, for a destination that never blocks.
+    fn stop_by(&mut self, deadline: Instant) {
+        let _ = deadline;
+    }
+
     /// Whether the link is up or being re-established, after the last call. The
     /// output reports `reconnecting` while it is not [`Active`](LinkState::Active).
     /// A destination that cannot lose its link keeps the default, `Active`.
@@ -131,8 +139,16 @@ impl LivePublish for RecordingPublish {
 /// connection drops ([`ReconnectingPublisher`], with the default
 /// [`ReconnectPolicy`]). `send_metadata` on the publisher adds `@setDataFrame`
 /// itself, so script tags are the file-style `onMetaData` body.
+///
+/// Once the output is stopping ([`LivePublish::stop_by`]), each write's timeout is
+/// cut to the time left before the deadline, a lost link is not reconnected, and past
+/// the deadline sends fail and `finish` drops the connection without the
+/// `FCUnpublish` … `deleteStream` goodbye, so a peer that has stopped reading cannot
+/// hold the stop.
 pub struct RtmpPublish {
     inner: Option<ReconnectingPublisher<Transport>>,
+    /// Set by [`LivePublish::stop_by`].
+    deadline: Option<Instant>,
 }
 
 impl RtmpPublish {
@@ -141,10 +157,35 @@ impl RtmpPublish {
             .as_mut()
             .ok_or_else(|| PublishError::new("the RTMP session has finished"))
     }
+
+    /// While stopping: bounds the next write by the time left before the deadline.
+    /// `Ok(false)` when the link is down, so the caller does not wait on a
+    /// reconnect. Fails once the deadline has passed. Not stopping: `Ok(true)`.
+    fn before_io(&mut self) -> Result<bool, PublishError> {
+        let Some(deadline) = self.deadline else {
+            return Ok(true);
+        };
+        let left = deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(PublishError::new("the stop deadline passed"));
+        }
+        let Some(session) = self.publisher()?.publisher() else {
+            return Ok(false);
+        };
+        // A zero timeout means "none" to the OS, so never go below 1 ms.
+        session
+            .get_ref()
+            .set_write_timeout(Some(left.max(Duration::from_millis(1))))
+            .map_err(|err| PublishError::new(format!("bounding the write timeout: {err}")))?;
+        Ok(true)
+    }
 }
 
 impl LivePublish for RtmpPublish {
     fn send_tag(&mut self, tag: &FlvTag) -> Result<(), PublishError> {
+        if !self.before_io()? {
+            return Err(PublishError::new("the RTMP link is down while stopping"));
+        }
         let publisher = self.publisher()?;
         let result = match tag.tag_type {
             TagType::Script => publisher.send_metadata(&tag.body),
@@ -155,14 +196,25 @@ impl LivePublish for RtmpPublish {
     }
 
     fn poll(&mut self) -> Result<(), PublishError> {
+        if !self.before_io()? {
+            // Stopping with the link down: no reconnect to move along.
+            return Ok(());
+        }
         self.publisher()?.poll().map_err(rtmp_err)
     }
 
     fn finish(&mut self) -> Result<(), PublishError> {
+        let in_time = matches!(self.before_io(), Ok(true));
         match self.inner.take() {
-            Some(publisher) => publisher.finish().map(|_| ()).map_err(rtmp_err),
-            None => Ok(()),
+            Some(publisher) if in_time => publisher.finish().map(|_| ()).map_err(rtmp_err),
+            // Past the stop deadline, or the link is down: dropping the publisher
+            // closes the connection without waiting on the peer.
+            Some(_) | None => Ok(()),
         }
+    }
+
+    fn stop_by(&mut self, deadline: Instant) {
+        self.deadline = Some(deadline);
     }
 
     fn link_state(&self) -> LinkState {
@@ -227,6 +279,7 @@ fn connect_rtmp_with(
             policy,
             Clock::system(),
         )),
+        deadline: None,
     })
 }
 
@@ -236,8 +289,10 @@ pub(crate) mod tests {
     use jstream_mux::amf0::Amf0Value;
     use jstream_mux::flv::{FlvTag, TagType};
     use jstream_outputs::rtmp::ReconnectPolicy;
-    use std::io::{Read, Write};
+    use std::io::{ErrorKind, Read, Write};
     use std::net::{Shutdown, TcpListener, TcpStream};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -278,7 +333,25 @@ pub(crate) mod tests {
     /// then accepts the stream. A thread drains what the client sends until it hangs
     /// up, and returns how many bytes that was; it is returned, so the caller can wait
     /// for it or hang up first. The engine's tests publish to it too.
-    pub(crate) fn serve(mut io: TcpStream, delay: Duration) -> thread::JoinHandle<u64> {
+    pub(crate) fn serve(io: TcpStream, delay: Duration) -> thread::JoinHandle<u64> {
+        let reader = answer(io.try_clone().expect("clone"), delay);
+        thread::spawn(move || {
+            let mut total = reader.join().unwrap_or(0);
+            let mut io = io;
+            io.set_read_timeout(None).expect("blocking reads");
+            let mut buf = [0u8; 4096];
+            while let Ok(n @ 1..) = io.read(&mut buf) {
+                total += n as u64;
+            }
+            total
+        })
+    }
+
+    /// Answers the handshake, `connect` and the publish exchange, each `delay` late.
+    /// A thread reads what the client sends meanwhile, so the client never blocks on
+    /// a write; it returns how many bytes it read once the publish replies are out,
+    /// and is returned.
+    fn answer(mut io: TcpStream, delay: Duration) -> thread::JoinHandle<u64> {
         let mut c0c1 = vec![0; 1 + HANDSHAKE];
         io.read_exact(&mut c0c1).expect("C0C1");
         thread::sleep(delay);
@@ -289,13 +362,27 @@ pub(crate) mod tests {
         let mut c2 = vec![0; HANDSHAKE];
         io.read_exact(&mut c2).expect("C2");
 
-        let drain = {
+        let done = Arc::new(AtomicBool::new(false));
+        let reader = {
             let mut io = io.try_clone().expect("clone");
+            let done = Arc::clone(&done);
+            // Reads with a short timeout so it can stop once the replies are out.
+            io.set_read_timeout(Some(Duration::from_millis(5)))
+                .expect("read timeout");
             thread::spawn(move || {
                 let mut buf = [0u8; 4096];
                 let mut total = 0;
-                while let Ok(n @ 1..) = io.read(&mut buf) {
-                    total += n as u64;
+                while !done.load(Ordering::Acquire) {
+                    match io.read(&mut buf) {
+                        Ok(0) => break,
+                        Ok(n) => total += n as u64,
+                        Err(err)
+                            if matches!(
+                                err.kind(),
+                                ErrorKind::WouldBlock | ErrorKind::TimedOut
+                            ) => {}
+                        Err(_) => break,
+                    }
                 }
                 total
             })
@@ -337,7 +424,8 @@ pub(crate) mod tests {
             &mut out,
         );
         io.write_all(&out).expect("publish replies");
-        drain
+        done.store(true, Ordering::Release);
+        reader
     }
 
     /// [`serve`] with [`DELAY`], until the client hangs up.
@@ -441,5 +529,57 @@ pub(crate) mod tests {
         publish.finish().expect("finish");
         drop(publish);
         server.join().expect("server");
+    }
+
+    /// A server that accepts the publish and then stops reading. Once the stop has
+    /// set a deadline, the first write that blocks gives up when it passes, later
+    /// sends fail at once, and `finish` closes without the goodbye. Before, each
+    /// blocked write waited out the 10 s write timeout.
+    #[test]
+    fn a_stopping_rtmp_publish_gives_up_at_its_deadline() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let port = listener.local_addr().expect("addr").port();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let server = thread::spawn(move || {
+            let (io, _) = listener.accept().expect("accept");
+            answer(io.try_clone().expect("clone"), Duration::ZERO)
+                .join()
+                .expect("reader");
+            // Hold the connection open, reading nothing, until the test is done.
+            let _ = release_rx.recv();
+            drop(io);
+        });
+
+        let mut publish =
+            connect_rtmp(&format!("rtmp://127.0.0.1:{port}/live"), "test-key").expect("publish");
+        let started = Instant::now();
+        let deadline = started + Duration::from_millis(300);
+        publish.stop_by(deadline);
+        let tag = FlvTag {
+            tag_type: TagType::Video,
+            timestamp: 0,
+            body: [&[0x17u8, 1, 0, 0, 0][..], &vec![0u8; 64 * 1024]].concat(),
+        };
+        let mut failed = false;
+        while started.elapsed() < Duration::from_secs(5) {
+            if publish.send_tag(&tag).is_err() {
+                failed = true;
+                break;
+            }
+        }
+        let sent_for = started.elapsed();
+        publish.finish().expect("finish");
+        let took = started.elapsed();
+        let _ = release_tx.send(());
+        server.join().expect("server");
+        assert!(failed, "sends to a peer that reads nothing never failed");
+        assert!(
+            sent_for < Duration::from_secs(2),
+            "the sends gave up {sent_for:?} after a 300 ms deadline"
+        );
+        assert!(
+            took < Duration::from_secs(2),
+            "finish returned {took:?} after a 300 ms deadline"
+        );
     }
 }
