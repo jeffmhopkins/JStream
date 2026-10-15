@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:119a92991fa79767", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042: covers gains Cargo.toml; 'depends only on jstream-media, thiserror and wgpu' matches the manifest; merge of main's text re-read, ARCH#threading edits don't touch the mailbox wording" }
+verified = { hash = "b3:4472ddd76ccf10e2", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (ADR-0042, B1) into C4b: main didn't change this section's text; re-read Not yet (VideoDevices not in Backends, MfVideoDevices/MfMjpegDecoder exist, CaptureStats decode count, MJPEG Codec variant) against src and lib.rs" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
