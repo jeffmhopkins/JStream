@@ -1766,6 +1766,139 @@ mod cpu_pipeline {
         }
     }
 
+    // --- Item: a publish opener connects on every start, as a live host needs.
+
+    /// The engine as a live host wires it: no one-shot target, an opener that
+    /// connects RTMP to a fake server on loopback. Each `output.start` opens a new
+    /// session and publishes media into it, and `output.stop` ends it, so the output
+    /// can start again after a stop.
+    #[test]
+    fn a_publish_opener_connects_rtmp_on_every_start() {
+        use crate::runtime::serve_rtmp;
+        use crate::{OpenPublish, connect_rtmp};
+        use std::net::TcpListener;
+
+        const STARTS: usize = 2;
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let url = format!(
+            "rtmp://127.0.0.1:{}/live",
+            listener.local_addr().expect("addr").port()
+        );
+        // A baseline session that publishes no media, then one session per start, in
+        // turn; each drains until the client hangs up.
+        let server = thread::spawn(move || {
+            (0..=STARTS)
+                .map(|_| {
+                    let (io, _) = listener.accept().expect("accept");
+                    serve_rtmp(io, Duration::ZERO).join().expect("drain")
+                })
+                .collect::<Vec<u64>>()
+        });
+        let opens = Arc::new(AtomicU64::new(0));
+        let open: OpenPublish = {
+            let opens = Arc::clone(&opens);
+            let url = url.clone();
+            Arc::new(move |output_id: &OutputId| {
+                assert_eq!(output_id, &OutputId::new("yt"));
+                opens.fetch_add(1, Ordering::SeqCst);
+                let publish: Box<dyn LivePublish> = Box::new(connect_rtmp(&url, "test-key")?);
+                Ok(publish)
+            })
+        };
+
+        let mut baseline = connect_rtmp(&url, "test-key").expect("baseline session");
+        baseline.finish().expect("finish");
+        drop(baseline);
+
+        let fakes = fakes();
+        let engine = Engine::new()
+            .with_output(OutputId::new("yt"))
+            .with_backends(share(&fakes.backends))
+            .with_draw(cpu_draw())
+            .with_publish_opener(open);
+        let control = connected(&engine);
+        let mut events = control.events();
+        for run in 1..=STARTS {
+            start(&control, &mut events);
+            assert_eq!(
+                opens.load(Ordering::SeqCst),
+                run as u64,
+                "one open per start"
+            );
+            assert!(
+                pump_until(&fakes.clock, &fakes.audio, || {
+                    engine.output_stats().is_some_and(|stats| {
+                        stats.video_subscriber.delivered >= 3
+                            && stats.audio_subscriber.delivered >= 3
+                    })
+                }),
+                "start {run}: media never reached the publish target"
+            );
+            block_on(control.call(output_call("yt", false))).expect("output.stop");
+            assert_eq!(
+                output_steps(&mut events),
+                vec![OutputState::Stopping, OutputState::Stopped]
+            );
+        }
+        let drained = server.join().expect("server");
+        let (baseline, runs) = drained.split_first().expect("sessions");
+        assert_eq!(runs.len(), STARTS, "one session per start");
+        for (run, bytes) in runs.iter().enumerate() {
+            assert!(
+                bytes > baseline,
+                "session {} carried {bytes} bytes, no more than the {baseline} without media",
+                run + 1
+            );
+        }
+    }
+
+    /// An opener that cannot connect fails the start with `action_failed` and settles
+    /// `failed`; the reason says what failed without the stream key (R-SEC-001), and
+    /// the opener is kept for the next start.
+    #[test]
+    fn a_failed_publish_opener_fails_the_start() {
+        use crate::{OpenPublish, connect_rtmp};
+        use std::net::TcpListener;
+
+        // A port nothing listens on: bound, then released.
+        let port = TcpListener::bind("127.0.0.1:0")
+            .and_then(|listener| listener.local_addr())
+            .expect("a free port")
+            .port();
+        let url = format!("rtmp://127.0.0.1:{port}/live");
+        let opens = Arc::new(AtomicU64::new(0));
+        let open: OpenPublish = {
+            let opens = Arc::clone(&opens);
+            Arc::new(move |_: &OutputId| {
+                opens.fetch_add(1, Ordering::SeqCst);
+                let publish: Box<dyn LivePublish> =
+                    Box::new(connect_rtmp(&url, "secret-stream-key")?);
+                Ok(publish)
+            })
+        };
+        let fakes = fakes();
+        let engine = Engine::new()
+            .with_output(OutputId::new("yt"))
+            .with_backends(share(&fakes.backends))
+            .with_draw(cpu_draw())
+            .with_publish_opener(open);
+        let control = connected(&engine);
+        let mut events = control.events();
+        for run in 1..=2 {
+            let err = block_on(control.call(output_call("yt", true))).expect_err("refused");
+            assert_eq!(code(&err), Some("action_failed"));
+            let reason = err.to_string();
+            assert!(reason.contains("opening the publish target"), "{reason}");
+            assert!(!reason.contains("secret-stream-key"), "{reason}");
+            assert_eq!(
+                output_steps(&mut events),
+                vec![OutputState::Starting, OutputState::Failed]
+            );
+            assert_eq!(opens.load(Ordering::SeqCst), run, "the opener is kept");
+            assert!(engine.output_stats().is_none());
+        }
+    }
+
     // --- Item: an encoder that fails mid-stream fails the output.
 
     struct FailingVideo {

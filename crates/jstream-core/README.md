@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:4aa7a09a8bf75717", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Purpose for #136 (bounded stop drain, rt_panic_is_reported, with_cpu_compositor test seam) after merging main (#132) and adding a doc comment on discard (#136 review N1: packets queued while draining are counted too); the drop-counts and tests bullets still hold" }
+verified = { hash = "b3:b6654e4f2b866422", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#135 publish opener) into #136: resolved the Tests bullet conflict by keeping both lists (stalled-stop and stop-deadline RTMP tests, rt_panic_is_reported via with_cpu_compositor, and #135's opener tests); Engine bullet names with_publish_opener, Drop counts bullet names the stop drain; both match the code" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -26,10 +26,12 @@ host hands them an `InProcessControl` as a `dyn Control`.
 
 The control plane is the scene graph, the sessions and `video.snapshot`.
 `output.start` runs the media pipeline when the host calls
-`with_backends` and `with_publish`. Without those, an output action stays the
-placeholder state machine. Contents:
+`with_backends` and gives it a publish target (`with_publish` or
+`with_publish_opener`). Without backends, an output action stays the placeholder
+state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
-  `Engine::new()`, `with_output(id)`, `with_backends` and `with_publish`;
+  `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish` and
+  `with_publish_opener`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads the running pipeline. It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys and the
@@ -65,7 +67,8 @@ placeholder state machine. Contents:
   without one),
   `connect_rtmp` against a slow fake RTMP server on loopback, one that hangs up
   and is reconnected to, and one that stops reading while a stop's deadline runs out,
-  overload drops from a
+  a publish opener connecting that fake server on every start (start, media, stop,
+  twice) and one that cannot connect, overload drops from a
   fake encoder and the mixer reported in `stats.tick`, render and mixer panics
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
   the hidden `Engine::with_cpu_compositor`), and an MCP agent
@@ -84,7 +87,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:84b6113953179e80", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Design for #136 after merging main (#132): the stop paragraph (STOP_DRAIN 2 s, stop_by, drop and count the rest in output_packets, errors while stopping logged) and the Stop drain drop-table row match pipeline.rs; the discard comment only clarifies that late-queued packets are counted, which the row already covers" }
+verified = { hash = "b3:06ae65a234c20a76", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#135 publish opener) into #136: re-read Pipeline, failure, stop, drop table and RTMP paragraphs; #135's one-shot vs opener wording and #136's bounded 2 s stop drain (stop_by, Stop drain row) coexist without contradiction: an opened target is a LivePublish, so it gets stop_by like a one-shot one; Locking unchanged" }
 -->
 
 ### Engine and sessions
@@ -297,15 +300,24 @@ and reports progress as events, so that is what the engine does:
 The placeholder stays so clients that already drive start/stop/status against the mock
 keep working when the host has not injected media.
 
-**Pipeline.** `with_backends` plus `with_publish` makes `output.start` launch threads
-instead. The call checks the output is idle and that no other pipeline is running,
+**Pipeline.** `with_backends` plus a publish target makes `output.start` launch
+threads instead. The target is either one-shot, set with `with_publish` and consumed
+by the next start, or an opener (`OpenPublish`, set with `with_publish_opener`) that
+every start calls when no one-shot target is waiting. A live host uses the opener
+with `connect_rtmp`: each start connects anew, so the output can start again after a
+stop or a failure, and no session sits idle before the start. The opener runs after
+`starting`, outside the collection lock and the pipeline gate, before any device
+opens; its error fails the start like a launch failure (`failed`, then
+`action_failed` with `opening the publish target: <reason>`), and the opener is kept.
+Its error text must not carry a stream key
+([R-SEC-001](../../docs/RULES.md#R-SEC-001)); `connect_rtmp`'s does not. The call checks the output is idle and that no other pipeline is running,
 takes the publish target, records an in-flight generation, emits `starting`, and
 drops the collection lock before it opens devices or joins anything. It then waits,
 up to 10 s, for the render thread to open the software compositor; that bound only
 keeps a stuck adapter from blocking the call, and the GPU tests raise it because
 lavapipe can open slower than that on a loaded CI runner. Success emits `active`.
-Failure emits `failed` and `action_failed`, and drops the publish target so the
-host sets another before retrying. A second start while one pipeline is up, or
+Failure emits `failed` and `action_failed`, and drops a one-shot publish target so
+the host sets another before retrying (an opener is kept). A second start while one pipeline is up, or
 while a start is still in flight, fails with `action_failed` and leaves that
 pipeline alone. `output.stop` on an `active` pipeline emits `stopping`, drops it
 outside the lock (its drop sets the stop flag and joins the threads; the output
@@ -313,7 +325,7 @@ thread's drain is bounded, see the RTMP paragraph below), then emits
 `stopped`. `output.stop` during the in-flight start cancels that generation, emits
 `stopping`, waits until the start has dropped whatever it opened, then emits
 `stopped`. The start then answers `action_failed` and does not emit `active`. The
-publish target is dropped on that path too.
+publish target (one-shot or opened) is dropped on that path too.
 
 Once the pipeline is `active`, a fatal error on any pipeline thread is sent on a
 channel: a `send_tag` or `poll` failure, an encoder stream that ends before the
@@ -323,7 +335,7 @@ A watcher the control thread started settles `failed`, emits `output.state_chang
 and drops the pipeline so the render and mixer threads stop. The watcher holds weak
 pointers between messages, so it does not keep the engine alive: dropping
 the last engine handle and its sessions joins the pipeline. `output_stats` is then
-empty. `failed` counts as idle, and a later start needs a new publish target. That
+empty. `failed` counts as idle, and a later start needs a new one-shot target or an opener. That
 start waits until the failed pipeline has finished joining, so the new devices do
 not overlap the old teardown. The same holds when a
 start fails after `launch` returned threads (a failure reported before `active`, or
