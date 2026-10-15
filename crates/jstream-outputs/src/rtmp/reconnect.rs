@@ -397,6 +397,15 @@ impl<S: Read + Write + Send + 'static> ReconnectingPublisher<S> {
         }
     }
 
+    /// The current session, mutably, while the link is up: for example to bound its
+    /// writes ([`Transport::set_write_deadline`]).
+    pub fn publisher_mut(&mut self) -> Option<&mut RtmpPublisher<S>> {
+        match &mut self.link {
+            Link::Up { publisher, .. } => Some(&mut **publisher),
+            _ => None,
+        }
+    }
+
     /// Sends `onMetaData` as [`RtmpPublisher::send_metadata`] does, and keeps it to
     /// re-send after a reconnect. While reconnecting it is only kept.
     ///

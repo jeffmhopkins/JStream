@@ -6,10 +6,10 @@
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rustls::pki_types::ServerName;
-use rustls::{ClientConfig, ClientConnection, RootCertStore, StreamOwned};
+use rustls::{ClientConfig, ClientConnection, RootCertStore, Stream, StreamOwned};
 
 use super::{RtmpError, RtmpUrl, Scheme};
 
@@ -21,9 +21,19 @@ use super::{RtmpError, RtmpUrl, Scheme};
 /// read that times out keeps any partly received record and resumes it on the next
 /// read, so [`RtmpPublisher::poll_incoming`](super::RtmpPublisher::poll_incoming) works
 /// the same over both.
+///
+/// A write timeout bounds each socket write, and writing one large message takes
+/// many. [`set_write_deadline`](Self::set_write_deadline) bounds them all together.
 #[derive(Debug)]
-#[non_exhaustive]
-pub enum Transport {
+pub struct Transport {
+    link: Link,
+    /// Set by [`Transport::set_write_deadline`].
+    write_deadline: Option<Instant>,
+}
+
+/// The byte stream itself.
+#[derive(Debug)]
+enum Link {
     /// `rtmp://`: the TCP stream itself.
     Tcp(TcpStream),
     /// `rtmps://`: a rustls client session over the TCP stream, handshake complete.
@@ -31,17 +41,38 @@ pub enum Transport {
 }
 
 impl Transport {
+    fn new(link: Link) -> Self {
+        Self {
+            link,
+            write_deadline: None,
+        }
+    }
+
     /// The TCP socket underneath, for example to read its peer address.
     pub fn tcp(&self) -> &TcpStream {
-        match self {
-            Self::Tcp(s) => s,
-            Self::Tls(s) => &s.sock,
+        match &self.link {
+            Link::Tcp(s) => s,
+            Link::Tls(s) => &s.sock,
         }
     }
 
     /// Whether this is a TLS (`rtmps://`) transport.
     pub fn is_tls(&self) -> bool {
-        matches!(self, Self::Tls(_))
+        matches!(self.link, Link::Tls(_))
+    }
+
+    /// Bounds every later write, and the flush, by `deadline`: before each socket write
+    /// (over TLS too) the write timeout is cut to the time left, and once it has passed
+    /// a write fails with [`TimedOut`](io::ErrorKind::TimedOut) without touching the
+    /// socket. So a peer that reads a few bytes at a time cannot stretch one message
+    /// past it, as it can with a write timeout alone, which each partial write
+    /// restarts. Each socket write also sends at most 16 KiB, because on macOS and the
+    /// BSDs the timeout of one write restarts whenever the peer frees buffer space; there
+    /// a trickling peer can still hold a write for as long as it takes to read 16 KiB.
+    /// `None` stops cutting, and leaves the last timeout set in place; set
+    /// another with [`set_write_timeout`](Self::set_write_timeout).
+    pub fn set_write_deadline(&mut self, deadline: Option<Instant>) {
+        self.write_deadline = deadline;
     }
 
     /// Sets the socket's read timeout. With a short one, a read that finds nothing
@@ -72,7 +103,7 @@ impl Transport {
     /// # Errors
     /// Transport errors while sending `close_notify` or shutting the socket down.
     pub fn shutdown(&mut self) -> io::Result<()> {
-        if let Self::Tls(s) = self {
+        if let Link::Tls(s) = &mut self.link {
             s.conn.send_close_notify();
             match s.flush() {
                 Err(e) if peer_gone(&e) => return Ok(()),
@@ -99,26 +130,85 @@ fn peer_gone(e: &io::Error) -> bool {
 
 impl Read for Transport {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Self::Tcp(s) => s.read(buf),
-            Self::Tls(s) => s.read(buf),
+        match &mut self.link {
+            Link::Tcp(s) => s.read(buf),
+            Link::Tls(s) => s.read(buf),
         }
     }
 }
 
 impl Write for Transport {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            Self::Tcp(s) => s.write(buf),
-            Self::Tls(s) => s.write(buf),
+        match (&mut self.link, self.write_deadline) {
+            (Link::Tcp(s), None) => s.write(buf),
+            (Link::Tls(s), None) => s.write(buf),
+            (Link::Tcp(s), Some(deadline)) => DeadlineSocket::new(s, deadline).write(buf),
+            (Link::Tls(s), Some(deadline)) => {
+                let s = &mut **s;
+                // The same as `StreamOwned`'s write, over a socket that cuts each of
+                // the writes rustls makes to the time left.
+                Stream::new(&mut s.conn, &mut DeadlineSocket::new(&s.sock, deadline)).write(buf)
+            }
         }
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        match self {
-            Self::Tcp(s) => s.flush(),
-            Self::Tls(s) => s.flush(),
+        match (&mut self.link, self.write_deadline) {
+            (Link::Tcp(s), _) => s.flush(),
+            (Link::Tls(s), None) => s.flush(),
+            (Link::Tls(s), Some(deadline)) => {
+                let s = &mut **s;
+                Stream::new(&mut s.conn, &mut DeadlineSocket::new(&s.sock, deadline)).flush()
+            }
         }
+    }
+}
+
+/// The most one socket write sends while a write deadline is set
+/// ([`DeadlineSocket`]): one TLS record's worth.
+const MAX_DEADLINE_WRITE: usize = 16 * 1024;
+
+/// A TCP socket whose every write is bounded by `deadline`
+/// ([`Transport::set_write_deadline`]). Reads pass straight through.
+struct DeadlineSocket<'a> {
+    tcp: &'a TcpStream,
+    deadline: Instant,
+}
+
+impl<'a> DeadlineSocket<'a> {
+    fn new(tcp: &'a TcpStream, deadline: Instant) -> Self {
+        Self { tcp, deadline }
+    }
+}
+
+impl Read for DeadlineSocket<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.tcp.read(buf)
+    }
+}
+
+impl Write for DeadlineSocket<'_> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let left = self.deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "the write deadline passed",
+            ));
+        }
+        // A zero timeout means "none" to the OS, so never go below 1 ms.
+        self.tcp
+            .set_write_timeout(Some(left.max(Duration::from_millis(1))))?;
+        // On macOS and the BSDs the timeout restarts each time the peer frees some
+        // buffer space, so one large write to a trickle-reading peer can block far past
+        // it. Capping each write bounds the overshoot to the time the peer takes to
+        // read this much; Linux bounds the whole write by the timeout anyway.
+        let len = buf.len().min(MAX_DEADLINE_WRITE);
+        self.tcp.write(&buf[..len])
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.tcp.flush()
     }
 }
 
@@ -144,7 +234,7 @@ impl Write for Transport {
 /// because the certificate does not match the host or chains to no trusted root.
 pub fn connect(url: &RtmpUrl, timeout: Option<Duration>) -> Result<Transport, RtmpError> {
     match url.scheme() {
-        Scheme::Rtmp => connect_tcp(url, timeout).map(Transport::Tcp),
+        Scheme::Rtmp => connect_tcp(url, timeout).map(|tcp| Transport::new(Link::Tcp(tcp))),
         Scheme::Rtmps => connect_tls(url, timeout, client_config(native_roots()?)?),
     }
 }
@@ -207,7 +297,9 @@ pub(crate) fn connect_tls(
     }
     tcp.set_read_timeout(None).map_err(io)?;
     tcp.set_write_timeout(None).map_err(io)?;
-    Ok(Transport::Tls(Box::new(StreamOwned::new(conn, tcp))))
+    Ok(Transport::new(Link::Tls(Box::new(StreamOwned::new(
+        conn, tcp,
+    )))))
 }
 
 /// A handshake I/O error: the rustls error inside it when there is one (a certificate

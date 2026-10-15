@@ -1,7 +1,7 @@
 //! Transport tests over loopback TCP, with TLS certificates generated at test time
 //! (docs/RULES.md#R-TEST-004).
 
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::thread;
 
 use rustls::CertificateError;
@@ -131,4 +131,85 @@ fn handshake_against_a_silent_server_times_out() {
         "{err:?}"
     );
     server.join().unwrap();
+}
+
+/// Reads `tcp` a trickle at a time (64 KiB every 60 ms, raw bytes even under TLS)
+/// until `stop` fires or the client hangs up.
+fn trickle(tcp: &TcpStream, stop: &std::sync::mpsc::Receiver<()>) {
+    tcp.set_read_timeout(Some(Duration::from_millis(50)))
+        .unwrap();
+    let mut buf = vec![0u8; 64 * 1024];
+    while stop.try_recv().is_err() {
+        match (&*tcp).read(&mut buf) {
+            Ok(0) => break,
+            Ok(_) => thread::sleep(Duration::from_millis(60)),
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
+                ) => {}
+            Err(_) => break,
+        }
+    }
+}
+
+/// Writes 32 MiB with a write deadline 500 ms out to a peer that reads a trickle, and
+/// returns how long the write took to fail. Without the deadline each socket write's
+/// timeout restarts on every bit of progress, so this would run for half a minute.
+fn write_past_a_deadline(t: &mut Transport) -> Duration {
+    t.set_write_timeout(Some(Duration::from_secs(1))).unwrap();
+    let started = std::time::Instant::now();
+    t.set_write_deadline(Some(started + Duration::from_millis(500)));
+    let err = t
+        .write_all(&vec![0u8; 32 * 1024 * 1024])
+        .and_then(|()| t.flush())
+        .expect_err("a trickle-reading peer took 32 MiB before the deadline");
+    assert!(
+        matches!(
+            err.kind(),
+            io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+        ),
+        "{err:?}"
+    );
+    started.elapsed()
+}
+
+/// #138: the write deadline bounds a whole large write, not each socket write.
+#[test]
+fn a_write_deadline_bounds_a_large_write_over_tcp() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let (stop, stopped) = std::sync::mpsc::channel();
+    let server = thread::spawn(move || trickle(&listener.accept().unwrap().0, &stopped));
+
+    let mut t = connect(&url("rtmp", "127.0.0.1", port), TIMEOUT).unwrap();
+    let took = write_past_a_deadline(&mut t);
+    let _ = stop.send(());
+    drop(t);
+    server.join().unwrap();
+    assert!(
+        took < Duration::from_secs(4),
+        "the write failed after {took:?}"
+    );
+}
+
+/// The same over TLS, where one write of the plaintext is many socket writes inside
+/// rustls.
+#[test]
+fn a_write_deadline_bounds_a_large_write_over_tls() {
+    let pki = TestPki::new(&["localhost"]);
+    let (stop, stopped) = std::sync::mpsc::channel();
+    let (port, server) = tls_server(pki.server_config(&[&TLS13]), move |s| {
+        trickle(&s.sock, &stopped);
+    });
+    let config = client_config(pki.roots.clone()).unwrap();
+    let mut t = connect_tls(&url("rtmps", "localhost", port), TIMEOUT, config).unwrap();
+    let took = write_past_a_deadline(&mut t);
+    let _ = stop.send(());
+    drop(t);
+    server.join().unwrap().unwrap();
+    assert!(
+        took < Duration::from_secs(4),
+        "the write failed after {took:?}"
+    );
 }
