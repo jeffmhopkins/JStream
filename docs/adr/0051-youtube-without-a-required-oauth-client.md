@@ -45,15 +45,20 @@ Most of what a streamer needs from YouTube works without the API:
 - A `youtube` stream goes out as a generic RTMPS output with the user's stream key
   (ADR-0009). That needs no sign-in, no Google client and no API quota.
 - **Chat without OAuth:** a "YouTube chat" preset of the browser source. It is a
-  browser source with the popout chat page for a live video, and its settings take a
-  video ID or live URL. It is read-only: it shows chat, and it can't send, feature or
-  moderate. The page is YouTube's own, so it runs under ADR-0021's browser rules like
-  any other page.
+  browser source with the popout chat page for a live video. Its main setting is the
+  user's channel (a handle such as `@name`, or a channel URL), so it is set up once:
+  each time it loads, and while it shows no chat, it opens the channel's public live
+  page to find the current live video and shows that video's chat, with no API call.
+  A video ID or link can be given instead, to pin one broadcast. It is read-only: it
+  shows chat, and it can't send, feature or moderate. The pages are YouTube's own, so
+  they run under ADR-0021's browser rules like any other page.
 
 **2. The Live API is optional: the user brings their own client.**
-- A user who wants more puts **their own** Google OAuth client ID (and its secret, if
-  the client type has one) in JStream's configuration. The client is set up in their
-  own Google Cloud project, under their own quota.
+- A user who wants more enters **their own** Google OAuth client ID (and its secret, if
+  the client type has one) in JStream's settings, with no file to edit. The client is
+  set up in their own Google Cloud project, under their own quota. The ID and secret
+  are kept in the OS credential store, like the refresh token: never in a collection
+  file, a protocol message or a log, and the secret is never shown back.
 - **JStream never embeds an OAuth client** in any build, and never ships a default one.
 - With a client configured, everything ADR-0041 describes turns on for that user's
   account, unchanged:
@@ -87,8 +92,10 @@ behaviour.
   enabling the YouTube Data API, making an OAuth client for a desktop app, and
   accepting the unverified-app warning for their own unpublished client. The docs need
   a how-to for this.
-- **Chat without a client is display-only,** and as reliable as YouTube's popout page:
-  if YouTube changes or blocks it, the preset breaks while the API path keeps working.
+- **Chat without a client is display-only,** and as reliable as YouTube's popout and
+  live pages: if YouTube changes or blocks them, the preset breaks while the API path
+  keeps working. Following a channel finds a stream once it is live; a scheduled
+  broadcast that hasn't started shows no chat until it does.
   The page's look comes from YouTube, styled only as far as browser-source CSS allows.
 - **Code that follows (on acceptance):**
   - Y3 (#223) and A6b (#312) treat YouTube as "off unless the user supplied a client":

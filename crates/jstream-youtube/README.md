@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0051-youtube-without-a-required-oauth-client.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:e65f6e5cd4cd3803", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 N3: re-read; the §4/§5 citations and the not-yet line now say ADR-0041 kept by ADR-0051; holds" }
+verified = { hash = "b3:cd6faeae87299ba5", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "ADR-0051 gains Jeff's UX answers (channel-following chat preset, client ID and secret in the OS credential store), plus N5 code comments citing ADR-0041 §4/§5 kept by ADR-0051: re-read; the client secret is held as a Secret here, and where the host keeps it is the host's job; holds" }
 -->
 
 Layer-2 client for Google sign-in and the
