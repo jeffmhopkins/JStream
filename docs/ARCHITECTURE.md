@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:02586af269c6ad78", by = "agent:claude@session_01G2n9TnrH9za1trRoJWCsmB", note = "main.rs gained the docs review and docs log usage entries only; the xtask/ line (docs, lint-deps, governance, ...) and the rest of the tree still hold" }
+verified = { hash = "b3:f93d77c61243e82a", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against H3: .github line now lists the new sweep workflow alongside ci, governance and review-gate; xtask main.rs entries and the rest of the tree unchanged" }
 -->
 
 ```
@@ -107,7 +107,7 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md, generated README.md index)
 │   └── guides/
-└── .github/                # workflows (CI, governance, review-gate), Dependabot config, PR template
+└── .github/                # workflows (CI, governance, review-gate, sweep), Dependabot config, PR template
 ```
 
 <a id="crate-map"></a>

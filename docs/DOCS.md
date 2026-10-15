@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:3ddfa20219b42b37", by = "agent:claude@session_01G2n9TnrH9za1trRoJWCsmB", note = "Re-read against I3's xtask change (history.rs adds docs log; mod.rs adds docs review and a shared stamp check): new History and TTL review bullet matches both commands; Not yet now names only docs index and the sweep; other bullets unchanged" }
+verified = { hash = "b3:dc8fac3dad6b7f2b", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against H3: new Weekly sweep bullet matches sweep.yml (cargo deny, docs due via docs log, cargo update --dry-run, override audit, one issue) and names link/fact checks as not built; Not yet now lists only docs index; other bullets unchanged" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -54,7 +54,10 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **History and TTL review** ([History](#history), [Time-based review](#ttl)):
   `cargo xtask docs log` derives a doc's or section's history from git, and
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
-- **Not yet:** `docs index` and the weekly sweep.
+- **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
+  `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
+  audit list in one issue. Its link and fact checks are not built yet.
+- **Not yet:** `docs index`.
 - IDs, anchors and rule numbers became permanent at the first merge to `main` (#1).
 
 <a id="identity"></a>
@@ -374,14 +377,21 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
   - `file`: checked on every PR.
   - `ext`: the sweep fetches the page and checks the value still appears.
   - `manual`: listed for re-check when due.
-- **Weekly sweep** (scheduled workflow `sweep`):
-  - link-checks every external with lychee (cached, authenticated; 403 and 429 count
-    as *unknown*, not broken);
-  - lists due docs and externals, fact drift, verify-to-edit ratios, pending
-    enforcement past its milestone, and every PR merged with `governance-approved`
-    or `review-override`, and every Tier-1 ADR decision on merged PRs, marked direct or
-    proxy, with the quoted instruction (the override and decision audit);
-  - **updates one pinned issue, "Docs due for review"**, instead of opening new ones.
+- **Weekly sweep** (scheduled workflow `sweep`, also run by hand from the Actions tab):
+  - runs `cargo deny check` against the latest RustSec advisory DB;
+  - lists docs due for review (from `cargo xtask docs log`, which prints `(due now)` once
+    `review_every` has passed), and any `cargo xtask docs check` failure on `main`;
+  - reports `cargo update --dry-run`: compatible updates, and dependencies held back by a
+    version requirement or the toolchain;
+  - lists every PR merged with `governance-approved` or `review-override` in the past
+    eight days (the override audit, [R-GOV-002](RULES.md#R-GOV-002));
+  - **rewrites one pinned issue, "Weekly sweep"**, instead of opening new ones, and
+    reopens it if it was closed. Findings never fail the job; a tool that can't run does.
+  - Not built yet: link-checking every external with lychee (cached, authenticated; 403
+    and 429 count as *unknown*, not broken), due externals and `ext` facts, fact drift,
+    verify-to-edit ratios, pending enforcement past its milestone, and every Tier-1 ADR
+    decision on merged PRs, marked direct or proxy, with the quoted instruction (the
+    decision audit).
   - A scheduled agent may pick items from that issue and open PRs. Those PRs go
     through the normal gate.
 
