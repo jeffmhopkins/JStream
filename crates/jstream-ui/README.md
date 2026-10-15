@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:55cc9041dedee7b0", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 round 2 (main's virtual camera, mixes 0.19, claim_layers); privacy now protocol 0.20: cascade only" }
+verified = { hash = "b3:5bcbc624f39db196", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): cascade only; UI text names no mixes" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

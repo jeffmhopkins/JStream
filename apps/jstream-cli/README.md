@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:3fa5a16e1d133e59", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; commands still map one-to-one onto protocol calls" }
+verified = { hash = "b3:d7771a078d6a9036", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): cascade only; text is main's and names no mix or audio change" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:dc5622c02a2978dd", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): added privacy on/off/get rows" }
+verified = { hash = "b3:b0dbb2ef65decf2e", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): re-read the edits bullet: video mix edits still need a JSON form and audio edits are not in the CLI; both lists hold together" }
 -->
 
 ```sh
@@ -123,7 +123,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   grouping is one batch that creates a scene as a group, places it through a `scene:`
   source, and moves the items into it. The placement edits'
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
-  the item's own scene, which omitting it already means.
+  the item's own scene, which omitting it already means. Protocol 0.19's audio edits
+  (`source.set_audio`, `bus.*`, `send.*`), `bus.list` and `audio.reset_loudness` are not
+  in the CLI either.
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
@@ -165,7 +167,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
   server URL, as `output.create` takes it). `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
-  (<name>):` by its role, then the outputs. `output status` prints
+  (<name>):` by its role, then the outputs; only `--json` shows the sources' audio, the
+  buses and the sends. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
@@ -182,6 +185,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   When the server dropped events because the CLI read too slowly, it prints
   `events.dropped <count>`. A pipeline drop sample prints
   `stats.tick seq <n> capture_frames <n> audio_frames <n> render_ticks <n> encode_frames <n> encode_blocks <n> output_packets <n>`.
+  Any other event, `meters.tick` among them, prints as its JSON.
 
 **MCP.** `jstream-cli mcp` is the stdio MCP proxy for an agent's MCP client to launch,
 for example:
@@ -238,7 +242,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:45dd434a6a8979e1", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 round 2 (main's virtual camera, mixes 0.19, claim_layers); privacy now protocol 0.20: re-read; privacy event line and dedicated note hold beside main's text" }
+verified = { hash = "b3:166f4f1aa874df12", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): cascade only; main's text unaffected by video mixes" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:3ff8c98088a56a29", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 round 2 (main's virtual camera, mixes 0.19, claim_layers); privacy now protocol 0.20: additions only, minor bump to 0.20" }
+verified = { hash = "b3:22ccd0649742b821", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): cascade only; no version number in this section" }
 -->
 
 <a id="R-API-001"></a>

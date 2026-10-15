@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:7b5d78b636508934", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 round 2 (main's virtual camera, mixes 0.19, claim_layers); privacy now protocol 0.20: cascade; vcam publishes the program frame, which privacy covers; text holds" }
+verified = { hash = "b3:90f21afd9a94763e", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): cascade only; daemon text unaffected by video mixes" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

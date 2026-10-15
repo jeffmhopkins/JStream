@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:4f71bac0785ccaf0", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; go-live steps don't involve privacy or sharing" }
+verified = { hash = "b3:17173de3e584fbba", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): cascade only; main's D5 steps hold, mixes are optional" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -76,7 +76,8 @@ $cli = 'target\release\jstream-cli.exe'
    `& $cli --url ws://127.0.0.1:4460 events`. While the output runs, a `stats.tick` line
    comes about once a second. Its counters are running totals of dropped frames and
    packets since the daemon started, so all zeros is healthy. A counter that keeps
-   climbing is worth an issue.
+   climbing is worth an issue. While the program runs, `meters.tick` lines, the audio
+   levels, come about ten a second as well.
 5. **Go live:** the `output` tool with `{"op": {"type": "output.start", "output_id":
    "live"}}`, or `& $cli --url ws://127.0.0.1:4460 output start live`.
    Check: the events show `output.state_changed` going `starting`, then `active`, and
@@ -99,7 +100,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:2f3dfbebfb33645a", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b privacy screen + encoder owner key + dedicated (protocol 0.19): re-read; smoke script commands unchanged" }
+verified = { hash = "b3:a7a7dfb5142d4202", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): cascade only; smoke steps hold with mixes absent" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
