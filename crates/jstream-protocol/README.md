@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:9f3e649a73466575", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes (0.17): re-read; Commands list the video_mix edits and output.set_video_mix, new Video mixes bullet for mix.rs, video_mix.list in Queries, version line 0.17, parity fixture holds two mixes" }
+verified = { hash = "b3:c935ee6cafb73132", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -91,10 +91,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.17 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
   video mixes (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and
-  the mixes in `state.get` and `output.list`); 0.16 added `scene.switch`, `studio.get`
-  and `studio.changed`, 0.15 `delete.plan` and the
+  the mixes in `state.get` and `output.list`); 0.17 added `scene.create`'s optional
+  `role`, 0.16 `scene.switch`, `studio.get` and `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
@@ -127,7 +127,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:53493340465d55cd", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes (0.17): re-read; new Video mixes paragraph (input, resolution, divisor, letterbox, delete refusal, live input change), scene.delete blocker mix.input.scene_id, delete.plan repoints mixes, state.get video_mixes and video_mix.list" }
+verified = { hash = "b3:0e30e079fb40878a", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -235,18 +235,18 @@ order with 0 at the bottom.
 ### Groups and placement addressing
 
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
-`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`, and
-`scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
+`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`. `scene.create` takes
+an optional `role` (omitted means `scene`; protocol 0.17), and `scene.set_role { scene_id, role }`
+changes it; the role changes no engine behaviour.
 `scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.11 reader sees
 no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
 to a position in another scene, keeping its ID and every placement property, under the
 same cycle check as `item.add` (field `scene_id`). `index` is the item's position after
 the move: up to the number of items already there for another scene, and below it for
 the item's own scene, where the move is a reorder. Grouping is a client-built batch:
-`scene.create`, `scene.set_role` to `group`, `source.create` of a `scene` source,
+`scene.create` with `role: group`, `source.create` of a `scene` source,
 `item.add` of it with `item.move` to the lowest selected index, then an `item.move` of
-each selected item into the group, bottom first. `scene.create` doesn't take a `role`
-yet.
+each selected item into the group, bottom first.
 
 The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
 `item.set_visible`) take an
@@ -319,7 +319,9 @@ then serializes as `null` and no longer parses. So a
 non-finite or out-of-`f32`-range number fails deserialization, and
 `ClientMessage::parse` rejects the whole message as `malformed`. In-process clients
 can't build a non-finite value either: `Finite32::new` and `Vec2::new` return `None`
-for one.
+for one. Settings values keep non-integer JSON numbers as `f64`, parsed to the nearest
+one (serde_json's `float_roundtrip`), so a message with a long number still serializes
+and parses back to itself.
 
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next
@@ -357,7 +359,7 @@ no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe 
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
 
-Video mixes (0.17) are collection state too: what an output's video shows.
+Video mixes (0.18) are collection state too: what an output's video shows.
 `video_mix.create` and `video_mix.update` take a `mix_id`, a `name` and a `VideoMix`: an
 `input` (`program`, the scene on program; `preview`, which shows the program until
 studio mode has a preview scene; or `scene` with a `scene_id`, one scene whatever is on
@@ -404,7 +406,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty), every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty) and every video mix
-  (`video_mixes`, ordered by ID; missing from a pre-0.17 server, it parses as empty). A client reads it on connecting, and again after a
+  (`video_mixes`, ordered by ID; missing from a pre-0.18 server, it parses as empty). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
@@ -416,7 +418,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   its `OutputKind`, `encoder_profile` (absent for the default) and `video_mix` (absent
   for the program), at a `rev`.
 - `encoder.list`: the encoder profiles, ordered by ID, at a `rev` (0.13).
-- `video_mix.list`: the video mixes, ordered by ID, at a `rev` (0.17).
+- `video_mix.list`: the video mixes, ordered by ID, at a `rev` (0.18).
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the
   credential store holds its key (missing from a pre-0.7 server, it parses as
   `false`). While it runs, `encoder` names its session's profile (absent for the
@@ -484,9 +486,9 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop` and
-`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
-`scene.reorder` unless it was last, `scene.set_role` for a group, and each item's
-restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`
+with the scene's `role` (omitted for `scene`), `scene.reorder` unless it was last, and
+each item's restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings and its
 `duplicated_from`, undoing `item.set_source` is `item.set_source` back, and undoing

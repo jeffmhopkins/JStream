@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:48981673d580fbaa", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; video mix edits listed as needing the JSON argument form, like encoder profiles" }
+verified = { hash = "b3:c61e54190e9ae17c", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:8d562bdd942bed3e", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; command table unchanged, version prints the bumped protocol version; holds" }
+verified = { hash = "b3:ecc7fc261b1cab74", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
 -->
 
 ```sh
@@ -101,7 +101,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 `jstream-cli`.
 
 - **Edits** are written as their protocol command name followed by its arguments, in a
-  fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
+  fixed order (`scene.create <scene-id> <name> [role:scene|role:group]`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
   protocol is supported except settings, encoder profiles, video mixes and
   `source.create`'s `duplicated_from`. `source.set_settings`,
@@ -117,8 +117,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `canvas.set_size <width> <height>` sets the canvas. Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
-  <index>`: grouping is one batch that creates a scene, makes it a group, places it
-  through a `scene:` source, and moves the items into it. The placement edits'
+  <index>`, and `scene.create` takes an optional trailing `role:group` or `role:scene`:
+  grouping is one batch that creates a scene as a group, places it through a `scene:`
+  source, and moves the items into it. The placement edits'
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
   the item's own scene, which omitting it already means.
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
@@ -235,11 +236,12 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a680168acb68ef53", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; design unaffected by mixes; holds" }
+verified = { hash = "b3:bf1892bab15dcb0c", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
-  most, a sequence of fixed-arity edits named by their protocol command names, doesn't
+  most, a sequence of fixed-arity edits (only `scene.create` takes one optional trailing
+  `role:`) named by their protocol command names, doesn't
   fit a derive-based parser: with `clap` it would be a trailing list of raw strings
   parsed by hand anyway. A parser crate would add a dependency tree (and a review under
   [R-DEP-004](../../docs/RULES.md#R-DEP-004)) for the few global options and the help

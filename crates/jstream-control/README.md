@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:8b2769c681441431", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; trait and contents unaffected; holds" }
+verified = { hash = "b3:bef779e709cc52d8", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -35,9 +35,10 @@ Contents (a first cut; [Design](#design) explains the choices):
   implementation; its tests hold it to the mock's answers.
 - **WebSocket client** (feature `ws`): `WsControl`, the `Control` trait over the
   engine's WebSocket API, natively (`ws.rs`) and in the browser (`ws_web.rs`, `wasm32`);
-  `WsConfig` and the handshake pieces both share (`ws_config.rs`); `WS_PATH`, the API's
-  path, shared with `jstream-server`; and `WS_PROTOCOL` and `WS_TOKEN_PROTOCOL_PREFIX`,
-  the subprotocols a browser offers.
+  `WsConfig` and the handshake pieces both share (`ws_config.rs`).
+- **Shared names** (`lib.rs`, no feature): `WS_PATH`, the API's path, and
+  `WS_PROTOCOL` and `WS_TOKEN_PROTOCOL_PREFIX`, the subprotocols a browser offers;
+  `jstream-server` uses the same constants, so client and server can't drift.
 - `jstream_control::protocol` re-exports `jstream-protocol`.
 
 <a id="design"></a>
@@ -45,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:e3927c156d96243f", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: re-read; mock keeps mixes, checks video_mix edits and the scene-delete refusal, answers video_mix.list, undo restores an output's mix" }
+verified = { hash = "b3:3747ab73366f28cf", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
 -->
 
 ### The trait
@@ -248,8 +249,8 @@ pulls `web-sys`.
   credentials, whose password is the control token, carry it instead (when the engine
   served the page behind Basic). A token that isn't an
   HTTP token (RFC 7230 `tchar`s) can't be a subprotocol and fails `connect`; the
-  daemon's tokens are hex. `jstream-server` doesn't accept the subprotocol yet, so a
-  browser connects only to an engine that does. The caller supplies the token (the CLI
+  daemon's tokens are hex. `jstream-server` accepts both
+  ([jstream-server › Design](../jstream-server/README.md#design)). The caller supplies the token (the CLI
   reads it from a token file). The server validates `Host`, and `Origin` when present;
   browsers set `Origin` themselves (`WsConfig::origin` is ignored there), and the
   native client sends the server's own origin (`http://<host>:<port>` of the URL)

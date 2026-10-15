@@ -1,0 +1,49 @@
+[package]
+name = "jstream-desktop"
+version = "0.0.0"
+description = "The JStream desktop app: a Tauri window showing the web UI, with the engine in-process."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 6
+summary = "`jstream-desktop` (links core and server)"
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+# `jstream.exe` in the portable folder (ADR-0020).
+[[bin]]
+name = "jstream"
+path = "src/main.rs"
+
+[dependencies]
+anyhow.workspace = true
+# The control token and the UI's CSP nonces, from the OS.
+getrandom.workspace = true
+jstream-core.workspace = true
+jstream-server.workspace = true
+# The runtime the server runs on; `sync` for its shutdown signal, `time` to bound it.
+tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time"] }
+tracing.workspace = true
+# The log file's subscriber, filtered by `RUST_LOG`.
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+# The tests connect to the host's server as a client would.
+jstream-control = { workspace = true, features = ["ws"] }
+
+# The window (WebView2) and the live engine on Windows: the platform backends, stream
+# keys in Credential Manager, and the output kinds the publish opener reads.
+[target.'cfg(windows)'.dependencies]
+jstream-platform.workspace = true
+jstream-platform-windows.workspace = true
+jstream-protocol.workspace = true
+tauri.workspace = true
+
+# Generates the Tauri context from `tauri.conf.json` and embeds the icon and manifest.
+[target.'cfg(windows)'.build-dependencies]
+tauri-build.workspace = true

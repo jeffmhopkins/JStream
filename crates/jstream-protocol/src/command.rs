@@ -41,6 +41,9 @@ pub enum Edit {
         scene_id: SceneId,
         /// Display name.
         name: String,
+        /// What the scene is for (ADR-0024 §1). Omitted means `scene`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        role: Option<SceneRole>,
     },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
@@ -64,9 +67,10 @@ pub enum Edit {
     /// Deletes a scene and its items; the sources they placed stay. Rejected with
     /// `invalid_argument` while a `scene` source or a video mix shows it, or any source's
     /// settings refer to it: delete those sources, point those mixes elsewhere, or clear
-    /// those references, first (in the same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old
-    /// display position (unless it was last), `scene.set_role` if it was a group, then
-    /// each deleted item's `item.remove` inverse, from bottom to top.
+    /// those references, first (in the same batch if needed). Inverse: `scene.create`
+    /// with its role (omitted for `scene`), then `scene.reorder` to its old display
+    /// position (unless it was last), then each deleted item's `item.remove` inverse,
+    /// from bottom to top.
     #[serde(rename = "scene.delete")]
     SceneDelete {
         /// The scene to delete.
@@ -763,7 +767,8 @@ pub enum SourceKind {
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum SceneRole {
-    /// A scene of its own, listed in the scene list. Scenes are created with this role.
+    /// A scene of its own, listed in the scene list. Scenes are created with this role
+    /// unless `scene.create` names another.
     #[default]
     Scene,
     /// A group: a scene placed in other scenes to hold items together. Clients hide it
@@ -780,9 +785,37 @@ impl SceneRole {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, Batch, Command, CommandClass, Edit};
+    use super::{Action, Batch, Command, CommandClass, Edit, SceneRole};
     use crate::id::{IdempotencyKey, OutputId, Rev, SceneId};
     use serde_json::json;
+
+    #[test]
+    fn scene_create_role_is_optional_on_the_wire() {
+        let plain: Edit =
+            serde_json::from_value(json!({"type": "scene.create", "scene_id": "s", "name": "S"}))
+                .expect("parses");
+        assert_eq!(
+            plain,
+            Edit::SceneCreate {
+                scene_id: SceneId::new("s"),
+                name: "S".into(),
+                role: None,
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(&plain).expect("serializes"),
+            json!({"type": "scene.create", "scene_id": "s", "name": "S"})
+        );
+        let group = Edit::SceneCreate {
+            scene_id: SceneId::new("g"),
+            name: "G".into(),
+            role: Some(SceneRole::Group),
+        };
+        assert_eq!(
+            serde_json::to_value(&group).expect("serializes"),
+            json!({"type": "scene.create", "scene_id": "g", "name": "G", "role": "group"})
+        );
+    }
 
     #[test]
     fn edits_and_actions_are_classified_apart() {

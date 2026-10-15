@@ -1326,10 +1326,12 @@ pub(crate) mod tests {
                     Edit::SceneCreate {
                         scene_id: SceneId::new("main"),
                         name: "Main".into(),
+                        role: None,
                     },
                     Edit::SceneCreate {
                         scene_id: SceneId::new("cam"),
                         name: "Camera".into(),
+                        role: None,
                     },
                     mix(
                         "side",

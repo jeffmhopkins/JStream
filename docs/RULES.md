@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e54fc0314e15e6e6", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: cascade from ARCH#threading (Collector row also frees a dropped mix's frame buffers); re-read, this text doesn't rely on that list; holds" }
+verified = { hash = "b3:78643fe21e6c7e23", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
 -->
 
 <a id="R-RT-001"></a>
@@ -451,7 +451,7 @@ The PR shows before and after.
 <!-- @rule
 status = "active"
 enforced_by = ["ci:test"]
-applies_to = ["crates/**", "tests/**"]
+applies_to = ["crates/**", "apps/**", "tests/**"]
 -->
 Tests need no network, real devices or physical GPU, unless they are platform tests
 behind `hw-tests`.
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:0db79bc3157133e2", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: cascade; re-read, additions are minor (0.17); holds" }
+verified = { hash = "b3:23de8303ba56c62d", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
 -->
 
 <a id="R-API-001"></a>
@@ -540,9 +540,13 @@ status = "active"
 enforced_by = ["test:jstream_server::rejects_missing_token", "test:jstream_server::rejects_foreign_origin"]
 applies_to = ["crates/jstream-server/**", "crates/jstream-mcp/**"]
 -->
-Every HTTP, WebSocket and MCP listener requires the control token (even on localhost) and
-validates the `Host` header, and the `Origin` header when one is present. Listeners bind
-to `127.0.0.1` by default
+Every HTTP, WebSocket and MCP listener requires the control token or a paired device's
+token (even on localhost), except `POST /api/v1/pair` while a pairing code is open
+([ADR-0044](adr/0044-pairing-remote-browsers.md)) and `GET /pair` on a TLS listener
+([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
+device token, never the control token, as the `__Host-jstream_device` cookie. Every
+listener validates the `Host` header, and
+the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>

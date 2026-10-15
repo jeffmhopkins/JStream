@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:ad97b64af661e6fa", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; nothing on program; holds" }
+verified = { hash = "b3:ba52f5f3dcaeb8c8", by = "agent:claude@session_01PZRAdnkMzURQaUtof2W6W2", note = "Round 1 B1: Tests bullet now says WS sets the key and starts the stream, MCP starts the recording (matches e2e.rs); rest of Purpose re-read, holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -53,12 +53,19 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   crash hook in a child process; the publish opener and the live engine on the
   platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
-  SIGINT; `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE
-  headers to check that the backends' Media Foundation DLLs are delay-loaded and none
-  is a load-time import).
+  SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
+  daemon makes it live, on the platform fakes with the CPU compositor, behind the
+  server with MCP on, where MCP builds a scene and creates an RTMP output to a local
+  loopback sink and a recording, the WebSocket client sets the key and starts the
+  stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
+  received and the recorded MP4. The binary has no backends off Windows, so it runs
+  in process; `tests/delay_load.rs`,
+  Windows MSVC only, which reads the built binary's PE headers to check that the
+  backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
-Not here yet: serving the web UI (it waits on `jstream-server`,
-[jstream-server › Design](../../crates/jstream-server/README.md#design)),
+Not here yet: serving the web UI (`jstream-server` serves one from
+`ServerConfig::ui_dir`, [jstream-server › Design](../../crates/jstream-server/README.md#design),
+but the daemon has no flag for it yet),
 YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
@@ -184,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1db43abc3a4d18f2", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 video mixes: cascade from core design; re-read, daemon text unaffected; holds" }
+verified = { hash = "b3:8d152d2b8c43c8ac", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

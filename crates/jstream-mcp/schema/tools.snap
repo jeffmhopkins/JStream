@@ -83,6 +83,17 @@ source: crates/jstream-mcp/src/tests.rs
                     "description": "Display name.",
                     "type": "string"
                   },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneRole"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "What the scene is for (ADR-0024 §1). Omitted means `scene`."
+                  },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
                     "description": "The new scene's ID, chosen by the client. Rejected if it exists."
@@ -146,7 +157,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Inverse: `scene.create`\nwith its role (omitted for `scene`), then `scene.reorder` to its old display\nposition (unless it was last), then each deleted item's `item.remove` inverse,\nfrom bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -1278,7 +1289,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "scene",
-                "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+                "description": "A scene of its own, listed in the scene list. Scenes are created with this role\nunless `scene.create` names another.",
                 "type": "string"
               },
               {
@@ -3042,7 +3053,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "scene",
-                "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+                "description": "A scene of its own, listed in the scene list. Scenes are created with this role\nunless `scene.create` names another.",
                 "type": "string"
               },
               {
@@ -3086,6 +3097,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "name": {
                     "description": "Display name.",
                     "type": "string"
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneRole"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "What the scene is for (ADR-0024 §1). Omitted means `scene`."
                   },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -3150,7 +3172,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Inverse: `scene.create`\nwith its role (omitted for `scene`), then `scene.reorder` to its old display\nposition (unless it was last), then each deleted item's `item.remove` inverse,\nfrom bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
