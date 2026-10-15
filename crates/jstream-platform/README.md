@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:3e8ed5fd47e4007a", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "Merge of main into P1: main added the daemon e2e test, the CLAP plugin-proto row and plugin-host status; P1's data-folder/paths and dist text is unchanged and both hold together" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -146,7 +145,6 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:1a524687fec45b0b", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main: stale via ARCH#crate-map (jstream-anim row, P1 paths row); GPU frame design untouched; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

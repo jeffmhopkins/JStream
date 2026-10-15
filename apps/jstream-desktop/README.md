@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:30dcae94297a3b25", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs removed, contents list says logs.rs and the paths module; release build of the portable folder now cargo xtask dist" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -51,7 +50,6 @@ portable folder ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:ea77775577946bf9", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (the data folder is jstream-platform paths now, documented in its Purpose); the Data folder bullet links there and holds" }
 -->
 
 On Windows, with the UI built first:
@@ -94,7 +92,6 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:d8c3940849482bc8", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "Merge of main into P1: main added the daemon e2e test, the CLAP plugin-proto row and plugin-host status; P1's data-folder/paths and dist text is unchanged and both hold together" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS

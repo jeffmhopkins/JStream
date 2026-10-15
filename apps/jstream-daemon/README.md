@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:24e7cd887cbf6b42", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "Merge of main into P1: main wires WindowsVcam into the daemon (delay-loaded mfsensorgroup) and adds ui-e2e; P1's paths/data-folder and dist text is unchanged; both sides re-read together and hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -78,7 +77,6 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:cbaf3677673e1716", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: Log files bullet adds the portable data folder and that a marker avoids the no-HOME/APPDATA failure; rest unchanged" }
 -->
 
 ```sh
@@ -192,7 +190,6 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:532672813b3d942a", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#328 LNK4199/delay_load text, K2, D5): re-read; main's delay-load text and P1's data-directory bullet (paths module), Dependencies entry agree; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

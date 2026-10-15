@@ -17,7 +17,6 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:1d308f508d80a48c", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via daemon usage (log files bullet adds the portable data folder); runbook uses the default %APPDATA% layout and run-folder logs, holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +35,6 @@ verified = { hash = "b3:1d308f508d80a48c", by = "agent:claude@session_012JH6K3Te
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:a4a20ebf80fe8d36", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = '''P1 merge of main: main's meters.tick line plus P1's daemon usage (portable data folder); steps run from target\release with no portable marker, so %APPDATA%\JStream\logs holds''' }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -100,7 +98,6 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:a163557db4d9c0c9", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main: smoke passes --token-file and --log-dir in its run folder, so the data-folder change doesn't reach it; text is main's; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
