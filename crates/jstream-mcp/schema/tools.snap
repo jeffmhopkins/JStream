@@ -749,7 +749,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "OutputKind": {
-            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL and recording to a file are configurable so far. The\nvirtual camera and the YouTube-bound target of the data model come later as new\nvariants.",
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL, recording to a file and the virtual camera are\nconfigurable so far. The YouTube-bound target of the data model comes later as a new\nvariant.",
             "oneOf": [
               {
                 "description": "A stream sent over RTMP or RTMPS.",
@@ -789,6 +789,19 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "path",
                   "container"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "The virtual camera: the program video, offered to other apps on the engine's\nmachine as a webcam. Video only: it has no audio, no target and no stream key.\nIt runs at the canvas size the collection has when it starts, at 30 fps.\n`output.start` fails with `action_failed` when the engine has no virtual camera,\nwhen the camera is not registered on the machine, or when it can't offer that\nsize (the Windows camera offers only 1920×1080, the default canvas).",
+                "properties": {
+                  "type": {
+                    "const": "virtual_cam",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               }
@@ -1736,7 +1749,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "OutputKind": {
-            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL and recording to a file are configurable so far. The\nvirtual camera and the YouTube-bound target of the data model come later as new\nvariants.",
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL, recording to a file and the virtual camera are\nconfigurable so far. The YouTube-bound target of the data model comes later as a new\nvariant.",
             "oneOf": [
               {
                 "description": "A stream sent over RTMP or RTMPS.",
@@ -1776,6 +1789,19 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "path",
                   "container"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "The virtual camera: the program video, offered to other apps on the engine's\nmachine as a webcam. Video only: it has no audio, no target and no stream key.\nIt runs at the canvas size the collection has when it starts, at 30 fps.\n`output.start` fails with `action_failed` when the engine has no virtual camera,\nwhen the camera is not registered on the machine, or when it can't offer that\nsize (the Windows camera offers only 1920×1080, the default canvas).",
+                "properties": {
+                  "type": {
+                    "const": "virtual_cam",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               }

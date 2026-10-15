@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:080fea9002e1d852", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: rule text unchanged; ARCH#threading only combines main's collector text and F2b's recording write path, both within R-RT-003/R-RT-004" }
+verified = { hash = "b3:a2a7a0d70e5c2075", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b cascade from ARCH#threading: rule text unchanged; the vcam render thread calls the non-blocking VcamSink publish, within R-RT-002" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:ee1670969f47fe74", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: rule text unchanged; re-read, holds for B6 as its own additive minor 0.12" }
+verified = { hash = "b3:4c17f867e8732094", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b cascade from ARCH#protocol: rule text unchanged; virtual_cam is an additive minor (0.13)" }
 -->
 
 <a id="R-API-001"></a>

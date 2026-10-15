@@ -7,6 +7,10 @@
 //! FLV and publishes it, or muxes fragmented MP4 and writes it to a recording file
 //! ([`Sink`]). None of those threads lock the engine's collection.
 //!
+//! The virtual camera has only the video chain: the render thread composites at the
+//! canvas size and publishes each frame to the camera itself ([`VcamOut`]). It opens
+//! no audio device, encoder, mixer or output thread.
+//!
 //! The render and mixer threads catch a panic at their thread boundary, and every
 //! fatal error on the render, mixer and output threads goes to the same channel, so
 //! the publish watcher settles `failed` instead of leaving an output `active` with a
@@ -36,10 +40,12 @@ use jstream_media::{
 };
 use jstream_platform::{
     AudioEncoderConfig, AudioInputTarget, AudioIo, AudioStream, Backends, Capture, CaptureStream,
-    Codecs, HardwarePreference, MediaClock, RateControl, VideoEncoderConfig, VideoSurface,
+    Codecs, HardwarePreference, MediaClock, RateControl, VcamFormat, VideoEncoderConfig,
+    VideoSurface,
 };
-use jstream_protocol::OutputId;
+use jstream_protocol::{ItemGeometry, OutputId};
 use jstream_render::{Color, Compositor, Crop, Item, OpenOptions, Placement, RenderError, Scene};
+use std::path::PathBuf;
 
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, AudioInputDrops, DropGuard, DropSnapshot, FnDropSource,
@@ -47,7 +53,8 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
-use crate::runtime::sink::{Destination, Sink, StreamInfo};
+use crate::runtime::sink::{Muxed, Sink, StreamInfo};
+use crate::runtime::vcam::{VcamOut, VcamSlot};
 use crate::runtime::{LinkState, LivePublish, OpenPublish};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
@@ -71,11 +78,13 @@ const MAX_DRAW_ERRORS: u32 = 30;
 /// peer cannot hold `output.stop` much longer than this.
 pub(crate) const STOP_DRAIN: Duration = Duration::from_secs(2);
 
-/// Composites one frame on the render thread: the captured RGBA8 frame, or black when
-/// there is none yet, at `size`, read back as RGBA8 into `out` (replacing its contents).
-/// Created on the render thread and kept there, so it need not be `Send`.
+/// Composites one frame on the render thread: the captured RGBA8 frame at its own size,
+/// or black when there is none yet, on a canvas of the first size, read back as RGBA8
+/// into `out` (replacing its contents). A capture of another size than the canvas is
+/// fitted inside it, centred. Created on the render thread and kept there, so it need
+/// not be `Send`.
 pub(crate) type DrawFn =
-    Box<dyn FnMut(FrameSize, Option<&[u8]>, &mut Vec<u8>) -> Result<(), String>>;
+    Box<dyn FnMut(FrameSize, Option<(FrameSize, &[u8])>, &mut Vec<u8>) -> Result<(), String>>;
 
 /// Opens the render thread's [`DrawFn`], on that thread. The engine's opens the wgpu
 /// compositor on the software adapter ([`gpu_draw`]). Tests inject [`cpu_draw`] (or a
@@ -83,19 +92,22 @@ pub(crate) type DrawFn =
 pub(crate) type OpenDraw = Arc<dyn Fn() -> Result<DrawFn, String> + Send + Sync>;
 
 /// A CPU stand-in for [`gpu_draw`]: it copies the captured RGBA8 frame, or fills black
-/// when there is none, which is what this cut's one-item composite produces. Tests use
-/// it to run the pipeline without a wgpu adapter
+/// when there is none, which is what this cut's one-item composite produces. It does
+/// not scale: a capture of another size than the canvas draws black too. Tests use it
+/// to run the pipeline without a wgpu adapter
 /// ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|| {
-        let draw: DrawFn = Box::new(|size: FrameSize, rgba: Option<&[u8]>, out: &mut Vec<u8>| {
-            out.clear();
-            match rgba {
-                Some(rgba) => out.extend_from_slice(rgba),
-                None => out.resize(size.width() as usize * size.height() as usize * 4, 0),
-            }
-            Ok(())
-        });
+        let draw: DrawFn = Box::new(
+            |canvas: FrameSize, source: Option<(FrameSize, &[u8])>, out: &mut Vec<u8>| {
+                out.clear();
+                match source {
+                    Some((size, rgba)) if size == canvas => out.extend_from_slice(rgba),
+                    _ => out.resize(canvas.width() as usize * canvas.height() as usize * 4, 0),
+                }
+                Ok(())
+            },
+        );
         Ok(draw)
     })
 }
@@ -153,6 +165,9 @@ pub(crate) struct MediaHost {
     pub(crate) publish: Mutex<Option<Box<dyn LivePublish>>>,
     /// Opens a target for a start when `publish` holds none.
     pub(crate) open_publish: Mutex<Option<OpenPublish>>,
+    /// The virtual-camera sink, taken out of the backends. Empty when the platform has
+    /// none, or while a virtual-camera output runs.
+    pub(crate) vcam: VcamSlot,
     pub(crate) gate: Mutex<Gate>,
     pub(crate) gate_cv: Condvar,
     pub(crate) next_generation: AtomicU64,
@@ -184,6 +199,7 @@ impl MediaHost {
             open_timeout: Mutex::new(OPEN_TIMEOUT),
             publish: Mutex::new(None),
             open_publish: Mutex::new(None),
+            vcam: Arc::new(Mutex::new(None)),
             gate: Mutex::new(Gate {
                 running: None,
                 pending: None,
@@ -217,14 +233,27 @@ pub(crate) struct Running {
     generation: u64,
     stop: Arc<AtomicBool>,
     render: Option<JoinHandle<()>>,
+    /// The audio, encode and output stages. `None` for the virtual camera, whose
+    /// render thread publishes the frames itself.
+    encoded: Option<Encoded>,
+    stats: Arc<PipelineStats>,
+    capture_drops: DropSnapshot,
+    drop_guard: Option<DropGuard>,
+    ticker: Option<JoinHandle<()>>,
+    /// Emits one last `stats.tick` once the threads have stopped and the sources are
+    /// latched, so the run's final drops are reported when it ends.
+    final_tick: Option<Box<dyn FnOnce() + Send>>,
+}
+
+/// What an encoded output runs after the render thread: the mixer, the encoder
+/// sessions and the output thread.
+struct Encoded {
     mixer: Option<JoinHandle<()>>,
     output: Option<JoinHandle<()>>,
     video: Arc<VideoSession>,
     audio: Arc<AudioSession>,
     /// Kept alive so the platform keeps calling the mixer producers.
     _streams: Vec<Box<dyn AudioStream>>,
-    stats: Arc<PipelineStats>,
-    capture_drops: DropSnapshot,
     /// Declared after `_streams` (fields drop in order), so the input rings outlive
     /// both producers and the mixer and are freed here, not on a real-time thread
     /// (docs/RULES.md#R-RT-003).
@@ -237,11 +266,6 @@ pub(crate) struct Running {
     output_drops: Arc<AtomicU64>,
     /// Tags the publish target dropped while its link was down, as it last reported.
     link_drops: Arc<AtomicU64>,
-    drop_guard: Option<DropGuard>,
-    ticker: Option<JoinHandle<()>>,
-    /// Emits one last `stats.tick` once the threads have stopped and the sources are
-    /// latched, so the run's final drops are reported when it ends.
-    final_tick: Option<Box<dyn FnOnce() + Send>>,
 }
 
 impl Running {
@@ -254,9 +278,11 @@ impl Running {
     }
 
     pub(crate) fn stats(&self) -> OutputStats {
+        let sessions = |encoded: &Encoded| (encoded.video.stats(), encoded.audio.stats());
+        let (video, audio) = self.encoded.as_ref().map(sessions).unwrap_or_default();
         OutputStats {
-            video: self.video.stats(),
-            audio: self.audio.stats(),
+            video,
+            audio,
             video_subscriber: *lock(&self.stats.video_subscriber),
             audio_subscriber: *lock(&self.stats.audio_subscriber),
             readbacks: self.stats.readbacks.load(Ordering::Relaxed),
@@ -268,22 +294,24 @@ impl Running {
     /// Dropping the run removes the sources, which latches their totals, and joins
     /// the sampler.
     pub(crate) fn arm_stats(&mut self, engine: &Engine) {
-        let own = Arc::clone(&self.output_drops);
-        let link = Arc::clone(&self.link_drops);
-        let ids = vec![
-            engine.add_drop_source(self.capture_drops.clone()),
-            engine.add_drop_source(VideoEncodeDrops::new(Arc::clone(&self.video))),
-            engine.add_drop_source(AudioEncodeDrops::new(Arc::clone(&self.audio))),
-            engine.add_drop_source(AudioInputDrops::new(self.mic.clone())),
-            engine.add_drop_source(AudioInputDrops::new(self.desktop.clone())),
-            engine.add_drop_source(AudioBusDrops::new(self.bus.clone())),
-            engine.add_drop_source(FnDropSource::new(move || {
-                output_packet_drops(
-                    own.load(Ordering::Relaxed)
-                        .saturating_add(link.load(Ordering::Relaxed)),
-                )
-            })),
-        ];
+        let mut ids = vec![engine.add_drop_source(self.capture_drops.clone())];
+        if let Some(encoded) = &self.encoded {
+            let own = Arc::clone(&encoded.output_drops);
+            let link = Arc::clone(&encoded.link_drops);
+            ids.extend([
+                engine.add_drop_source(VideoEncodeDrops::new(Arc::clone(&encoded.video))),
+                engine.add_drop_source(AudioEncodeDrops::new(Arc::clone(&encoded.audio))),
+                engine.add_drop_source(AudioInputDrops::new(encoded.mic.clone())),
+                engine.add_drop_source(AudioInputDrops::new(encoded.desktop.clone())),
+                engine.add_drop_source(AudioBusDrops::new(encoded.bus.clone())),
+                engine.add_drop_source(FnDropSource::new(move || {
+                    output_packet_drops(
+                        own.load(Ordering::Relaxed)
+                            .saturating_add(link.load(Ordering::Relaxed)),
+                    )
+                })),
+            ]);
+        }
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
         self.ticker = engine.spawn_stats_ticker(Arc::clone(&self.stop));
         self.final_tick = Some(engine.stats_emitter());
@@ -293,17 +321,20 @@ impl Running {
 impl Drop for Running {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
+        // A virtual camera's render thread stops the camera as it ends.
         join("render", self.render.take());
-        join("mixer", self.mixer.take());
-        // Finish after the producers have stopped pushing, so the output thread
-        // can drain the remaining packets and then see the streams end.
-        if let Err(err) = self.video.finish() {
-            tracing::info!(error = %err, "video session finish failed");
+        if let Some(encoded) = self.encoded.as_mut() {
+            join("mixer", encoded.mixer.take());
+            // Finish after the producers have stopped pushing, so the output thread
+            // can drain the remaining packets and then see the streams end.
+            if let Err(err) = encoded.video.finish() {
+                tracing::info!(error = %err, "video session finish failed");
+            }
+            if let Err(err) = encoded.audio.finish() {
+                tracing::info!(error = %err, "audio session finish failed");
+            }
+            join("output", encoded.output.take());
         }
-        if let Err(err) = self.audio.finish() {
-            tracing::info!(error = %err, "audio session finish failed");
-        }
-        join("output", self.output.take());
         join("stats", self.ticker.take());
         // After the threads stop, so the latch sees their final counters.
         self.drop_guard.take();
@@ -353,10 +384,10 @@ pub(crate) fn gpu_draw() -> OpenDraw {
     Arc::new(|| {
         let mut compositor =
             Compositor::open(OpenOptions::headless()).map_err(|err| render_open_error(&err))?;
-        let draw: DrawFn = Box::new(move |size, rgba, out| {
-            let drawn = match rgba {
-                Some(rgba) => draw_image(&mut compositor, size, rgba, out),
-                None => readback(&mut compositor, size, &[], out),
+        let draw: DrawFn = Box::new(move |canvas, source, out| {
+            let drawn = match source {
+                Some((size, rgba)) => draw_image(&mut compositor, canvas, size, rgba, out),
+                None => readback(&mut compositor, canvas, &[], out),
             };
             drawn.map_err(|err| err.to_string())
         });
@@ -392,13 +423,100 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
     }
 }
 
+/// Where a start sends its output, once its target is open.
+pub(crate) enum Destination {
+    /// A live publish target, sent FLV tags.
+    Publish(Box<dyn LivePublish>),
+    /// A recording to this path, in MP4.
+    Record(PathBuf),
+    /// The virtual camera, at this size (the canvas).
+    Vcam(VcamOut, FrameSize),
+}
+
+/// Starts the pipeline for `destination`: [`launch_encoded`] for a publish target or a
+/// recording, [`launch_vcam`] for the virtual camera.
+pub(crate) fn launch(
+    parts: Parts,
+    destination: Destination,
+    output_id: OutputId,
+    generation: u64,
+    fail_tx: Sender<PipelineEvent>,
+) -> Result<Running, String> {
+    let muxed = match destination {
+        Destination::Publish(publish) => Muxed::Publish(publish),
+        Destination::Record(path) => Muxed::Record(path),
+        Destination::Vcam(vcam, canvas) => {
+            return launch_vcam(parts, vcam, canvas, output_id, generation, fail_tx);
+        }
+    };
+    launch_encoded(parts, muxed, output_id, generation, fail_tx)
+}
+
+/// Opens the capture, starts the camera, then the render thread, which composites at
+/// `canvas` and publishes every frame to the camera. On failure `vcam` drops, which
+/// stops the camera and returns its sink to the engine.
+fn launch_vcam(
+    parts: Parts,
+    mut vcam: VcamOut,
+    canvas: FrameSize,
+    output_id: OutputId,
+    generation: u64,
+    fail_tx: Sender<PipelineEvent>,
+) -> Result<Running, String> {
+    let (source, capture) = open_capture(&parts)?;
+    let period = frame_period(parts.clock.timebase())?;
+    if period.ticks() <= 0 {
+        return Err("the media clock is too coarse for the frame rate".into());
+    }
+    vcam.start(VcamFormat {
+        size: canvas,
+        pixel_format: PixelFormat::Bgra8,
+        frame_period: Timebase::new(FRAME_NUM, FRAME_DEN)
+            .map_err(|err| format!("frame period: {err}"))?,
+    })?;
+    let capture_drops = DropSnapshot::new();
+    let stop = Arc::new(AtomicBool::new(false));
+    let stats = PipelineStats::new();
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let render = spawn("jstream-render", {
+        let job = RenderJob {
+            capture,
+            open: Arc::clone(&parts.draw),
+            clock: Arc::clone(&parts.clock),
+            out: FrameOut::Vcam(vcam),
+            source,
+            canvas,
+            period,
+            stop: Arc::clone(&stop),
+            ready: ready_tx,
+            stats: Arc::clone(&stats),
+            drops: capture_drops.clone(),
+            fail: fail_tx,
+        };
+        move || render_thread(job)
+    })?;
+    let running = Running {
+        output_id,
+        generation,
+        stop,
+        render: Some(render),
+        encoded: None,
+        stats,
+        capture_drops,
+        drop_guard: None,
+        ticker: None,
+        final_tick: None,
+    };
+    await_ready(running, &ready_rx, parts.open_timeout)
+}
+
 /// Opens the devices and encoders, then the destination, then the threads. On failure
 /// the publish target is dropped: a one-shot target has to be set again, an opener
 /// opens a new one on the next start. A recording opened before the failure is
 /// removed, so its `.part` file doesn't block the next start.
-pub(crate) fn launch(
+fn launch_encoded(
     parts: Parts,
-    destination: Destination,
+    destination: Muxed,
     output_id: OutputId,
     generation: u64,
     fail_tx: Sender<PipelineEvent>,
@@ -443,8 +561,9 @@ pub(crate) fn launch(
             capture,
             open: Arc::clone(&parts.draw),
             clock: Arc::clone(&parts.clock),
-            input: video.input(),
-            size,
+            out: FrameOut::Encoder(video.input()),
+            source: size,
+            canvas: size,
             period,
             stop: Arc::clone(&stop),
             ready: ready_tx,
@@ -497,27 +616,38 @@ pub(crate) fn launch(
         generation,
         stop,
         render: Some(render),
-        mixer: Some(mixer_thread),
-        output: Some(output),
-        video,
-        audio,
-        _streams: streams,
+        encoded: Some(Encoded {
+            mixer: Some(mixer_thread),
+            output: Some(output),
+            video,
+            audio,
+            _streams: streams,
+            mic,
+            desktop,
+            bus,
+            output_drops,
+            link_drops,
+        }),
         stats,
         capture_drops,
-        mic,
-        desktop,
-        bus,
-        output_drops,
-        link_drops,
         drop_guard: None,
         ticker: None,
         final_tick: None,
     };
-    match ready_rx.recv_timeout(parts.open_timeout) {
-        Ok(Ok(())) => {
-            keep.store(true, Ordering::Release);
-            Ok(running)
-        }
+    let running = await_ready(running, &ready_rx, parts.open_timeout)?;
+    keep.store(true, Ordering::Release);
+    Ok(running)
+}
+
+/// Waits for the render thread to open its compositor. On anything but success the
+/// run is dropped, which stops its threads.
+fn await_ready(
+    running: Running,
+    ready: &mpsc::Receiver<Result<(), String>>,
+    timeout: Duration,
+) -> Result<Running, String> {
+    match ready.recv_timeout(timeout) {
+        Ok(Ok(())) => Ok(running),
         Ok(Err(reason)) => {
             drop(running);
             Err(reason)
@@ -526,7 +656,7 @@ pub(crate) fn launch(
             drop(running);
             Err(format!(
                 "the compositor did not open within {}s",
-                parts.open_timeout.as_secs()
+                timeout.as_secs()
             ))
         }
         Err(RecvTimeoutError::Disconnected) => {
@@ -679,8 +809,12 @@ struct RenderJob {
     capture: Box<dyn CaptureStream>,
     open: OpenDraw,
     clock: Arc<dyn MediaClock>,
-    input: VideoInput,
-    size: FrameSize,
+    out: FrameOut,
+    /// The capture's size.
+    source: FrameSize,
+    /// The size the frames are composited at: the capture's for an encoded output, the
+    /// canvas for the virtual camera.
+    canvas: FrameSize,
     period: MediaTime,
     stop: Arc<AtomicBool>,
     ready: mpsc::Sender<Result<(), String>>,
@@ -738,9 +872,14 @@ impl Frames {
     }
 
     /// Composites into `scratch` and, on success, makes that the shown frame.
-    fn draw(&mut self, draw: &mut DrawFn, size: FrameSize) -> Result<(), String> {
-        let source = (!self.source.is_empty()).then_some(self.source.as_slice());
-        draw(size, source, &mut self.scratch)?;
+    fn draw(
+        &mut self,
+        draw: &mut DrawFn,
+        canvas: FrameSize,
+        source: FrameSize,
+    ) -> Result<(), String> {
+        let source = (!self.source.is_empty()).then_some((source, self.source.as_slice()));
+        draw(canvas, source, &mut self.scratch)?;
         std::mem::swap(&mut self.scratch, &mut self.shown);
         Ok(())
     }
@@ -762,8 +901,9 @@ fn render_loop(job: RenderJob) {
         mut capture,
         open,
         clock,
-        input,
-        size,
+        mut out,
+        source,
+        canvas,
         period,
         stop,
         ready,
@@ -811,8 +951,8 @@ fn render_loop(job: RenderJob) {
         skipped = skipped.saturating_add(missed);
         if !broken {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
-                frames.read_capture(capture.as_mut(), size);
-                frames.draw(&mut draw, size)
+                frames.read_capture(capture.as_mut(), source);
+                frames.draw(&mut draw, canvas, source)
             }));
             match tick {
                 Ok(Ok(())) => {
@@ -842,8 +982,15 @@ fn render_loop(job: RenderJob) {
             }
         }
         drops.publish(capture_drops(frames.capture).saturating_add(render_tick_drops(skipped)));
-        if !frames.shown.is_empty() && !push_frame(&input, size, due, &frames.shown) {
-            break;
+        if !frames.shown.is_empty() {
+            match out.push(canvas, due, &frames.shown) {
+                Ok(true) => {}
+                Ok(false) => break,
+                Err(err) => {
+                    report(&fail, err);
+                    break;
+                }
+            }
         }
         next = match due.checked_add(period) {
             Ok(next) => Some(next),
@@ -922,21 +1069,36 @@ fn rgba_from_surface(surface: &VideoSurface, expected: FrameSize, out: &mut Vec<
     true
 }
 
+/// Draws the `size` RGBA8 image on a `canvas`: at its native size when they match,
+/// otherwise fitted inside the canvas, centred.
 fn draw_image(
     comp: &mut Compositor,
+    canvas: FrameSize,
     size: FrameSize,
     rgba: &[u8],
     out: &mut Vec<u8>,
 ) -> Result<(), RenderError> {
     let image = comp.upload_rgba8(size.width(), size.height(), rgba)?;
+    let placement = if size == canvas {
+        Placement::IDENTITY
+    } else {
+        let fitted =
+            ItemGeometry::covering_canvas(canvas.width(), canvas.height()).map_err(|err| {
+                RenderError::Invalid {
+                    what: "placement",
+                    detail: format!("fitting the capture to the canvas: {err}"),
+                }
+            })?;
+        Placement::Geometry(fitted)
+    };
     let items = [Item {
         image: &image,
-        placement: Placement::IDENTITY,
+        placement,
         crop: Crop::NONE,
         opacity: 1.0,
         visible: true,
     }];
-    readback(comp, size, &items, out)
+    readback(comp, canvas, &items, out)
 }
 
 /// Renders `items` and copies the readback into `out`, reusing its allocation.
@@ -961,6 +1123,25 @@ fn readback(
         None => Err(RenderError::Readback {
             detail: "the compositor returned no pixels".into(),
         }),
+    }
+}
+
+/// Where the render thread sends its frames.
+enum FrameOut {
+    /// The video encoder session.
+    Encoder(VideoInput),
+    /// The virtual camera. Dropped when the render thread ends, which stops it.
+    Vcam(VcamOut),
+}
+
+impl FrameOut {
+    /// Sends one composited frame. `Ok(false)` when the encoder session has closed, and
+    /// an error, which is fatal, when the virtual camera refused it.
+    fn push(&mut self, size: FrameSize, pts: MediaTime, rgba: &[u8]) -> Result<bool, String> {
+        match self {
+            Self::Encoder(input) => Ok(push_frame(input, size, pts, rgba)),
+            Self::Vcam(vcam) => vcam.publish(size, pts, rgba).map(|()| true),
+        }
     }
 }
 

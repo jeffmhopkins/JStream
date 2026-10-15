@@ -187,6 +187,10 @@ pub(crate) fn edits() -> Vec<Edit> {
                 container: RecordContainer::Mp4,
             },
         },
+        Edit::OutputCreate {
+            output_id: OutputId::new("out_cam"),
+            kind: OutputKind::VirtualCam,
+        },
     ]
 }
 

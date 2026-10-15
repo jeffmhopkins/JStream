@@ -1773,15 +1773,15 @@ mod cpu_pipeline {
     use crate::runtime::{DrawFn, OpenDraw, cpu_draw};
     use crate::{Engine, LinkState, LivePublish, PublishError, RecordingPublish};
     use jstream_control::{Control, EventStream};
-    use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, Timebase};
+    use jstream_media::{ChannelLayout, FrameSize, MediaTime, Packet, PixelFormat, Timebase};
     use jstream_mux::flv::{FlvTag, TagType};
     use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
     use jstream_platform::{
         AudioDeviceInfo, AudioEncoder, AudioEncoderConfig, AudioInputHandler, AudioInputTarget,
         AudioIo, AudioOutputHandler, AudioOutputTarget, AudioStream, Backends, Capture,
         CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo, Codecs,
-        MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
-        VideoEncoderConfig, VideoSurface,
+        MediaClock, PlatformError, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig,
+        VideoEncoder, VideoEncoderConfig, VideoSurface,
     };
     use jstream_protocol::{Edit, Event, OutputId, OutputKind, OutputState, RecordContainer};
     use std::panic::{self, AssertUnwindSafe};
@@ -3170,6 +3170,254 @@ mod cpu_pipeline {
         block_on(control.call(output_call("rec", true))).expect("output.start");
         block_on(control.call(output_call("rec", false))).expect("output.stop");
         assert!(path.exists(), "the second start did not record");
+    }
+
+    // --- Item: the virtual camera publishes the program, video only.
+
+    /// What a [`ScriptedVcam`] saw, shared with the test.
+    #[derive(Default)]
+    struct VcamLog {
+        starts: Vec<VcamFormat>,
+        stops: u64,
+        /// The first pixel of every frame published, as given (BGRA).
+        pixels: Vec<[u8; 4]>,
+        started: bool,
+        /// Refuse `start` with `Unsupported`.
+        refuse: bool,
+        /// Fail `publish` with `Os` once this many frames went through.
+        fail_after: Option<usize>,
+    }
+
+    /// A virtual-camera sink a test scripts and watches.
+    struct ScriptedVcam(Arc<Mutex<VcamLog>>);
+
+    impl VcamSink for ScriptedVcam {
+        fn start(&mut self, format: VcamFormat) -> Result<(), PlatformError> {
+            let mut log = self.0.lock().expect("vcam log");
+            if log.refuse {
+                return Err(PlatformError::Unsupported {
+                    what: "this camera size".into(),
+                });
+            }
+            assert!(!log.started, "started twice");
+            log.started = true;
+            log.starts.push(format);
+            Ok(())
+        }
+
+        fn publish(&mut self, frame: VideoSurface) -> Result<(), PlatformError> {
+            let mut log = self.0.lock().expect("vcam log");
+            assert!(log.started, "published while stopped");
+            if log
+                .fail_after
+                .is_some_and(|after| log.pixels.len() >= after)
+            {
+                return Err(PlatformError::Os {
+                    call: "publish",
+                    code: Some(5),
+                    message: "the camera went away".into(),
+                });
+            }
+            let VideoSurface::Cpu(frame) = frame else {
+                panic!("not a CPU frame");
+            };
+            let info = frame.info();
+            assert_eq!(info.format, PixelFormat::Bgra8);
+            assert_eq!(Some(info.size), log.starts.last().map(|f| f.size));
+            let row = frame.row(0, 0).expect("a first row");
+            log.pixels.push([row[0], row[1], row[2], row[3]]);
+            Ok(())
+        }
+
+        fn stop(&mut self) -> Result<(), PlatformError> {
+            let mut log = self.0.lock().expect("vcam log");
+            if log.started {
+                log.started = false;
+                log.stops += 1;
+            }
+            Ok(())
+        }
+
+        fn format(&self) -> Option<VcamFormat> {
+            let log = self.0.lock().expect("vcam log");
+            log.started.then(|| *log.starts.last().expect("a start"))
+        }
+    }
+
+    /// A draw that fills the canvas with one RGBA colour, so the test can tell the
+    /// camera got the composite, swizzled to BGRA.
+    fn solid(rgba: [u8; 4]) -> OpenDraw {
+        Arc::new(move || {
+            let draw: DrawFn = Box::new(move |canvas: FrameSize, _, out: &mut Vec<u8>| {
+                out.clear();
+                for _ in 0..canvas.width() as usize * canvas.height() as usize {
+                    out.extend_from_slice(&rgba);
+                }
+                Ok(())
+            });
+            Ok(draw)
+        })
+    }
+
+    /// An engine whose backends have `vcam` (or none), a 64x36 canvas, and the virtual
+    /// camera output `cam` created through the protocol. No publish target or opener.
+    fn vcam_engine(
+        fakes: &Fakes,
+        draw: OpenDraw,
+        vcam: Option<Box<dyn VcamSink>>,
+    ) -> (Engine, InProcessControl, EventStream) {
+        let mut backends = share(&fakes.backends);
+        backends.vcam = vcam;
+        let engine = Engine::new().with_backends(backends).with_draw(draw);
+        let control = connected(&engine);
+        let mut events = control.events();
+        batch(
+            &control,
+            edits(vec![
+                Edit::CanvasSetSize {
+                    width: 64,
+                    height: 36,
+                },
+                Edit::OutputCreate {
+                    output_id: OutputId::new("cam"),
+                    kind: OutputKind::VirtualCam,
+                },
+            ]),
+        )
+        .expect("output.create");
+        drain(&mut events);
+        (engine, control, events)
+    }
+
+    fn scripted(log: &Arc<Mutex<VcamLog>>) -> Option<Box<dyn VcamSink>> {
+        Some(Box::new(ScriptedVcam(Arc::clone(log))))
+    }
+
+    /// `output.start` on a virtual camera starts the platform's sink at the canvas
+    /// size, as BGRA at 30 fps, and publishes every composited frame to it with no
+    /// publish target and no audio. `output.stop` stops the camera, and the engine
+    /// keeps the sink, so the output starts again.
+    #[test]
+    fn a_virtual_camera_publishes_the_canvas_until_stopped() {
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog::default()));
+        let (engine, control, mut events) =
+            vcam_engine(&fakes, solid([10, 20, 30, 255]), scripted(&log));
+
+        for run in 1..=2u64 {
+            start_output(&control, &mut events, "cam");
+            assert!(
+                pump_until(&fakes.clock, &fakes.audio, || {
+                    log.lock().expect("vcam log").pixels.len() >= 5 * run as usize
+                }),
+                "the camera got no frames"
+            );
+            let stats = engine.output_stats().expect("running");
+            assert_eq!(
+                stats.video.received, 0,
+                "the virtual camera encodes nothing"
+            );
+            assert_eq!(stats.audio.received, 0, "the virtual camera has no audio");
+            assert!(stats.readbacks >= 5);
+
+            block_on(control.call(output_call("cam", false))).expect("output.stop");
+            assert_eq!(
+                output_steps(&mut events),
+                vec![OutputState::Stopping, OutputState::Stopped]
+            );
+            let log = log.lock().expect("vcam log");
+            assert!(!log.started, "the camera is still up after the stop");
+            assert_eq!(log.stops, run);
+        }
+        let log = log.lock().expect("vcam log");
+        let size = FrameSize::new(64, 36).expect("size");
+        assert_eq!(log.starts.len(), 2);
+        for format in &log.starts {
+            assert_eq!(format.size, size);
+            assert_eq!(format.pixel_format, PixelFormat::Bgra8);
+            assert_eq!(format.frame_period, Timebase::new(1, 30).expect("1/30"));
+        }
+        assert!(
+            log.pixels.iter().all(|px| *px == [30, 20, 10, 255]),
+            "the frames are not the composite in BGRA"
+        );
+    }
+
+    /// Without a virtual camera in the backends, a start fails before `starting`.
+    #[test]
+    fn a_virtual_camera_needs_one_in_the_backends() {
+        let fakes = fakes();
+        let (_engine, control, mut events) = vcam_engine(&fakes, cpu_draw(), None);
+        let err = block_on(control.call(output_call("cam", true))).expect_err("refused");
+        assert_eq!(code(&err), Some("action_failed"));
+        assert!(err.to_string().contains("no virtual camera"), "{err}");
+        assert!(output_steps(&mut events).is_empty());
+        assert_eq!(output_state(&control, "cam"), OutputState::Stopped);
+    }
+
+    /// A camera that refuses to start fails `output.start` with its reason, and the
+    /// engine keeps the sink: once the camera accepts, the next start runs.
+    #[test]
+    fn a_refused_virtual_camera_fails_the_start_and_keeps_the_sink() {
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog {
+            refuse: true,
+            ..VcamLog::default()
+        }));
+        let (_engine, control, mut events) = vcam_engine(&fakes, cpu_draw(), scripted(&log));
+
+        let err = block_on(control.call(output_call("cam", true))).expect_err("refused");
+        assert_eq!(code(&err), Some("action_failed"));
+        assert!(
+            err.to_string().contains("starting the virtual camera"),
+            "{err}"
+        );
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Starting, OutputState::Failed]
+        );
+
+        log.lock().expect("vcam log").refuse = false;
+        start_output(&control, &mut events, "cam");
+        block_on(control.call(output_call("cam", false))).expect("output.stop");
+        assert_eq!(log.lock().expect("vcam log").stops, 1);
+    }
+
+    /// A camera that fails a publish fails the output (R-RT-006), and the camera is
+    /// stopped and handed back.
+    #[test]
+    fn a_failed_virtual_camera_publish_fails_the_output() {
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog {
+            fail_after: Some(3),
+            ..VcamLog::default()
+        }));
+        let (engine, control, mut events) = vcam_engine(&fakes, cpu_draw(), scripted(&log));
+        start_output(&control, &mut events, "cam");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                output_state(&control, "cam") == OutputState::Failed
+                    && engine.output_stats().is_none()
+            }),
+            "the output did not fail"
+        );
+        let log_now = log.lock().expect("vcam log");
+        assert_eq!(log_now.pixels.len(), 3);
+        assert!(!log_now.started, "the camera is still up");
+        drop(log_now);
+
+        log.lock().expect("vcam log").fail_after = None;
+        drain(&mut events);
+        start_output(&control, &mut events, "cam");
+        block_on(control.call(output_call("cam", false))).expect("output.stop");
+    }
+
+    fn start_output(control: &dyn Control, events: &mut EventStream, output: &str) {
+        block_on(control.call(output_call(output, true))).expect("output.start");
+        assert_eq!(
+            output_steps(events),
+            vec![OutputState::Starting, OutputState::Active]
+        );
     }
 }
 

@@ -15,11 +15,12 @@ use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
     Destination, Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent,
-    Running, launch, parts_from,
+    Running, VcamOut, launch, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
 use jstream_graph::Graph;
+use jstream_media::FrameSize;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, HistoryCall,
@@ -160,7 +161,8 @@ impl Engine {
     /// collection has no such output. A host reads its target here when it opens the
     /// publish target for `output.start`, and its key from the store it injected. A
     /// recording output (`OutputKind::Record`) needs no publish target: the engine
-    /// opens its file itself.
+    /// opens its file itself. Nor does the virtual camera (`OutputKind::VirtualCam`),
+    /// which publishes to the backends' [`VcamSink`](jstream_platform::VcamSink).
     pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
         lock(&self.shared.state)
             .graph
@@ -176,10 +178,14 @@ impl Engine {
     /// A start still needs a publish target ([`with_publish`](Self::with_publish))
     /// or an opener ([`with_publish_opener`](Self::with_publish_opener)). Without
     /// either it fails with `action_failed` and changes no output state. A recording
-    /// output needs neither: its start records to the file the collection names.
+    /// output needs neither: its start records to the file the collection names. Nor
+    /// does a virtual-camera output: its start renders the program at the canvas size
+    /// and publishes it to `backends.vcam`, video only. The engine keeps that sink for
+    /// its whole life, starting it on each such start and stopping it on the stop.
     #[must_use]
-    pub fn with_backends(mut self, backends: Backends) -> Self {
+    pub fn with_backends(mut self, mut backends: Backends) -> Self {
         let host = self.host();
+        *lock(&host.vcam) = backends.vcam.take();
         *lock(&host.backends) = Some(backends);
         self
     }
@@ -611,8 +617,17 @@ impl Engine {
                     reason: "another output is already running".into(),
                 });
             }
-            let publish = match record_path(&state.graph, &output_id) {
-                Some(path) => Target::Record(path),
+            let publish = match own_target(&state.graph, &output_id) {
+                Some(OwnTarget::Record(path)) => Target::Record(path),
+                Some(OwnTarget::Vcam(canvas)) => {
+                    let sink = lock(&host.vcam).take();
+                    let Some(sink) = sink else {
+                        return Err(ProtocolError::ActionFailed {
+                            reason: "this engine has no virtual camera".into(),
+                        });
+                    };
+                    Target::Vcam(VcamOut::new(sink, Arc::clone(&host.vcam)), canvas)
+                }
                 None => match lock(&host.publish).take() {
                     Some(publish) => Target::Ready(publish),
                     None => match lock(&host.open_publish).as_ref() {
@@ -922,29 +937,48 @@ impl Drop for SettleOnDrop<'_> {
     }
 }
 
-/// Where a recording output in the collection records to, or `None` when the output
-/// is not a recording (or not in the collection).
-fn record_path(graph: &Graph, output_id: &OutputId) -> Option<PathBuf> {
+/// Where an output the engine sends to itself goes, rather than to a publish target
+/// the host opens.
+enum OwnTarget {
+    /// A recording, to this file.
+    Record(PathBuf),
+    /// The virtual camera, at the canvas size.
+    Vcam(FrameSize),
+}
+
+/// Where a recording output in the collection records to, or the size a virtual camera
+/// runs at. `None` when the output needs a publish target (or is not in the
+/// collection).
+fn own_target(graph: &Graph, output_id: &OutputId) -> Option<OwnTarget> {
     match graph.state().output(output_id)?.kind() {
         OutputKind::Record {
             path,
             container: RecordContainer::Mp4,
-        } => Some(PathBuf::from(path)),
+        } => Some(OwnTarget::Record(PathBuf::from(path))),
+        OutputKind::VirtualCam => {
+            let canvas = graph.state().canvas();
+            // The graph keeps both sides above zero, so this always succeeds.
+            FrameSize::new(canvas.width, canvas.height)
+                .ok()
+                .map(OwnTarget::Vcam)
+        }
         _ => None,
     }
 }
 
 /// Where a start sends its output: a one-shot publish target the host set, the opener
-/// it calls once the locks are released, or a recording file.
+/// it calls once the locks are released, a recording file, or the virtual camera.
 enum Target {
     Ready(Box<dyn LivePublish>),
     Open(OpenPublish),
     Record(PathBuf),
+    Vcam(VcamOut, FrameSize),
 }
 
 impl Target {
     /// Puts a one-shot target back for the next start, when this one refused
-    /// before `starting`. An opener was never taken out of the host.
+    /// before `starting`. An opener was never taken out of the host. The virtual
+    /// camera's sink goes back to the host when its [`VcamOut`] drops.
     fn give_back(self, host: &MediaHost) {
         if let Target::Ready(publish) = self {
             *lock(&host.publish) = Some(publish);
@@ -960,6 +994,7 @@ impl Target {
                 .map(Destination::Publish)
                 .map_err(|err| format!("opening the publish target: {err}")),
             Target::Record(path) => Ok(Destination::Record(path)),
+            Target::Vcam(out, canvas) => Ok(Destination::Vcam(out, canvas)),
         }
     }
 }

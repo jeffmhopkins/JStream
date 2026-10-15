@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:3158adba7f4edd30", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: cascade from ARCH data-model; re-read, no protocol, scene or placement claims" }
+verified = { hash = "b3:50afdc1f2b70790d", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b cascade from ARCH#threading/data-model: re-read; no claims about output kinds, holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

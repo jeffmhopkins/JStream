@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:1a3374260c93e175", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Built so far keeps B3's placement/canvas and adds B6's role, item.move and scene_id (0.12); Not yet keeps scene.create role, variants, 3D geometry" }
+verified = { hash = "b3:a52d3dcd1406ad17", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b: Built so far lists VirtualCam among output kinds; Not yet drops the VirtualCam kind and keeps the YouTube target" }
 -->
 
 ```
@@ -353,15 +353,15 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
   built-in kinds are stubs in `jstream-core` until `jstream-sources` exists.
   Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
-  the URL checked to carry no credential, or `Record { path, container: mp4 }`, the path
-  checked to be absolute and to end in a file name. A stream key is never collection state: it
+  the URL checked to carry no credential, `Record { path, container: mp4 }`, the path
+  checked to be absolute and to end in a file name, or `VirtualCam`. A stream key is never collection state: it
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, 3D
   geometry, `scene.create`'s optional `role`, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
-  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
+  `YouTube` target, and everything outside `sources`, `scenes`
   and `outputs`. Nothing is persisted yet.
 
 <a id="threading"></a>
@@ -369,7 +369,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:9b6300f85c94cfbb", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (#202 merged) into #199: took main's stamp; re-read; prose is main's; #199 changes only the ring torn-frame test; holds" }
+verified = { hash = "b3:635a7fb0cd9e2a2e", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b: Output pipeline says a virtual camera needs no publish target and runs only the render thread, publishing to VcamSink, publish error fatal; matches runtime/pipeline.rs" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -391,7 +391,7 @@ every mix runs at the base rate divided by an integer.
 
 **Output pipeline** (`jstream-core` `src/runtime/`), the part that is built.
 `output.start`, once the host has injected platform backends and a publish target
-(a recording output needs none), starts it and emits `output.state_changed` from the control thread. The render
+(a recording output and a virtual camera need none), starts it and emits `output.state_changed` from the control thread. The render
 thread calls the platform capture mailbox, composites one scene on each 1/30 s
 tick, repeats the last frame when capture is empty, and reads that frame back.
 This cut encodes that CPU readback, and the readback is counted. The mixer thread
@@ -415,7 +415,10 @@ before stop, a render or mixer panic) is a channel message to a watcher the cont
 thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
 encoder session queues. Arc-swap snapshots and a GPU encode target are still the
 rows above, not this cut. The collector so far is the mixer's own, and frees only
-input rings and their counters.
+input rings and their counters. A virtual-camera output runs only the render thread:
+it composites at the canvas size and publishes each frame to the platform's
+`VcamSink` itself, which must not block (spike S2), with no mixer, encoder or output
+thread; a publish error is fatal like a render panic.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
@@ -508,7 +511,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:92b7bead00a5a859", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Cascade from protocol#design; re-read, Edits bullet says placement edits take scene_id (0.12), canvas/geometry 0.11; holds" }
+verified = { hash = "b3:061321e8338b91cd", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b: Edits bullet adds the virtual_cam kind at 0.13" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -527,7 +530,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.13.
+  `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
@@ -614,7 +618,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:3520026dd573c7fb", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: tools.snap is 115 KB after B3 and B6, so the text says about 115 KB" }
+verified = { hash = "b3:eb690fb100c3f030", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b: tools.snap grows to 116.6 KB with the virtual_cam variant; 'about 115 KB' still holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

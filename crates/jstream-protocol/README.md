@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:c9f8fa7e31b98afb", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Commands list merges B3's set_geometry/canvas.set_size and B6's set_role/item.move; Geometry bullet: 0.12 groups, 0.11 canvas and geometry, 0.10 history" }
+verified = { hash = "b3:73dd5a27b3c55fda", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b: Outputs bullet lists virtual_cam; version bullet says 0.13 for the virtual_cam kind; parity fixture bullet names the vcam output" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -42,7 +42,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
@@ -77,9 +77,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.12 because of groups
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.13 because of the
+  `virtual_cam` output kind; 0.12 added groups
   (`scene.set_role`, `item.move`, a scene's `role` and the placement edits'
-  `scene_id`); 0.11 added the canvas and the geometry wire surface
+  `scene_id`), 0.11 the canvas and the geometry wire surface
   ([Item geometry](#design)), 0.10 the `history` calls, 0.9 the `record` output kind, 0.8 the kind queries and settings,
   0.7 the output edits, `output.list`, the key actions and `key_set`, 0.6 `stats.tick`
   and 0.5 `video.snapshot`.
@@ -88,7 +89,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs and a recording output),
+  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera and a
+  recording output),
   the exact answer to every collection read of it (`output.list` included), and the
   exact error for batches rejected against it (geometry, canvas, RTMP URL and
   recording path checks included).
@@ -104,7 +106,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:c31fe2b045ea1f33", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Round 6 B5 follow-up: Groups subsection's placement-edit list now names item.set_geometry, matching command.rs's scene_id field on it" }
+verified = { hash = "b3:500e07804eef49a0", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b: Outputs paragraph documents virtual_cam (0.13): no fields, canvas size at start, 30 fps, action_failed cases, set_target refused, read as Unknown by 0.9-0.12; compatibility text holds (fallback from 0.9)" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -293,7 +295,12 @@ no `..` segment and end in a file name, and
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
 so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
-record elsewhere. The
+record elsewhere. A `virtual_cam` output (0.13) has no fields: it offers the program
+video to other apps on the engine's machine as a webcam, with no audio, at the canvas
+size it has when it starts and 30 fps. `output.start` fails with `action_failed` when
+the engine has no virtual camera, the camera isn't registered on the machine, or it
+can't offer that size. It has no target either, so `output.set_target` refuses it too.
+A 0.9 to 0.12 client reads it as `Unknown`. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,

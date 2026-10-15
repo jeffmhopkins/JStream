@@ -23,8 +23,9 @@ use jstream_outputs::record::{RecordError, Recorder, temp_path_for};
 
 use crate::runtime::{LinkState, LivePublish};
 
-/// Where a start sends its output, before the pipeline knows the frame size.
-pub(crate) enum Destination {
+/// Where the output thread sends the encoded stream, before the pipeline knows the
+/// frame size.
+pub(crate) enum Muxed {
     /// A live publish target, sent FLV tags.
     Publish(Box<dyn LivePublish>),
     /// A recording to this path, in MP4.
@@ -69,12 +70,12 @@ impl Sink {
     /// Builds the muxer for `destination`. A recording opens its `.part` file here and
     /// writes the init segment; it stays provisional until `keep` is set.
     pub(crate) fn open(
-        destination: Destination,
+        destination: Muxed,
         info: &StreamInfo,
         keep: Arc<AtomicBool>,
     ) -> Result<Self, String> {
         match destination {
-            Destination::Publish(publish) => {
+            Muxed::Publish(publish) => {
                 let config = FlvConfig {
                     video: Some(flv::VideoTrack {
                         width: info.size.width(),
@@ -94,7 +95,7 @@ impl Sink {
                 let tagger = FlvTagger::new(config).map_err(|err| format!("FLV tagger: {err}"))?;
                 Ok(Self::Flv { tagger, publish })
             }
-            Destination::Record(path) => {
+            Muxed::Record(path) => {
                 // The collection's check is the same on every platform, so `/show.mp4`
                 // passes it on Windows and `C:\show.mp4` on Linux, where it would be a
                 // relative name in the working directory.

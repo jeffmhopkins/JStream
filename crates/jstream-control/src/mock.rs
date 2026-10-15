@@ -737,6 +737,7 @@ impl Collection {
                 match &kind {
                     OutputKind::Rtmp { target } => check_target(target, at, "kind.target")?,
                     OutputKind::Record { path, container } => check_record(path, *container, at)?,
+                    OutputKind::VirtualCam => {}
                     OutputKind::Unknown => {
                         return Err(invalid(
                             at,

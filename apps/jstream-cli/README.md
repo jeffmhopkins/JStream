@@ -213,7 +213,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ba6b3375fe9da05d", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; parsing and writers hold with scene_id: None on the placement constructors" }
+verified = { hash = "b3:c8b1c54504e2abb3", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b cascade from control#design: re-read; CLI parsing is unchanged (no virtual_cam form; a listed virtual_cam output prints as JSON through the existing fallback), holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

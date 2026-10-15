@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:69708ec0315d4fe2", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Round 6 B5 follow-up: Groups and moves bullet's placement-edit list now names item.set_geometry, which takes scene_id after the B3 merge (apply.rs placement_mut)" }
+verified = { hash = "b3:6d00adabc2031375", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b: Output model and outputs bullet name the virtual camera (nothing to check) and set_target refused on it, matching apply.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -40,8 +40,8 @@ codes, so the engine passes them to clients unchanged.
   one of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two forms: a
   `Geometry` (a box on the canvas) or a `Legacy` 0.3 `ItemTransform`, kept exactly as
   written. Only an edit changes the form.
-- `Output`: an ID and an `OutputKind` (so far RTMP to a generic URL, or a recording
-  to an MP4 file). Whether it
+- `Output`: an ID and an `OutputKind` (so far RTMP to a generic URL, a recording
+  to an MP4 file, or the virtual camera, which has nothing to check). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -89,8 +89,8 @@ goes up by exactly one, and the result carries the **inverse batch**.
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
   `\…`, `C:\…` or `C:/…`, the same on every platform, as for an absolute asset), or
   doesn't end in a file name; whether it is absolute on the engine's own machine, and
-  whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording fails with
-  `invalid_argument` (it has no RTMP target). `output.delete` is undone by `output.create` with its kind, and
+  whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
+  `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
   with `invalid_argument`, in edit order.
