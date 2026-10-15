@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:9b34d8b002209ccb", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading handover addition: the platform traits (capture mailbox, audio handler, vcam) don't touch snapshots or live values; unchanged" }
+verified = { hash = "b3:63e7f5a6967567fe", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via ARCH#threading's handover paragraph; capture mailbox, audio handlers and vcam aren't snapshot readers, so the rule doesn't apply" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

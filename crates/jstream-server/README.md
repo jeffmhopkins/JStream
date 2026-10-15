@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:e6f67a8d29a125e0", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the session bullet. The connection task and bounded outbox are unchanged. The new test only observes the subscription Design already ends when a connection closes." }
+verified = { hash = "b3:3630422825c76331", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the limits change: the contents list now names listener.rs and the connection limits on ServerConfig; layer, connector and not-yet items unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -28,7 +28,9 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Server** (`lib.rs`): `Server::bind`, `serve` and `serve_with_shutdown`, the
   `Connector` type, and the `GET /api/v1/ws` upgrade handler.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
-  origins) and `Token`, the control token.
+  origins, connection limits) and `Token`, the control token.
+- **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
+  an accepted upgrade request in time.
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every upgrade passes
   ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
@@ -49,7 +51,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3a87f96621387261", by = "agent:grok@stats-tick", note = "Re-read Sessions and open question 7 against session.rs. The task still forwards every event, including stats.tick, and still drops a slow client's queued events. stats.tick is about once a second; meters are still to come. Shutdown still ends the subscription before the close timeout." }
+verified = { hash = "b3:9fc66f6965fe6863", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged with main and edited open question 8: the jstream-cli mcp conflict is settled (jstream-mcp says hello at initialize); limits table, Sessions and Logging still match config.rs, listener.rs, lib.rs, session.rs" }
 -->
 
 ### Listening and admission
@@ -92,6 +94,25 @@ value is hashed with BLAKE3 too, and the two 32-byte digests are compared with
 `blake3::Hash`'s constant-time equality. So the compare reveals nothing about the
 token: not where the two differ, and not its length.
 
+**Connection limits.** Three bounds keep one client, or a crowd of them, from holding
+the server's resources. Each is a `ServerConfig` field, and `ServerConfig::new` sets
+the default:
+
+| Limit | Default | When it is exceeded |
+|---|---|---|
+| `max_connections` | 32 open WebSocket connections | An upgrade that passes the checks above gets 503 and no session. The slot is taken just before the upgrade and freed when the connection ends. |
+| `header_read_timeout` | 10 s from accept to an accepted upgrade request | The connection is dropped, unanswered. |
+| `handshake_timeout` | 10 s from accept to a successful `hello` | The connection is closed with close code 1008 (see *Sessions*). |
+
+The header-read timeout is kept on the socket, by the listener (`listener.rs`), since
+hyper's own isn't reachable through `axum::serve`: until the upgrade handler accepts a
+request, every read and write fails once the deadline has passed. So it also drops a
+connection that sends no request, asks for another path, or stays open after a refusal.
+The cap is checked after the `Host`, `Origin` and token checks, so a refused client
+learns nothing about the server's load, and a refusal costs no session. The listener
+stays on loopback by default; these bounds are what a non-loopback bind would rely on
+against a misbehaving client on the network.
+
 ### Sessions
 
 Each accepted connection gets a fresh session from the `Connector`
@@ -102,7 +123,9 @@ task speaks the envelope
 - `hello` is forwarded to `Control::hello`. On success the task subscribes to the
   session's events and answers `welcome`; from then on events are forwarded. A refused
   first handshake (`unsupported_version`) is answered and the connection closed (close
-  code 1008), as the envelope says.
+  code 1008), as the envelope says. A connection whose handshake hasn't succeeded within
+  `handshake_timeout` of being accepted is closed with code 1008 too (`no handshake in
+  time`).
 - Each `request` is forwarded to `Control::call` and may stay in flight while others
   run; answers go back as they complete, carrying the client's request ID. A request
   before `hello` is answered by the session itself (`handshake_required`).
@@ -152,8 +175,8 @@ address (axum's `ConnectInfo`), for logging only: admission depends on the heade
 alone.
 
 - **Refused upgrades** are logged at `warn` as `connection refused`, with the peer
-  address and the reason (`Host not allowed`, `Origin not allowed`, or `missing or wrong
-  control token`). No header value is logged: not the token, nor the refused `Host` or
+  address and the reason (`Host not allowed`, `Origin not allowed`, `missing or wrong
+  control token`, or `too many connections`). No header value is logged: not the token, nor the refused `Host` or
   `Origin` ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The test
   `gate::tests::refusals_are_logged_without_the_token` checks this with a capturing
   subscriber, and `jstream-daemon`'s end-to-end test checks its stderr.
@@ -165,7 +188,9 @@ alone.
   `warn` when the engine failed (close code 1011). A slow client's dropped events are
   logged at `warn` (`client reads too slowly: events dropped`) with their count. Message
   contents are never logged.
-- A request that isn't a WebSocket upgrade is logged at `debug`.
+- A request that isn't a WebSocket upgrade is logged at `debug`, and so is a connection
+  dropped by the header-read timeout. A connection closed by the handshake timeout logs
+  `connection closed` at `info` with its code and reason, like any other close.
 
 ### Dependencies
 
@@ -209,3 +234,11 @@ for the token digest; `tracing` for the spans and events above. No TLS crate is 
    left open is tuning: whether 1024 events suits `stats.tick` (about once a second
    while a pipeline runs) and the high-rate meters still to come, or wants a byte
    limit or per-event-kind limits once they exist.
+8. **Limit tuning.** The connection limits (see *Listening and admission*) are a
+   conservative first cut. Whether a remote bind wants a per-peer cap as well, or the
+   host app should expose the limits, is open. Settled: the handshake timeout counts
+   from accept, so a client must say `hello` as soon as it connects. `jstream-cli mcp`
+   connects when it starts, and `jstream-mcp` sends `hello` at the MCP `initialize` (or
+   `server/discover`), not at the first tool call
+   ([jstream-mcp › Design](../jstream-mcp/README.md#design)), so an idle agent keeps its
+   session.

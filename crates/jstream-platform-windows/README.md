@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:4c99700bf8c4ceb3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: added the WindowsCredentials bullet (CredentialTarget JStream/stream-key/<id>, GENERIC + LOCAL_MACHINE, 1..=CRED_MAX_CREDENTIAL_BLOB_SIZE, zeroing Secret, CredFree after wipe) checked against src/credential.rs; intro now says safe APIs incl. the store's own; Tests paragraph names the credential tests and where they run" }
+verified = { hash = "b3:85a97d10aeebb8fc", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#139 SeqCst handover, #140) into #141: re-read; the WindowsCredentials bullet is unchanged and runs on the control plane, and the WASAPI/WGC/MF threads are not snapshot readers, so the handover rule adds nothing here" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
