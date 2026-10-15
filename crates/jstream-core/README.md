@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:3b024987fb96f334", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#202 reconnect test, #199, #206) into B5: re-read; #202 changes only a runtime/publish test, B5's history text holds" }
+verified = { hash = "b3:953bf0022e458810", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: re-read; History bullet holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a486b1faa2fba256", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#202) into B5: re-read; history paragraph keeps item.set_source (Prop::Source, both sources used); #202's publish test change touches no described behaviour" }
+verified = { hash = "b3:8b7f74e0468e5b1c", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: history touched paragraph merges B6's role/item.move scenes and B5's item.set_source (both sources used, which source an item places), matching history.rs Touched::add" }
 -->
 
 ### Engine and sessions
@@ -238,11 +238,12 @@ collection lock:
 - **Conflicts.** Each applied batch, undo and redo is logged with what it *touched*,
   computed in core from its edits and the inverse's (so a delete also names what it
   removed): objects created or deleted, objects used (an item's scene and source, both
-  sources of an `item.set_source`, a `scene` source's scene, a duplicate's original),
-  properties set (names, an item's placement, whether set as a transform or a
-  geometry, crop, visibility, an item's index, which source an item places, each
-  settings parameter, an output's target), the scenes' order, and the
-  canvas size. An undo or redo first applies the step's edits to a copy of the
+  sources of an `item.set_source`, a `scene` source's scene, a duplicate's original,
+  the scenes an `item.move` and its inverse name), properties set (names, a scene's
+  role, an item's placement, whether set as a transform or a geometry, crop,
+  visibility, an item's index, which `item.move` also sets, which source an item
+  places, each settings parameter, an output's target), the scenes'
+  order, and the canvas size. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
   `scene.create` also deletes the items the scene holds now, even ones whose own step
   was dropped. The step conflicts with another client's later entry, logged after

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:993927ab5a54ac42", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: re-read; args.rs has B3's geometry: None and B5's item.set_source parsing; contents list holds" }
+verified = { hash = "b3:57660c9bda11de30", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: re-read; contents list holds; CLI adds only item.set_source" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:db930e72dd2984a3", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: Edits bullet merged: B3's not-in-CLI canvas/geometry sentence kept, B5's item.set_source form and the duplicated_from exception added" }
+verified = { hash = "b3:be793cab1152a57e", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: Edits bullet keeps B6's note that set_role/item.move/scene_id aren't in the CLI and adds B5's item.set_source form" }
 -->
 
 ```sh
@@ -107,7 +107,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   creates gets its kind's defaults. Protocol 0.11's `canvas.set_size`,
   `item.set_geometry` and `item.add`'s `geometry`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
-  yet; `item.add` sends neither placement, so its item is a legacy one.
+  yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
+  the placement edits' optional `scene_id` are not in the CLI either.
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
@@ -214,7 +215,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5179a7c70247355f", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: re-read; hand-rolled parser with B5's two-argument item.set_source; bullets hold" }
+verified = { hash = "b3:3b5cd64f66b9d88a", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: re-read; parser has B5's two-argument item.set_source beside scene_id: None constructors" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

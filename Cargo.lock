@@ -901,6 +901,7 @@ name = "jstream-platform-windows"
 version = "0.0.0"
 dependencies = [
  "jstream-platform",
+ "jstream-vcam-proto",
  "wgpu",
  "windows",
  "windows-core",

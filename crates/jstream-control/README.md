@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:fc9d39cac1ac7adc", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: re-read; mock bullet holds with B3 geometry and B5 set_source/duplicated_from" }
+verified = { hash = "b3:85e85074c4bde414", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: re-read; mock contents hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:939e47983bd5cbf3", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: mock rules list keeps B3's geometry checks and B5's item.set_source cycle and duplicated_from rules; tests updated for the fixture's new i4" }
+verified = { hash = "b3:d75fcf1f659b635f", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: mock bullet: every edit but set_role/item.move; nesting cycles from item.add and item.set_source; duplicated_from link rules match mock.rs" }
 -->
 
 ### The trait
@@ -101,13 +101,15 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   retry with a known key answers first; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but protocol 0.12's `scene.set_role` and `item.move` (which answer
+  `internal`), with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
   - reorder indices out of range;
+  - a placement edit's `scene_id` naming a scene other than the item's own;
   - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
     not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or

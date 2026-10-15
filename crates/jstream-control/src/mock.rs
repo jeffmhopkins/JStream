@@ -18,7 +18,8 @@ use jstream_protocol::{
     GeometryError, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId,
     OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
     QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind, Welcome,
+    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind,
+    Welcome,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -387,6 +388,7 @@ impl State {
                     .map(|scene| SceneSummary {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
+                        role: SceneRole::Scene,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                     })
                     .collect(),
@@ -424,6 +426,7 @@ impl State {
                     .map(|scene| SceneInfo {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
+                        role: SceneRole::Scene,
                         items: self.collection.item_infos(scene),
                     })
                     .collect(),
@@ -605,13 +608,21 @@ impl Collection {
                 items.retain(|id| *id != item_id);
                 items.insert(to, item_id);
             }
-            Edit::ItemSetTransform { item_id, transform } => {
-                let item = self.existing_item(&item_id)?;
+            Edit::ItemSetTransform {
+                item_id,
+                scene_id,
+                transform,
+            } => {
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
                 item.transform = transform;
                 item.geometry = None;
             }
-            Edit::ItemSetGeometry { item_id, geometry } => {
-                self.existing_item(&item_id)?;
+            Edit::ItemSetGeometry {
+                item_id,
+                scene_id,
+                geometry,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?;
                 let view = geometry_view(&geometry, at)?;
                 let item = self.existing_item(&item_id)?;
                 item.transform = view;
@@ -622,8 +633,12 @@ impl Collection {
                 check_canvas_side(height, at, "height")?;
                 self.canvas = Canvas { width, height };
             }
-            Edit::ItemSetCrop { item_id, crop } => {
-                self.existing_item(&item_id)?.crop = crop;
+            Edit::ItemSetCrop {
+                item_id,
+                scene_id,
+                crop,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?.crop = crop;
             }
             Edit::ItemSetSource { item_id, source_id } => {
                 let scene_id = self.existing_item(&item_id)?.scene_id.clone();
@@ -633,8 +648,12 @@ impl Collection {
                 self.check_nesting(&scene_id, kind, at)?;
                 self.existing_item(&item_id)?.source_id = source_id;
             }
-            Edit::ItemSetVisible { item_id, visible } => {
-                self.existing_item(&item_id)?.visible = visible;
+            Edit::ItemSetVisible {
+                item_id,
+                scene_id,
+                visible,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?.visible = visible;
             }
             Edit::SourceCreate {
                 source_id,
@@ -904,6 +923,31 @@ impl Collection {
         self.items
             .get_mut(item_id)
             .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))
+    }
+
+    /// The item a placement edit changes, with its optional `scene_id` checked as
+    /// `jstream-graph` checks it: only the item's own scene, until keyframe scenes exist.
+    fn placement(
+        &mut self,
+        item_id: &ItemId,
+        scene_id: Option<&SceneId>,
+        at: usize,
+    ) -> Result<&mut Item, ProtocolError> {
+        let own = self.existing_item(item_id)?.scene_id.clone();
+        if let Some(scene_id) = scene_id
+            && *scene_id != own
+        {
+            self.existing_scene(scene_id)?;
+            return Err(invalid(
+                at,
+                "scene_id",
+                format!(
+                    "item `{item_id}` is in scene `{own}`, and only its own scene can be named \
+                     until keyframe scenes exist"
+                ),
+            ));
+        }
+        self.existing_item(item_id)
     }
 }
 
@@ -1423,6 +1467,7 @@ mod tests {
                 add("a", "i2", "nested_b"),
                 Edit::ItemSetVisible {
                     item_id: ItemId::new("i1"),
+                    scene_id: None,
                     visible: false,
                 },
                 Edit::ItemReorder {

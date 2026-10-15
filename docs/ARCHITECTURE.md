@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:1c4cf0facd099307", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: re-read; apps/** gains only the CLI item.set_source form; diagram holds" }
+verified = { hash = "b3:03ae24056b20cf35", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: re-read; crate shape unchanged" }
 -->
 
 ```
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:e39a8376b6d18fa3", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4 adds only a dev-dependency (assert_no_alloc) to jstream-audio's Cargo.toml; its row (layer 2, summary, unsafe no) is unchanged" }
+verified = { hash = "b3:e426654a0827d75f", by = "agent:claude@session_01HGK7agjEsYDqGN4QkkiUjA", note = "Merge of main (E3a and others) into G3a: took main's rows; re-read the map; G3a only adds jstream-platform-windows -> jstream-vcam-proto (L2 -> L0), and the platform-windows row already lists the vcam sink side" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:f49e76b07fba3575", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: Built so far merged: B3's placement/canvas sentence and B5's item.set_source/duplicated_from; Not yet drops both B5 items and keeps 3D geometry" }
+verified = { hash = "b3:57da6980e0a584ba", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: Built so far keeps B6's role/item.move/scene_id and adds item.set_source and duplicated_from; Not yet drops both B5 items" }
 -->
 
 ```
@@ -343,7 +343,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   filters yet), scenes in display order, and items in stacking order with `source_id`,
   a placement, `crop` and `visible`. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
-  its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Items refer to sources; they never copy them, and
+  its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Scenes have
+  a `role` (`scene` or `group`, set by `scene.set_role`), and `item.move` moves an item
+  to another scene keeping its id, under the same cycle check. The placement edits take
+  an optional `scene_id`, accepted only when it names the item's own scene until
+  variants exist (protocol 0.12). Items refer to sources; they never copy them, and
   `item.set_source` retargets one, keeping its id, placement and stacking position.
   A source copied by `source.duplicate` records its original in `duplicated_from`, a
   plain link that reads as absent once the original is deleted. Scene and source
@@ -357,8 +361,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, the transition fields, 3D
-  geometry, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
-  variants and overrides, folders, labels, favourites and other organisation metadata,
+  geometry, `scene.create`'s optional `role`, variants and overrides (so no edit drops
+  any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
   and `outputs`. Nothing is persisted yet.
@@ -507,7 +511,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5e4b82ccc3f1b4a8", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: re-read; B2/B3 bullets from main hold; new edit is additive" }
+verified = { hash = "b3:705742349a8aae2b", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: re-read; Edits bullet holds; item.set_source is additive" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -520,8 +524,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
-  id, and placement edits take an optional `scene_id` so they can write a keyframe
-  scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
+  id, `scene.set_role` marks a scene as a group, and placement edits take an optional
+  `scene_id` so they can write a keyframe scene's override
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.12). Until keyframe scenes are
+  built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
@@ -611,7 +617,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:47ff46fcf5616cb0", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B2 history, B3 geometry) into B5: tools.snap is now about 109 KB with B5's item.set_source and duplicated_from on top of B2/B3, so the text says about 110 KB" }
+verified = { hash = "b3:a37a96fcd3e67b13", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (B6 #184, #194; 0.12) into B5: tools.snap is about 120 KB after B6 and B5, so the text says about 120 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -625,7 +631,7 @@ verified = { hash = "b3:47ff46fcf5616cb0", by = "agent:claude@session_01WYFCTjMh
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 110 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 120 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
