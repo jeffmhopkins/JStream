@@ -9,7 +9,7 @@
 
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
-use crate::history::History;
+use crate::history::{History, Touched};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
@@ -1251,8 +1251,10 @@ impl State {
     /// other stack. No new step is made.
     ///
     /// In order: a used idempotency key gets its first result; a stale `expected_rev`
-    /// fails with `rev_conflict`; an empty stack fails with `history_empty`. A step that
-    /// another client's later batch touched, or whose edits no longer apply after one,
+    /// fails with `rev_conflict`; an empty stack fails with `history_empty`. A step
+    /// whose edits, applied now, would touch what another client's later batch touched
+    /// (a scene's undone `scene.create` touches the items the scene holds now), or whose
+    /// edits no longer apply after one,
     /// fails with `undo_conflict` and is dropped, so the next undo reaches the step
     /// before it. Edits that fail only because an output is running (an output the step
     /// would delete) fail with the graph's error, and the step stays: stop the output
@@ -1288,13 +1290,11 @@ impl State {
             client_id,
             rev,
         };
-        if let Some(found) = self.history.conflict(client_id, &step) {
-            let error = conflict(found);
-            self.history.dropped();
-            return Err(error);
-        }
+        // Applied to a copy first: what the edits touch now decides the conflict, and
+        // the state changes only once there is none.
         let running = self.outputs.running();
-        let applied = match self.graph.apply_with_running(&step.edits, None, &running) {
+        let mut next = self.graph.clone();
+        let applied = match next.apply_with_running(&step.edits, None, &running) {
             Ok(applied) => applied,
             Err(error) => {
                 // Only a running output in the way: keep the step for a retry.
@@ -1304,7 +1304,11 @@ impl State {
                         .clone()
                         .apply_with_running(&step.edits, None, &BTreeSet::new())
                         .is_ok();
-                let error = match self.history.latest_other(client_id, &step) {
+                let found = self
+                    .history
+                    .conflict(client_id, &step, None)
+                    .or_else(|| self.history.latest_other(client_id, &step));
+                let error = match found {
                     Some(found) if !blocked_by_output => conflict(found),
                     _ => {
                         self.history.put_back(client_id, direction, step);
@@ -1315,6 +1319,13 @@ impl State {
                 return Err(error);
             }
         };
+        let now = Touched::of(&step.edits, &applied.inverse.edits);
+        if let Some(found) = self.history.conflict(client_id, &step, Some(&now)) {
+            let error = conflict(found);
+            self.history.dropped();
+            return Err(error);
+        }
+        self.graph = next;
         let edits = step.edits.clone();
         self.history.moved(
             client_id,

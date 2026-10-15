@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:ed042041866f86ba", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166) into F2b: only the CLI README's edit-form wording changed under apps/**; diagram (outputs list includes record) and host table hold" }
+verified = { hash = "b3:bd9768d2ab90a22e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; apps changes from main (MCP on, CLI outputs) and B2's CLI cause print fit the diagram" }
 -->
 
 ```
@@ -503,7 +503,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f7428a0902cef033", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; no message, edit, query or transport rule changed by the mock/parity merge; record kind bullet still says 0.9" }
+verified = { hash = "b3:70362ac384ff3ac8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): History bullet says protocol 0.10; record kind bullet 0.9 from main holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -605,7 +605,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:9b8fb2677f948e39", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#169 Y2, #153 I1) into F2b round 2: took main's verified line and re-read; I1's /mcp text; tools.snap unchanged by round 2 (Unknown variants are schemars-skipped)" }
+verified = { hash = "b3:93f000624e12ab05", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): grouped tools list includes history; tools.snap about 83 KB, so about 80 KB holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

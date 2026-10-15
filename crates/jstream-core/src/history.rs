@@ -146,6 +146,15 @@ impl Touched {
         }
     }
 
+    /// Adds everything `other` touches.
+    pub(crate) fn extend(&mut self, other: &Touched) {
+        self.exists.extend(other.exists.iter().cloned());
+        self.uses.extend(other.uses.iter().cloned());
+        self.props.extend(other.props.iter().cloned());
+        self.scene_order |= other.scene_order;
+        self.unknown |= other.unknown;
+    }
+
     fn prop(&mut self, object: Object, prop: Prop) {
         self.props.insert((object, prop));
     }
@@ -229,7 +238,9 @@ impl History {
             while stacks.undo.len() > limit {
                 stacks.undo.pop_front();
             }
-            stacks.redo.truncate(limit);
+            // The bottom of the redo stack is the step furthest from being redone.
+            let excess = stacks.redo.len().saturating_sub(limit);
+            stacks.redo.drain(..excess);
         }
         self.prune();
     }
@@ -316,10 +327,25 @@ impl History {
     }
 
     /// The first batch by another client, after `step` was last applied or undone, that
-    /// touched what the step touches: its client and `rev`.
-    pub(crate) fn conflict(&self, client_id: &ClientId, step: &Step) -> Option<(ClientId, Rev)> {
+    /// touched what applying the step touches: its client and `rev`.
+    ///
+    /// `now` is what applying the step's edits to the current state touches, its new
+    /// inverse included, when they apply. It can name more than the step did when it
+    /// was recorded: undoing `scene.create` deletes whatever items the scene holds now,
+    /// including ones whose own step was dropped (ADR-0032: an undo never overwrites
+    /// another client's work).
+    pub(crate) fn conflict(
+        &self,
+        client_id: &ClientId,
+        step: &Step,
+        now: Option<&Touched>,
+    ) -> Option<(ClientId, Rev)> {
+        let mut touched = step.touched.clone();
+        if let Some(now) = now {
+            touched.extend(now);
+        }
         self.others_since(client_id, step.since)
-            .find(|entry| entry.touched.conflicts_with(&step.touched))
+            .find(|entry| entry.touched.conflicts_with(&touched))
             .map(|entry| (entry.client_id.clone(), entry.rev))
     }
 

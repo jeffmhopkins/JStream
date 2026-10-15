@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:40bcd2eae02a4021", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155, 0.8) into A5: re-read; Running bullet (mcp and output set-key read the BufRead) and contents list hold for args.rs with both source.rename and the output commands" }
+verified = { hash = "b3:981187ded0c79d9b", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; contents list (output set-key reads stdin) holds; run.rs still prints a state.changed cause" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:5e8970433d7959a4", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: edit-forms bullet now says output.create's URL form is for generic RTMP and the CLI has no recording form yet; args.rs only parses rtmp(s) URLs" }
+verified = { hash = "b3:ca23828e30a23c33", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): output commands and exit table from #166 hold; the event line's undo/redo suffix and exit code 20 for undo_conflict/history_empty still match run.rs/exit.rs" }
 -->
 
 ```sh
@@ -207,7 +207,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fc2eb1855e933b5e", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: control design change is only the mock's recording checks; CLI design text about WsControl and the mock holds" }
+verified = { hash = "b3:a7797f30fdad8605", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; #166's BufRead note holds, history adds nothing CLI-side beyond the event cause" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -207,6 +207,36 @@ fn an_undo_never_overwrites_another_clients_later_change() {
     );
 }
 
+/// Undoing a `scene.create` deletes the items the scene holds now. When the step that
+/// added an item was dropped for a conflict, another client's later change to that
+/// item must still block the undo (review B1 on #176).
+#[test]
+fn undoing_a_scene_never_deletes_another_clients_work_on_its_items() {
+    let engine = Engine::new();
+    let user = connected(&engine);
+    let agent = connected(&engine);
+    batch(&user, one(webcam())).expect("source");
+    batch(&user, one(create("main"))).expect("scene");
+    batch(&user, one(add("main", "cam", "webcam"))).expect("item");
+    let theirs = batch(&agent, one(moved_to("cam", 20.0))).expect("agent moves it");
+
+    assert_eq!(
+        code(&undo(&user).expect_err("the agent moved the item")),
+        Some("undo_conflict")
+    );
+    let err = undo(&user).expect_err("deleting the scene would delete the agent's item");
+    assert_eq!(
+        err.protocol(),
+        Some(&ProtocolError::UndoConflict {
+            step_rev: Rev(2),
+            client_id: agent.client_id().expect("hello"),
+            rev: theirs,
+        })
+    );
+    assert_eq!(x_of(&user, "cam"), 20.0, "nothing was applied");
+    assert_eq!(engine.rev(), theirs);
+}
+
 #[test]
 fn another_clients_unrelated_change_does_not_block_an_undo() {
     let engine = Engine::new();

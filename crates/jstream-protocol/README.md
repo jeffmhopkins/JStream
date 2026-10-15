@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:a655b1c4ad444569", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: parity bullet now says the collection has a recording output and recording path rejections, matching parity.rs" }
+verified = { hash = "b3:282e2dba9c68124f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): History bullet and version line: 0.10 history, 0.9 record kind (version.rs)" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -98,7 +98,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:1eebe9000cc00689", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's 0.9 record kind and Compatibility/OQ8; #166 changed only parity.rs and the mock, no wire type" }
+verified = { hash = "b3:b1b6243ce4d95b48", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): handshake example 0.10, state.changed cause (0.10), open question 4 built in 0.10, geometry version paragraph names 0.10/0.9; #170's OutputKind fallback text unaffected" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

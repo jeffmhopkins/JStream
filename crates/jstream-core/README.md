@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:2623ed8268e70844", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#147 C6 nested scene rendering) into F2b; took main's verified line and re-read; C6's snapshot/nesting text and F2b's recording text (no publish target needed, four recording tests) both present and accurate" }
+verified = { hash = "b3:a5a3e6e78aa571a1", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; History bullet, recording and nested-scene test notes hold together" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -107,7 +107,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c6fc31d036233f3d", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's Recording paragraph plus main's; re-read against sink.rs, pipeline.rs and engine.rs on the merged tree" }
+verified = { hash = "b3:92d4e953dfc716fb", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10) plus review B1: Undo and redo now says the step's edits are applied to a graph copy and the conflict uses what they touch now (engine.rs history()); recording/nested-scene sections from main unaffected" }
 -->
 
 ### Engine and sessions
@@ -233,7 +233,10 @@ collection lock:
   removed): objects created or deleted, objects used (an item's scene and source, a
   `scene` source's scene, a duplicate's original), properties set (names, transform,
   crop, visibility, an item's index, each settings parameter, an output's target), and
-  the scenes' order. A step conflicts with another client's later entry, logged after
+  the scenes' order. An undo or redo first applies the step's edits to a copy of the
+  graph, so the step's touched set includes what they touch *now*: undoing
+  `scene.create` also deletes the items the scene holds now, even ones whose own step
+  was dropped. The step conflicts with another client's later entry, logged after
   the step was last applied or undone, when either creates or deletes an object the
   other touches, when both set the same property, or when both reorder scenes. Two
   items added to one scene do not conflict. A conflict fails with `undo_conflict`
@@ -243,7 +246,8 @@ collection lock:
   is running (undoing `output.create` while it runs) answer the graph's own
   `invalid_argument` and keep the step for a retry once it is stopped; with no other
   client's entry to blame, any other failure does too. The log is pruned to the oldest
-  `since` of any kept step.
+  `since` of any kept step. Only when there is no conflict does the copy replace the
+  graph.
 - **Not steps:** actions (outputs, stream keys), queries and history calls. Live
   values are not built.
 
