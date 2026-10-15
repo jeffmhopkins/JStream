@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:bfdbc8263dd3b145", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (D8, U0-U5, B6-r, #215, #262, #263, #267) into C9: main's text kept beside C9's; UI-dir line from U2 kept; C9 adds no purpose text; re-read" }
+verified = { hash = "b3:ba52f5f3dcaeb8c8", by = "agent:claude@session_01PZRAdnkMzURQaUtof2W6W2", note = "Round 1 B1: Tests bullet now says WS sets the key and starts the stream, MCP starts the recording (matches e2e.rs); rest of Purpose re-read, holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -53,9 +53,15 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   crash hook in a child process; the publish opener and the live engine on the
   platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
-  SIGINT; `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE
-  headers to check that the backends' Media Foundation DLLs are delay-loaded and none
-  is a load-time import).
+  SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
+  daemon makes it live, on the platform fakes with the CPU compositor, behind the
+  server with MCP on, where MCP builds a scene and creates an RTMP output to a local
+  loopback sink and a recording, the WebSocket client sets the key and starts the
+  stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
+  received and the recorded MP4. The binary has no backends off Windows, so it runs
+  in process; `tests/delay_load.rs`,
+  Windows MSVC only, which reads the built binary's PE headers to check that the
+  backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
 Not here yet: serving the web UI (`jstream-server` serves one from
 `ServerConfig::ui_dir`, [jstream-server › Design](../../crates/jstream-server/README.md#design),
