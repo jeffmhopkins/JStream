@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:589f22ce4668b274", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; UI shows program via studio.get (preview not used yet); holds" }
+verified = { hash = "b3:76518133bfbf74b4", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "Studio mode UI: panels list now names studio.rs (StudioMode under the canvas); re-read; holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -53,7 +53,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:cd268cea238292db", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; holds" }
+verified = { hash = "b3:f22bf20a70c22b5b", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "Studio mode UI: added the Studio mode bullet (preview/program, Transition/Cut/Swap, presets and scene overrides); styles stay classes in style.css; re-read; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

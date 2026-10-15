@@ -696,7 +696,8 @@ prs = [260]
 id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
-status = "planned"
+status = "review"
+prs = [304]
 
 [[item]]
 id = "E2"
