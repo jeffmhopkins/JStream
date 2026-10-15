@@ -17,7 +17,7 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:847c096affe4cfe0", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "New runbook: prerequisites match daemon Usage (exit 3 for missing Media Foundation, token file created then reused, parent dir must exist) and R-SEC-001 for the key" }
+verified = { hash = "b3:02c4c09d0297240c", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (A4 #234) into A6: re-read; prerequisites (exit 3, token file created then reused, key off the command line) unchanged by --collection and the audit log; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +36,7 @@ verified = { hash = "b3:847c096affe4cfe0", by = "agent:claude@session_01PHLTrve4
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:03463792587031a6", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Stale on main too: #203 added a 'No undo or redo command' bullet to the CLI Usage this depends on; the runbook's steps use no undo, redo or history, so they hold" }
+verified = { hash = "b3:1bf9c2976890b524", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (A4 #234) into A6: step 8 now says the output is gone on stop unless the daemon ran with --collection, which saves it; other steps re-read against daemon Usage and hold" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -91,15 +91,15 @@ $cli = 'target\release\jstream-cli.exe'
    Check: the state goes `stopping`, then `stopped`, and the service sees the stream
    end. Then press Ctrl-C in the daemon's terminal. It prints `stopped` and exits 0.
 8. **Clean up** if this was a test: `output clear-key live` removes the key from
-   Credential Manager. The output itself is gone when the daemon stops, because the
-   daemon doesn't save a collection yet.
+   Credential Manager. The output itself is gone when the daemon stops, unless it
+   was started with `--collection <file>`, which saves it for the next run.
 
 <a id="smoke"></a>
 ## Smoke script
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:8f76b8a97add354b", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Stale on main too: #203 added a 'No undo or redo command' bullet to the CLI Usage this depends on; the smoke steps and smoke.ps1 use no undo, redo or history, so they hold" }
+verified = { hash = "b3:4963bce2e6a3d6bf", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (A4 #234) into A6: re-read; the script starts the daemon without --collection and its run folder's logs now also hold audit.jsonl (no token or key in it); steps and exit codes hold" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
