@@ -2,13 +2,16 @@
 //! selection, drag, resize, rotate and snapping on their geometry (ADR-0022), each
 //! finished gesture sent as one undoable edit, and undo and redo (ADR-0032).
 //!
-//! The preview itself is a placeholder background until the preview stream is hooked
-//! up. Pure logic lives in [`transform`], [`snap`] and [`model`], which are tested
+//! Under the boxes is the live program preview: one `preview.subscribe` stream on the
+//! session's binary channel, decoded into a `<canvas>` ([`preview`], [`screen`]). Pure
+//! logic lives in [`transform`], [`snap`], [`model`] and [`preview`], which are tested
 //! natively; this module is the Leptos component that wires them to the page.
 //!
 //! Docs: crates/jstream-ui/README.md#canvas
 
 pub mod model;
+pub mod preview;
+pub mod screen;
 pub mod snap;
 pub mod transform;
 
@@ -19,7 +22,9 @@ use leptos::ev;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use model::{CanvasError, Depths, Layout};
+use preview::PreviewState;
 use snap::{Guide, SNAP_DISTANCE, SnapTargets};
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use transform::{
@@ -60,6 +65,8 @@ pub fn Canvas() -> impl IntoView {
     // Bumped by every load and every commit, so an older load's answer is dropped.
     let loads = StoredValue::new(0_u64);
     let stage = NodeRef::<leptos::html::Div>::new();
+    let screen = NodeRef::<leptos::html::Canvas>::new();
+    let preview_state = RwSignal::new(PreviewState::Starting);
     let alive = Arc::new(AtomicBool::new(true));
 
     let measure = move || {
@@ -130,6 +137,34 @@ pub fn Canvas() -> impl IntoView {
         });
     }
     reload();
+
+    // The live preview: once the `<canvas>` is in the page, open the session's binary
+    // channel and one preview stream on it, and draw its frames.
+    {
+        let alive = Arc::clone(&alive);
+        screen.on_load(move |element| {
+            let Some(open) = session.and_then(|s| s.get()) else {
+                return;
+            };
+            let frames = open.control.binary();
+            // Only a weak handle is kept, so disconnecting still closes the socket.
+            let control = Rc::downgrade(&open.control);
+            drop(open);
+            let size = stage.get_untracked().map_or((640.0, 360.0), |stage| {
+                (stage.client_width() as f32, stage.client_height() as f32)
+            });
+            let ratio = window().device_pixel_ratio() as f32;
+            spawn_local(run_preview(
+                frames,
+                control,
+                screen::Screen::new(element),
+                size,
+                ratio,
+                preview_state,
+                alive,
+            ));
+        });
+    }
     {
         let alive = Arc::clone(&alive);
         let resize = window_event_listener(ev::resize, move |_| measure());
@@ -361,6 +396,18 @@ pub fn Canvas() -> impl IntoView {
         })
     };
     // Screen pixels in canvas units, for handle sizes and label text.
+    // Where the preview picture goes in the stage, in CSS pixels: the canvas's own fit,
+    // so the picture lies exactly under the boxes.
+    let screen_box = move || {
+        let fit = viewport.get()?;
+        let (width, height) = canvas_size();
+        Some((
+            fit.offset_x,
+            fit.offset_y,
+            width as f32 * fit.scale,
+            height as f32 * fit.scale,
+        ))
+    };
     let px = move |screen: f32| viewport.get().map_or(screen, |v| v.canvas_len(screen));
 
     let boxes = move || {
@@ -534,27 +581,38 @@ pub fn Canvas() -> impl IntoView {
                 on:lostpointercapture=move |_| end(true)
                 on:keydown=on_key
             >
+                <canvas
+                    node_ref=screen
+                    class="stage-screen"
+                    style:left=move || screen_box().map(|b| format!("{}px", b.0))
+                    style:top=move || screen_box().map(|b| format!("{}px", b.1))
+                    style:width=move || screen_box().map(|b| format!("{}px", b.2))
+                    style:height=move || screen_box().map(|b| format!("{}px", b.3))
+                    style:visibility=move || {
+                        if preview_state.get() == PreviewState::Live { "visible" } else { "hidden" }
+                    }
+                ></canvas>
                 <svg
                     viewBox=view_box
                     preserveAspectRatio="xMidYMid meet"
                     class="stage-overlay"
                 >
-                    <rect
-                        x="0"
-                        y="0"
-                        width=move || canvas_size().0
-                        height=move || canvas_size().1
-                        fill="#1d1d21"
-                    />
-                    <text
-                        x=move || canvas_size().0 / 2
-                        y=move || canvas_size().1 / 2
-                        text-anchor="middle"
-                        font-size=move || px(13.0)
-                        fill="#77777f"
-                    >
-                        "Preview stream not connected yet"
-                    </text>
+                    {move || {
+                        let message = preview_state.get().message()?;
+                        let (width, height) = canvas_size();
+                        Some(view! {
+                            <rect x="0" y="0" width=width height=height fill="#1d1d21" />
+                            <text
+                                x=width / 2
+                                y=height / 2
+                                text-anchor="middle"
+                                font-size=px(13.0)
+                                fill="#77777f"
+                            >
+                                {message}
+                            </text>
+                        })
+                    }}
                     {boxes}
                     {guide_lines}
                     {handles}
@@ -592,5 +650,89 @@ fn describe(error: &CanvasError) -> String {
             "Can't undo that: someone else has changed it since.".to_owned()
         }
         other => other.to_string(),
+    }
+}
+
+/// Runs the canvas's preview stream: subscribes, then draws each frame of its channel
+/// until the session, the stream or the canvas ends. When the browser's H.264 decoder
+/// fails, it subscribes again for JPEG only.
+async fn run_preview(
+    mut frames: jstream_control::BinaryStream,
+    control: std::rc::Weak<dyn jstream_control::Control>,
+    screen: Option<screen::Screen>,
+    (width, height): (f32, f32),
+    ratio: f32,
+    state: RwSignal<PreviewState>,
+    alive: Arc<AtomicBool>,
+) {
+    let Some(mut screen) = screen else {
+        state.set(PreviewState::Unavailable(
+            "this browser can't draw on a canvas".into(),
+        ));
+        return;
+    };
+    let subscribe = |h264: bool| {
+        let control = control.clone();
+        async move {
+            let control = control.upgrade()?;
+            let action = preview::subscribe(width, height, ratio, h264);
+            Some(
+                control
+                    .call(jstream_control::protocol::Call::Action { action })
+                    .await,
+            )
+        }
+    };
+    let mut h264 = screen::Screen::supports_h264();
+    match subscribe(h264).await {
+        Some(Ok(_)) => {}
+        Some(Err(error)) => {
+            state.try_set(PreviewState::Unavailable(error.to_string()));
+            return;
+        }
+        None => return,
+    }
+    while let Some(frame) = frames.next().await {
+        if !alive.load(Ordering::Relaxed) {
+            return;
+        }
+        let header = frame.header;
+        if header.channel != preview::CHANNEL {
+            continue;
+        }
+        if header.end {
+            let reason = String::from_utf8_lossy(&frame.payload).into_owned();
+            state.try_set(PreviewState::Unavailable(reason));
+            return;
+        }
+        if let Err(reason) = screen.show(&header, &frame.payload)
+            && !screen.h264_failed()
+        {
+            state.try_set(PreviewState::Unavailable(reason));
+            return;
+        }
+        if h264 && screen.h264_failed() {
+            // Fall back to JPEG once. The channel can only be reused once its stream is
+            // closed, so close it first.
+            h264 = false;
+            let Some(control) = control.upgrade() else {
+                return;
+            };
+            let close = jstream_control::protocol::Action::PreviewUnsubscribe {
+                channel: preview::CHANNEL,
+            };
+            let _closed = control
+                .call(jstream_control::protocol::Call::Action { action: close })
+                .await;
+            drop(control);
+            if let Some(Err(error)) = subscribe(false).await {
+                state.try_set(PreviewState::Unavailable(error.to_string()));
+                return;
+            }
+            continue;
+        }
+        if screen.drew() && state.try_get_untracked() != Some(PreviewState::Live) {
+            state.try_set(PreviewState::Live);
+        }
     }
 }

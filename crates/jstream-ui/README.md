@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:d062616cd6fdcbc4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: only lib.rs's test module and style.css's header comment changed; contents list holds" }
+verified = { hash = "b3:d6512bcd90dc04e3", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "U4 preview: Canvas bullet now says the boxes are drawn over the live program preview; rest re-read, holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -39,9 +39,8 @@ Contents (the skeleton; [Design](#design) explains the choices):
   go-live and the pipeline's health), and the calls and logic behind it, tested
   natively against `MockEngine`.
 - **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
-  over a placeholder background, edits their geometry with the pointer and the
-  keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
-  hooked up yet.
+  over the live program preview, edits their geometry with the pointer and the
+  keyboard, and undoes and redoes ([Canvas](#canvas)).
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
   ([Build](#build)).
@@ -51,7 +50,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f2ffa0341cd7ace6", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): stale via control and protocol design cascades; UI still says the preview stream is not hooked up, which holds (U0's lane)" }
+verified = { hash = "b3:bb355cf26cd97353", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "U4 preview: re-read; the canvas keeps only its event and binary streams plus a Weak control handle, so disconnecting still closes the socket; no style attributes (style: bindings only); holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -118,14 +117,16 @@ verified = { hash = "b3:f2ffa0341cd7ace6", by = "agent:claude@session_016ERA9mo5
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:8120b6e7a0057203", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: Styles bullet now says the test refuses any style attribute, static or set at run time (style=move, attr:style), outside test modules; matches sets_style_attribute in lib.rs" }
+verified = { hash = "b3:ac18538018be0967", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "U4 preview: new Preview bullet checked against preview.rs (channel 1, 30 fps, 320x180..1280x720, H.264 then JPEG, avc1 from SPS, backlog 3), screen.rs (VideoDecoder/createImageBitmap via Reflect, JPEG drop while busy) and mod.rs (fit-placed canvas, JPEG fallback, refusal and end messages); JPEG path exercised in Chromium against the daemon" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
 handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads the
-scene and sends the edits. These three are pure and tested natively against
-`MockEngine`; `mod.rs` is the component.
+scene and sends the edits; `preview.rs` chooses the preview stream and decides what
+to do with each H.264 frame. These are pure and tested natively (`model.rs` against
+`MockEngine`). `screen.rs` decodes and draws the preview in the browser, and `mod.rs`
+is the component.
 
 - **What it shows.** The scene on program (`studio.get`, or the first non-group scene
   if none is), re-read on every `state.changed`, `studio.changed` and
@@ -134,6 +135,21 @@ scene and sends the edits. These three are pure and tested natively against
   placement is not drawn: its box depends on the source's runtime size, which the
   protocol doesn't report yet (ADR-0022's `source.sizes`), and the toolbar counts
   such items. Hidden items are drawn dashed.
+- **The preview.** Under the boxes is the program mix, live. The canvas opens the
+  session's binary channel (`Control::binary`; a session has one, so the canvas is
+  its only reader) and one `preview.subscribe` stream on channel 1, at 30 fps and as
+  sharp as the stage (its size in device pixels, kept between 320×180 and 1280×720).
+  It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
+  H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
+  (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
+  decoder's queue passes 3 chunks; JPEG frames go through `createImageBitmap`, and one
+  that arrives while the last is still decoding is dropped. Each decoded picture is
+  drawn into a `<canvas>` placed with the canvas's own fit, so the picture lies exactly
+  under the boxes. If the decoder fails, the canvas closes the stream and subscribes
+  again for JPEG only. If the engine refuses or ends the stream, the background says
+  why. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  behind the `web_sys_unstable_apis` build flag. Without live values (below), the
+  preview shows a drag once it is committed.
 - **Selecting and dragging.** A press selects the topmost box under the pointer, or
   clears the selection on empty canvas. Dragging the box moves it. The selected box
   has eight resize handles and a rotate handle above its top edge. A corner keeps the

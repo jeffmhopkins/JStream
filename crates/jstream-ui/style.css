@@ -131,6 +131,8 @@ input {
 }
 .inline-check { width: auto; }
 .stage { position: relative; touch-action: none; outline-offset: 2px; }
+/* The preview picture under the overlay; its box is set from the canvas's fit. */
+.stage-screen { position: absolute; pointer-events: none; }
 .stage-overlay {
   position: absolute;
   inset: 0;
