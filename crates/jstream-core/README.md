@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:35252def9891785f", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
+verified = { hash = "b3:e55fec008d8072b9", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#202 RTMP reconnect test) into B2-f3: re-read Undo and redo, differential-script and Outputs paragraphs; #202 touches only a publish.rs test helper the prose doesn't describe, and the mock's undo changes nothing here; holds" }
 -->
 
 ### Engine and sessions
