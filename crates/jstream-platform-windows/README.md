@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:d08dcc2b3594bfae", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (G3a #194 WindowsVcam, B3, B6) into C4b: kept main's depends_on (ADR-0020) and G3a's WindowsVcam bullet/vcam test text; Tests now lists vcam checks plus video-device helpers and both hw-test descriptions; MfVideoDevices bullet and its Not yet unchanged and still match video_device/**" }
+verified = { hash = "b3:9859c63cd8ebddb0", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (G3a vcam sink, E3a) into ADR-0042: text and depends_on are main's (adds ADR-0020); this PR's ARCH#threading edit leaves the MMCSS / capture-thread roster it relies on unchanged; holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
