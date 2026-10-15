@@ -273,6 +273,8 @@ verified = { hash = "b3:174bb43ca018529b", by = "agent:claude@session_01QBbMRwRu
   the item status the [Progress](#progress) table is generated from
 - [docs/runbooks/go-live.md](docs/runbooks/go-live.md): taking the daemon live on Windows,
   and the smoke script that checks it
+- [docs/security/threat-model.md](docs/security/threat-model.md): what JStream protects, from
+  whom, the controls at each trust boundary, and the open gaps
 - [CLAUDE.md](CLAUDE.md): the entry point for builder agents
 - [REVIEW.md](REVIEW.md): the reviewer agent's instructions; its verdict gates merges
 - [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and
