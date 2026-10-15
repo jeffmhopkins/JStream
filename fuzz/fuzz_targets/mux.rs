@@ -32,11 +32,15 @@ impl<'a> Input<'a> {
     }
 
     fn u32(&mut self) -> Option<u32> {
-        self.take(4).and_then(|b| b.try_into().ok()).map(u32::from_le_bytes)
+        self.take(4)
+            .and_then(|b| b.try_into().ok())
+            .map(u32::from_le_bytes)
     }
 
     fn i64(&mut self) -> Option<i64> {
-        self.take(8).and_then(|b| b.try_into().ok()).map(i64::from_le_bytes)
+        self.take(8)
+            .and_then(|b| b.try_into().ok())
+            .map(i64::from_le_bytes)
     }
 }
 
@@ -109,7 +113,7 @@ fuzz_target!(|data: &[u8]| {
                 height: 720,
                 avc: None,
             }),
-            audio: has_audio.then(|| fmp4::AudioTrack {
+            audio: has_audio.then_some(fmp4::AudioTrack {
                 config: audio,
                 bitrate_kbps: Some(128),
             }),
@@ -129,7 +133,7 @@ fuzz_target!(|data: &[u8]| {
                 bitrate_kbps: Some(6000),
                 avc: None,
             }),
-            audio: has_audio.then(|| flv::AudioTrack {
+            audio: has_audio.then_some(flv::AudioTrack {
                 config: audio,
                 bitrate_kbps: Some(128),
             }),

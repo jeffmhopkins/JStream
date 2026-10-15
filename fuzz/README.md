@@ -21,7 +21,7 @@ needs the sanitizer flags only nightly accepts.
 ## Targets
 <!-- @section
 covers = ["fuzz/fuzz_targets/**"]
-verified = { hash = "b3:2ca1f1c3d81aba91", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1: table matches the nine fuzz_targets and the property each asserts; no FLV/fMP4 parser exists in jstream-mux, so mux covers the muxers' input parsing" }
+verified = { hash = "b3:f0e9175beff11225", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r2: mux target only reformatted (then_some); table unchanged" }
 -->
 
 No target may panic, overflow or run out of memory on any input. Most also check a
@@ -46,7 +46,7 @@ fuzz; the `mux` target covers the parsing the muxers do on their way in.
 ## Running
 <!-- @section
 covers = ["fuzz/Cargo.toml", "fuzz/seed.sh"]
-verified = { hash = "b3:1f4b618b30422992", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1: commands run as written with nightly and cargo-fuzz 0.13.2; seed.sh sources and the corpus/artifacts layout match fuzz/.gitignore" }
+verified = { hash = "b3:258c952c31274f71", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r2: Cargo.toml gained the restated clippy lints; commands and layout unchanged" }
 -->
 
 ```sh

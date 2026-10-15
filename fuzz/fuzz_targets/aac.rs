@@ -13,7 +13,7 @@ fuzz_target!(|data: &[u8]| {
         return;
     };
     assert_eq!(config.as_bytes(), data);
-    let again = AudioSpecificConfig::from_bytes(config.as_bytes().to_vec())
-        .expect("its own bytes parse");
+    let again =
+        AudioSpecificConfig::from_bytes(config.as_bytes().to_vec()).expect("its own bytes parse");
     assert_eq!(again, config);
 });

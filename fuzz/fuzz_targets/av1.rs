@@ -24,7 +24,10 @@ fuzz_target!(|data: &[u8]| {
     for obu in &units {
         let sized = obu.with_size_field();
         let parsed = obus(&sized).expect("a sized OBU parses");
-        assert_eq!(parsed.iter().map(content).collect::<Vec<_>>(), [content(obu)]);
+        assert_eq!(
+            parsed.iter().map(content).collect::<Vec<_>>(),
+            [content(obu)]
+        );
     }
     if let Ok(sample) = to_sample(data) {
         let kept: Vec<_> = units
