@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:553b098ae5492f3e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#375 round 1 B2/N3 and merge of C8 at e4689ab: re-read; browser and youtube_chat both have gpu_frame and audio, Context's backend names both, opens_browser documented, Tests lists the video_id unit test and tests/youtube_chat.rs; youtube_chat bullet matches the case-insensitive scheme/host; C8's browser text holds beside it" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
