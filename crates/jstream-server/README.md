@@ -213,7 +213,8 @@ task speaks the envelope
   first handshake (`unsupported_version`) is answered and the connection closed (close
   code 1008), as the envelope says. A connection whose handshake hasn't succeeded within
   `handshake_timeout` of being accepted is closed with code 1008 too (`no handshake in
-  time`).
+  time`), including one whose `hello` arrived in time but that the engine hasn't
+  answered by then: the wait for the engine's answer races the same deadline.
 - Each `request` is forwarded to `Control::call` and may stay in flight while others
   run; answers go back as they complete, carrying the client's request ID. A request
   before `hello` is answered by the session itself (`handshake_required`).

@@ -309,7 +309,7 @@ fn handshake_list_and_call_round_trip() {
 fn initialize_answers_when_hello_never_does() {
     let mut f = fixture();
     f.server = Server::new(Arc::clone(&f.control) as Arc<dyn Control>)
-        .with_open_early_timeout(std::time::Duration::from_millis(50));
+        .with_hello_timeout(std::time::Duration::from_millis(50));
     f.control.silent.store(true, Ordering::Relaxed);
     let started = std::time::Instant::now();
     let init = f.initialize();
@@ -326,12 +326,45 @@ fn initialize_answers_when_hello_never_does() {
     assert_eq!(f.hello_names(), ["agent-x", "agent-x"]);
 }
 
+/// A tool call's own `hello` (the retry after `initialize`'s timed out) is bounded the
+/// same way (#273): the call fails with `disconnected`, saying it was not sent, instead
+/// of hanging until the engine's handshake timeout, and the next call tries again.
+#[test]
+fn tool_call_fails_when_its_hello_never_answers() {
+    let mut f = fixture();
+    f.server = Server::new(Arc::clone(&f.control) as Arc<dyn Control>)
+        .with_hello_timeout(std::time::Duration::from_millis(50));
+    f.control.silent.store(true, Ordering::Relaxed);
+    f.initialize();
+    // On another thread, so a call that hangs fails the test instead of hanging it.
+    let (sent, answered) = std::sync::mpsc::channel();
+    let f = std::thread::spawn(move || {
+        let result = f.call_tool("scene", json!({"op": {"type": "scene.list"}}));
+        let _ = sent.send(result);
+        f
+    });
+    let result = answered
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .expect("the tool call answers instead of waiting for hello");
+    let f = f.join().expect("the call thread doesn't panic");
+    let error = tool_error(&result);
+    assert_eq!(error["code"], "disconnected", "{result}");
+    let message = error["message"].as_str().expect("a message");
+    assert!(message.contains("was not sent"), "{message}");
+    assert!(message.contains("next call tries again"), "{message}");
+    assert_eq!(f.hello_names(), ["agent-x", "agent-x"]);
+
+    f.control.silent.store(false, Ordering::Relaxed);
+    ok(&f.call_tool("scene", json!({"op": {"type": "scene.list"}})));
+    assert_eq!(f.hello_names(), ["agent-x", "agent-x", "agent-x"]);
+}
+
 /// A `hello` that is answered in time isn't cut short by the open-early wait.
 #[test]
 fn initialize_opens_the_session_within_the_wait() {
     let mut f = fixture();
     f.server = Server::new(Arc::clone(&f.control) as Arc<dyn Control>)
-        .with_open_early_timeout(std::time::Duration::from_secs(60));
+        .with_hello_timeout(std::time::Duration::from_secs(60));
     f.initialize();
     ok(&f.call_tool("scene", json!({"op": {"type": "scene.list"}})));
     assert_eq!(f.hello_names(), ["agent-x"]);
