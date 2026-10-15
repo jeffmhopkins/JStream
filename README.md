@@ -4,12 +4,16 @@ title = "JStream"
 kind = "normative"
 status = "active"
 review_every = "90d"
+retired_sections = { "today" = [] }
 -->
 
 # JStream
 
 A live-streaming and compositing engine written in Rust: a ground-up rewrite in the spirit of
 OBS, built to be driven equally well by a human or an AI agent.
+
+> **In development.** JStream is not ready for use yet. [Progress](#progress) shows how
+> far each milestone has got, and [ROADMAP.md](ROADMAP.md) has the plan.
 
 - **Stream** to YouTube (RTMPS + YouTube Live API) or any RTMP target
 - **Virtual camera** (an OS-native Windows camera that every app can see)
@@ -27,58 +31,24 @@ nothing the UI can do is out of an agent's reach
 [ADR-0006](docs/adr/0006-mcp-full-access.md)). Windows comes first, and the headless
 engine and MCP come before the GUI ([ADR-0010](docs/adr/0010-headless-first-milestone.md)).
 
-<a id="today"></a>
-## What works today
-<!-- @section
--->
-
-M0 is done apart from spike S4's Windows run, M1 (the headless engine) is most of the way there, and M2 (the UI) has
-started. Item by item status is in [Progress](#progress); the plan is in
-[ROADMAP.md](ROADMAP.md).
-
-- **Going live from the headless daemon on Windows.** `jstream-daemon` captures the
-  display, composites the program scene on the GPU (wgpu), encodes H.264 and AAC with
-  Media Foundation, and publishes FLV over RTMP or RTMPS to any server, YouTube's ingest
-  included, reconnecting with backoff. Stream keys live in Windows Credential Manager,
-  never in the collection or the logs. The [go-live runbook](docs/runbooks/go-live.md)
-  walks through it, and `scripts/smoke.ps1` runs the same steps unattended.
-- **Agent and script control.** The daemon serves an authenticated WebSocket API and MCP
-  over streamable HTTP; `jstream-cli` drives it from a shell, and `jstream-cli mcp` is a
-  stdio MCP proxy. `video.snapshot` returns the program as a PNG, and `stats.tick`
-  reports drops once a second.
-- **Scenes.** Scenes with placed items (transform and crop), groups, scenes inside
-  scenes, shared sources and clones, program-scene switching, per-client undo and redo,
-  an audit log, and a collection file that persists across runs. Color, image (PNG,
-  JPEG, WebP, animated GIF) and text sources render live.
-- **Audio and recording.** Microphone and desktop audio go through a bus-matrix mixer
-  with filter chains, loudness and true-peak meters. A record output writes fragmented
-  MP4, and outputs share encoder sessions.
-- **UI, early.** A Leptos web UI with an outputs and go-live panel and canvas editing,
-  and a Tauri desktop app that runs the engine in-process (Windows).
-- **Built, not yet wired end to end:** the virtual camera's media source and
-  `--register-vcam`, YouTube sign-in and broadcast control, and the zero-copy GPU
-  capture path. Their remaining pieces are in review; several need a run on Windows
-  hardware.
-
 <a id="progress"></a>
 ## Progress
 <!-- @section
 -->
 
-Generated from [`docs/progress.toml`](docs/progress.toml) by `cargo xtask docs generate`,
-and drift-checked by `docs check`, so it changes in the same PR as the work. Item IDs
-match the PR titles that deliver them.
+Generated from [`docs/progress.toml`](docs/progress.toml) by `cargo xtask docs generate`
+and drift-checked by `docs check`, so it changes in the same PR as the work.
 
 <!-- @generated begin progress -->
 | Milestone | Progress | Merged | In review | Planned |
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `████████░░` 83% | 15 | 2 | 1 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 82% | 29 | 3 | 3 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 83% | 29 | 3 | 3 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
-| [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 77% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 31% | 6 | 7 | 6 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 12% | 1 | 0 | 7 |
+| [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 32% | 6 | 7 | 6 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 13% | 1 | 0 | 7 |
 
 74 of 106 items are merged; 7 of those still wait on a run on Windows hardware.
 
@@ -237,7 +207,7 @@ match the PR titles that deliver them.
 | E3c | Encode from GPU frames | ⏳ planned |  |
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned |  |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned |  |
-| CL1 | CLAP plugin host | ⏳ planned |  |
+| CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
 | WA1 | WASM automation plugins | ⏳ planned |  |
 | MAC1 | macOS platform crate | ⏳ planned |  |
 | LNX1 | Linux codec path and platform crate | ⏳ planned |  |

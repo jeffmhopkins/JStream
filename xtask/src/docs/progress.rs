@@ -239,7 +239,7 @@ fn render(p: &Progress) -> String {
             escape(&m.title),
             m.roadmap,
             bar(merged, items.len()),
-            merged * 100 / items.len(),
+            (merged * 200 + items.len()) / (items.len() * 2),
             items.len() - merged - review,
         );
     }
@@ -385,7 +385,11 @@ fn merged_from(subject: &str) -> Option<Merged> {
     let mut names = BTreeSet::new();
     for group in title.split('(').skip(1) {
         if let Some((inside, _)) = group.split_once(')') {
-            names.extend(inside.split(',').map(|w| w.trim().to_owned()));
+            for part in inside.split(',').map(str::trim) {
+                // `(CL1 part 1)` names `CL1`: keep the whole group and its first word.
+                names.extend(part.split_whitespace().next().map(str::to_owned));
+                names.insert(part.to_owned());
+            }
         }
     }
     Some(Merged { number, names })
@@ -396,7 +400,8 @@ fn stale(p: &Progress, merged: &[Merged]) -> Vec<String> {
     let numbers: BTreeSet<u64> = merged.iter().map(|m| m.number).collect();
     let mut out = Vec::new();
     for i in &p.items {
-        if !i.merged() && !i.prs.is_empty() && i.prs.iter().all(|n| numbers.contains(n)) {
+        // A `planned` item may list the merged first part of work still to come.
+        if i.status == "review" && i.prs.iter().all(|n| numbers.contains(n)) {
             out.push(format!(
                 "- **{}** is `{}`, but all its PRs ({}) are merged: set `done`, or `hardware` with a note.",
                 i.id,
@@ -621,6 +626,8 @@ prs = [3, 3]
         let m = merged_from("feat(cli): protocol 0.7 outputs (A5) (#166)").expect("invariant");
         assert_eq!(m.number, 166);
         assert!(m.names.contains("A5"));
+        let m = merged_from("feat(audio): CLAP (CL1 part 1, ADR-0035) (#272)").expect("invariant");
+        assert!(m.names.contains("CL1") && m.names.contains("ADR-0035"));
         let m =
             merged_from("feat(protocol): program scene (B10, ADR-0030) (#201)").expect("invariant");
         assert!(m.names.contains("B10") && m.names.contains("ADR-0030"));

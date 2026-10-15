@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:ae9d0ff1e09e16b4", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "Generated content bullet now names the README progress block and docs progress, both implemented in xtask/src/docs/progress.rs with unit tests and wired into check/generate in mod.rs; other bullets untouched" }
+verified = { hash = "b3:7b89ede4cb2ec0e6", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "#276 review N1/N4: docs progress now matches an item named as the first word of a title group (CL1 part 1) and flags only review items whose PRs all merged; percentages round. Generated-content bullet still holds" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -500,7 +500,7 @@ in committed docs are fenced as `<!-- @generated begin <name> -->` …
 
 `cargo xtask docs generate` writes them; running it again changes nothing. `docs check`
 regenerates them in memory and fails, naming that command, when the committed text
-differs. Today it generates two things, both from ADR `@doc` metadata
+differs. Two of them come from ADR `@doc` metadata
 ([ADR-0038](adr/0038-adr-status-banner-and-index.md)):
 
 - **The `adr-status` banner** in every ADR: directly under the `# ADR-NNNN: …` line, after
