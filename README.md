@@ -48,9 +48,9 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 30% | 6 | 8 | 6 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 13% | 1 | 0 | 7 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 11% | 1 | 1 | 7 |
 
-75 of 107 items are merged; 7 of those still wait on a run on Windows hardware.
+75 of 108 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -200,13 +200,14 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 1 of 8 merged</summary>
+<summary><b>M3</b> Depth and reach: 1 of 9 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ⏳ planned |  |
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned |  |
+| 3D1 | 3D transforms: rendering ADR and spike | 🔍 in review | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned |  |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
 | WA1 | WASM automation plugins | ⏳ planned |  |

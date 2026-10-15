@@ -767,6 +767,13 @@ title = "Full 3D transforms and WGSL effect packs"
 status = "planned"
 
 [[item]]
+id = "3D1"
+milestone = "M3"
+title = "3D transforms: rendering ADR and spike"
+status = "review"
+prs = [360]
+
+[[item]]
 id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
