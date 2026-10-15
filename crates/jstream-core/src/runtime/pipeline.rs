@@ -1832,6 +1832,13 @@ fn output_loop(job: OutputJob) {
                 }
             }
         }
+        // Checked again between the two sends, so a target that ignores the deadline
+        // keeps the thread past it by one send at most, inside `OUTPUT_GRACE`, and
+        // what is left is still counted before the stop reads the final drops.
+        if drain.is_some_and(|deadline| Instant::now() >= deadline) {
+            abandoned = true;
+            break;
+        }
         if failed.is_none() && !audio_done {
             match audio.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
