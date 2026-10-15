@@ -1,6 +1,6 @@
 //! How [`VideoSession::open_on`] picks GPU or CPU frames, and that a GPU session hands
 //! every frame back. The GPU frames are textures on a software adapter, so these run on
-//! every platform; a machine with no wgpu adapter at all skips them outside CI.
+//! every platform. A machine with no wgpu adapter skips them, except on CI, where that fails.
 
 use std::io::Write;
 use std::pin::pin;
