@@ -271,7 +271,8 @@ fn handshake_list_and_call_round_trip() {
     assert_eq!(
         ok(&state)["result"]["result"],
         json!({"type": "state.get", "rev": 2, "sources": [cam],
-               "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}]})
+               "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
+               "outputs": []})
     );
     let started = f.call_tool(
         "output",

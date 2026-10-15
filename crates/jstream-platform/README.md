@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:e57a5565127b6875", by = "agent:claude@session_017dgMHhk9KuuwXxpbutfCzi", note = "C4a: new Video capture devices bullet (VideoDevices, VideoDeviceInfo with paired audio, VideoDeviceFormat, CaptureEncoding Raw/Yuy2/Mjpeg, CaptureDecoder hook on the capture thread, rejected frames dropped) matches video_device.rs; Fakes bullet adds FakeVideoDevices and FakeCaptureDecoder; Not yet now names C4b, Backends wiring and an MJPEG Codec variant instead of a camera CaptureTarget" }
+verified = { hash = "b3:f6c8c4929c171800", by = "agent:claude@session_017dgMHhk9KuuwXxpbutfCzi", note = "Merge of main (#142 Stream keys bullet, MemoryKeyStore in Fakes) into C4a: re-read both; main's keys bullet and fake are unchanged; C4a's Video capture devices bullet (VideoDevices, paired audio, VideoDeviceFormat, CaptureEncoding Raw/Yuy2/Mjpeg, CaptureDecoder hook, rejected frames dropped), FakeVideoDevices/FakeCaptureDecoder and the Not yet line (C4b, Backends wiring, MJPEG Codec variant) match video_device.rs and fake.rs" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -85,6 +85,13 @@ Contents:
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
   ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)), not this trait's.
+- **Stream keys** (`keys.rs`): `StreamKeyStore` (`Send + Sync`), the seam to the OS
+  credential store ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `clear`
+  and `is_set`, one key per output ID. No error may contain a key. `Secret` carries a
+  key across it: it prints as `Secret("***")`, it has no `Display` and isn't `Clone`, it is
+  read only through `expose`, and its bytes are zeroed on drop (best effort).
+  `Secret::from_utf8` takes a store's bytes and refuses non-UTF-8 without naming them.
+  The engine holds the store apart from `Backends`, through `Engine::with_key_store`.
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, audio,
   codec and GPU-interop backends and its optional virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
@@ -98,7 +105,8 @@ Contents:
   (dropping it stops it; a test watches it through a `FakeVcamProbe`),
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
   MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
-  `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI) and
+  `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
+  `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
