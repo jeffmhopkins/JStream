@@ -487,6 +487,8 @@ impl Codecs for FakeCodecs {
             config: *config,
             pending: VecDeque::new(),
             frames: 0,
+            since_keyframe: 0,
+            force_keyframe: false,
             finished: false,
         }))
     }
@@ -534,6 +536,11 @@ struct FakeVideoEncoder {
     config: VideoEncoderConfig,
     pending: VecDeque<Packet>,
     frames: u64,
+    /// Frames encoded since the last keyframe; the cadence restarts at a forced one.
+    since_keyframe: u64,
+    /// [`request_keyframe`](VideoEncoder::request_keyframe) was called since the last
+    /// frame was encoded.
+    force_keyframe: bool,
     finished: bool,
 }
 
@@ -569,20 +576,34 @@ impl VideoEncoder for FakeVideoEncoder {
                 ),
             });
         }
-        let keyframe = self
-            .frames
-            .is_multiple_of(u64::from(self.config.keyframe_interval));
+        let keyframe = self.force_keyframe
+            || self
+                .since_keyframe
+                .is_multiple_of(u64::from(self.config.keyframe_interval));
+        if keyframe {
+            self.since_keyframe = 0;
+        }
         // An Annex B start code and an IDR or non-IDR NAL header, then the frame number.
         let mut data = vec![0, 0, 0, 1, if keyframe { 0x65 } else { 0x41 }];
         data.extend_from_slice(&self.frames.to_be_bytes());
         let packet = Packet::new(self.info.codec, keyframe, info.pts, info.pts, data)?;
         self.pending.push_back(packet);
         self.frames += 1;
+        self.since_keyframe += 1;
+        self.force_keyframe = false;
         Ok(())
     }
 
     fn poll(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
         out.extend(self.pending.drain(..));
+        Ok(())
+    }
+
+    fn request_keyframe(&mut self) -> Result<(), PlatformError> {
+        if self.finished {
+            return Err(FINISHED);
+        }
+        self.force_keyframe = true;
         Ok(())
     }
 
