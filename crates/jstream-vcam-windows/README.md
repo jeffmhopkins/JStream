@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:abf65baa6c0ede4a", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Review round 1 B2/N2: re-read against frames.rs: a live, fresh producer with no safe frame repeats the last copied frame (Shared::Hold), colour bars only without a live producer or after a shared-path error, and a non-live block drops the opened objects at once; rest unchanged" }
+verified = { hash = "b3:60e167a551e03614", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "Stale only via ARCH#packaging, which gained the browser helper exe beside the CEF runtime; the vcam registration, HKLM and session-namespace findings this section cites are unchanged, so it holds" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -68,7 +68,7 @@ example on Windows.
 <!-- @section
 covers = ["crates/jstream-vcam-windows/examples/**"]
 depends_on = ["docs/ARCHITECTURE.md#packaging"]
-verified = { hash = "b3:e71245c93f81f3f6", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "New section: steps match examples/vcam_smoke after fmt (args --seconds/--no-camera/--no-producer, report verdict line), the DLL file name and the log path from src/win/log.rs" }
+verified = { hash = "b3:5f72b2d453c31890", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "Stale only via ARCH#packaging (browser helper exe added); the vcam_smoke steps and DLL registration it relies on are unchanged, so it holds" }
 -->
 
 `examples/vcam_smoke` stands in for the engine side: it publishes the ring, the fence and
