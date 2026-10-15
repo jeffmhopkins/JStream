@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:721fd176086fc04e", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): cascade only; encode crate untouched by mixes or audio" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -70,7 +69,6 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:0bb3ee6c69f3bd6a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: Sharing paragraph now says jstream-core keys its registry by the protocol encoder profile (id and settings) and maps it to platform configs; Not yet drops encoder profiles in the protocol" }
 -->
 
 ### Threads and pacing
@@ -207,7 +205,13 @@ The pipeline registers the session; this crate does not emit the event.
   dependency now, but this crate doesn't use it yet; it reports through its counters
   and `StreamEnd`. Spans would go on the control side (session start and end), not in
   the encode thread's per-frame loop ([R-RT-002](../../docs/RULES.md#R-RT-002)).
-- Performance: not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
+- Performance ([R-RT-005](../../docs/RULES.md#R-RT-005)): `benches/session.rs`
+  (criterion) times the session's own cost around the fake encoder, from `push` until
+  every subscriber has the packet: about 40 µs for a 1080p NV12 frame to 1 or 4
+  subscribers and 29 µs for a 1024-frame audio block, measured on a cloud container
+  (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux 6.18), release build. The `bench`
+  workflow records them on every push to `main`
+  ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A real encoder's cost is not measured.
 
 <a id="open-questions"></a>
 ## Open questions

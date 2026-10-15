@@ -2310,22 +2310,15 @@ mod cpu_pipeline {
         thread::sleep(Duration::from_millis(10));
     }
 
-    /// Pumps until `done`, for at most five seconds.
-    fn pump_until(clock: &FakeClock, audio: &FakeAudioIo, done: impl FnMut() -> bool) -> bool {
-        pump_within(Duration::from_secs(5), clock, audio, done)
-    }
+    /// How long `pump_until` and `wait_until` keep trying. It only bounds how long a
+    /// failing test hangs, it is not a timing assertion: these tests pass in well under
+    /// a second, but a loaded CI or workspace run can starve the pipeline threads for
+    /// seconds at a time (#392).
+    const HANG_BOUND: Duration = Duration::from_secs(30);
 
-    /// Pumps until `done`, for at most `budget`. Each pump moves the clock 1.5 base
-    /// ticks, and a render thread that wakes late skips to the current tick, so on a
-    /// loaded machine a pump can yield one frame: a wait for many frames needs more
-    /// than five seconds there.
-    fn pump_within(
-        budget: Duration,
-        clock: &FakeClock,
-        audio: &FakeAudioIo,
-        mut done: impl FnMut() -> bool,
-    ) -> bool {
-        let deadline = Instant::now() + budget;
+    /// Pumps until `done`, for at most `HANG_BOUND`.
+    fn pump_until(clock: &FakeClock, audio: &FakeAudioIo, mut done: impl FnMut() -> bool) -> bool {
+        let deadline = Instant::now() + HANG_BOUND;
         while Instant::now() < deadline {
             if done() {
                 return true;
@@ -2335,8 +2328,9 @@ mod cpu_pipeline {
         done()
     }
 
+    /// Waits until `done`, for at most `HANG_BOUND`.
     fn wait_until(mut done: impl FnMut() -> bool) -> bool {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + HANG_BOUND;
         while Instant::now() < deadline {
             if done() {
                 return true;
@@ -4001,9 +3995,7 @@ mod cpu_pipeline {
                 .map_or(0, |stats| stats.video_subscriber.delivered)
         };
         assert!(
-            pump_within(Duration::from_secs(30), &fakes.clock, &fakes.audio, || {
-                video_tags(&publish) >= 90
-            }),
+            pump_until(&fakes.clock, &fakes.audio, || video_tags(&publish) >= 90),
             "the stream never got its frames"
         );
         let (full, half) = (video_tags(&publish) as u64, recorded(&engine));

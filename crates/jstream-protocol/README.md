@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:f759fa28f5000c3b", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 D5 merge follow-up: OutputInfo.video_mix doc now says older than 0.20; section text unchanged and still holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -142,7 +141,6 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:d93a63db78410c2c", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 D5 merge follow-up: OutputInfo.video_mix doc now says older than 0.20; section text unchanged and still holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -339,8 +337,14 @@ never a type per kind.
   reference to a missing scene or source is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
   `collection` and `app` are relative, with `/` separators and no `..` segment, drive
-  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows); an
-  asset that doesn't exist yet is accepted.
+  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
+  Under `absolute` the path is `/…`, `\…`, `C:\…` or `C:/…`, with no `..` segment, no
+  second leading separator (`\\host\share`, `//host/share`, `\\.\…` and `\\?\…` name
+  a UNC share or a device, and opening one on Windows hands the engine's credentials to
+  that host), no `:` but the drive letter's, and no `?` or `*` (Win32 never allows
+  them in a file name, and `\??\UNC\…` or `\??\GLOBALROOT\Device\…` is an NT object
+  path that reaches the same hosts and devices). An asset that doesn't exist yet is
+  accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
