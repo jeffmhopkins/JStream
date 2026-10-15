@@ -319,7 +319,12 @@ impl State {
                 let Some(&state) = self.outputs.get(&output_id) else {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 };
-                QueryResult::OutputStatus { output_id, state }
+                QueryResult::OutputStatus {
+                    output_id,
+                    state,
+                    // The mock has no key store.
+                    key_set: false,
+                }
             }
             Query::SourceList => QueryResult::SourceList {
                 rev: self.collection.rev,
@@ -346,6 +351,8 @@ impl State {
                         items: self.collection.item_infos(scene),
                     })
                     .collect(),
+                // The mock does not implement the output edits.
+                outputs: vec![],
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -1341,7 +1348,8 @@ mod tests {
             CallResult::Query {
                 result: QueryResult::OutputStatus {
                     output_id: OutputId::new("yt"),
-                    state: OutputState::Active
+                    state: OutputState::Active,
+                    key_set: false,
                 }
             }
         );

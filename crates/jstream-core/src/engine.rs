@@ -18,10 +18,11 @@ use crate::runtime::{
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
 use jstream_graph::Graph;
-use jstream_platform::Backends;
+use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, Event, IdempotencyKey, OutputId,
-    OutputState, ProtocolError, Query, QueryResult, RequestId, Rev, SourceId,
+    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, IdempotencyKey,
+    OutputId, OutputKind, OutputState, ProtocolError, Query, QueryResult, RequestId, Rev,
+    SecretString, SourceId,
 };
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -63,6 +64,9 @@ pub struct Engine {
 struct Shared {
     state: Mutex<State>,
     snapshots: SnapshotWorker,
+    /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
+    /// only to clone the handle: the store is never called under the collection lock.
+    keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
 }
 
 impl Default for Engine {
@@ -71,6 +75,7 @@ impl Default for Engine {
             shared: Arc::new(Shared {
                 state: Mutex::new(State::default()),
                 snapshots: SnapshotWorker::default(),
+                keys: Mutex::new(None),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -113,11 +118,34 @@ impl Engine {
     /// `output.status` can name it. Outputs are runtime state: this changes no `rev` and
     /// emits no event. Adding an ID twice keeps the first.
     ///
-    /// Outputs are configured this way until the protocol has edits for them.
+    /// A declared output is a placeholder: it has no target, so it is not in the
+    /// collection. `output.create` configures an output through the protocol instead.
     #[must_use]
     pub fn with_output(self, output_id: OutputId) -> Self {
         lock(&self.shared.state).outputs.add(output_id);
         self
+    }
+
+    /// Gives the engine the OS credential store that holds stream keys (R-SEC-001):
+    /// `output.set_key` writes to it, `output.clear_key` removes from it, and
+    /// `output.status` reports whether it holds a key. Without one, those actions fail
+    /// with `action_failed` and `key_set` is `false`. Clones share the store, made
+    /// before or after.
+    #[must_use]
+    pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
+        *lock(&self.shared.keys) = Some(store);
+        self
+    }
+
+    /// What an output in the collection is and where it sends, or `None` if the
+    /// collection has no such output. A host reads its target here when it opens the
+    /// publish target for `output.start`, and its key from the store it injected.
+    pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
+        lock(&self.shared.state)
+            .graph
+            .state()
+            .output(output_id)
+            .map(|output| output.kind().clone())
     }
 
     /// Injects platform backends. `output.start` then runs the media pipeline
@@ -323,17 +351,27 @@ impl Engine {
         }
         let output = match &call {
             Call::Action {
-                action: Action::OutputStart { output_id } | Action::OutputStop { output_id },
+                action:
+                    Action::OutputStart { output_id }
+                    | Action::OutputStop { output_id }
+                    | Action::OutputSetKey { output_id, .. }
+                    | Action::OutputClearKey { output_id },
             } => Some(output_id.clone()),
             _ => None,
         };
-        let result = if self.backends_ready()
+        let result = if let Call::Action {
+            action: action @ (Action::OutputSetKey { .. } | Action::OutputClearKey { .. }),
+        } = call
+        {
+            self.key_action(action)
+        } else if self.backends_ready()
             && matches!(
                 call,
                 Call::Action {
                     action: Action::OutputStart { .. } | Action::OutputStop { .. }
                 }
-            ) {
+            )
+        {
             self.run_media_action(call)
         } else {
             let mut wake = Vec::new();
@@ -341,7 +379,7 @@ impl Engine {
             for waker in wake {
                 waker.wake();
             }
-            result
+            self.with_key_set(result)
         };
         match (&result, output) {
             (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
@@ -355,6 +393,88 @@ impl Engine {
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
         }
         Executed::Ready(result)
+    }
+
+    /// The key store, if the host gave one. The handle is cloned so the store is
+    /// called with no engine lock held.
+    fn key_store(&self) -> Option<Arc<dyn StreamKeyStore>> {
+        lock(&self.shared.keys).clone()
+    }
+
+    /// `output.set_key` and `output.clear_key`. The collection lock is held only to
+    /// check that the output exists; the store is called after it is released. Nothing
+    /// here logs, returns or emits the key: errors carry fixed reasons, and a store's
+    /// error must not contain one (R-SEC-001).
+    fn key_action(&self, action: Action) -> Result<CallResult, ProtocolError> {
+        match action {
+            Action::OutputSetKey { output_id, key } => {
+                let exists = lock(&self.shared.state)
+                    .graph
+                    .state()
+                    .output(&output_id)
+                    .is_some();
+                if !exists {
+                    return Err(ProtocolError::NotFound {
+                        entity: EntityKind::Output,
+                        id: output_id.as_str().to_owned(),
+                    });
+                }
+                check_key(&key)?;
+                let store = self.key_store().ok_or_else(no_key_store)?;
+                store
+                    .set(output_id.as_str(), &Secret::new(key.expose()))
+                    .map_err(|err| ProtocolError::ActionFailed {
+                        reason: format!("the credential store did not store the key: {err}"),
+                    })?;
+                Ok(CallResult::Action {})
+            }
+            Action::OutputClearKey { output_id } => {
+                let store = self.key_store().ok_or_else(no_key_store)?;
+                store
+                    .clear(output_id.as_str())
+                    .map_err(|err| ProtocolError::ActionFailed {
+                        reason: format!("the credential store did not remove the key: {err}"),
+                    })?;
+                Ok(CallResult::Action {})
+            }
+            other => Err(not_implemented(other.name())),
+        }
+    }
+
+    /// Fills `output.status`'s `key_set` from the key store, after the collection lock
+    /// is released. Without a store it stays `false`.
+    fn with_key_set(
+        &self,
+        result: Result<CallResult, ProtocolError>,
+    ) -> Result<CallResult, ProtocolError> {
+        let Ok(CallResult::Query {
+            result:
+                QueryResult::OutputStatus {
+                    output_id,
+                    state,
+                    key_set: _,
+                },
+        }) = result
+        else {
+            return result;
+        };
+        let key_set = match self.key_store() {
+            Some(store) => {
+                store
+                    .is_set(output_id.as_str())
+                    .map_err(|err| ProtocolError::Internal {
+                        reason: format!("reading the credential store: {err}"),
+                    })?
+            }
+            None => false,
+        };
+        Ok(CallResult::Query {
+            result: QueryResult::OutputStatus {
+                output_id,
+                state,
+                key_set,
+            },
+        })
     }
 
     fn host(&mut self) -> Arc<MediaHost> {
@@ -1054,8 +1174,13 @@ impl State {
             return Ok(CallResult::Batch { rev: *rev });
         }
         // The inverse is dropped: per-client undo needs undo requests in the protocol
-        // first (protocol open question 4).
-        let applied = self.graph.apply_batch(batch)?;
+        // first (protocol open question 4). A running output can't be deleted.
+        let applied = self.graph.apply_with_running(
+            &batch.edits,
+            batch.expected_rev,
+            &self.outputs.running(),
+        )?;
+        self.outputs.sync(self.graph.state());
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, applied.rev);
         }
@@ -1106,9 +1231,11 @@ impl State {
         let result = match self.graph.query(query) {
             Some(result) => result?,
             None => match query {
+                // `key_set` is filled in after the lock is released (`with_key_set`).
                 Query::OutputStatus { output_id } => QueryResult::OutputStatus {
                     output_id: output_id.clone(),
                     state: self.outputs.state(output_id)?,
+                    key_set: false,
                 },
                 other => return Err(not_implemented(other.name())),
             },
@@ -1132,6 +1259,33 @@ impl Drop for State {
     /// Ends every subscription when the engine goes away.
     fn drop(&mut self) {
         self.subscribers.close_all();
+    }
+}
+
+/// The longest stream key `output.set_key` accepts, in bytes.
+const MAX_KEY_LEN: usize = 1024;
+
+/// Checks a stream key's shape. The reasons are fixed text: they never repeat the key.
+fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
+    let key = key.expose();
+    let reason = if key.is_empty() {
+        "must not be empty"
+    } else if key.len() > MAX_KEY_LEN {
+        "must be at most 1024 bytes"
+    } else if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        "must not contain whitespace or control characters"
+    } else {
+        return Ok(());
+    };
+    Err(ProtocolError::InvalidArgument {
+        field: "key".into(),
+        reason: reason.into(),
+    })
+}
+
+fn no_key_store() -> ProtocolError {
+    ProtocolError::ActionFailed {
+        reason: "this engine has no credential store for stream keys".into(),
     }
 }
 
