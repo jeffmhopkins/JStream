@@ -149,7 +149,7 @@ impl Pass for Mask {
         input: &Image,
         output: &Image,
     ) -> Result<(), RenderError> {
-        let aux = self.reference.get(ctx)?;
+        let aux = self.reference.get(ctx, input)?;
         ctx.draw(&Draw {
             shader: SHADER,
             input,

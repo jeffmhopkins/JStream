@@ -88,7 +88,7 @@ impl Pass for ApplyLut {
         output: &Image,
     ) -> Result<(), RenderError> {
         // An image that is not a table layout (or none) passes the input through.
-        let table = self.lut.get(ctx)?.and_then(|image| {
+        let table = self.lut.get(ctx, input)?.and_then(|image| {
             size_of_layout(image.width(), image.height()).map(|size| (image, size))
         });
         let (aux, size) = table.map_or((None, 0), |(image, size)| (Some(image), size));

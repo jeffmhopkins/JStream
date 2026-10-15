@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:8a43331530451d18", by = "agent:claude", note = "re-read after dropping the unused LUT re-exports from filter/assets (callers use the full paths until V0 wires them); text unchanged and still holds" }
+verified = { hash = "b3:740ae7bbe164de9b", by = "agent:claude", note = "re-read after Reference::get skips staging a hold shared with the input and the set_reference doc path fix; Purpose states neither; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:61231dce588f0a18", by = "agent:claude", note = "re-read after dropping the unused LUT re-exports from filter/assets (callers use the full paths until V0 wires them); text unchanged and still holds" }
+verified = { hash = "b3:d379d722aa0bbf7d", by = "agent:claude", note = "re-read after Reference::get's shared-hold check: one stage per distinct hold per submit, as render does; no new pass, thread or allocation; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:e10cbd9b0282d5e0", by = "agent:claude", note = "re-read after dropping the unused LUT re-exports from filter/assets (callers use the full paths until V0 wires them); text unchanged and still holds" }
+verified = { hash = "b3:b629397ef457acb2", by = "agent:claude", note = "V3 N2: added that a reference's FrameSync is staged with the pass unless it shares the input's hold (Reference::get's Arc::ptr_eq check against input.sync()); re-read the rest of the V3 paragraph and the harness bullets, unchanged, holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -335,7 +335,8 @@ Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 underneath): render opens no files (R-RT-002), so V0 resolves the asset or scene
 reference and decodes it. A kind passes its input through unchanged until both its
 reference setting is non-`null` and an image is set, and refuses an image from another
-compositor.
+compositor. A reference's `FrameSync` is staged with the pass, unless it is the input's
+own hold, which `apply_filter` already stages.
 
 - `apply_lut` (`lut`: asset, `cube` or `png`; `amount` 0 to 1, default 1). The table
   maps sRGB-encoded straight colour, the `.cube` convention: the shader unpremultiplies,
