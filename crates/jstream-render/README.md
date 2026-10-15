@@ -16,7 +16,6 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:c3086e97eceed60e", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "E3d: Nv12Converter bullet and Not-in-this-cut (render-thread hookup in core, P010, BT.601/2020) match convert/mod.rs exports in lib.rs" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -120,7 +119,6 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:5109375354d7b9e9", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "E3d: pass 5 (bind once, two fullscreen passes, sRGB decode then OETF, over-black alpha, BT.709 coefficients, left-sited [1 2 1] chroma, H.273 codes, odd sizes refused) and the resources rows match convert/mod.rs and nv12.wgsl" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -310,7 +308,6 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:2d0ca29fa4d30a7b", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "E3d: NV12 paragraph lists exactly the six tests in convert/tests.rs, the f64 reference in convert/reference.rs, and the lavapipe plane-view skip observed locally" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -402,7 +399,16 @@ plane-1 render into plane 0's memory (the Y plane's first rows came back holding
 CbCr values), so the native path is checked on WARP if WARP has the feature, and on
 real hardware.
 
-**Not measured** ([R-RT-005](../../docs/RULES.md#R-RT-005)). No frame-time numbers.
+**Benchmarks** (`benches/composite.rs`, criterion, [R-RT-005](../../docs/RULES.md#R-RT-005)).
+A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with readback
+(`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
+and refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
+`cargo bench -p jstream-render --bench composite`; the `bench` workflow records them on
+lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
+software adapter's numbers are CPU rasterisation: they track regressions in what the
+compositor submits, and say nothing about GPU frame time. **Not measured:** the NV12
+pass, and frame time on
+a hardware GPU.
 
 <a id="open-questions"></a>
 ## Open questions
