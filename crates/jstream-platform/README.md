@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:5d5148d1cf21bd10", by = "agent:claude@session_01CinhSCRTBiaJNaiD4w6CUq", note = "Y2: re-read the purpose section; new OAuth tokens bullet (OAuthTokenStore set/get/clear/is_set per account, Secret only, separate from StreamKeyStore, refresh tokens only, no token in errors) and MemoryTokenStore in Fakes match keys.rs and fake.rs; the rest is unchanged" }
+verified = { hash = "b3:c7a07f7e27ddc59c", by = "agent:claude@session_01M7dd6pdhEEieUbct9m5TkJ", note = "Merge of main (Y2 OAuth tokens bullet and MemoryTokenStore, on top of C4a and #142) with F5 (jstream-media's Codec gains Hevc and Av1): re-read Codecs, Video capture devices, Stream keys, OAuth tokens, Fakes and Not yet; platform encoders still emit only H.264 Annex B and raw AAC, nothing here produces HEVC/AV1, the MJPEG Codec variant is still not added, so the section holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
