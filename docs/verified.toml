@@ -1188,7 +1188,7 @@ stamp = { hash = "b3:d848ae5f04b83c6f" }
 stamp = { hash = "b3:5b73caa28ffd99e3" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:c4445af061a77053", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 now excepts GET /pair on a TLS listener and allows a device-token cookie; desktop serves loopback without TLS, pairs nothing and uses its in-memory token, so nothing here changes; holds" }
+stamp = { hash = "b3:835f5fa0210d9962", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): vcam status values match host.rs VcamStatus strings; build.rs delay-loads mfsensorgroup.dll; WindowsVcam behind --no-vcam" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -1203,19 +1203,19 @@ stamp = { hash = "b3:febfe552adc09d5b" }
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/build.rs"]
-stamp = { hash = "b3:22c33836996b1c6b" }
+stamp = { hash = "b3:bb5ec41398523fc4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): vcam status values match host.rs VcamStatus strings; build.rs delay-loads mfsensorgroup.dll; WindowsVcam behind --no-vcam" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:c539140aae7561d4" }
+stamp = { hash = "b3:30a43a5e8f18c3e1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): vcam status values match host.rs VcamStatus strings; build.rs delay-loads mfsensorgroup.dll; WindowsVcam behind --no-vcam" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/bootstrap.rs"]
-stamp = { hash = "b3:f0fe0fb519a068bf" }
+stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): vcam status values match host.rs VcamStatus strings; build.rs delay-loads mfsensorgroup.dll; WindowsVcam behind --no-vcam" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/data.rs"]
 stamp = { hash = "b3:ca2f21dc552ae191" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:9b575597b71027d3" }
+stamp = { hash = "b3:bab2de2f5fabc2d9", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): vcam status values match host.rs VcamStatus strings; build.rs delay-loads mfsensorgroup.dll; WindowsVcam behind --no-vcam" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:47bd5b3369b57d20" }
@@ -1236,22 +1236,22 @@ stamp = { hash = "b3:45624952598c1f3a" }
 stamp = { hash = "b3:558b5c5512b30191" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:ec6f85c97d250939", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
+stamp = { hash = "b3:4c988f118281073a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): contents list matches app.rs, host.rs (vcam_status), bootstrap.rs (vcam in the global) and ui.rs" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:194117bebc81240c" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:c539140aae7561d4" }
+stamp = { hash = "b3:30a43a5e8f18c3e1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): contents list matches app.rs, host.rs (vcam_status), bootstrap.rs (vcam in the global) and ui.rs" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/bootstrap.rs"]
-stamp = { hash = "b3:f0fe0fb519a068bf" }
+stamp = { hash = "b3:d5a809c097ce63bf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): contents list matches app.rs, host.rs (vcam_status), bootstrap.rs (vcam in the global) and ui.rs" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/data.rs"]
 stamp = { hash = "b3:ca2f21dc552ae191" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:9b575597b71027d3" }
+stamp = { hash = "b3:bab2de2f5fabc2d9", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): contents list matches app.rs, host.rs (vcam_status), bootstrap.rs (vcam in the global) and ui.rs" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
 stamp = { hash = "b3:47bd5b3369b57d20" }
@@ -1269,13 +1269,13 @@ stamp = { hash = "b3:ee281b0fbf540f66" }
 stamp = { hash = "b3:45624952598c1f3a" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:4d0cdcc543ce52f7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
+stamp = { hash = "b3:a98002602e339e58", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): --ui-dir and --no-vcam are the only options (app.rs parse); vcam registration via jstream-daemon --register-vcam" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
 stamp = { hash = "b3:9ae316de6772baa9" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:c539140aae7561d4" }
+stamp = { hash = "b3:30a43a5e8f18c3e1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): --ui-dir and --no-vcam are the only options (app.rs parse); vcam registration via jstream-daemon --register-vcam" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/data.rs"]
 stamp = { hash = "b3:ca2f21dc552ae191" }
@@ -2340,7 +2340,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:de38d89391222d92", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at Q3 (#309): the design text is main's (Playwright against a mock daemon); D5's mock additions (buses, sends, audio) are additive to the state the mock daemon serves; holds" }
+stamp = { hash = "b3:fbc096d2fa3574e2", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:4b7f99a329a36029" }
@@ -2364,7 +2364,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/host.rs"]
-stamp = { hash = "b3:3ab8a619ef73791f" }
+stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
 stamp = { hash = "b3:374727eaba299426" }
@@ -2376,16 +2376,16 @@ stamp = { hash = "b3:b0fabe46ab68dffb" }
 stamp = { hash = "b3:ef3e4d543c670393" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:81728ddff971bf23" }
+stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:bd8197d3c2a90a4b" }
+stamp = { hash = "b3:db8f68d00c8d8c1c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): virtual camera card, registration hints and browser refusal wording match outputs.rs" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:e5df397b64055237", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line gained the e2e README sections; contents list holds" }
+stamp = { hash = "b3:258fbbb344a370ec", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): host.rs desktop() and desktop_vcam(); outputs.rs covers streams, recordings and the virtual camera" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -2406,7 +2406,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/host.rs"]
-stamp = { hash = "b3:3ab8a619ef73791f" }
+stamp = { hash = "b3:e80cf4c40780c81c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): host.rs desktop() and desktop_vcam(); outputs.rs covers streams, recordings and the virtual camera" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
 stamp = { hash = "b3:374727eaba299426" }
@@ -2418,7 +2418,7 @@ stamp = { hash = "b3:b0fabe46ab68dffb" }
 stamp = { hash = "b3:ef3e4d543c670393" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:81728ddff971bf23" }
+stamp = { hash = "b3:bd8fff5e8d130d97", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Re-read after merging main (#376): host.rs desktop() and desktop_vcam(); outputs.rs covers streams, recordings and the virtual camera" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d" }
