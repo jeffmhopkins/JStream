@@ -13,15 +13,16 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:1cbced154f1f983b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#126 N4/N7/N8 follow-up: crash.rs doc line moved onto fn report, logs.rs prune comment says age order to the second and expects Windows deletes to succeed via FILE_SHARE_DELETE; the Log files and Crash reports bullets and Tests list still hold" }
+verified = { hash = "b3:f8c1170ccbd8db7f", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; main changed no prose here, I1's MCP-on text holds and main.rs crate doc now matches it (review B4)" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
 `jstream-core` `Engine` and serves it through `jstream-server`'s authenticated WebSocket
 API on `127.0.0.1`, so `jstream-cli --url …` and the stdio MCP proxy `jstream-cli mcp`
-can drive it. Like every host it only wires the engine to its interfaces
-([ADR-0001](../../docs/adr/0001-library-first-engine.md)): each connection gets its own
-`InProcessControl` session through the server's `Connector`. Layer 6, an app that links
+can drive it, and turns on the server's MCP transport over streamable HTTP at `/mcp`, so
+an agent can connect without the proxy. Like every host it only wires the engine to its interfaces
+([ADR-0001](../../docs/adr/0001-library-first-engine.md)): each connection and each MCP
+session gets its own `InProcessControl` session through the server's `Connector`. Layer 6, an app that links
 core and server ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)).
 
 Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
@@ -33,17 +34,18 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with its placeholder outputs), installs
-  the signal handlers that stop it, then binds the server.
+  the signal handlers that stop it, then binds the server with MCP on.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
   ([Design](#design)).
 - **Crash reports** (`crash.rs`): the panic hook that writes a redacted report into the
   log directory ([Design](#design)).
 - **Tests** (`serve.rs`, `token.rs`, `args.rs`, `logs.rs`, `crash.rs` unit tests, the
   crash hook in a child process; `tests/daemon.rs`, the built binary driven by
-  `jstream-control`'s WebSocket client and stopped with SIGINT).
+  `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
+  SIGINT).
 
-Not here yet: serving the web UI, MCP over streamable HTTP (both wait on
-`jstream-server`, [jstream-server › Design](../../crates/jstream-server/README.md#design)),
+Not here yet: serving the web UI (it waits on `jstream-server`,
+[jstream-server › Design](../../crates/jstream-server/README.md#design)),
 `--collection` (the engine has no persistence), a default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
@@ -55,12 +57,13 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:55f76fc36aafb8b9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against this PR: --log-dir and --log-level rows, Log files bullet (now 'at info and above the first line names the file'), Crash reports bullet and exit codes 1/2 match args.rs and main.rs" }
+verified = { hash = "b3:96e6a64a7ccf1aed", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; mcp endpoint line and options match main.rs/args.rs" }
 -->
 
 ```sh
 jstream-daemon --token-file ~/.config/jstream/token --port 4460 --output out_1
 # token file: /home/me/.config/jstream/token (created, new token)
+# mcp endpoint: (the same port, path /mcp)
 # listening on ws://127.0.0.1:4460/api/v1/ws
 JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460 scene list
 ```
@@ -83,7 +86,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   left as it is.
   The parent directory must exist. The token itself is never printed.
 - **Output.** On stdout: `token file: <path> (created, new token)` or
-  `… (existing token)`, then `listening on ws://127.0.0.1:<port>/api/v1/ws` once it
+  `… (existing token)`, then `mcp endpoint: http://127.0.0.1:<port>/mcp` (point an MCP
+  client there, with the token as `Authorization: Bearer <token>`), then
+  `listening on ws://127.0.0.1:<port>/api/v1/ws` once it
   serves (a script waits for this line), and `stopped` after a graceful stop. Errors go
   to stderr as `error: <message>`.
 - **Logs.** The libraries' log lines go to stderr, never stdout, and to log files:
@@ -122,7 +127,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:66cea1178284e8c9", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1a: stale through core#design only (its Dependencies list gained jstream-sources); re-read the daemon Design bullets, which cite core's Design for sessions and events, unchanged; daemon code untouched" }
+verified = { hash = "b3:2d2b0d853d78df1c", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#153 daemon serves /mcp) into C1a: took main's line; stale through core#design only (Dependencies gained jstream-sources); daemon Design bullets as main left them, daemon code untouched by C1a" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -130,7 +135,14 @@ verified = { hash = "b3:66cea1178284e8c9", by = "agent:claude@session_01JxutE3HY
   gets its own `InProcessControl` (its own `client_id`) on the shared engine, and sees
   every other client's events ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
   The daemon never touches the protocol itself.
-- **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port changed):
+- **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server
+  answers MCP at `/mcp` on the same port, with its default MCP session cap and idle
+  timeout. Each MCP session is one more engine client through the same `Connector`, so
+  an agent's edits form their own undo history
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is
+  no option to turn it off: it is behind the same token as the WebSocket API, which
+  already gives full control ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)).
+- **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port and MCP changed):
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
   option to listen on other addresses until remote browsers need it (with TLS and token

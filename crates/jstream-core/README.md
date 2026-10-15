@@ -96,7 +96,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:652772d0b7e3af74", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1a: Dependencies list adds jstream-sources and moves serde_json to dev-dependencies (kind tests); Not yet bullet says rendering from the registry; Calls and Locking unchanged" }
+verified = { hash = "b3:552823956687a7cb", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#153) into C1a: took main's line; core README prose unchanged by main; C1a's Dependencies (jstream-sources, serde_json dev-only) and Not yet bullets re-read" }
 -->
 
 ### Engine and sessions
