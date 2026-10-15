@@ -1,12 +1,14 @@
 //! Reading the graph as protocol query results: what an engine answers to the queries
-//! that read collection state (`scene.list`, `source.list`, `item.list`, `state.get`).
+//! that read collection state (`scene.list`, `source.list`, `item.list`, `output.list`,
+//! `state.get`), and to the kind queries (`kind.list`, `kind.describe`).
 //!
-//! Reads never change the graph. Each result carries the revision it was read at.
+//! Reads never change the graph. Each collection result carries the revision it was
+//! read at; kinds are not collection state, so their results carry none.
 
-use crate::model::{Graph, Item, Scene, Source};
+use crate::model::{Graph, Item, Output, Scene, Source};
 use jstream_protocol::{
-    EntityKind, ItemInfo, ProtocolError, Query, QueryResult, SceneId, SceneInfo, SceneSummary,
-    SourceInfo,
+    EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query, QueryResult, SceneId,
+    SceneInfo, SceneSummary, SourceInfo,
 };
 
 impl Graph {
@@ -14,14 +16,40 @@ impl Graph {
     /// graph doesn't hold (`output.status` reads runtime state) or is a query this crate
     /// doesn't know.
     ///
-    /// Fails only with `not_found`, for an `item.list` of a missing scene.
+    /// Fails only with `not_found`, for an `item.list` of a missing scene, and with
+    /// `invalid_argument` on `kind_id`, for a `kind.describe` of a kind it doesn't have.
     pub fn query(&self, query: &Query) -> Option<Result<QueryResult, ProtocolError>> {
         Some(match query {
             Query::SceneList => Ok(self.scene_list()),
             Query::SourceList => Ok(self.source_list()),
             Query::ItemList { scene_id } => self.item_list(scene_id),
             Query::StateGet => Ok(self.state_get()),
+            Query::KindList => Ok(self.kind_list()),
+            Query::KindDescribe { kind_id } => self.kind_describe(kind_id),
+            Query::OutputList => Ok(self.output_list()),
             _ => return None,
+        })
+    }
+
+    /// The `kind.list` result: every kind, ordered by ID.
+    pub fn kind_list(&self) -> QueryResult {
+        QueryResult::KindList {
+            kinds: self.kinds().map(KindDescriptor::summary).collect(),
+        }
+    }
+
+    /// The `kind.describe` result for `kind_id`: its descriptor and settings schema.
+    /// Fails with `invalid_argument` on `kind_id` if there is no such kind.
+    pub fn kind_describe(&self, kind_id: &str) -> Result<QueryResult, ProtocolError> {
+        let kind = self
+            .kind(kind_id)
+            .ok_or_else(|| ProtocolError::InvalidArgument {
+                field: "kind_id".into(),
+                reason: format!("there is no kind `{kind_id}`; `kind.list` names them"),
+            })?;
+        Ok(QueryResult::KindDescribe {
+            settings_schema: kind.settings_schema(),
+            kind: kind.clone(),
         })
     }
 
@@ -67,13 +95,22 @@ impl Graph {
         })
     }
 
-    /// The `state.get` result: every source by ID, and every scene with its items in
-    /// display order.
+    /// The `output.list` result: every output, ordered by ID.
+    pub fn output_list(&self) -> QueryResult {
+        QueryResult::OutputList {
+            rev: self.rev,
+            outputs: self.state.outputs().map(Output::to_info).collect(),
+        }
+    }
+
+    /// The `state.get` result: every source by ID, every scene with its items in
+    /// display order, and every output by ID.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
             sources: self.state.sources().map(Source::to_info).collect(),
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
+            outputs: self.state.outputs().map(Output::to_info).collect(),
         }
     }
 }
@@ -84,6 +121,17 @@ impl Source {
         SourceInfo {
             source_id: self.id.clone(),
             name: self.name.clone(),
+            kind: self.kind.clone(),
+            settings: self.settings.clone(),
+        }
+    }
+}
+
+impl Output {
+    /// This output as `output.list` and `state.get` report it.
+    pub fn to_info(&self) -> OutputInfo {
+        OutputInfo {
+            output_id: self.id.clone(),
             kind: self.kind.clone(),
         }
     }
@@ -116,13 +164,15 @@ impl Item {
 #[cfg(test)]
 mod tests {
     use crate::Graph;
-    use jstream_protocol::{Edit, ItemId, OutputId, Query, QueryResult, Rev, parity};
+    use jstream_protocol::{
+        Edit, ItemId, OutputId, ProtocolError, Query, QueryResult, Rev, parity,
+    };
 
     /// The shared parity collection (`jstream_protocol::parity::collection`), which
     /// `jstream-control`'s mock engine is tested against too.
     fn graph() -> Graph {
         let setup = parity::collection();
-        let mut graph = Graph::new();
+        let mut graph = Graph::new().with_kinds(parity::kinds());
         let applied = graph
             .apply(&setup.edits, setup.expected_rev)
             .expect("applies");
@@ -171,6 +221,14 @@ mod tests {
                 rev: Rev(0),
                 sources: vec![],
                 scenes: vec![],
+                outputs: vec![],
+            }
+        );
+        assert_eq!(
+            graph.output_list(),
+            QueryResult::OutputList {
+                rev: Rev(0),
+                outputs: vec![],
             }
         );
         assert_eq!(
@@ -180,6 +238,29 @@ mod tests {
                 sources: vec![],
             }
         );
+    }
+
+    #[test]
+    fn kinds_are_listed_by_id_and_described_with_a_schema() {
+        let graph = graph();
+        let Some(Ok(QueryResult::KindList { kinds })) = graph.query(&Query::KindList) else {
+            panic!("kind.list");
+        };
+        assert_eq!(kinds, vec![parity::kinds()[0].summary()]);
+        let describe = |id: &str| graph.query(&Query::KindDescribe { kind_id: id.into() });
+        let Some(Ok(QueryResult::KindDescribe {
+            kind,
+            settings_schema,
+        })) = describe("webcam")
+        else {
+            panic!("kind.describe");
+        };
+        assert_eq!(settings_schema, kind.settings_schema());
+        assert_eq!(kind, parity::kinds()[0]);
+        assert!(matches!(
+            describe("ghost"),
+            Some(Err(ProtocolError::InvalidArgument { field, .. })) if field == "kind_id"
+        ));
     }
 
     #[test]
@@ -210,6 +291,7 @@ mod tests {
                 rev,
                 sources,
                 scenes,
+                ..
             },
             QueryResult::StateGet {
                 sources: was_sources,

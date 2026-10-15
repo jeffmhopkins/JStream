@@ -24,6 +24,10 @@
 //! A refused `Host` or `Origin` is HTTP 403, a missing or wrong token 401. `Host` and
 //! the token must appear exactly once, and `Origin` at most once. `Gate::admit` logs each refusal at `warn` with its reason
 //! and the peer address, and never a header's value, so never the token (R-SEC-001).
+//!
+//! A request that passes the gate can still be refused because the server already has
+//! `ServerConfig::max_connections` connections open: HTTP 503 (`Refusal::Full`), logged
+//! the same way.
 
 use crate::config::{ServerConfig, Token};
 use crate::error::ServerError;
@@ -44,6 +48,8 @@ pub(crate) enum Refusal {
     Origin,
     /// The control token is missing or wrong.
     Token,
+    /// The server already has as many connections open as it allows.
+    Full,
 }
 
 impl Refusal {
@@ -53,7 +59,14 @@ impl Refusal {
             Refusal::Host => "Host not allowed",
             Refusal::Origin => "Origin not allowed",
             Refusal::Token => "missing or wrong control token",
+            Refusal::Full => "too many connections",
         }
+    }
+
+    /// Logs the refusal at `warn` with its reason and `peer`, the address it came from.
+    /// Nothing from the request is logged.
+    pub(crate) fn log(self, peer: SocketAddr) {
+        tracing::warn!(peer = %peer, reason = self.reason(), "connection refused");
     }
 }
 
@@ -68,6 +81,9 @@ impl IntoResponse for Refusal {
                 "a valid control token is required\n",
             )
                 .into_response(),
+            Refusal::Full => {
+                (StatusCode::SERVICE_UNAVAILABLE, "too many connections\n").into_response()
+            }
         }
     }
 }
@@ -120,7 +136,7 @@ impl Gate {
     pub(crate) fn admit(&self, headers: &HeaderMap, peer: SocketAddr) -> Result<(), Refusal> {
         let result = self.check(headers);
         if let Err(refusal) = result {
-            tracing::warn!(peer = %peer, reason = refusal.reason(), "connection refused");
+            refusal.log(peer);
         }
         result
     }
@@ -611,16 +627,22 @@ mod tests {
                 Err(Refusal::Origin)
             );
             assert_eq!(gate.admit(&headers(&good()), peer), Ok(()));
+            Refusal::Full.log(peer);
         });
         let logged = capture.text();
         assert!(
             logged.contains("connection refused")
                 && logged.contains("missing or wrong control token")
                 && logged.contains("Origin not allowed")
+                && logged.contains("too many connections")
                 && logged.contains("127.0.0.1:50000"),
             "{logged}"
         );
-        assert_eq!(logged.lines().count(), 2, "only the refusals: {logged}");
+        assert_eq!(logged.lines().count(), 3, "only the refusals: {logged}");
+        assert!(
+            logged.lines().all(|line| line.starts_with("event WARN ")),
+            "refusals are warnings: {logged}"
+        );
         for secret in ["wr0ng-s3cret", "t0ken", "evil.example"] {
             assert!(!logged.contains(secret), "{secret} logged: {logged}");
         }

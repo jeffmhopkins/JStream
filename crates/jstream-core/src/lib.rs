@@ -6,7 +6,8 @@
 //!
 //! Without platform backends, outputs are a placeholder state machine.
 //! [`Engine::with_backends`](engine::Engine::with_backends) and
-//! [`Engine::with_publish`](engine::Engine::with_publish) run the media pipeline on
+//! [`Engine::with_publish`](engine::Engine::with_publish) (or
+//! [`Engine::with_publish_opener`](engine::Engine::with_publish_opener)) run the media pipeline on
 //! `output.start` instead. That pipeline registers the drop sources a `stats.tick`
 //! sums and emits one about once a second while it runs. There is no undo, audit log
 //! or persistence yet.
@@ -18,6 +19,7 @@
 mod drops;
 mod engine;
 mod events;
+mod kinds;
 mod outputs;
 mod runtime;
 mod session;
@@ -32,7 +34,8 @@ pub use drops::{
 };
 pub use engine::Engine;
 pub use runtime::{
-    LinkState, LivePublish, OutputStats, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
+    LinkState, LivePublish, OpenPublish, OutputStats, PublishError, RecordingPublish, RtmpPublish,
+    connect_rtmp,
 };
 pub use session::InProcessControl;
 pub use snapshot::SourceFrameError;
@@ -46,8 +49,9 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-// The test below sits at the crate root because RULES.md names it by path (R-API-004):
-// `jstream_core::stale_expected_rev_is_rejected`.
+// The tests below sit at the crate root because RULES.md names them by path:
+// `jstream_core::stale_expected_rev_is_rejected` (R-API-004) and
+// `jstream_core::secrets_are_redacted` (R-SEC-001).
 
 /// R-API-004: a batch whose `expected_rev` is stale fails with `rev_conflict`, carrying
 /// both revisions, and applies nothing; the same batch at the current `rev` applies.
@@ -55,4 +59,12 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 #[test]
 fn stale_expected_rev_is_rejected() {
     tests::check_stale_expected_rev_is_rejected();
+}
+
+/// R-SEC-001: a stream key set through the protocol reaches the credential store and
+/// nothing else the engine sends or logs.
+#[cfg(test)]
+#[test]
+fn secrets_are_redacted() {
+    tests::check_secrets_are_redacted();
 }

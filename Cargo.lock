@@ -820,6 +820,7 @@ name = "jstream-graph"
 version = "0.0.0"
 dependencies = [
  "jstream-protocol",
+ "serde_json",
 ]
 
 [[package]]
@@ -923,6 +924,10 @@ dependencies = [
 
 [[package]]
 name = "jstream-types"
+version = "0.0.0"
+
+[[package]]
+name = "jstream-vcam-proto"
 version = "0.0.0"
 
 [[package]]

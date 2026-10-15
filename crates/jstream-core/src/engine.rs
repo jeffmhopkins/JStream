@@ -12,15 +12,17 @@ use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
-    Gate, LivePublish, MediaHost, OutputStats, Pending, PipelineEvent, Running, launch, parts_from,
+    Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent, Running,
+    launch, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
 use jstream_graph::Graph;
-use jstream_platform::Backends;
+use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, Event, IdempotencyKey, OutputId,
-    OutputState, ProtocolError, Query, QueryResult, RequestId, Rev, SourceId,
+    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, IdempotencyKey,
+    OutputId, OutputKind, OutputState, ProtocolError, Query, QueryResult, RequestId, Rev,
+    SecretString, SourceId,
 };
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -62,14 +64,22 @@ pub struct Engine {
 struct Shared {
     state: Mutex<State>,
     snapshots: SnapshotWorker,
+    /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
+    /// only to clone the handle: the store is never called under the collection lock.
+    keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
 }
 
 impl Default for Engine {
     fn default() -> Self {
         Self {
             shared: Arc::new(Shared {
-                state: Mutex::new(State::default()),
+                state: Mutex::new({
+                    let mut state = State::default();
+                    state.graph = Graph::new().with_kinds(crate::kinds::builtin());
+                    state
+                }),
                 snapshots: SnapshotWorker::default(),
+                keys: Mutex::new(None),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -112,19 +122,43 @@ impl Engine {
     /// `output.status` can name it. Outputs are runtime state: this changes no `rev` and
     /// emits no event. Adding an ID twice keeps the first.
     ///
-    /// Outputs are configured this way until the protocol has edits for them.
+    /// A declared output is a placeholder: it has no target, so it is not in the
+    /// collection. `output.create` configures an output through the protocol instead.
     #[must_use]
     pub fn with_output(self, output_id: OutputId) -> Self {
         lock(&self.shared.state).outputs.add(output_id);
         self
     }
 
+    /// Gives the engine the OS credential store that holds stream keys (R-SEC-001):
+    /// `output.set_key` writes to it, `output.clear_key` removes from it, and
+    /// `output.status` reports whether it holds a key. Without one, those actions fail
+    /// with `action_failed` and `key_set` is `false`. Clones share the store, made
+    /// before or after.
+    #[must_use]
+    pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
+        *lock(&self.shared.keys) = Some(store);
+        self
+    }
+
+    /// What an output in the collection is and where it sends, or `None` if the
+    /// collection has no such output. A host reads its target here when it opens the
+    /// publish target for `output.start`, and its key from the store it injected.
+    pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
+        lock(&self.shared.state)
+            .graph
+            .state()
+            .output(output_id)
+            .map(|output| output.kind().clone())
+    }
+
     /// Injects platform backends. `output.start` then runs the media pipeline
     /// instead of the placeholder state machine. Configure this before
     /// [`connect`](Self::connect); clones made earlier do not see it.
     ///
-    /// A start still needs a publish target ([`with_publish`](Self::with_publish)).
-    /// Without one it fails with `action_failed` and changes no output state.
+    /// A start still needs a publish target ([`with_publish`](Self::with_publish))
+    /// or an opener ([`with_publish_opener`](Self::with_publish_opener)). Without
+    /// either it fails with `action_failed` and changes no output state.
     #[must_use]
     pub fn with_backends(mut self, backends: Backends) -> Self {
         let host = self.host();
@@ -139,6 +173,21 @@ impl Engine {
     pub fn with_publish(self, publish: Box<dyn LivePublish>) -> Self {
         if let Some(host) = &self.media {
             *lock(&host.publish) = Some(publish);
+        }
+        self
+    }
+
+    /// Stores how `output.start` opens its publish target when no one-shot target
+    /// ([`with_publish`](Self::with_publish)) is waiting: every start calls `open`
+    /// once, after `starting` and outside the engine's locks, so a host that is live
+    /// (with [`connect_rtmp`](crate::connect_rtmp)) connects on each start and can
+    /// start again after a stop or a failure. An `open` error fails that start with
+    /// `action_failed`. Requires [`with_backends`](Self::with_backends) first;
+    /// otherwise it is not kept.
+    #[must_use]
+    pub fn with_publish_opener(self, open: OpenPublish) -> Self {
+        if let Some(host) = &self.media {
+            *lock(&host.open_publish) = Some(open);
         }
         self
     }
@@ -227,13 +276,24 @@ impl Engine {
 
     /// Replaces how the render thread composites. Tests use it to run the pipeline
     /// without a wgpu adapter. Requires [`with_backends`](Self::with_backends) first.
-    #[cfg(test)]
     #[must_use]
     pub(crate) fn with_draw(self, open: crate::runtime::OpenDraw) -> Self {
         if let Some(host) = &self.media {
             *lock(&host.draw) = open;
         }
         self
+    }
+
+    /// Test support, not a product option: the render thread composites on the CPU
+    /// instead of opening the wgpu compositor, so the pipeline runs on a machine with
+    /// no adapter. It copies the captured frame, or draws black, which is what this
+    /// cut's one-item composite produces. Engine scenario tests
+    /// (`crates/jstream-core/tests/scenarios.rs`) use it with the platform fakes.
+    /// Requires [`with_backends`](Self::with_backends) first; otherwise it does nothing.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn with_cpu_compositor(self) -> Self {
+        self.with_draw(crate::runtime::cpu_draw())
     }
 
     /// Opens a new client session. It must send `hello` before any call.
@@ -295,17 +355,27 @@ impl Engine {
         }
         let output = match &call {
             Call::Action {
-                action: Action::OutputStart { output_id } | Action::OutputStop { output_id },
+                action:
+                    Action::OutputStart { output_id }
+                    | Action::OutputStop { output_id }
+                    | Action::OutputSetKey { output_id, .. }
+                    | Action::OutputClearKey { output_id },
             } => Some(output_id.clone()),
             _ => None,
         };
-        let result = if self.backends_ready()
+        let result = if let Call::Action {
+            action: action @ (Action::OutputSetKey { .. } | Action::OutputClearKey { .. }),
+        } = call
+        {
+            self.key_action(action)
+        } else if self.backends_ready()
             && matches!(
                 call,
                 Call::Action {
                     action: Action::OutputStart { .. } | Action::OutputStop { .. }
                 }
-            ) {
+            )
+        {
             self.run_media_action(call)
         } else {
             let mut wake = Vec::new();
@@ -313,7 +383,7 @@ impl Engine {
             for waker in wake {
                 waker.wake();
             }
-            result
+            self.with_key_set(result)
         };
         match (&result, output) {
             (Ok(CallResult::Batch { rev }), _) => tracing::debug!(rev = %rev, "batch applied"),
@@ -327,6 +397,88 @@ impl Engine {
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
         }
         Executed::Ready(result)
+    }
+
+    /// The key store, if the host gave one. The handle is cloned so the store is
+    /// called with no engine lock held.
+    fn key_store(&self) -> Option<Arc<dyn StreamKeyStore>> {
+        lock(&self.shared.keys).clone()
+    }
+
+    /// `output.set_key` and `output.clear_key`. The collection lock is held only to
+    /// check that the output exists; the store is called after it is released. Nothing
+    /// here logs, returns or emits the key: errors carry fixed reasons, and a store's
+    /// error must not contain one (R-SEC-001).
+    fn key_action(&self, action: Action) -> Result<CallResult, ProtocolError> {
+        match action {
+            Action::OutputSetKey { output_id, key } => {
+                let exists = lock(&self.shared.state)
+                    .graph
+                    .state()
+                    .output(&output_id)
+                    .is_some();
+                if !exists {
+                    return Err(ProtocolError::NotFound {
+                        entity: EntityKind::Output,
+                        id: output_id.as_str().to_owned(),
+                    });
+                }
+                check_key(&key)?;
+                let store = self.key_store().ok_or_else(no_key_store)?;
+                store
+                    .set(output_id.as_str(), &Secret::new(key.expose()))
+                    .map_err(|err| ProtocolError::ActionFailed {
+                        reason: format!("the credential store did not store the key: {err}"),
+                    })?;
+                Ok(CallResult::Action {})
+            }
+            Action::OutputClearKey { output_id } => {
+                let store = self.key_store().ok_or_else(no_key_store)?;
+                store
+                    .clear(output_id.as_str())
+                    .map_err(|err| ProtocolError::ActionFailed {
+                        reason: format!("the credential store did not remove the key: {err}"),
+                    })?;
+                Ok(CallResult::Action {})
+            }
+            other => Err(not_implemented(other.name())),
+        }
+    }
+
+    /// Fills `output.status`'s `key_set` from the key store, after the collection lock
+    /// is released. Without a store it stays `false`.
+    fn with_key_set(
+        &self,
+        result: Result<CallResult, ProtocolError>,
+    ) -> Result<CallResult, ProtocolError> {
+        let Ok(CallResult::Query {
+            result:
+                QueryResult::OutputStatus {
+                    output_id,
+                    state,
+                    key_set: _,
+                },
+        }) = result
+        else {
+            return result;
+        };
+        let key_set = match self.key_store() {
+            Some(store) => {
+                store
+                    .is_set(output_id.as_str())
+                    .map_err(|err| ProtocolError::Internal {
+                        reason: format!("reading the credential store: {err}"),
+                    })?
+            }
+            None => false,
+        };
+        Ok(CallResult::Query {
+            result: QueryResult::OutputStatus {
+                output_id,
+                state,
+                key_set,
+            },
+        })
     }
 
     fn host(&mut self) -> Arc<MediaHost> {
@@ -385,16 +537,22 @@ impl Engine {
                     reason: "another output is already running".into(),
                 });
             }
-            let Some(publish) = lock(&host.publish).take() else {
-                return Err(ProtocolError::ActionFailed {
-                    reason: "output.start has no publish target".into(),
-                });
+            let publish = match lock(&host.publish).take() {
+                Some(publish) => Target::Ready(publish),
+                None => match lock(&host.open_publish).as_ref() {
+                    Some(open) => Target::Open(Arc::clone(open)),
+                    None => {
+                        return Err(ProtocolError::ActionFailed {
+                            reason: "output.start has no publish target".into(),
+                        });
+                    }
+                },
             };
             let parts = {
                 let backends = lock(&host.backends);
                 let Some(backends) = backends.as_ref() else {
                     drop(backends);
-                    *lock(&host.publish) = Some(publish);
+                    publish.give_back(host);
                     return Err(not_implemented("output.start"));
                 };
                 parts_from(
@@ -413,7 +571,7 @@ impl Engine {
                 Ok(step) => emit_output(&mut state, &output_id, step, &mut wake),
                 Err(err) => {
                     gate.pending = None;
-                    *lock(&host.publish) = Some(publish);
+                    publish.give_back(host);
                     return Err(err);
                 }
             }
@@ -428,8 +586,10 @@ impl Engine {
             armed: true,
         };
         let (fail_tx, fail_rx) = mpsc::channel();
-        let launched =
-            launch(parts, publish, output_id.clone(), generation, fail_tx).map(|mut running| {
+        let launched = publish
+            .open(&output_id)
+            .and_then(|publish| launch(parts, publish, output_id.clone(), generation, fail_tx))
+            .map(|mut running| {
                 running.arm_stats(self);
                 running
             });
@@ -680,6 +840,33 @@ struct SettleOnDrop<'a> {
 impl Drop for SettleOnDrop<'_> {
     fn drop(&mut self) {
         self.engine.settle(self.output_id, self.state);
+    }
+}
+
+/// The publish target a start took: a one-shot one the host set, or the opener it
+/// calls once the locks are released.
+enum Target {
+    Ready(Box<dyn LivePublish>),
+    Open(OpenPublish),
+}
+
+impl Target {
+    /// Puts a one-shot target back for the next start, when this one refused
+    /// before `starting`. An opener was never taken out of the host.
+    fn give_back(self, host: &MediaHost) {
+        if let Target::Ready(publish) = self {
+            *lock(&host.publish) = Some(publish);
+        }
+    }
+
+    /// The target to publish into. Runs the opener, outside the engine's locks.
+    fn open(self, output_id: &OutputId) -> Result<Box<dyn LivePublish>, String> {
+        match self {
+            Target::Ready(publish) => Ok(publish),
+            Target::Open(open) => {
+                open(output_id).map_err(|err| format!("opening the publish target: {err}"))
+            }
+        }
     }
 }
 
@@ -991,8 +1178,13 @@ impl State {
             return Ok(CallResult::Batch { rev: *rev });
         }
         // The inverse is dropped: per-client undo needs undo requests in the protocol
-        // first (protocol open question 4).
-        let applied = self.graph.apply_batch(batch)?;
+        // first (protocol open question 4). A running output can't be deleted.
+        let applied = self.graph.apply_with_running(
+            &batch.edits,
+            batch.expected_rev,
+            &self.outputs.running(),
+        )?;
+        self.outputs.sync(self.graph.state());
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, applied.rev);
         }
@@ -1043,9 +1235,11 @@ impl State {
         let result = match self.graph.query(query) {
             Some(result) => result?,
             None => match query {
+                // `key_set` is filled in after the lock is released (`with_key_set`).
                 Query::OutputStatus { output_id } => QueryResult::OutputStatus {
                     output_id: output_id.clone(),
                     state: self.outputs.state(output_id)?,
+                    key_set: false,
                 },
                 other => return Err(not_implemented(other.name())),
             },
@@ -1069,6 +1263,33 @@ impl Drop for State {
     /// Ends every subscription when the engine goes away.
     fn drop(&mut self) {
         self.subscribers.close_all();
+    }
+}
+
+/// The longest stream key `output.set_key` accepts, in bytes.
+const MAX_KEY_LEN: usize = 1024;
+
+/// Checks a stream key's shape. The reasons are fixed text: they never repeat the key.
+fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
+    let key = key.expose();
+    let reason = if key.is_empty() {
+        "must not be empty"
+    } else if key.len() > MAX_KEY_LEN {
+        "must be at most 1024 bytes"
+    } else if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        "must not contain whitespace or control characters"
+    } else {
+        return Ok(());
+    };
+    Err(ProtocolError::InvalidArgument {
+        field: "key".into(),
+        reason: reason.into(),
+    })
+}
+
+fn no_key_store() -> ProtocolError {
+    ProtocolError::ActionFailed {
+        reason: "this engine has no credential store for stream keys".into(),
     }
 }
 

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:96d3d789bd0aefe7", by = "agent:grok@stats-tick", note = "Re-read the contents list against args.rs and run.rs. The parser still maps commands onto protocol calls, and the binary still does not link the engine. stats.tick is printed from the existing event stream." }
+verified = { hash = "b3:15e8ec2e9262bce9", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; contents list holds for both (run.rs ignores key_set/outputs and settings alike)" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:c7b258fd09e04188", by = "agent:grok@stats-tick", note = "Re-read the events bullet against run.rs. A stats.tick prints seq and the six drop totals. version and hello print PROTOCOL_VERSION, now 0.6. --json still prints the protocol event. video snapshot still omits the payload." }
+verified = { hash = "b3:46f8a234ede5d0ab", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Edits bullet merged to say settings and outputs are both unsupported (args.rs has source.rename, no settings or output edits); Reads bullet keeps #142's outputs/key_set note; version line reads PROTOCOL_VERSION" }
 -->
 
 ```sh
@@ -94,7 +94,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported. Several edits on one line go as **one atomic batch**: one new
+  protocol is supported except settings and outputs. `source.set_settings`, and
+  `source.create` with settings, need a JSON argument form the CLI doesn't have yet, so
+  a source it creates gets its kind's defaults. Protocol 0.7's output edits
+  (`output.create`, `output.set_target`, `output.delete`), `output.list` and the
+  stream-key actions are not in the CLI yet. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
@@ -107,7 +111,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `scene:main`); items bottom first, with `VISIBLE`, `POSITION` (`x,y`), `SCALE`,
   `ROTATION` and `CROP` (`left,top,right,bottom`) in the argument order of the edits
   that set them. `state get` prints the sources, then each scene in display order with
-  its items. An empty list prints `no scenes`, `no sources` or `no items`.
+  its items; it doesn't print the outputs, and `output status` prints the state but
+  not `key_set`, so read those with `--json`. An empty list prints `no scenes`,
+  `no sources` or `no items`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
 - **Errors** go to stderr. For people: `error: <message>`, with ` (<code>)` appended
@@ -140,8 +146,9 @@ for example:
   or token file, 3 when the engine can't be reached or refuses the token. Nothing is
   written to stdout then, so the MCP client sees the process exit.
 - **One session for the whole run.** Every tool call acts as one client of the engine,
-  with one undo history; `hello` is sent before the first call that needs the engine,
-  with the MCP client's name (`clientInfo.name`) instead of `jstream-cli`.
+  with one undo history; `hello` is sent at `initialize` (the proxy has already
+  connected, and the server closes a connection that hasn't said `hello` in time), with
+  the MCP client's name (`clientInfo.name`) instead of `jstream-cli`.
 - **A lost engine doesn't stop the proxy.** Each tool call that needs the engine is then
   answered with the `disconnected` tool error, and `describe_api` still works, as does
   `events`, which returns what was buffered and says the feed ended. The proxy doesn't
@@ -176,7 +183,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:49f50f57490e9f45", by = "agent:grok@stats-tick", note = "Re-read against the control design. The mock still answers video.snapshot with internal, and MockEngine::emit can inject a stats.tick. The CLI still sends queries through the same connector. Parsing, block_on and exit code 3 are unchanged." }
+verified = { hash = "b3:1c04bb14bd2bf578", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; parsing, block_on, connector, mock, writers and MCP proxy bullets unaffected by either change" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
@@ -218,8 +225,8 @@ verified = { hash = "b3:49f50f57490e9f45", by = "agent:grok@stats-tick", note = 
   CLI adds no MCP code of its own (`jstream-mcp` is layer 3, below this app, and needs
   no runtime). Like `ws`, it is always built, with no feature: `mcp` is part of what the
   CLI is for (ARCH), and it adds no third-party crate. It doesn't send `hello` first,
-  unlike the other commands: the server does, with the MCP client's name, so the audit
-  log names the agent rather than the CLI. A lost connection follows `jstream-mcp`'s
+  unlike the other commands: the server does, at `initialize`, with the MCP client's
+  name, so the audit log names the agent rather than the CLI. A lost connection follows `jstream-mcp`'s
   design: a `disconnected` tool error per call that the model can read and act on,
   while the transport keeps going until the MCP client closes stdin. Exiting instead
   would surface to the agent only as a crashed server. The proxy doesn't reconnect by
@@ -234,7 +241,8 @@ verified = { hash = "b3:49f50f57490e9f45", by = "agent:grok@stats-tick", note = 
   (`initialize`, `tools/list`, `tools/call`, a refused connection, a lost one and a
   failing input), and
   `tests/mcp.rs` runs the binary's `mcp` against a real `jstream-server` on a loopback
-  port, through a server shutdown. `jstream-server` and tokio (for the runtime the test
+  port, through a server shutdown, and with an agent that idles past a short handshake
+  timeout after `initialize` and still has its session. `jstream-server` and tokio (for the runtime the test
   serves on) are dev-dependencies only; the binary itself gains only `jstream-mcp`.
 
 ### Open questions

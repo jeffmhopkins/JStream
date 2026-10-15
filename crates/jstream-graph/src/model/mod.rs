@@ -1,35 +1,69 @@
-//! The collection state: sources, scenes and the items that place sources in scenes.
+//! The collection state: sources, scenes and the items that place sources in scenes, and
+//! the outputs.
 //!
 //! Docs: docs/ARCHITECTURE.md#data-model
 //!
 //! Everything here is read-only from outside the crate. The only way to change it is
 //! [`Graph::apply`](crate::Graph::apply), which keeps the invariants below:
 //!
-//! - Source, scene and item IDs are non-empty and unique within their kind. Item IDs are
-//!   unique across all scenes.
+//! - Source, scene, item and output IDs are non-empty and unique within their kind. Item
+//!   IDs are unique across all scenes.
 //! - Every item's source exists, and every `scene` source's scene exists.
-//! - No scene contains itself, directly or through nested scene sources.
+//! - Every `builtin` source's kind is one the graph's kinds describe, and its settings
+//!   hold exactly that kind's parameters, each valid for its descriptor. A `scene`
+//!   source has no settings.
+//! - Every scene and source that a settings value refers to exists.
+//! - The dependency edges (items placing sources, `scene` sources showing scenes, and
+//!   scene and source references in settings) have no cycle.
+//! - Every RTMP output's URL is a valid `rtmp://` or `rtmps://` server URL that carries
+//!   no credential. Stream keys are never here (R-SEC-001): they live in the OS
+//!   credential store, outside the collection.
 //!
 //! The structs have private fields so that later additions (source `filters[]`, item
 //! `effects[]`, the full 3D transform) don't break callers.
 
-use jstream_protocol::{Crop, ItemId, ItemTransform, Rev, SceneId, SourceId, SourceKind};
+use jstream_protocol::{
+    Crop, ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind, Rev, SceneId, Settings,
+    SourceId, SourceKind,
+};
 use std::collections::BTreeMap;
 
-/// The scene graph of one collection, and its revision.
+/// The scene graph of one collection, its revision, and the kinds it can create.
 ///
 /// Starts empty at rev 0. Each successful [`Graph::apply`](crate::Graph::apply) changes
-/// the [`State`] and increments the revision by exactly one.
+/// the [`State`] and increments the revision by exactly one. The kinds are not
+/// collection state: the engine supplies them, and `builtin` sources are validated
+/// against them.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Graph {
     pub(crate) rev: Rev,
     pub(crate) state: State,
+    pub(crate) kinds: BTreeMap<String, KindDescriptor>,
 }
 
 impl Graph {
-    /// An empty graph at rev 0.
+    /// An empty graph at rev 0 that describes no kinds, so it can hold only `scene`
+    /// sources until [`Graph::with_kinds`] adds some.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Adds kind descriptors, replacing any with the same ID.
+    #[must_use]
+    pub fn with_kinds(mut self, kinds: impl IntoIterator<Item = KindDescriptor>) -> Self {
+        self.kinds
+            .extend(kinds.into_iter().map(|k| (k.kind_id.clone(), k)));
+        self
+    }
+
+    /// Every kind this graph can create sources of, ordered by ID.
+    pub fn kinds(&self) -> impl ExactSizeIterator<Item = &KindDescriptor> {
+        self.kinds.values()
+    }
+
+    /// The kind with this ID.
+    pub fn kind(&self, id: &str) -> Option<&KindDescriptor> {
+        self.kinds.get(id)
     }
 
     /// The current revision.
@@ -48,6 +82,7 @@ impl Graph {
 pub struct State {
     pub(crate) sources: BTreeMap<SourceId, Source>,
     pub(crate) scenes: Vec<Scene>,
+    pub(crate) outputs: BTreeMap<OutputId, Output>,
 }
 
 impl State {
@@ -86,6 +121,16 @@ impl State {
             .filter(move |i| &i.source_id == source)
     }
 
+    /// Every output, ordered by ID. Outputs have no display order of their own.
+    pub fn outputs(&self) -> impl ExactSizeIterator<Item = &Output> {
+        self.outputs.values()
+    }
+
+    /// The output with this ID.
+    pub fn output(&self, id: &OutputId) -> Option<&Output> {
+        self.outputs.get(id)
+    }
+
     pub(crate) fn scene_index(&self, id: &SceneId) -> Option<usize> {
         self.scenes.iter().position(|s| &s.id == id)
     }
@@ -105,6 +150,7 @@ pub struct Source {
     pub(crate) id: SourceId,
     pub(crate) name: String,
     pub(crate) kind: SourceKind,
+    pub(crate) settings: Settings,
 }
 
 impl Source {
@@ -121,6 +167,11 @@ impl Source {
     /// What it shows.
     pub fn kind(&self) -> &SourceKind {
         &self.kind
+    }
+
+    /// Its settings: every parameter of its kind, or empty for a `scene` source.
+    pub fn settings(&self) -> &Settings {
+        &self.settings
     }
 }
 
@@ -183,5 +234,25 @@ impl Item {
     /// Whether it is drawn.
     pub fn visible(&self) -> bool {
         self.visible
+    }
+}
+
+/// One output's configuration: what it is and where it sends. Whether it runs is runtime
+/// state, kept by the engine, and its stream key is in the OS credential store.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Output {
+    pub(crate) id: OutputId,
+    pub(crate) kind: OutputKind,
+}
+
+impl Output {
+    /// Its ID.
+    pub fn id(&self) -> &OutputId {
+        &self.id
+    }
+
+    /// What it is and where it sends.
+    pub fn kind(&self) -> &OutputKind {
+        &self.kind
     }
 }

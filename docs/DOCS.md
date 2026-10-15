@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:159065a894722bd5", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against #100's xtask change (parse.rs gives rules a body range; hash.rs resolves rule anchors to it): the hash-bound bullet still holds, and Hash-bound verification now names rule-anchor targets" }
+verified = { hash = "b3:3014a97ef3a6df99", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read after the sweep bullet changed to point at the ttl not-built list instead of naming only link and fact checks; other bullets and Not yet (docs index) unchanged" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -51,8 +51,14 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   The crate map and the other generated references are not generated yet.
 - **Reports (warnings):** crates no section covers, and `applies_to` globs naming an
   unknown crate ([PR gate](#gate)).
-- **Not yet:** the `review` and `log` commands.
-  Until they land, those rules are enforced by review.
+- **History and TTL review** ([History](#history), [Time-based review](#ttl)):
+  `cargo xtask docs log` derives a doc's or section's history from git, and
+  `cargo xtask docs review` writes a doc's `reviewed` stamp.
+- **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
+  `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
+  audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
+  yet are still missing.
+- **Not yet:** `docs index`.
 - IDs, anchors and rule numbers became permanent at the first merge to `main` (#1).
 
 <a id="identity"></a>
@@ -259,8 +265,9 @@ Commands:
 cargo xtask docs check                         # what is stale, and why
 cargo xtask docs verify ARCH#gpu-pipeline \
     --by agent:claude --note "…"                # re-read (or edited) and it holds: write new hash
-cargo xtask docs review ARCH --note "…"        # doc-level TTL review          (planned)
-cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git     (planned)
+cargo xtask docs review ARCH \
+    --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
+cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
 cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
 cargo xtask docs rehash                        # one-time ADR-0039 migration (below)
 ```
@@ -282,7 +289,15 @@ Nothing about history is stored in the files. `xtask docs log` derives it from g
 - **Revision n** of a section is the n-th commit on `main` that changed its normalized
   body.
 - **Date, author and PR** come from that squash-merge commit.
-- **Verifications** are the commits that changed its `verified` line, with the note.
+- **Verifications** are the commits that changed its `verified` line, with the note. A
+  commit that changed only the stored hash (`docs rehash`) is shown as a restamp.
+- **Reviews** of a whole doc are the commits that changed its `reviewed` line. The log of
+  a doc also shows its TTL: when the clock last restarted and when the doc is due.
+
+`docs log` takes a doc (`ARCH`), a section or a rule (`ARCH#gpu-pipeline`,
+`RULES#R-DOC-011`), and `--rev <rev>` for another branch than `HEAD`. It follows the
+first-parent line, so on `main` each entry is one squash-merged PR. A doc is followed by
+its current path only, and a shallow clone shows only the history it has.
 
 `xtask docs index` renders an index (every ID, link, revision count, last change, last
 verification, TTL status). It is published as a CI artifact and is **not committed**,
@@ -335,19 +350,26 @@ holds**. The note says what was checked and why it still holds, e.g.:
   against the diff. A note that doesn't engage with what changed is a blocking finding.
   A stock-phrase list alone is too easy to game.
 - A false verification is a bug, and gets fixed and noted like one.
-- The sweep reports each section's verify-to-edit ratio from git. A section that gets
+- The sweep is to report each section's verify-to-edit ratio from git (not built yet,
+  see [Time-based review](#ttl)). A section that gets
   re-verified far more often than it is edited has `covers` that are too broad, so
   narrow them.
 
 <a id="ttl"></a>
 ## Time-based review
 <!-- @section
+covers = [".github/workflows/sweep.yml"]
+verified = { hash = "b3:c3082e7e20a1bae2", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against sweep.yml now that ttl covers it: deny (fetch, version line, tool-failure exit), docs due via docs log, cargo update --dry-run, 8-day override audit, one Weekly sweep issue, and the not-built list all match the workflow" }
 -->
 
 Docs also go stale when nothing in the repo changes. **Time-based checks never fail a PR.**
 
 - **Docs:** a doc's TTL clock restarts at the last git commit that changed its content
   or its `reviewed` line. Once `review_every` has passed, it is due.
+  `cargo xtask docs review <DOC> --by <who> --note "…"` writes the `reviewed` line after a
+  re-read. The note follows [Verification notes](#notes), and it must differ from the
+  last one, since an unchanged line restarts nothing. ADRs and docs without
+  `review_every` are refused.
 - **ADRs** have no TTL, because they are immutable. The external resources they cite do
   have TTLs. A decision that no longer holds gets a new superseding ADR.
 - **External resources** ([`external.toml`](external.toml)): each entry records its URL,
@@ -357,16 +379,24 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
   - `status = "unverified"` means nobody has checked it yet.
 - **Facts** ([`facts.toml`](facts.toml)), by source:
   - `file`: checked on every PR.
-  - `ext`: the sweep fetches the page and checks the value still appears.
+  - `ext`: the sweep is to fetch the page and check the value still appears (not built
+    yet, see the weekly sweep below).
   - `manual`: listed for re-check when due.
-- **Weekly sweep** (scheduled workflow `sweep`):
-  - link-checks every external with lychee (cached, authenticated; 403 and 429 count
-    as *unknown*, not broken);
-  - lists due docs and externals, fact drift, verify-to-edit ratios, pending
-    enforcement past its milestone, and every PR merged with `governance-approved`
-    or `review-override`, and every Tier-1 ADR decision on merged PRs, marked direct or
-    proxy, with the quoted instruction (the override and decision audit);
-  - **updates one pinned issue, "Docs due for review"**, instead of opening new ones.
+- **Weekly sweep** (scheduled workflow `sweep`, also run by hand from the Actions tab):
+  - runs `cargo deny check` against the latest RustSec advisory DB;
+  - lists docs due for review (from `cargo xtask docs log`, which prints `(due now)` once
+    `review_every` has passed), and any `cargo xtask docs check` failure on `main`;
+  - reports `cargo update --dry-run`: compatible updates, and dependencies held back by a
+    version requirement or the toolchain;
+  - lists every PR merged with `governance-approved` or `review-override` in the past
+    eight days (the override audit, [R-GOV-002](RULES.md#R-GOV-002));
+  - **rewrites one pinned issue, "Weekly sweep"**, instead of opening new ones, and
+    reopens it if it was closed. Findings never fail the job; a tool that can't run does.
+  - Not built yet: link-checking every external with lychee (cached, authenticated; 403
+    and 429 count as *unknown*, not broken), due externals and `ext` facts, fact drift,
+    verify-to-edit ratios, pending enforcement past its milestone, and every Tier-1 ADR
+    decision on merged PRs, marked direct or proxy, with the quoted instruction (the
+    decision audit).
   - A scheduled agent may pick items from that issue and open PRs. Those PRs go
     through the normal gate.
 

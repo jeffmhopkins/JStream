@@ -26,7 +26,7 @@ where they are and how to find the ones that apply to your change.
 ## Your documentation duty
 <!-- @section
 depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
-verified = { hash = "b3:0a9109322d1188c6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against DOCS#verification's new line that a rule-anchor dependency hashes the rule's text: the check/verify workflow and both hash bullets still hold" }
+verified = { hash = "b3:d5323183193d9c30", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against DOCS#notes, whose verify-to-edit sentence now says the sweep doesn't report it yet: the check/verify workflow, no-dates rule and hash bullets here don't rely on it and still hold" }
 -->
 
 - `cargo xtask docs check` lists the sections your change made stale. Re-read each one
@@ -92,5 +92,7 @@ verified = { hash = "b3:a74acf3f822f102f", by = "agent:claude@session_01QBbMRwRu
 Available now: `cargo fmt`, `cargo clippy`, `cargo test`, `cargo doc`, `cargo deny check`,
 `cargo xtask docs check`, `cargo xtask docs verify`, `cargo xtask docs for`,
 `cargo xtask docs generate` (rewrites `@generated` blocks, e.g. ADR status banners),
+`cargo xtask docs log <DOC[#anchor]>` (history from git), `cargo xtask docs review <DOC>`
+(doc-level TTL review),
 `cargo xtask lint-deps` and `cargo xtask governance --base origin/main` (lists your
-governance changes). Coming during M0: `cargo xtask docs log|review`.
+governance changes).

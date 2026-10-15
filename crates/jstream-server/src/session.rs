@@ -4,8 +4,10 @@
 //! The connection task reads client messages, forwards `hello` and each `request` to the
 //! session (several requests may be in flight; answers go back as they complete), and
 //! forwards the session's events once the handshake has succeeded. It ends when the
-//! client closes, the session's event stream ends (the engine went away), or the server
-//! shuts down; dropping the session then ends its event streams.
+//! client closes, the session's event stream ends (the engine went away), the server
+//! shuts down, or the handshake hasn't succeeded by its deadline
+//! (`ServerConfig::handshake_timeout`, counted from when the connection was accepted;
+//! close code 1008); dropping the session then ends its event streams.
 //!
 //! **Logging.** The task runs in its connection's `connection` span. It logs the
 //! handshake's outcome (the `client_id`, or the refusal's code) and why the connection
@@ -44,6 +46,7 @@ use jstream_protocol::{
 use std::collections::VecDeque;
 use std::time::Duration;
 use tokio::sync::watch;
+use tokio::time::Instant;
 
 /// How many session-to-wire request ID pairs a connection remembers. A `state.changed`
 /// event normally arrives within a few calls of its answer.
@@ -56,7 +59,7 @@ const MAX_HELD_EVENTS: usize = 1024;
 /// How long a closing connection waits for the client to take what is still queued and
 /// the close frame. A client that has stopped reading would otherwise hold the
 /// connection, and its `Control` session, open for good (#108 review N1).
-const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+pub(crate) const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// How many events a connection's outbox holds before it drops them all and queues one
 /// `events.dropped` notice instead.
@@ -79,11 +82,13 @@ struct Closed;
 /// The answer to one forwarded request, with the client's ID for it.
 type Answer = (RequestId, Result<Response, ControlError>);
 
-/// Runs one connection until it ends.
+/// Runs one connection until it ends. A connection whose handshake hasn't succeeded by
+/// `hello_by` is closed.
 pub(crate) async fn run(
     socket: WebSocket,
     control: Box<dyn Control>,
     mut shutdown: watch::Receiver<bool>,
+    hello_by: Instant,
 ) {
     let (sink, mut incoming) = socket.split();
     let mut writer = Writer::new(sink);
@@ -92,6 +97,8 @@ pub(crate) async fn run(
     let mut calls: FuturesUnordered<BoxFuture<'_, Answer>> = FuturesUnordered::new();
     let mut events: Option<EventStream> = None;
     let mut ids = IdMap::default();
+    let handshake_deadline = tokio::time::sleep_until(hello_by);
+    tokio::pin!(handshake_deadline);
     let end: Result<Option<CloseFrame>, Closed> = loop {
         if writer.start(&mut outbox).is_err() {
             break Err(Closed);
@@ -99,6 +106,9 @@ pub(crate) async fn run(
         tokio::select! {
             () = stopping(&mut shutdown) => {
                 break Ok(Some(close(close_code::AWAY, "the server is shutting down")));
+            }
+            () = &mut handshake_deadline, if ids.client_id.is_none() => {
+                break Ok(Some(close(close_code::POLICY, "no handshake in time")));
             }
             sent = writer.sent() => {
                 if sent.is_err() {

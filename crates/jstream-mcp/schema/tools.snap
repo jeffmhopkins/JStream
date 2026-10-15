@@ -4,7 +4,7 @@ source: crates/jstream-mcp/src/tests.rs
 {
   "tools": [
     {
-      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `item`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `item`, `output`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Crop": {
@@ -93,7 +93,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it: delete those sources first (in\nthe same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -266,11 +266,15 @@ source: crates/jstream-mcp/src/tests.rs
                 "properties": {
                   "kind": {
                     "$ref": "#/$defs/SourceKind",
-                    "description": "What the source shows. A `scene` source must name an existing scene."
+                    "description": "What the source shows. A `scene` source must name an existing scene; a\n`builtin` one a kind that `kind.list` reports."
                   },
                   "name": {
                     "description": "Display name.",
                     "type": "string"
+                  },
+                  "settings": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Initial settings, checked against the kind's descriptor (`kind.describe`).\nParameters left out, or sent as `null`, take their defaults, and the engine\nstores the complete map. A `scene` source has no settings. Omitted means all\ndefaults."
                   },
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -286,6 +290,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "source_id",
                   "name",
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Renames a source. Inverse: `source.rename` back to the previous name.",
+                "properties": {
+                  "name": {
+                    "description": "The new display name.",
+                    "type": "string"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to rename."
+                  },
+                  "type": {
+                    "const": "source.rename",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes some of a source's settings. Each entry of `patch` is checked against the\nkind's descriptor like `source.create`'s settings, and replaces that parameter's\nvalue; `null` resets a parameter to its default (a reference parameter to no\nreference). Parameters not in the patch keep their values. A reference that would\nmake a cycle is rejected with `invalid_argument` naming it. Inverse:\n`source.set_settings` with the patched parameters' previous values.",
+                "properties": {
+                  "patch": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Parameter ID to new value, or `null` for the default."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to change."
+                  },
+                  "type": {
+                    "const": "source.set_settings",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "patch"
                 ],
                 "type": "object"
               },
@@ -318,7 +368,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it:\nremove those items first (in the same batch if needed). Inverse: `source.create`\nwith its name and kind.",
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Inverse: `source.create` with its\nname, kind and settings.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -357,6 +407,70 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "scene_id",
                   "index"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Adds an output to the collection, `stopped`. Its stream key is not part of it:\nset that with the `output.set_key` action. Inverse: `output.delete`.",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/$defs/OutputKind",
+                    "description": "What it is and where it sends. A URL that is not a valid RTMP(S) server URL,\nor that could carry a credential, is rejected with `invalid_argument`."
+                  },
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The new output's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "output.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id",
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes where an RTMP output publishes. A running output keeps its connection;\nthe new target applies from its next `output.start`. Its stream key is kept.\nInverse: `output.set_target` with the previous target.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output to change."
+                  },
+                  "target": {
+                    "$ref": "#/$defs/RtmpTarget",
+                    "description": "The new target, validated as in `output.create`."
+                  },
+                  "type": {
+                    "const": "output.set_target",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id",
+                  "target"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key stays in the credential store, so undoing the delete restores a\nworking output; `output.clear_key` removes it. Inverse: `output.create` with its\nkind.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output to delete."
+                  },
+                  "type": {
+                    "const": "output.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
                 ],
                 "type": "object"
               }
@@ -398,15 +512,70 @@ source: crates/jstream-mcp/src/tests.rs
             ],
             "type": "object"
           },
+          "OutputId": {
+            "description": "An output (RTMP(S), recording, virtual camera).",
+            "type": "string"
+          },
+          "OutputKind": {
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nOnly RTMP(S) to a generic URL is configurable so far. Recording, the virtual camera\nand the YouTube-bound target of the data model come later as new variants.",
+            "oneOf": [
+              {
+                "description": "A stream sent over RTMP or RTMPS.",
+                "properties": {
+                  "target": {
+                    "$ref": "#/$defs/RtmpTarget",
+                    "description": "The ingest server it publishes to."
+                  },
+                  "type": {
+                    "const": "rtmp",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "target"
+                ],
+                "type": "object"
+              }
+            ]
+          },
           "Rev": {
             "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
             "format": "uint64",
             "minimum": 0,
             "type": "integer"
           },
+          "RtmpTarget": {
+            "description": "Where an RTMP output publishes. Serialized with an internal `type` tag.",
+            "oneOf": [
+              {
+                "description": "Any RTMP(S) ingest server, named by its server URL.",
+                "properties": {
+                  "type": {
+                    "const": "generic",
+                    "type": "string"
+                  },
+                  "url": {
+                    "description": "The server URL, `rtmp://host[:port]/app` or `rtmps://…`: what streaming\nservices call the \"server\" or \"ingest URL\". The stream key is not part of\nit: set that with `output.set_key`. The engine rejects, with\n`invalid_argument`, another scheme, a missing host or application, a bad\nport, whitespace or control characters, and anything that can carry a\ncredential: `user:password@`, a `?query` or a `#fragment`.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "url"
+                ],
+                "type": "object"
+              }
+            ]
+          },
           "SceneId": {
             "description": "A scene in the collection.",
             "type": "string"
+          },
+          "Settings": {
+            "additionalProperties": true,
+            "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
+            "type": "object"
           },
           "SourceId": {
             "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
@@ -434,10 +603,10 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). Its settings come with `jstream-sources`;\nuntil then the kind is only a name.",
+                "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). `kind.list` reports the kinds, and\n`kind.describe` the settings each takes; the settings travel beside the kind, on\nthe source.",
                 "properties": {
                   "kind": {
-                    "description": "The kind's name.",
+                    "description": "The kind's ID, as `kind.list` reports it.",
                     "type": "string"
                   },
                   "type": {
@@ -851,19 +1020,214 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "item"
     },
     {
-      "description": "Runs one `output` operation: set `op.type` to one of `output.start` (action), `output.stop` (action), `output.status` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `kind` operation: set `op.type` to one of `kind.list` (query), `kind.describe` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `kind` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Lists every kind the engine can create, ordered by ID. Kinds are not collection\nstate, so the result carries no `rev`.",
+                "properties": {
+                  "type": {
+                    "const": "kind.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "One kind's full descriptor, and a JSON Schema of its settings generated from it.\nFails with `invalid_argument` on `kind_id` if the engine has no such kind.",
+                "properties": {
+                  "kind_id": {
+                    "description": "The kind to describe, as `kind.list` reports it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "kind.describe",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kind_id"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "kind"
+    },
+    {
+      "description": "Runs one `output` operation: set `op.type` to one of `output.create` (edit), `output.set_target` (edit), `output.delete` (edit), `output.start` (action), `output.stop` (action), `output.set_key` (action), `output.clear_key` (action), `output.status` (query), `output.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
           "OutputId": {
             "description": "An output (RTMP(S), recording, virtual camera).",
+            "type": "string"
+          },
+          "OutputKind": {
+            "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nOnly RTMP(S) to a generic URL is configurable so far. Recording, the virtual camera\nand the YouTube-bound target of the data model come later as new variants.",
+            "oneOf": [
+              {
+                "description": "A stream sent over RTMP or RTMPS.",
+                "properties": {
+                  "target": {
+                    "$ref": "#/$defs/RtmpTarget",
+                    "description": "The ingest server it publishes to."
+                  },
+                  "type": {
+                    "const": "rtmp",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "target"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "RtmpTarget": {
+            "description": "Where an RTMP output publishes. Serialized with an internal `type` tag.",
+            "oneOf": [
+              {
+                "description": "Any RTMP(S) ingest server, named by its server URL.",
+                "properties": {
+                  "type": {
+                    "const": "generic",
+                    "type": "string"
+                  },
+                  "url": {
+                    "description": "The server URL, `rtmp://host[:port]/app` or `rtmps://…`: what streaming\nservices call the \"server\" or \"ingest URL\". The stream key is not part of\nit: set that with `output.set_key`. The engine rejects, with\n`invalid_argument`, another scheme, a missing host or application, a bad\nport, whitespace or control characters, and anything that can carry a\ncredential: `user:password@`, a `?query` or a `#fragment`.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "url"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "SecretString": {
+            "description": "A secret string, such as a stream key, sent by a client to the engine.\n\nOn the wire it is a plain JSON string. In Rust it never prints: its `Debug` is\n`\"***\"`, it has no `Display`, and the only way to read it is [`expose`](Self::expose).\nA value that is not a string fails to parse with a message that doesn't repeat it.\nThe engine never sends one back (R-SEC-001).",
             "type": "string"
           }
         },
         "additionalProperties": false,
         "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
           "op": {
             "description": "The `output` operation, tagged by `type`.",
             "oneOf": [
+              {
+                "description": "Adds an output to the collection, `stopped`. Its stream key is not part of it:\nset that with the `output.set_key` action. Inverse: `output.delete`.",
+                "properties": {
+                  "kind": {
+                    "$ref": "#/$defs/OutputKind",
+                    "description": "What it is and where it sends. A URL that is not a valid RTMP(S) server URL,\nor that could carry a credential, is rejected with `invalid_argument`."
+                  },
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The new output's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "output.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id",
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes where an RTMP output publishes. A running output keeps its connection;\nthe new target applies from its next `output.start`. Its stream key is kept.\nInverse: `output.set_target` with the previous target.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output to change."
+                  },
+                  "target": {
+                    "$ref": "#/$defs/RtmpTarget",
+                    "description": "The new target, validated as in `output.create`."
+                  },
+                  "type": {
+                    "const": "output.set_target",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id",
+                  "target"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key stays in the credential store, so undoing the delete restores a\nworking output; `output.clear_key` removes it. Inverse: `output.create` with its\nkind.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output to delete."
+                  },
+                  "type": {
+                    "const": "output.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
+                ],
+                "type": "object"
+              },
               {
                 "description": "Starts an output (stream, recording or virtual camera).",
                 "properties": {
@@ -901,7 +1265,48 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Reports an output's current state.",
+                "description": "Stores an output's stream key in the OS credential store (R-SEC-001), replacing\nany key it had. Write-only: the key never comes back in a response, event, error,\n`state.get` or log, and `output.status` reports only `key_set`. An action, not an\nedit: the key is not collection state, so it is never undone. A running output\nuses the new key from its next `output.start`. Fails with `not_found` for an\noutput not in the collection, `invalid_argument` (field `key`) for an empty key,\none over 1024 bytes or one with whitespace or control characters, and\n`action_failed` when the engine has no credential store or the store refuses.",
+                "properties": {
+                  "key": {
+                    "$ref": "#/$defs/SecretString",
+                    "description": "The stream key, as the streaming service shows it."
+                  },
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output whose key to set."
+                  },
+                  "type": {
+                    "const": "output.set_key",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes an output's stream key from the credential store. Succeeds when there is\nnone, and for an output that is no longer in the collection, so a client can clear\nthe key of an output it deleted. Fails with `action_failed` when the engine has no\ncredential store or the store refuses.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output whose key to remove."
+                  },
+                  "type": {
+                    "const": "output.clear_key",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Reports an output's current state, and whether its stream key is set. Fails with\n`not_found` for an output the engine doesn't know.",
                 "properties": {
                   "output_id": {
                     "$ref": "#/$defs/OutputId",
@@ -915,6 +1320,19 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "output_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists the collection's outputs, ordered by ID, with what each is and where it\nsends. Outputs have no display order of their own.",
+                "properties": {
+                  "type": {
+                    "const": "output.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               }
@@ -1021,7 +1439,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it: delete those sources first (in\nthe same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -1087,7 +1505,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "scene"
     },
     {
-      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "IdempotencyKey": {
@@ -1103,6 +1521,11 @@ source: crates/jstream-mcp/src/tests.rs
           "SceneId": {
             "description": "A scene in the collection.",
             "type": "string"
+          },
+          "Settings": {
+            "additionalProperties": true,
+            "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
+            "type": "object"
           },
           "SourceId": {
             "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
@@ -1130,10 +1553,10 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). Its settings come with `jstream-sources`;\nuntil then the kind is only a name.",
+                "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). `kind.list` reports the kinds, and\n`kind.describe` the settings each takes; the settings travel beside the kind, on\nthe source.",
                 "properties": {
                   "kind": {
-                    "description": "The kind's name.",
+                    "description": "The kind's ID, as `kind.list` reports it.",
                     "type": "string"
                   },
                   "type": {
@@ -1182,11 +1605,15 @@ source: crates/jstream-mcp/src/tests.rs
                 "properties": {
                   "kind": {
                     "$ref": "#/$defs/SourceKind",
-                    "description": "What the source shows. A `scene` source must name an existing scene."
+                    "description": "What the source shows. A `scene` source must name an existing scene; a\n`builtin` one a kind that `kind.list` reports."
                   },
                   "name": {
                     "description": "Display name.",
                     "type": "string"
+                  },
+                  "settings": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Initial settings, checked against the kind's descriptor (`kind.describe`).\nParameters left out, or sent as `null`, take their defaults, and the engine\nstores the complete map. A `scene` source has no settings. Omitted means all\ndefaults."
                   },
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -1202,6 +1629,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "source_id",
                   "name",
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Renames a source. Inverse: `source.rename` back to the previous name.",
+                "properties": {
+                  "name": {
+                    "description": "The new display name.",
+                    "type": "string"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to rename."
+                  },
+                  "type": {
+                    "const": "source.rename",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes some of a source's settings. Each entry of `patch` is checked against the\nkind's descriptor like `source.create`'s settings, and replaces that parameter's\nvalue; `null` resets a parameter to its default (a reference parameter to no\nreference). Parameters not in the patch keep their values. A reference that would\nmake a cycle is rejected with `invalid_argument` naming it. Inverse:\n`source.set_settings` with the patched parameters' previous values.",
+                "properties": {
+                  "patch": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Parameter ID to new value, or `null` for the default."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to change."
+                  },
+                  "type": {
+                    "const": "source.set_settings",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "patch"
                 ],
                 "type": "object"
               },
@@ -1234,7 +1707,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it:\nremove those items first (in the same batch if needed). Inverse: `source.create`\nwith its name and kind.",
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Inverse: `source.create` with its\nname, kind and settings.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -1283,7 +1756,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `state` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Reads the whole collection state (every source, and every scene with its items)\nat one revision: what a client reads on connecting, after a `state.changed` it\ndidn't cause, or before an edit it sends with `expected_rev`.",
+                "description": "Reads the whole collection state (every source, every scene with its items, and\nevery output) at one revision: what a client reads on connecting, after a `state.changed` it\ndidn't cause, or before an edit it sends with `expected_rev`.",
                 "properties": {
                   "type": {
                     "const": "state.get",

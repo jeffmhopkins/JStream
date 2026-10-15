@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:2fe95b1d54d6f074", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-RT-001..006 against the ARCH#threading handover addition: the stopped marker is one atomic store on the RT thread and the control side polls it, so no allocation, lock or wait on the control plane; R-RT-003's snapshots/parameter channels unchanged. No rule text changed" }
+verified = { hash = "b3:e33b2a7a9766038f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-RT-001..006 against the handover text: a SeqCst store, load or fence allocates, locks and waits on nothing, so the rules hold unchanged" }
 -->
 
 <a id="R-RT-001"></a>
@@ -320,7 +320,7 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:58068a9c133cbde8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and R-DEP-002's link moved to ADR-0031; R-DEP-002 gains ADR-0031's sentence that pure-Rust image and font crates are not banned codec libraries; deny.toml bans and lint-deps allowlist enforcement unchanged" }
+verified = { hash = "b3:cee5defb3a32a048", by = "agent:claude@session_01H77oW1hhSxiNfijCpkEKPw", note = "Re-read R-DEP-001..006 against H2: R-DEP-005 now says multiple-versions is deny (M1d) and duplicates need a skip entry with a reason, which deny.toml now has for all eight; other rules unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -378,8 +378,8 @@ enforced_by = ["deny:bans"]
 applies_to = ["Cargo.lock"]
 -->
 Duplicates need a `deny.toml` skip entry with a reason. Known duplicates (several `windows`
-crate versions via Tauri, wgpu and windows-rs) are expected. `multiple-versions` is `warn`
-until M1 and switches to `deny` there ([ROADMAP](../ROADMAP.md#m1)).
+crate versions via Tauri, wgpu and windows-rs) are expected. `multiple-versions` is `deny`
+(M1d, [ROADMAP](../ROADMAP.md#m1)).
 
 <a id="R-DEP-006"></a>
 ### R-DEP-006: TLS through rustls with the ring provider
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:755a5ebd3c2cb244", by = "agent:grok@stats-tick", note = "Re-read R-API-001 through R-API-004 against the protocol section. stats.tick is an additive event, a minor bump to 0.6, named noun.verb. expected_rev is unchanged. No collection migration. No rule text changed." }
+verified = { hash = "b3:b7eb001719f9e4f4", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): both minors are additive (0.7 outputs, 0.8 kind queries, settings and two edits, optional settings fields); no rule text changed" }
 -->
 
 <a id="R-API-001"></a>
@@ -616,7 +616,7 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
-| `sweep` | weekly docs/external/facts sweep plus override audit list (scheduled) | n/a | M1 |
+| `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
 
 <a id="R-GIT-004"></a>
 ### R-GIT-004: One logical change per PR

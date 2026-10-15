@@ -3,6 +3,9 @@
 use crate::command::{Crop, ItemTransform, SourceKind};
 use crate::event::OutputState;
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::kind::{KindDescriptor, KindSummary};
+use crate::output::OutputInfo;
+use crate::settings::Settings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -16,7 +19,8 @@ pub enum Query {
     /// Lists the collection's scenes, in display order.
     #[serde(rename = "scene.list")]
     SceneList,
-    /// Reports an output's current state.
+    /// Reports an output's current state, and whether its stream key is set. Fails with
+    /// `not_found` for an output the engine doesn't know.
     #[serde(rename = "output.status")]
     OutputStatus {
         /// The output to report on.
@@ -33,8 +37,8 @@ pub enum Query {
         /// The scene whose items to list.
         scene_id: SceneId,
     },
-    /// Reads the whole collection state (every source, and every scene with its items)
-    /// at one revision: what a client reads on connecting, after a `state.changed` it
+    /// Reads the whole collection state (every source, every scene with its items, and
+    /// every output) at one revision: what a client reads on connecting, after a `state.changed` it
     /// didn't cause, or before an edit it sends with `expected_rev`.
     #[serde(rename = "state.get")]
     StateGet,
@@ -46,6 +50,21 @@ pub enum Query {
     /// runtime state and can change without a new `rev`.
     #[serde(rename = "video.snapshot")]
     VideoSnapshot,
+    /// Lists every kind the engine can create, ordered by ID. Kinds are not collection
+    /// state, so the result carries no `rev`.
+    #[serde(rename = "kind.list")]
+    KindList,
+    /// One kind's full descriptor, and a JSON Schema of its settings generated from it.
+    /// Fails with `invalid_argument` on `kind_id` if the engine has no such kind.
+    #[serde(rename = "kind.describe")]
+    KindDescribe {
+        /// The kind to describe, as `kind.list` reports it.
+        kind_id: String,
+    },
+    /// Lists the collection's outputs, ordered by ID, with what each is and where it
+    /// sends. Outputs have no display order of their own.
+    #[serde(rename = "output.list")]
+    OutputList,
 }
 
 impl Query {
@@ -58,6 +77,9 @@ impl Query {
             Query::ItemList { .. } => "item.list",
             Query::StateGet => "state.get",
             Query::VideoSnapshot => "video.snapshot",
+            Query::KindList => "kind.list",
+            Query::KindDescribe { .. } => "kind.describe",
+            Query::OutputList => "output.list",
         }
     }
 }
@@ -83,6 +105,10 @@ pub enum QueryResult {
         output_id: OutputId,
         /// Its current state.
         state: OutputState,
+        /// Whether the credential store holds a stream key for it. The key itself is
+        /// never reported. Missing (from a server older than 0.7) parses as `false`.
+        #[serde(default)]
+        key_set: bool,
     },
     /// The result of `source.list`.
     #[serde(rename = "source.list")]
@@ -111,6 +137,10 @@ pub enum QueryResult {
         sources: Vec<SourceInfo>,
         /// Every scene with its items, in display order.
         scenes: Vec<SceneInfo>,
+        /// Every output, ordered by ID. Missing (from a server older than 0.7) parses
+        /// as empty.
+        #[serde(default)]
+        outputs: Vec<OutputInfo>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -124,6 +154,29 @@ pub enum QueryResult {
         /// The PNG file, standard base64 with padding and no line breaks.
         png: String,
     },
+    /// The result of `kind.list`.
+    #[serde(rename = "kind.list")]
+    KindList {
+        /// Every kind, ordered by ID.
+        kinds: Vec<KindSummary>,
+    },
+    /// The result of `kind.describe`.
+    #[serde(rename = "kind.describe")]
+    KindDescribe {
+        /// The kind's descriptor.
+        kind: KindDescriptor,
+        /// A JSON Schema (draft 2020-12) of a complete settings map of this kind,
+        /// generated from `kind`.
+        settings_schema: serde_json::Value,
+    },
+    /// The result of `output.list`.
+    #[serde(rename = "output.list")]
+    OutputList {
+        /// The revision the list was read at.
+        rev: Rev,
+        /// The outputs, ordered by ID.
+        outputs: Vec<OutputInfo>,
+    },
 }
 
 impl QueryResult {
@@ -136,6 +189,9 @@ impl QueryResult {
             QueryResult::ItemList { .. } => "item.list",
             QueryResult::StateGet { .. } => "state.get",
             QueryResult::VideoSnapshot { .. } => "video.snapshot",
+            QueryResult::KindList { .. } => "kind.list",
+            QueryResult::KindDescribe { .. } => "kind.describe",
+            QueryResult::OutputList { .. } => "output.list",
         }
     }
 }
@@ -160,6 +216,10 @@ pub struct SourceInfo {
     pub name: String,
     /// What it shows.
     pub kind: SourceKind,
+    /// Its settings: every parameter of its kind. Empty (and omitted) for a `scene`
+    /// source and for a kind without parameters.
+    #[serde(default, skip_serializing_if = "Settings::is_empty")]
+    pub settings: Settings,
 }
 
 /// One scene with its items, as `state.get` reports it.

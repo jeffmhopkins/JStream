@@ -10,6 +10,8 @@
 
 use crate::finite::Finite32;
 use crate::id::{IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::output::{OutputKind, RtmpTarget, SecretString};
+use crate::settings::Settings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -43,8 +45,9 @@ pub enum Edit {
         name: String,
     },
     /// Deletes a scene and its items; the sources they placed stay. Rejected with
-    /// `invalid_argument` while a `scene` source shows it: delete those sources first (in
-    /// the same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old
+    /// `invalid_argument` while a `scene` source shows it or any source's settings refer
+    /// to it: delete those sources, or clear those references, first (in the same batch
+    /// if needed). Inverse: `scene.create`, then `scene.reorder` to its old
     /// display position (unless it was last), then each deleted item's `item.remove`
     /// inverse, from bottom to top.
     #[serde(rename = "scene.delete")]
@@ -120,8 +123,36 @@ pub enum Edit {
         source_id: SourceId,
         /// Display name.
         name: String,
-        /// What the source shows. A `scene` source must name an existing scene.
+        /// What the source shows. A `scene` source must name an existing scene; a
+        /// `builtin` one a kind that `kind.list` reports.
         kind: SourceKind,
+        /// Initial settings, checked against the kind's descriptor (`kind.describe`).
+        /// Parameters left out, or sent as `null`, take their defaults, and the engine
+        /// stores the complete map. A `scene` source has no settings. Omitted means all
+        /// defaults.
+        #[serde(default, skip_serializing_if = "Settings::is_empty")]
+        settings: Settings,
+    },
+    /// Renames a source. Inverse: `source.rename` back to the previous name.
+    #[serde(rename = "source.rename")]
+    SourceRename {
+        /// The source to rename.
+        source_id: SourceId,
+        /// The new display name.
+        name: String,
+    },
+    /// Changes some of a source's settings. Each entry of `patch` is checked against the
+    /// kind's descriptor like `source.create`'s settings, and replaces that parameter's
+    /// value; `null` resets a parameter to its default (a reference parameter to no
+    /// reference). Parameters not in the patch keep their values. A reference that would
+    /// make a cycle is rejected with `invalid_argument` naming it. Inverse:
+    /// `source.set_settings` with the patched parameters' previous values.
+    #[serde(rename = "source.set_settings")]
+    SourceSetSettings {
+        /// The source to change.
+        source_id: SourceId,
+        /// Parameter ID to new value, or `null` for the default.
+        patch: Settings,
     },
     /// Copies a source under a new ID: a separate instance with the same kind and
     /// settings, which changes independently from then on. Placing the *same* source again
@@ -135,9 +166,10 @@ pub enum Edit {
         /// The copy's display name.
         name: String,
     },
-    /// Deletes a source. Rejected with `invalid_argument` while any item still places it:
-    /// remove those items first (in the same batch if needed). Inverse: `source.create`
-    /// with its name and kind.
+    /// Deletes a source. Rejected with `invalid_argument` while any item still places it,
+    /// or any source's settings refer to it: remove those items, or clear those
+    /// references, first (in the same batch if needed). Inverse: `source.create` with its
+    /// name, kind and settings.
     #[serde(rename = "source.delete")]
     SourceDelete {
         /// The source to delete.
@@ -153,6 +185,35 @@ pub enum Edit {
         /// number of scenes, else `invalid_argument`. The other scenes keep their
         /// relative order.
         index: u32,
+    },
+    /// Adds an output to the collection, `stopped`. Its stream key is not part of it:
+    /// set that with the `output.set_key` action. Inverse: `output.delete`.
+    #[serde(rename = "output.create")]
+    OutputCreate {
+        /// The new output's ID, chosen by the client. Rejected if it exists.
+        output_id: OutputId,
+        /// What it is and where it sends. A URL that is not a valid RTMP(S) server URL,
+        /// or that could carry a credential, is rejected with `invalid_argument`.
+        kind: OutputKind,
+    },
+    /// Changes where an RTMP output publishes. A running output keeps its connection;
+    /// the new target applies from its next `output.start`. Its stream key is kept.
+    /// Inverse: `output.set_target` with the previous target.
+    #[serde(rename = "output.set_target")]
+    OutputSetTarget {
+        /// The output to change.
+        output_id: OutputId,
+        /// The new target, validated as in `output.create`.
+        target: RtmpTarget,
+    },
+    /// Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.
+    /// Its stream key stays in the credential store, so undoing the delete restores a
+    /// working output; `output.clear_key` removes it. Inverse: `output.create` with its
+    /// kind.
+    #[serde(rename = "output.delete")]
+    OutputDelete {
+        /// The output to delete.
+        output_id: OutputId,
     },
 }
 
@@ -171,8 +232,13 @@ impl Edit {
             Edit::SceneReorder { .. } => "scene.reorder",
             Edit::ItemSetCrop { .. } => "item.set_crop",
             Edit::SourceCreate { .. } => "source.create",
+            Edit::SourceRename { .. } => "source.rename",
+            Edit::SourceSetSettings { .. } => "source.set_settings",
             Edit::SourceDuplicate { .. } => "source.duplicate",
             Edit::SourceDelete { .. } => "source.delete",
+            Edit::OutputCreate { .. } => "output.create",
+            Edit::OutputSetTarget { .. } => "output.set_target",
+            Edit::OutputDelete { .. } => "output.delete",
         }
     }
 }
@@ -199,6 +265,30 @@ pub enum Action {
         /// The output to stop.
         output_id: OutputId,
     },
+    /// Stores an output's stream key in the OS credential store (R-SEC-001), replacing
+    /// any key it had. Write-only: the key never comes back in a response, event, error,
+    /// `state.get` or log, and `output.status` reports only `key_set`. An action, not an
+    /// edit: the key is not collection state, so it is never undone. A running output
+    /// uses the new key from its next `output.start`. Fails with `not_found` for an
+    /// output not in the collection, `invalid_argument` (field `key`) for an empty key,
+    /// one over 1024 bytes or one with whitespace or control characters, and
+    /// `action_failed` when the engine has no credential store or the store refuses.
+    #[serde(rename = "output.set_key")]
+    OutputSetKey {
+        /// The output whose key to set.
+        output_id: OutputId,
+        /// The stream key, as the streaming service shows it.
+        key: SecretString,
+    },
+    /// Removes an output's stream key from the credential store. Succeeds when there is
+    /// none, and for an output that is no longer in the collection, so a client can clear
+    /// the key of an output it deleted. Fails with `action_failed` when the engine has no
+    /// credential store or the store refuses.
+    #[serde(rename = "output.clear_key")]
+    OutputClearKey {
+        /// The output whose key to remove.
+        output_id: OutputId,
+    },
 }
 
 impl Action {
@@ -207,6 +297,8 @@ impl Action {
         match self {
             Action::OutputStart { .. } => "output.start",
             Action::OutputStop { .. } => "output.stop",
+            Action::OutputSetKey { .. } => "output.set_key",
+            Action::OutputClearKey { .. } => "output.clear_key",
         }
     }
 }
@@ -426,10 +518,11 @@ pub enum SourceKind {
         scene_id: SceneId,
     },
     /// A built-in source kind named by the engine (`display`, `window`, `webcam`,
-    /// `image`, `color`, `text`, `media`). Its settings come with `jstream-sources`;
-    /// until then the kind is only a name.
+    /// `image`, `color`, `text`, `media`). `kind.list` reports the kinds, and
+    /// `kind.describe` the settings each takes; the settings travel beside the kind, on
+    /// the source.
     Builtin {
-        /// The kind's name.
+        /// The kind's ID, as `kind.list` reports it.
         kind: String,
     },
 }

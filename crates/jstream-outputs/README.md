@@ -13,17 +13,18 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:81ee17e11f9d715c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading handover addition: outputs read no snapshots or live values; nothing here mentions the handover, so it holds" }
+verified = { hash = "b3:bd5137389f3420a8", by = "agent:claude@session_01Ut2Cuz7uioyngsXQuKGFMP", note = "#156 review N1/N2: re-read Purpose against the manifest description change and the ends_recording doc (create-time errors count as never started); the record paragraph's error bullet still matches error.rs, crate-map row unchanged" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
 first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, written in Rust
 as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) requires and needed for the
 generic RTMP/RTMPS output of [ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md). The
-`Output` trait, recording and the virtual-camera output come later. Its JStream
-dependencies are `jstream-media` (for `MediaTime`) and the layer-2 `jstream-mux`, whose
-public `amf0` codec and `flv::to_ms` conversion the client uses. Its third-party
-dependencies are `thiserror`, `tracing` for logging
+second is the **recording file sink** in the `record` module (below). The `Output` trait
+and the virtual-camera output come later. Its JStream dependencies are `jstream-media`
+(for `MediaTime` and `Packet`) and the layer-2 `jstream-mux`, whose public `amf0` codec
+and `flv::to_ms` conversion the client uses, and whose `fmp4` muxer the recorder
+uses. Its third-party dependencies are `thiserror`, `tracing` for logging
 ([R-RS-005](../../docs/RULES.md#R-RS-005)), and for TLS `rustls` (with the `ring` provider, per
 [R-DEP-006](../../docs/RULES.md#R-DEP-006)) and `rustls-native-certs`. Tests also use
 `rcgen` to generate certificates.
@@ -117,6 +118,37 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   server input as untrusted (nesting limit, no allocation from claimed counts). Its
   errors reach callers as `RtmpError::Amf0`, with the `MuxError` as the source.
 
+**What the recorder does.** `record::Recorder` takes the encoded packets an output
+receives from `jstream-encode` (H.264 in Annex B and raw AAC, the same packets the RTMP
+path builds its FLV tags from) and writes fragmented MP4 with `jstream-mux`'s
+`Fmp4Muxer`, which starts a fragment at every video keyframe (every second for
+audio-only).
+
+- **Temporary name, renamed on finish:** a recording to `show.mp4` is written to
+  `show.mp4.part` in the same directory (so the rename stays on one file system), and
+  `finish` writes the last fragment, syncs, closes the file and renames it. A file at
+  the destination is therefore always a finished recording. Nothing is overwritten: an
+  existing destination or `.part` file (a recording a crash left behind) is
+  `RecordError::Exists`, checked on create and again just before the rename. That
+  second check can still race a file created in between, since `std` has no
+  rename-without-replace.
+- **Crash safety:** each fragment is written as one buffer and then synced
+  (`sync_data`), so a crash or power loss loses at most the fragment being built, and
+  the `.part` file is readable up to its last complete fragment. Dropping a recorder
+  without `finish` leaves the `.part` file as a crash would.
+- **Errors** (`RecordError`): a full disk or quota is `DiskFull`, any other write or
+  sync failure `Write`, each with the `.part` path. Either ends the recording, because
+  the muxer has already moved past the segment that failed; later calls return `Ended`,
+  and the `.part` file keeps every completed fragment. A packet the muxer rejects (a
+  timestamp going backwards, a first video packet that isn't a keyframe) is `Packet`:
+  nothing is written and the recording carries on. `ends_recording` tells them apart.
+  `finish` can also fail with `Finish` (audio buffered but no keyframe ever gave the file
+  its AVC configuration), `Exists` or `Rename`, keeping the `.part` file in each case.
+- **Threading:** the recorder blocks on the disk, so like the RTMP client it runs on its
+  output's own thread, fed through a bounded queue that drops and counts packets under
+  overload ([R-RT-004](../../docs/RULES.md#R-RT-004)). The `Record { path, container }`
+  output kind and its engine wiring come with the `Output` layer.
+
 **Why blocking I/O over `Read + Write`.** [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)
 puts network outputs on the control plane, whose rules allow allocating and waiting.
 A blocking client over a generic byte stream fits there without tying this crate to an
@@ -160,7 +192,14 @@ second connection, and the state sequence; a write that fails over an in-memory 
 `max_attempts` and at the outage limit; a session that drops again at once
 continuing its outage, and one that stayed up starting a new one. Nothing contacts a
 real ingest server or reads the OS trust store. AMF0 tests live
-in `jstream-mux`.
+in `jstream-mux`. Recorder tests write to a directory under the system temp dir:
+the finished file matches `Fmp4Writer`'s output byte for byte, with the AVC
+configuration given or taken from the stream; after every packet the `.part` file is
+exactly the segments completed so far, and stays so when the recorder is dropped; an
+existing destination or `.part` file is refused, also at finish; a rejected packet
+leaves the recording going. A writer that fails on demand checks that a full disk is
+`DiskFull` and other write or sync failures `Write`, that each ends the recording, and
+that every fragment is synced.
 
 <a id="open-questions"></a>
 ## Open questions

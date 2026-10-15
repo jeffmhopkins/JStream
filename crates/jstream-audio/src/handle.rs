@@ -8,18 +8,30 @@ use std::sync::atomic::Ordering;
 use crate::MeterReading;
 use crate::rt::input::InputShared;
 use crate::rt::mixer::BusShared;
+use crate::rt::ring::FrameRing;
 use crate::rt::shared::db_to_gain;
 
 /// Controls and observes one mixer input. Cheap to clone; every clone controls the
 /// same input.
+///
+/// It also holds a reference to everything the input's audio thread and the mixer
+/// thread share (its ring and its counters), so neither real-time thread frees them
+/// (docs/RULES.md#R-RT-003). Keep one handle until the input's stream is closed and the
+/// [`Mixer`](crate::Mixer) is dropped: the last reference is then released here, on the
+/// control plane.
 #[derive(Clone, Debug)]
 pub struct InputControl {
     shared: Arc<InputShared>,
+    /// Never read: it only keeps the ring's last reference off the real-time threads.
+    _ring: Arc<FrameRing>,
 }
 
 impl InputControl {
-    pub(crate) fn new(shared: Arc<InputShared>) -> Self {
-        Self { shared }
+    pub(crate) fn new(shared: Arc<InputShared>, ring: Arc<FrameRing>) -> Self {
+        Self {
+            shared,
+            _ring: ring,
+        }
     }
 
     /// Sets the input's gain into the bus (its send), linear. Clamped to 0..=+24 dB; NaN

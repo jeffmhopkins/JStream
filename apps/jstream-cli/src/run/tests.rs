@@ -104,6 +104,7 @@ fn populated() -> MockEngine {
                 kind: SourceKind::Builtin {
                     kind: "webcam".into(),
                 },
+                settings: Default::default(),
             },
             Edit::ItemAdd {
                 scene_id: SceneId::new("main"),
@@ -148,12 +149,15 @@ fn version_and_help_need_no_connection() {
     let version = env!("CARGO_PKG_VERSION");
     assert_eq!(
         run_with(&refuse, &["version"]),
-        ok(&format!("jstream-cli {version}, protocol 0.6\n"))
+        ok(&format!(
+            "jstream-cli {version}, protocol {PROTOCOL_VERSION}\n"
+        ))
     );
     assert_eq!(
         run_with(&refuse, &["--json", "version"]),
         ok(&format!(
-            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":0,\"minor\":6}}}}\n"
+            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":{},\"minor\":{}}}}}\n",
+            PROTOCOL_VERSION.major, PROTOCOL_VERSION.minor
         ))
     );
     let help = run_with(&refuse, &["help"]);
@@ -170,11 +174,16 @@ fn hello_prints_the_session() {
     let engine = populated();
     assert_eq!(
         run_on(&engine, &["--mock", "hello"]),
-        ok("connected: protocol 0.6, client mock_2, rev 1\n")
+        ok(&format!(
+            "connected: protocol {PROTOCOL_VERSION}, client mock_2, rev 1\n"
+        ))
     );
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "hello"]),
-        ok("{\"protocol\":{\"major\":0,\"minor\":6},\"client_id\":\"mock_3\",\"rev\":1}\n")
+        ok(&format!(
+            "{{\"protocol\":{{\"major\":{},\"minor\":{}}},\"client_id\":\"mock_3\",\"rev\":1}}\n",
+            PROTOCOL_VERSION.major, PROTOCOL_VERSION.minor
+        ))
     );
 }
 
@@ -324,7 +333,7 @@ fn state_get_golden() {
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
-            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}]}}}"#,
+            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[]}}}"#,
         ))
     );
     assert_eq!(
@@ -467,7 +476,7 @@ fn outputs_golden() {
         run_on(&engine, &["--json", "--mock", "output", "status", "out_1"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":"#,
-            r#"{"type":"output.status","output_id":"out_1","state":"active"}}}"#,
+            r#"{"type":"output.status","output_id":"out_1","state":"active","key_set":false}}}"#,
             "\n"
         ))
     );
