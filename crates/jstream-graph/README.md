@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:d52976b0565808d9", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6 #184): collection file paragraph now saves scene role (group) and rebuild sets it with scene.set_role; item crop/visible replays pass scene_id None; B6's model and move prose from main kept" }
+verified = { hash = "b3:af0daa7f4537dc33", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: B1's collection JSON text is main's; E1 doesn't touch the graph" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

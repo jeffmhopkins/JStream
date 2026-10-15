@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod cache;
 mod color;
 mod compositor;
 mod error;
@@ -15,6 +16,7 @@ mod image;
 mod place;
 mod scene;
 
+pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;
 pub use error::RenderError;
 pub use gpu::OpenOptions;

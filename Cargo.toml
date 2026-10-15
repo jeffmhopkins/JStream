@@ -11,6 +11,9 @@ publish = false
 [workspace.dependencies]
 # Shared dependency versions live here (R-DEP-003). Member crates use `dep.workspace = true`.
 anyhow = "1"
+# The render snapshot (ARCH › Threads, "State to RT threads"): the control side swaps an
+# immutable snapshot that the render thread loads without a lock. No dependencies.
+arc-swap = { version = "1.9", default-features = false }
 # Test-only global allocator that flags allocations inside a marked scope (R-RT-001).
 # Warn mode counts violations instead of aborting, so a test can assert on them, in
 # debug and release builds alike.

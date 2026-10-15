@@ -189,32 +189,90 @@ impl Compositor {
     /// quantised to 8 bits between the levels. Each call allocates its own texture, so
     /// an image stays valid across later renders; it is freed when dropped. The
     /// submit is ordered before the next one on this queue, so a later `render` that
-    /// places the image samples the finished composite.
+    /// places the image samples the finished composite. A caller that draws the same
+    /// scene every frame keeps a [`Self::layer`] and calls [`Self::render_into`]
+    /// instead, which allocates nothing.
     ///
     /// # Errors
     /// As for [`Self::render`], apart from [`RenderError::Readback`].
     pub fn render_image(&mut self, scene: &Scene<'_>) -> Result<Image, RenderError> {
+        let image = self.layer(scene.canvas.width(), scene.canvas.height())?;
+        self.render_into(scene, &image)?;
+        Ok(image)
+    }
+
+    /// A new layer of `width` by `height`: an [`Image`] that [`Self::render_into`]
+    /// composites into and a later scene places. Its contents are undefined until then.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] for a zero dimension, [`RenderError::TooLarge`] past the
+    /// adapter limit.
+    pub fn layer(&self, width: u32, height: u32) -> Result<Image, RenderError> {
+        image::layer(&self.maker(), width, height)
+    }
+
+    /// Composites `scene` into `target`, a [`Self::layer`] of the canvas size, replacing
+    /// what it held. Like [`Self::render_image`], but the texture is reused, so a frame
+    /// that redraws a nested scene allocates no texture. Earlier submits that placed
+    /// `target` are ordered before this one on the queue, so they keep the old contents.
+    ///
+    /// # Errors
+    /// As for [`Self::render_image`]; also [`RenderError::Invalid`] when `target` is not
+    /// a layer this compositor made, is not the canvas size, or is placed by `scene`
+    /// itself (a layer cannot be sampled while it is drawn into).
+    pub fn render_into(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
+        let view = match target.target() {
+            Some(view) if target.owner().is(&self.owner) => view,
+            _ => {
+                return Err(RenderError::Invalid {
+                    what: "layer",
+                    detail: "the target is not a layer this compositor made".into(),
+                });
+            }
+        };
+        if target.width() != scene.canvas.width() || target.height() != scene.canvas.height() {
+            return Err(RenderError::Invalid {
+                what: "layer",
+                detail: format!(
+                    "the target is {}x{} but the canvas is {}x{}",
+                    target.width(),
+                    target.height(),
+                    scene.canvas.width(),
+                    scene.canvas.height()
+                ),
+            });
+        }
+        if let Some(index) = scene
+            .items
+            .iter()
+            .position(|item| item.image.texture() == target.texture())
+        {
+            return Err(RenderError::Invalid {
+                what: "layer",
+                detail: format!("item {index} places the layer being drawn into"),
+            });
+        }
         self.load(scene)?;
-        let width = scene.canvas.width();
-        let height = scene.canvas.height();
-        let target = texture(
-            &self.gpu.device,
-            "jstream-render-layer",
-            width,
-            height,
-            image::LAYER_FORMAT,
-            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        );
-        let view = target.create_view(&wgpu::TextureViewDescriptor::default());
         let mut encoder = self
             .gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-layer"),
             });
-        self.record_composite(&mut encoder, &view, scene);
+        self.record_composite(&mut encoder, view, scene);
         self.gpu.queue.submit([encoder.finish()]);
-        Ok(image::layer(&self.maker(), target, width, height))
+        Ok(())
+    }
+
+    /// Refills `image`, an upload this compositor made, with new tightly packed
+    /// straight-alpha sRGB RGBA8 of the same size, without allocating a texture. Frames
+    /// already submitted keep sampling the old contents.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when `image` is not an upload this compositor made, and
+    /// [`RenderError::ImageBytes`] when `rgba` is not its `width * height * 4` bytes.
+    pub fn rewrite_rgba8(&self, image: &Image, rgba: &[u8]) -> Result<(), RenderError> {
+        image::rewrite(&self.maker(), image, rgba)
     }
 
     /// The device images and targets are created on.
