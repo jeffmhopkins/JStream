@@ -7,13 +7,14 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::audit::{self, Audit, AuditSink};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
-    Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent, Running,
-    launch, parts_from,
+    Destination, Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent,
+    Running, launch, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
@@ -21,10 +22,11 @@ use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, IdempotencyKey,
-    OutputId, OutputKind, OutputState, ProtocolError, Query, QueryResult, RequestId, Rev,
-    SecretString, SourceId,
+    OutputId, OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer,
+    RequestId, Rev, SecretString, SourceId,
 };
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
@@ -67,6 +69,8 @@ struct Shared {
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
     /// only to clone the handle: the store is never called under the collection lock.
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
+    /// Where each executed batch and action is recorded, if the host gave a sink.
+    audit: Audit,
 }
 
 impl Default for Engine {
@@ -80,6 +84,7 @@ impl Default for Engine {
                 }),
                 snapshots: SnapshotWorker::default(),
                 keys: Mutex::new(None),
+                audit: Audit::default(),
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -141,9 +146,20 @@ impl Engine {
         self
     }
 
+    /// Records every batch and action this engine executes in `sink`, after the call
+    /// and with no engine lock held (see [`AuditSink`]). Without a sink nothing is
+    /// recorded. Every clone of the engine shares it.
+    #[must_use]
+    pub fn with_audit(self, sink: Arc<dyn AuditSink>) -> Self {
+        self.shared.audit.set(sink);
+        self
+    }
+
     /// What an output in the collection is and where it sends, or `None` if the
     /// collection has no such output. A host reads its target here when it opens the
-    /// publish target for `output.start`, and its key from the store it injected.
+    /// publish target for `output.start`, and its key from the store it injected. A
+    /// recording output (`OutputKind::Record`) needs no publish target: the engine
+    /// opens its file itself.
     pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
         lock(&self.shared.state)
             .graph
@@ -158,7 +174,8 @@ impl Engine {
     ///
     /// A start still needs a publish target ([`with_publish`](Self::with_publish))
     /// or an opener ([`with_publish_opener`](Self::with_publish_opener)). Without
-    /// either it fails with `action_failed` and changes no output state.
+    /// either it fails with `action_failed` and changes no output state. A recording
+    /// output needs neither: its start records to the file the collection names.
     #[must_use]
     pub fn with_backends(mut self, backends: Backends) -> Self {
         let host = self.host();
@@ -179,7 +196,8 @@ impl Engine {
 
     /// Stores how `output.start` opens its publish target when no one-shot target
     /// ([`with_publish`](Self::with_publish)) is waiting: every start calls `open`
-    /// once, after `starting` and outside the engine's locks, so a host that is live
+    /// once, after `starting` and outside the engine's locks (except for a recording
+    /// output, which never calls it), so a host that is live
     /// (with [`connect_rtmp`](crate::connect_rtmp)) connects on each start and can
     /// start again after a stop or a failure. An `open` error fails that start with
     /// `action_failed`. Requires [`with_backends`](Self::with_backends) first;
@@ -306,12 +324,38 @@ impl Engine {
         lock(&self.shared.state).graph.rev()
     }
 
-    /// Assigns the next client ID and returns it with the current `rev`.
-    pub(crate) fn register_client(&self) -> (ClientId, Rev) {
+    /// Assigns the next client ID, records `client_name` for it (the name the audit log
+    /// shows), and returns the ID with the current `rev`.
+    pub(crate) fn register_client(&self, client_name: &str) -> (ClientId, Rev) {
         let mut state = lock(&self.shared.state);
         state.clients += 1;
         let client_id = ClientId::new(format!("client_{}", state.clients));
+        state
+            .client_names
+            .insert(client_id.clone(), audit::client_name(client_name));
         (client_id, state.graph.rev())
+    }
+
+    /// Records `client_name` as the name of `client_id`, which sent `hello` again, and
+    /// returns the current `rev`.
+    pub(crate) fn rename_client(&self, client_id: &ClientId, client_name: &str) -> Rev {
+        let mut state = lock(&self.shared.state);
+        state
+            .client_names
+            .insert(client_id.clone(), audit::client_name(client_name));
+        state.graph.rev()
+    }
+
+    /// What an audit entry needs before its call runs: the current `rev` and the
+    /// client's name from its latest `hello`.
+    fn audit_context(&self, client_id: &ClientId) -> (Rev, String) {
+        let state = lock(&self.shared.state);
+        let name = state
+            .client_names
+            .get(client_id)
+            .cloned()
+            .unwrap_or_default();
+        (state.graph.rev(), name)
     }
 
     /// Opens an event subscription: the stream, and the weak handle its session keeps
@@ -353,6 +397,10 @@ impl Engine {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
         }
+        let audit = self.shared.audit.sink_for(&call).map(|sink| {
+            let (rev, client_name) = self.audit_context(client_id);
+            (sink, audit::Pending::new(&call, rev, client_name))
+        });
         let output = match &call {
             Call::Action {
                 action:
@@ -395,6 +443,9 @@ impl Engine {
                 tracing::info!(output_id = %output_id, code = error.code(), "output action failed");
             }
             (Err(error), None) => tracing::debug!(code = error.code(), "call failed"),
+        }
+        if let Some((sink, pending)) = audit {
+            sink.record(pending.finish(client_id, request_id, &result));
         }
         Executed::Ready(result)
     }
@@ -537,15 +588,18 @@ impl Engine {
                     reason: "another output is already running".into(),
                 });
             }
-            let publish = match lock(&host.publish).take() {
-                Some(publish) => Target::Ready(publish),
-                None => match lock(&host.open_publish).as_ref() {
-                    Some(open) => Target::Open(Arc::clone(open)),
-                    None => {
-                        return Err(ProtocolError::ActionFailed {
-                            reason: "output.start has no publish target".into(),
-                        });
-                    }
+            let publish = match record_path(&state.graph, &output_id) {
+                Some(path) => Target::Record(path),
+                None => match lock(&host.publish).take() {
+                    Some(publish) => Target::Ready(publish),
+                    None => match lock(&host.open_publish).as_ref() {
+                        Some(open) => Target::Open(Arc::clone(open)),
+                        None => {
+                            return Err(ProtocolError::ActionFailed {
+                                reason: "output.start has no publish target".into(),
+                            });
+                        }
+                    },
                 },
             };
             let parts = {
@@ -588,7 +642,9 @@ impl Engine {
         let (fail_tx, fail_rx) = mpsc::channel();
         let launched = publish
             .open(&output_id)
-            .and_then(|publish| launch(parts, publish, output_id.clone(), generation, fail_tx))
+            .and_then(|destination| {
+                launch(parts, destination, output_id.clone(), generation, fail_tx)
+            })
             .map(|mut running| {
                 running.arm_stats(self);
                 running
@@ -843,11 +899,24 @@ impl Drop for SettleOnDrop<'_> {
     }
 }
 
-/// The publish target a start took: a one-shot one the host set, or the opener it
-/// calls once the locks are released.
+/// Where a recording output in the collection records to, or `None` when the output
+/// is not a recording (or not in the collection).
+fn record_path(graph: &Graph, output_id: &OutputId) -> Option<PathBuf> {
+    match graph.state().output(output_id)?.kind() {
+        OutputKind::Record {
+            path,
+            container: RecordContainer::Mp4,
+        } => Some(PathBuf::from(path)),
+        _ => None,
+    }
+}
+
+/// Where a start sends its output: a one-shot publish target the host set, the opener
+/// it calls once the locks are released, or a recording file.
 enum Target {
     Ready(Box<dyn LivePublish>),
     Open(OpenPublish),
+    Record(PathBuf),
 }
 
 impl Target {
@@ -859,13 +928,15 @@ impl Target {
         }
     }
 
-    /// The target to publish into. Runs the opener, outside the engine's locks.
-    fn open(self, output_id: &OutputId) -> Result<Box<dyn LivePublish>, String> {
+    /// Where to send the output. Runs the opener, outside the engine's locks. A
+    /// recording's file is opened by `launch`, once the frame size is known.
+    fn open(self, output_id: &OutputId) -> Result<Destination, String> {
         match self {
-            Target::Ready(publish) => Ok(publish),
-            Target::Open(open) => {
-                open(output_id).map_err(|err| format!("opening the publish target: {err}"))
-            }
+            Target::Ready(publish) => Ok(Destination::Publish(publish)),
+            Target::Open(open) => open(output_id)
+                .map(Destination::Publish)
+                .map_err(|err| format!("opening the publish target: {err}")),
+            Target::Record(path) => Ok(Destination::Record(path)),
         }
     }
 }
@@ -1131,6 +1202,9 @@ struct State {
     applied: BTreeMap<(ClientId, IdempotencyKey), Rev>,
     /// How many sessions have completed `hello`; numbers the client IDs.
     clients: u64,
+    /// Each client's name from its latest `hello`, for the audit log. Kept for the
+    /// engine's lifetime, like the client IDs.
+    client_names: BTreeMap<ClientId, String>,
     subscribers: Subscribers,
     /// The latest CPU frame of each source, keyed by id. Runtime state: not part of
     /// `rev`. A snapshot draws an item from this when the source is not itself a scene.

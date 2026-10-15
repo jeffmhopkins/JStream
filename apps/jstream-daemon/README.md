@@ -127,7 +127,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:dc6a8443402d1172", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#153 MCP over HTTP) into C6 #147: main's note (daemon turns on /mcp, server 413 row) holds; C6's Snapshots change doesn't reach the daemon" }
+verified = { hash = "b3:c7f7d44f2c11602c", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#170, #174) into B8 #171: re-read; daemon injects no audit sink and nothing from main changes that" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

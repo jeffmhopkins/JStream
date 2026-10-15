@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:7ec8a9f3406327d6", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (#149 D1, #166 A5; section text unchanged by main) plus C4b's B5 fix: the capture thread now releases the reader, source and decoder before Media Foundation shuts down; the MfVideoDevices bullet's end-of-stream text (releases the device, drops the decoder) still holds, as do the Tests paragraph and WindowsCredentials text" }
+verified = { hash = "b3:f646c29340c49e1d", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose unchanged; ARCH#threading change (recording sink) doesn't touch the Windows backends" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

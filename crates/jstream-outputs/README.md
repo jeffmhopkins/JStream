@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:d0817d8b8ea99a07", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main (#156 recording sink) into D1: section text is main's; stale only via ARCH#threading, where D1 changes only the mixer's collector sentences; re-read its thread mentions (reconnect attempts on a short-lived thread), none concerns the collector" }
+verified = { hash = "b3:fc5913fc41f880c7", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose unchanged; threading bullet still says core drives the Recorder on the output thread, as ARCH#threading says" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -146,8 +146,9 @@ audio-only).
   its AVC configuration), `Exists` or `Rename`, keeping the `.part` file in each case.
 - **Threading:** the recorder blocks on the disk, so like the RTMP client it runs on its
   output's own thread, fed through a bounded queue that drops and counts packets under
-  overload ([R-RT-004](../../docs/RULES.md#R-RT-004)). The `Record { path, container }`
-  output kind and its engine wiring come with the `Output` layer.
+  overload ([R-RT-004](../../docs/RULES.md#R-RT-004)). The protocol's
+  `Record { path, container }` output kind drives it from `jstream-core`'s output
+  thread, which opens it on `output.start` and finishes it on `output.stop`.
 
 **Why blocking I/O over `Read + Write`.** [ARCH › Threads](../../docs/ARCHITECTURE.md#threading)
 puts network outputs on the control plane, whose rules allow allocating and waiting.
