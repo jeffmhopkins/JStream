@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d002ffb73e0e21a0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via apps/jstream-cli (mcp.rs comment, README, tests): jstream-cli is still the remote client with the stdio MCP proxy and doesn't link the engine; table and diagram hold" }
+verified = { hash = "b3:8c01e3ac115def0d", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 touched apps/jstream-cli only for protocol 0.7 goldens and the new key_set/outputs fields; the CLI is still the remote client and doesn't link the engine; diagram and host table hold" }
 -->
 
 ```
@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:0e48ba2d422db8da", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs gained the 'docs generate' usage entry (xtask/ line still lists docs); the docs/adr/ line now mentions the generated README.md index next to TEMPLATE.md; rest of the tree unchanged" }
+verified = { hash = "b3:f93d77c61243e82a", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against H3: .github line now lists the new sweep workflow alongside ci, governance and review-gate; xtask main.rs entries and the rest of the tree unchanged" }
 -->
 
 ```
@@ -107,7 +107,7 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md, generated README.md index)
 │   └── guides/
-└── .github/                # workflows (CI, governance, review-gate), Dependabot config, PR template
+└── .github/                # workflows (CI, governance, review-gate, sweep), Dependabot config, PR template
 ```
 
 <a id="crate-map"></a>
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:4917a95a616248b0", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Re-read the jstream-audio row against its Cargo.toml: layer 2, unsafe_allowed false; the new dependency crossbeam-channel is external, so no new JStream crate edge and the row holds" }
+verified = { hash = "b3:85ead2b7da2a5bd2", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main (G1's vcam-proto row, #141's platform-windows row) into D1: rows are main's; jstream-audio row still layer 2 and no unsafe, crossbeam-channel external" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -132,7 +132,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-types` | IDs, math (Vec/Mat/Transform3D), color, rational time, units | no |
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
 | 0 | `jstream-plugin-proto` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): the versioned `repr(C)` shared-memory contract (audio rings, parameter-event ring, status block) between the mixer and the CLAP plugin host | no |
-| 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL (`repr(C)` types and constants only) | no |
+| 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `AudioIo`, `VideoEncoder`, `AudioEncoder`, `VideoDecoder`, `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types). The **single owner** of the encoder and decoder traits. | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
@@ -141,7 +141,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0034](adr/0034-youtube-interaction-scope-v2.md)). No media code. | no |
-| 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
+| 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
@@ -165,7 +165,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:6c79e1f6a3e80df1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#102 N2: the stale-hotkey sentence now re-points through a hotkey.clear + hotkey.set batch, matching ADR-0024 §5 (set on a bound chord is already_exists); nothing else in the section changed" }
+verified = { hash = "b3:aa09a2850f43607f", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Built so far now includes outputs (kind Rtmp Generic url only, no key in the collection); Not yet adds an output's mix, buses, encoder profile, chains and the other kinds; checked against graph model/mod.rs" }
 -->
 
 ```
@@ -341,19 +341,22 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   order with `source_id`, protocol 0.3's 2D transform (top-left corner and scale, which
   ADR-0022 replaces), `crop` and `visible`. Items refer to sources; they never copy them.
   Deleting a source an item still places, or a scene a source still shows, is rejected.
-  Not yet: settings, filters, source audio settings, `opacity`, `blend`, the reserved
+  Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
+  the URL checked to carry no credential. A stream key is never collection state: it
+  lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)). Not yet: settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
   `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
   variants and overrides, folders, labels, favourites and other organisation metadata,
-  `background`, hotkeys, and everything outside `sources` and `scenes`. Nothing is
-  persisted yet.
+  `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
+  `YouTube`, `Record` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
+  and `outputs`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:a8775cf3e702e94b", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Re-read with D1: the In-the-engine paragraph says inputs are added and removed on a lock-free queue and released rings go to the collector; the output-pipeline sentence now says the only collector so far is the mixer's own for input rings. Thread table, clock, handover text unchanged" }
+verified = { hash = "b3:8be44cb5d6358bec", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main (#133, #136, #146) into D1: prose is main's except D1's two collector sentences (mixer's own collector for input rings; queue add/remove with rings freed on the collector), which still hold beside #133's InputControl reference; Collector row unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -490,7 +493,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:730d037d3a32ecb6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via the jstream-server README (open question 8): Transport bullet still holds; the handshake timeout is server-local, envelope unchanged" }
+verified = { hash = "b3:1297cb1237ce04ea", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#150, #151, #152) into #142: only verified lines conflicted; re-read the section: the 0.7 output edits, Stream keys and output.list bullets are #142's, Transport and Slow clients unaffected by #150's test-only change" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -505,6 +508,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
   id, and placement edits take an optional `scene_id` so they can write a keyframe
   scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
+  `output.create`, `output.set_target` and `output.delete` configure the collection's
+  outputs (protocol 0.7).
+- **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
+  A key is not collection state: it goes to the OS credential store and is write-only,
+  never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
+  `output.status` reports only `key_set`.
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
@@ -536,7 +545,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   naming the outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
-  `output.status`, `video.snapshot` → the program mix as a PNG in the JSON result,
+  `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the JSON result,
   longest side at most 1280, with the layout `rev`; later `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
@@ -582,7 +591,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:86ae7c32cfa70b9a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via jstream-mcp server.rs/README: tools, events buffer, schema, access and audit bullets unaffected by sending hello at initialize; audit still names the client (clientInfo.name)" }
+verified = { hash = "b3:e7a22d3fc6b340a6", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: tools.snap grew to about 70 KB with the output ops; tool grouping (output tool takes the new ops) unchanged; other bullets unaffected" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -596,8 +605,8 @@ verified = { hash = "b3:86ae7c32cfa70b9a", by = "agent:claude@session_01QBbMRwRu
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 50 KB
-  of `tools/list` today), and `describe_api` returns the whole protocol schema. Shrinking
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 70 KB
+  of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in

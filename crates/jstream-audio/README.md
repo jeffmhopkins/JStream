@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:dc91e88efca3294e", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Re-read against D1: API names Mixer::add_input and MixerControl::add_input, InputControl::remove, 64 inputs; Errors gains TooManyInputs, CommandQueueFull, CollectorUnavailable; Tests list gains the live add/remove and collector tests" }
+verified = { hash = "b3:56a81026dcc7647b", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main (#133 keep-alive, #152 meters) into D1: API bullet is D1's MixerControl/remove text plus #133's InputControl-holds-the-ring sentence (no longer a must-keep, since the collector also covers it); Errors merges main's loudness-rate case with D1's three new variants; meter bullet is main's" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -26,7 +26,8 @@ and metering. In [ADR-0028](../../docs/adr/0028-audio-model-v2.md)'s model each 
 is a source's audio stream with its fader and mute, and the stereo bus is the master bus,
 which every input implicitly sends to at 0 dB. The send matrix, further buses, activity
 gains (audio that follows the program), filters with keys and latency compensation,
-loudness and true-peak meters, and monitor taps come later.
+and monitor taps come later. The true-peak and loudness meters exist as DSP
+([Meters](#meters)) but don't run in the mixer yet.
 
 **Time line.** Engine frame `n` is media time `n / rate` on the media clock
 ([ADR-0014](../../docs/adr/0014-media-clock.md)), with `rate` the engine rate (48 kHz by
@@ -47,6 +48,9 @@ stamped on the clock, and no device is the master.
   not borrow the mixer, so another thread can add or `InputControl::remove` while
   `poll` runs; the mixer applies those commands at the start of the next block and
   does not allocate to do it. At most 64 inputs.
+  The `InputControl` also holds a reference to the input's ring and counters, so
+  whichever handle is dropped last, the free never happens on a real-time thread (see
+  [Real-time design](#realtime)).
 - `Mixer::poll(now, out)` mixes the next block once the media clock `now` has passed its
   end by the latency, into `out` (interleaved stereo), and returns its `Block` (first
   frame, length, and `pts` in ticks of `1 / rate`). The first call starts the time line
@@ -59,10 +63,13 @@ stamped on the clock, and no device is the master.
   gap, late, overrun and underrun frames, resets, re-anchors, timestamp outliers, the
   measured drift and stamp jitter, the controller's correction and timing error, and
   whether the stream failed.
+- `meter::TruePeakMeter` and `meter::LoudnessMeter`: the true-peak and BS.1770 loudness
+  meters, not yet run by the mixer ([Meters](#meters)).
 
-**Errors** (`AudioError`): an invalid configuration, an unsupported input rate or
-sample layout, a wrong output length, more than 64 inputs, a full input command
-queue, or a collector thread that could not start. No variant allocates.
+**Errors** (`AudioError`): an invalid configuration (including a loudness meter's
+rate), an unsupported input rate or sample layout, a wrong output length, more than
+64 inputs, a full input command queue, or a collector thread that could not start. No
+variant allocates.
 
 **Tests.** The unit tests in each `src/rt/` module cover:
 - ring: underrun, drop-oldest overrun, late frames, forward jumps, and a two-thread test
@@ -100,7 +107,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:ae9308712501d220", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Re-read the command-queue paragraph against cmd.rs, mixer.rs and retire.rs: bounded crossbeam queue applied between blocks into a list reserved for 64; mixer and producer hand their Arcs to a per-mixer collector (no global, R-RS-008) that polls so try_send never wakes a thread; R-RT-001/R-RT-003 hold" }
+verified = { hash = "b3:9e6116f499ac15cf", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main (#133) into D1: dropped #133's 'no collector yet' bullet, which D1 replaces; the command-queue paragraph now also says each InputControl holds a ring and counters reference released on the control plane; checked against handle.rs, cmd.rs, mixer.rs and retire.rs" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -184,20 +191,21 @@ ramps the bus gain, replaces any non-finite output with 0, and meters inputs (po
 and the bus. Peaks use a `fetch_max` on the bits, which order like the values for
 non-negative floats.
 
-**Adding and removing inputs** (`cmd.rs`, `retire.rs`). The control thread allocates
-the ring and the producer and sends them on a bounded lock-free queue
-(`crossbeam-channel`, 128 commands). The mixer applies that queue at the start of the
-next block. Its input list is reserved for 64 inputs, so installing one does not
-allocate, and removing one unlinks it. The mixer and the producer each hold an `Arc`
-of the ring. Releasing either reference hands that `Arc` to the collector thread,
-which is where the ring is freed
+**Adding and removing inputs** (`cmd.rs`, `retire.rs`). The control thread allocates the
+ring and the producer and sends them on a bounded lock-free queue (`crossbeam-channel`,
+128 commands). The mixer applies that queue at the start of the next block. Its input
+list is reserved for 64 inputs, so installing one does not allocate, and removing one
+unlinks it. The mixer and the producer each hold an `Arc` of the ring. Releasing either
+reference hands that `Arc` to the collector thread, which is where the ring is freed
 ([R-RT-003](../../docs/RULES.md#R-RT-003)), including when the producer is dropped on
-the audio thread after the mixer is already gone. Each mixer starts its own collector
-in `Mixer::new` and hands it to its control plane and producers, so nothing is global
+the audio thread after the mixer is already gone. Each mixer starts its own collector in
+`Mixer::new` and hands it to its control plane and producers, so nothing is global
 ([R-RS-008](../../docs/RULES.md#R-RS-008)). It ends once the mixer, every producer and
-its control handles are gone. It polls its queue every 10 ms rather than blocking on it, so a hand-off is
-a `try_send` that never wakes a thread or takes the channel's lock. A full command
-queue refuses the add or the removal rather than blocking the mixer.
+its control handles are gone. It polls its queue every 10 ms rather than blocking on it,
+so a hand-off is a `try_send` that never wakes a thread or takes the channel's lock.
+Each `InputControl` also holds a reference to its input's ring and counters, so when the
+control plane drops the last one it frees them there, also off the real-time threads. A
+full command queue refuses the add or the removal rather than blocking the mixer.
 
 **Not yet enforced or measured:**
 - No test proves the absence of allocation. R-RT-001 names
@@ -206,6 +214,61 @@ queue refuses the add or the removal rather than blocking the mixer.
 - CPU cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 - Catching a panic at the thread boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) is the engine's job, where the threads are.
+
+<a id="meters"></a>
+## Meters
+<!-- @section
+covers = ["crates/jstream-audio/src/meter/**"]
+depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
+verified = { hash = "b3:f77ce7451ac1f6e0", by = "agent:claude@session_01MYuHTvXyZdeQGrKJhs9Htz", note = "New section, checked against src/meter/: filter length, cutoff and measured phase agreement, 100 ms steps and windows, gates, 0.02 LU histogram range and size, rate rule, and the tests listed; ADR-0028 decision (4x true peak, momentary/short-term/integrated, allocation-free, reset action) matches" }
+-->
+
+`src/meter/` holds the broadcast meters
+[ADR-0028](../../docs/adr/0028-audio-model-v2.md) asks for, as pure DSP over interleaved
+stereo blocks. They will run on the mixer thread, so each builds its fixed-size state in
+its constructor and never allocates, locks or blocks after that
+([R-RT-001](../../docs/RULES.md#R-RT-001)). They aren't wired into the mixer, its
+`MeterReading`s or any protocol yet ([Not yet](#follow-ups)).
+
+**`TruePeakMeter`** (ITU-R BS.1770 Annex 2): each channel is upsampled 4× and the largest
+absolute value is held until `take_peak`, as the sample-peak meters are. A reading is
+never below the sample peak.
+- The annex's 48-tap filter is only an example. Its phases differ in treble gain, so it
+  reads a 12 kHz tone at 48 kHz up to +0.22 dB high at some phases, just outside EBU
+  Tech 3341's +0.2 / −0.4 dB tolerance, and it rejects images by only about 40 dB.
+- This meter uses a 192-tap Blackman–Harris windowed sinc instead, built like the
+  resampler's, with a cutoff at 23/48 of the input rate and each phase at unity DC gain.
+  At 48 kHz its phases agree within 0.02 dB up to 20 kHz, and images are more than
+  110 dB down.
+- 4× oversampling still misses a peak between two upsampled points by up to
+  `cos(π·f / (4·rate))`: −0.27 dB at 15 kHz, −0.48 dB at 20 kHz.
+
+**`LoudnessMeter`** (BS.1770 K-weighting and gating, stereo, `G = 1` per channel):
+- Squares are summed per 100 ms step, and the last 30 steps are kept. Momentary is the
+  last 400 ms and short-term the last 3 s, both updated every 100 ms. Each reads `None`
+  until its window has filled once.
+- Each momentary value is also a gating block (400 ms, 75 % overlap). Integrated
+  loudness applies the −70 LUFS absolute gate and the −10 LU relative gate.
+- So that memory stays fixed, blocks are counted in 0.02 LU bins from −70 to +30 LUFS
+  (80 KB), each bin holding its count and the exact sum of its blocks' energy. The only
+  approximation is that the relative gate falls on a bin edge.
+- `reset_integrated` restarts the integrated measure, for ADR-0028's
+  `audio.reset_loudness`.
+- The K-weighting coefficients are derived for any rate that is a whole number of frames
+  per 100 ms, and they reproduce BS.1770's 48 kHz tables.
+
+**Tests** (`src/meter/`), against reference values:
+- K-weighting: BS.1770's 48 kHz coefficient tables, and the same response at 44.1, 48
+  and 96 kHz.
+- Loudness: EBU Tech 3341 cases 1 to 5, synthesised (1 kHz stereo tones, which also
+  exercise both gates), at ±0.1 LU. Also the window lengths, block-size independence,
+  channel summing, resets and extreme input.
+- True peak: tones up to 15 kHz at 16 phases each, within EBU Tech 3341's tolerance. A
+  quarter-rate tone between its samples reads +3 dBTP from 0 dBFS samples. Also
+  20 kHz against the 4× bound, block-size independence and the sample-peak floor.
+
+The EBU's own test files and the real-program cases (Tech 3341 cases 6 to 8, and the
+true-peak cases from files) are not run; they would add binary fixtures.
 
 <a id="follow-ups"></a>
 ## Not yet
@@ -233,8 +296,10 @@ queue refuses the add or the removal rather than blocking the mixer.
   error event. `rt_panic_is_reported` lands with that engine thread.
 - **The rest of the audio model** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
   the activity gain per source, the send matrix and further buses, filters with keys and
-  latency reporting, true peak and BS.1770 loudness, and monitor taps; and render-side
-  resampling for output devices.
+  latency reporting, running the true-peak and loudness meters in the mixer (for the
+  master bus and subscribed buses and sources) with their meter-stream fields and
+  `audio.reset_loudness`, and monitor taps; and render-side resampling for output
+  devices.
 - **A no-allocation test** with `assert_no_alloc`, and a CPU measurement on hardware.
 - **Feeding the fitted drift forward** into the controller, which would shorten the
   start-up transient (about 0.46 · drift / (2π · 0.02 Hz): 0.55 ms at 150 ppm).

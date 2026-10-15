@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:7dfae645018feee8", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#140 server limits) into #135: re-read; daemon still builds one Engine with placeholder outputs and uses ServerConfig::new with only the port changed (now carrying #140's connection cap and timeouts as defaults), and claims nothing about publishing or the opener; Listening and other bullets hold" }
+verified = { hash = "b3:f33eae9d213aa174", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Stale via core Design (#142 outputs/stream keys): serve.rs still builds one Engine with with_output only, no backends, opener or key store, so set_key answers action_failed there; session, listening, token, logging (message contents never logged) bullets hold" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

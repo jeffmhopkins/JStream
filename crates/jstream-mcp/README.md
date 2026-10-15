@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:2d4009ea144de67c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via server.rs: Server still answers one message at a time; contents list unchanged by opening the session at initialize/server/discover" }
+verified = { hash = "b3:4d29b5c889f24117", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 changed only a test golden (key_set) in src/tests.rs; server, tools, events, jsonrpc, stdio and error bullets unchanged" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:10ad376d3a45c6f9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Session and identity (hello at initialize or server/discover, lazy fallback for a failed hello or a client that skips both, why: jstream-server handshake timeout) and the Events read paragraph; checked against server.rs open_early/open and tests.rs" }
+verified = { hash = "b3:efc099de4381eb41", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: the output tool gains the new ops through the generated table with no code change, as the Tools section says; tools.snap regenerated; revisions, results and logging unchanged" }
 -->
 
 ### Tools

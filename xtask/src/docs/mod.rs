@@ -7,6 +7,7 @@ mod check;
 pub(crate) mod generate;
 mod govern;
 mod hash;
+mod history;
 pub(crate) mod parse;
 
 use std::collections::BTreeMap;
@@ -112,9 +113,8 @@ pub(crate) fn check_repo(root: &Path) -> Result<Vec<Diag>> {
     Ok(diags)
 }
 
-/// `docs verify <DOC-ID#anchor | path#anchor> --by <who> --note <text>`: records that a
-/// section was re-read and still holds, by writing its current hash into `verified`.
-fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
+/// Checks the `--by` and `--note` of a `verify` or `review` stamp; returns the trimmed note.
+fn check_stamp<'a>(by: &str, note: &'a str) -> Result<&'a str> {
     let note = note.trim();
     if note.len() < 20 || STOCK_NOTES.contains(&note.to_lowercase().trim_end_matches('.')) {
         bail!("the note must say what you checked and why it still holds (docs/DOCS.md#notes)");
@@ -125,6 +125,63 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
     if !(by.starts_with("human:") || by.starts_with("agent:")) {
         bail!("--by must be `human:<github-user>` or `agent:<name>`");
     }
+    Ok(note)
+}
+
+/// `docs review <DOC-ID | path> --by <who> --note <text>`: records a doc-level TTL review
+/// by writing `reviewed` into the `@doc` block (docs/DOCS.md#ttl). The commit that changes
+/// that line restarts the doc's TTL clock, so the new line must differ from the old one.
+fn review(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
+    let note = check_stamp(by, note)?;
+    if target.contains('#') {
+        bail!("`docs review` stamps a whole doc; a section is re-read with `docs verify`");
+    }
+    let l = load(root)?;
+    let doc = l
+        .docs
+        .iter()
+        .find(|d| d.path == target || d.meta_str("id") == Some(target))
+        .with_context(|| format!("no tracked doc `{target}`"))?;
+    if doc.is_adr() {
+        bail!(
+            "ADRs have no TTL; a decision that no longer holds gets a superseding ADR (docs/DOCS.md#ttl)"
+        );
+    }
+    if doc.meta_str("review_every").is_none() {
+        bail!("{} has no `review_every`, so it has no TTL", doc.path);
+    }
+    let Some((start, end)) = doc.doc_block.filter(|_| doc.meta.is_some()) else {
+        bail!("{} has no valid `@doc` block", doc.path);
+    };
+    let line = format!(
+        "reviewed = {{ by = {}, note = {} }}",
+        hash::toml_str(by),
+        hash::toml_str(note)
+    );
+    let mut lines: Vec<String> = doc.text.lines().map(str::to_owned).collect();
+    let key = |l: &str| l.split('=').next().unwrap_or_default().trim() == "reviewed";
+    match (start + 1..end).find(|&k| key(&lines[k])) {
+        Some(k) if lines[k] == line => bail!(
+            "{} already records this review; only a changed `reviewed` line restarts the TTL \
+             clock, so say what you re-read this time",
+            doc.path
+        ),
+        Some(k) => lines[k] = line,
+        None => lines.insert(end, line),
+    }
+    let mut out = lines.join("\n");
+    if doc.text.ends_with('\n') {
+        out.push('\n');
+    }
+    std::fs::write(root.join(&doc.path), out).with_context(|| format!("writing {}", doc.path))?;
+    eprintln!("reviewed {}", doc.meta_str("id").unwrap_or(&doc.path));
+    Ok(())
+}
+
+/// `docs verify <DOC-ID#anchor | path#anchor> --by <who> --note <text>`: records that a
+/// section was re-read and still holds, by writing its current hash into `verified`.
+fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
+    let note = check_stamp(by, note)?;
     let (doc_ref, anchor) = target
         .split_once('#')
         .context("target must be `DOC#anchor`")?;
@@ -402,6 +459,49 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             verify(root, target, by, note)?;
             Ok(true)
         }
+        Some("review") => {
+            let mut target = None;
+            let mut by = None;
+            let mut note = None;
+            let mut it = args[1..].iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--by" => by = it.next(),
+                    "--note" => note = it.next(),
+                    t if target.is_none() => target = Some(t),
+                    other => bail!("unexpected argument `{other}`"),
+                }
+            }
+            let (Some(target), Some(by), Some(note)) = (target, by, note) else {
+                bail!(
+                    "usage: cargo xtask docs review <DOC> --by <human:..|agent:..> --note \"<what you re-read>\""
+                );
+            };
+            review(root, target, by, note)?;
+            Ok(true)
+        }
+        Some("log") => {
+            let mut target = None;
+            let mut rev = None;
+            let mut it = args[1..].iter();
+            while let Some(a) = it.next() {
+                match a.as_str() {
+                    "--rev" => rev = it.next(),
+                    t if target.is_none() => target = Some(t),
+                    other => bail!("unexpected argument `{other}`"),
+                }
+            }
+            let Some(target) = target else {
+                bail!("usage: cargo xtask docs log <DOC[#anchor]> [--rev <rev>]");
+            };
+            let l = load(root)?;
+            let log = history::log(root, &l.docs, target, rev.map_or("HEAD", String::as_str))?;
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
+            eprint!("{}", history::render(&log, now));
+            Ok(true)
+        }
         Some("rehash") => {
             let [_] = args else {
                 bail!("usage: cargo xtask docs rehash");
@@ -441,7 +541,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             Ok(true)
         }
         _ => bail!(
-            "usage: cargo xtask docs check | generate | verify <DOC#anchor> --by <who> --note <text> | for <path> | rehash"
+            "usage: cargo xtask docs check | generate | verify <DOC#anchor> --by <who> --note <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | rehash"
         ),
     }
 }
@@ -594,6 +694,99 @@ mod tests {
         let stale = f.diags("is stale");
         assert_eq!(stale.len(), 2, "{stale:?}");
         assert!(stale[1].contains("section `b`"), "{stale:?}");
+    }
+
+    /// `docs review` writes `reviewed` into the `@doc` block (replacing an older one),
+    /// refuses ADRs, docs without a TTL, sections and an unchanged line; `docs log` then
+    /// finds each review and verification in git, and each body change as a revision.
+    #[test]
+    fn review_and_log() {
+        let t = "<!-- @doc\nid = \"T\"\nkind = \"guide\"\nreview_every = \"90d\"\n-->\nIntro.\n<a id=\"a\"></a>\n## A\n<!-- @section\n-->\nText.\n";
+        let adr = "<!-- @doc\nid = \"ADR-0001\"\nkind = \"adr\"\n-->\nDecision.\n";
+        let mut files = REGISTRIES.to_vec();
+        files.extend([
+            ("T.md", t),
+            ("ADR.md", adr),
+            ("G.md", "<!-- @doc\nid = \"G\"\n-->\n"),
+        ]);
+        let f = Fixture::new("review-log", &files);
+        let commit = |msg: &str| {
+            f.git(&["add", "-A"]);
+            f.git(&[
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "-m",
+                msg,
+            ]);
+        };
+        commit("docs: add T (#1)");
+        for (target, why) in [
+            ("ADR-0001", "ADRs have no TTL"),
+            ("G", "no `review_every`"),
+            ("T#a", "stamps a whole doc"),
+            ("NOPE", "no tracked doc"),
+        ] {
+            let err = review(&f.0, target, "agent:test", NOTE).expect_err(target);
+            assert!(format!("{err:#}").contains(why), "{target}: {err:#}");
+        }
+        review(&f.0, "T", "agent:test", NOTE).expect("T reviews");
+        let err = review(&f.0, "T", "agent:test", NOTE).expect_err("same line");
+        assert!(format!("{err:#}").contains("already records"), "{err:#}");
+        commit("docs: review T (#2)");
+        verify(&f.0, "T#a", "agent:test", NOTE).expect("T#a verifies");
+        commit("docs: verify T#a (#3)");
+        let text = std::fs::read_to_string(f.0.join("T.md")).expect("invariant: written");
+        f.write("T.md", &text.replace("Text.", "New text."));
+        commit("docs: edit T#a (#4)");
+        review(&f.0, "T.md", "human:j", &format!("{NOTE}, again")).expect("T reviews again");
+        commit("docs: review T again (#5)");
+        assert_eq!(f.diags("is stale"), Vec::<String>::new());
+        let written = std::fs::read_to_string(f.0.join("T.md")).expect("invariant: written");
+        assert_eq!(written.matches("reviewed =").count(), 1, "{written}");
+        assert!(written.starts_with("<!-- @doc\nid = \"T\"\nkind = \"guide\"\nreview_every = \"90d\"\nreviewed = { by = \"human:j\""), "{written}");
+
+        let l = load(&f.0).expect("invariant: the fixture is readable");
+        let changes = |target: &str| -> Vec<(Option<u32>, String)> {
+            history::log(&f.0, &l.docs, target, "HEAD")
+                .expect(target)
+                .events
+                .into_iter()
+                .map(|e| {
+                    let what = match e.change {
+                        history::Change::Revision(n) => format!("r{n}"),
+                        history::Change::Stamped(s) => s.by,
+                        other => format!("{other:?}"),
+                    };
+                    (e.commit.pr(), what)
+                })
+                .collect()
+        };
+        assert_eq!(
+            changes("T"),
+            vec![
+                (Some(1), "r1".into()),
+                (Some(2), "agent:test".into()),
+                (Some(4), "r2".into()),
+                (Some(5), "human:j".into()),
+            ]
+        );
+        assert_eq!(
+            changes("T.md#a"),
+            vec![
+                (Some(1), "r1".into()),
+                (Some(3), "agent:test".into()),
+                (Some(4), "r2".into()),
+            ]
+        );
+        let err = history::log(&f.0, &l.docs, "T#nope", "HEAD").expect_err("no anchor");
+        assert!(
+            format!("{err:#}").contains("no section or rule `nope`"),
+            "{err:#}"
+        );
     }
 
     const MAP: &str = "<!-- @doc\nid = \"M\"\n-->\n<a id=\"map\"></a>\n## Map\n<!-- @section\n-->\n| L | Crate |\n|---|---|\n| 0 | `a` |\n| 1 | `b` |\n";

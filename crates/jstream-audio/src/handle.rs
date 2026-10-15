@@ -9,6 +9,7 @@ use crate::MeterReading;
 use crate::rt::cmd::ControlPlane;
 use crate::rt::input::InputShared;
 use crate::rt::mixer::BusShared;
+use crate::rt::ring::FrameRing;
 use crate::rt::shared::db_to_gain;
 
 /// One mixer's input. Opaque: only [`InputControl::id`] produces one.
@@ -17,16 +18,33 @@ pub struct InputId(pub(crate) u64);
 
 /// Controls and observes one mixer input. Cheap to clone; every clone controls the
 /// same input.
+///
+/// It also holds a reference to everything the input's audio thread and the mixer
+/// thread share (its ring and its counters). The mixer and the producer hand their own
+/// references to the collector thread, so whichever handle goes last, neither real-time
+/// thread frees them (docs/RULES.md#R-RT-003).
 #[derive(Clone, Debug)]
 pub struct InputControl {
     id: InputId,
     shared: Arc<InputShared>,
     plane: Arc<ControlPlane>,
+    /// Never read: it only keeps the ring's last reference off the real-time threads.
+    _ring: Arc<FrameRing>,
 }
 
 impl InputControl {
-    pub(crate) fn new(id: InputId, shared: Arc<InputShared>, plane: Arc<ControlPlane>) -> Self {
-        Self { id, shared, plane }
+    pub(crate) fn new(
+        id: InputId,
+        shared: Arc<InputShared>,
+        ring: Arc<FrameRing>,
+        plane: Arc<ControlPlane>,
+    ) -> Self {
+        Self {
+            id,
+            shared,
+            plane,
+            _ring: ring,
+        }
     }
 
     /// This input's id.

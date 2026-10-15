@@ -191,6 +191,11 @@ impl Mixer {
     /// while setting the mixer up. To add an input while [`Self::poll`] is running on
     /// another thread, use [`MixerControl::add_input`] from [`Self::control`].
     ///
+    /// The returned [`InputControl`] also holds the input's ring and counters. Dropping
+    /// it early (`let (producer, _) = ...`) is fine: the mixer and the producer hand
+    /// their references to the collector thread, so no real-time thread frees them
+    /// (R-RT-003).
+    ///
     /// # Errors
     /// [`AudioError::UnsupportedFormat`] for planar samples,
     /// [`AudioError::UnsupportedRate`] for a rate more than 4 times above or 6 times below
@@ -402,10 +407,10 @@ impl MixerControl {
         &self,
         format: jstream_media::AudioFormat,
     ) -> Result<(super::input::InputProducer, InputControl), AudioError> {
-        let (producer, id, shared) = self.plane.add(format)?;
+        let (producer, id, shared, ring) = self.plane.add(format)?;
         Ok((
             producer,
-            InputControl::new(InputId(id), shared, Arc::clone(&self.plane)),
+            InputControl::new(InputId(id), shared, ring, Arc::clone(&self.plane)),
         ))
     }
 }
@@ -526,6 +531,39 @@ mod tests {
             let f =
                 AudioFormat::new(rate, ChannelLayout::Mono, SampleFormat::F32Interleaved).unwrap();
             assert!(m.add_input(f).is_ok(), "{rate}");
+        }
+    }
+
+    /// Whichever of the producer (audio thread) and the mixer (mixer thread) is dropped
+    /// last, the input's ring and counters outlive both while a control handle is
+    /// held (R-RT-003), and are freed once it is gone too.
+    #[test]
+    fn control_handle_holds_the_last_shared_reference() {
+        for mixer_first in [true, false] {
+            let mut m = Mixer::new(config(480)).unwrap();
+            let (p, control) = m.add_input(stereo48()).unwrap();
+            let ring = Arc::downgrade(&m.inputs[0].ring);
+            let shared = Arc::downgrade(&m.inputs[0].shared);
+            if mixer_first {
+                drop(m);
+                drop(p);
+            } else {
+                drop(p);
+                drop(m);
+            }
+            assert!(ring.upgrade().is_some(), "ring freed by an RT handle");
+            assert!(shared.upgrade().is_some(), "counters freed by an RT handle");
+            drop(control);
+            // The collector frees the mixer's and producer's references on its own
+            // schedule, so the last free happens on whichever side goes last.
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            while ring.upgrade().is_some() || shared.upgrade().is_some() {
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "ring or counters leaked"
+                );
+                std::thread::yield_now();
+            }
         }
     }
 
@@ -715,8 +753,8 @@ mod tests {
         assert!(ops.add_input(stereo48()).is_ok());
     }
 
-    /// Dropping the producer on another thread, then the mixer's reference, frees the
-    /// ring on the collector thread.
+    /// With the control dropped, dropping the producer on another thread and then the
+    /// mixer's reference frees the ring on the collector thread.
     #[test]
     fn a_removed_ring_is_freed_on_the_collector_thread() {
         let mut mixer = Mixer::new(config(480)).unwrap();
@@ -735,6 +773,8 @@ mod tests {
             "the ring was freed while the mixer still held it"
         );
         assert!(control.remove());
+        // The control plane lets go of its reference first, so the mixer's is the last.
+        drop(control);
         let mut out = vec![0.0; 960];
         mixer.mix(0, &mut out).unwrap();
         let freed_on = hook_rx
@@ -746,12 +786,15 @@ mod tests {
     }
 
     /// The case from #75 review N1: the mixer is dropped first, and the producer is
-    /// dropped later on the audio thread. The ring is still freed on the collector.
+    /// dropped later on the audio thread. With no control handle left, the ring is
+    /// still freed on the collector.
     #[test]
     fn dropping_the_mixer_first_still_frees_the_ring_on_the_collector() {
         let mut mixer = Mixer::new(config(480)).unwrap();
         let collector = mixer.plane.retirer().thread();
-        let (producer, _control) = mixer.add_input(stereo48()).unwrap();
+        let (producer, control) = mixer.add_input(stereo48()).unwrap();
+        // Dropped early, so the producer's reference is the last.
+        drop(control);
         let (hook_tx, hook_rx) = std::sync::mpsc::channel();
         producer.ring().on_drop(hook_tx);
         let mixer_id = std::thread::current().id();

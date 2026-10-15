@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:49c3b58f2d586ee9", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Stale only via ARCH#threading, whose change is about the audio mixer's collector for input rings. Re-read this section's threading references (its own threads and RT rules); none mentions the collector, so it holds" }
+verified = { hash = "b3:6343311b84f7ab98", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main into D1: section text is main's; stale only via ARCH#threading/crate-map, where D1 changes only the audio mixer's collector sentences; re-read this section's threading and crate-map references, none concerns the mixer's collector" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -51,6 +51,16 @@ Contents:
   thread takes from it without blocking; `None` means "repeat the last frame". Spike S1
   drains Windows.Graphics.Capture's pool to the newest frame the same way.
   `CaptureStats` counts captured and skipped frames.
+- **Video capture devices** (webcams and capture cards,
+  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `VideoDevices`
+  (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
+  endpoint when the backend can pair one), each device's `VideoDeviceFormat`s (size, frame
+  period, `CaptureEncoding`), and opens a device in one format as a `CaptureStream`, the
+  same mailbox as display capture. `CaptureEncoding` is `Raw` (an engine pixel format),
+  `Yuy2` (converted to NV12 by the backend) or `Mjpeg`. MJPEG is a video codec, so it is
+  decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
+  (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
+  a frame it rejects is dropped and the stream goes on.
 - **Audio:** `AudioIo` (`Send + Sync`) lists devices and opens input (microphone,
   output loopback, process loopback) and output streams. Each stream calls an
   engine-supplied `AudioInputHandler` or `AudioOutputHandler` on the backend's real-time
@@ -63,7 +73,9 @@ Contents:
 - **Codecs:** `Codecs` (`Send + Sync`) lists the OS codecs (`CodecInfo`) and opens
   `VideoEncoder`, `AudioEncoder` and `VideoDecoder` sessions (each `Send`). The call
   pattern is spike S1's Media Foundation one: `can_accept`, then `encode` (or
-  `decode`), then a non-blocking `poll` for ready output, and `finish` to drain. A full
+  `decode`), then a non-blocking `poll` for ready output, and `finish` to drain.
+  `VideoEncoder::request_keyframe` forces the next frame to be a keyframe; its default
+  refuses with `Unsupported`, and an encoder that refuses keeps its regular cadence. A full
   encoder returns `PlatformError::Busy`, so the caller drops and counts the frame
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). Packets keep their frame's `pts` on the
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
@@ -73,6 +85,13 @@ Contents:
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
   ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)), not this trait's.
+- **Stream keys** (`keys.rs`): `StreamKeyStore` (`Send + Sync`), the seam to the OS
+  credential store ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `clear`
+  and `is_set`, one key per output ID. No error may contain a key. `Secret` carries a
+  key across it: it prints as `Secret("***")`, it has no `Display` and isn't `Clone`, it is
+  read only through `expose`, and its bytes are zeroed on drop (best effort).
+  `Secret::from_utf8` takes a store's bytes and refuses non-UTF-8 without naming them.
+  The engine holds the store apart from `Backends`, through `Engine::with_key_store`.
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, audio,
   codec and GPU-interop backends and its optional virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
@@ -81,24 +100,28 @@ Contents:
 - **Fakes** (`fake.rs`, feature `fake`): deterministic in-memory backends for engine and
   scenario tests ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): `FakeClock` (time moves
   only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and
-  keyframe pattern, placeholder payloads; the decoder returns frames in presentation
+  keyframe pattern, a forced keyframe restarting that pattern, placeholder payloads; the decoder returns frames in presentation
   order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
-  (dropping it stops it; a test watches it through a `FakeVcamProbe`), plus
-  `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI) and
+  (dropping it stops it; a test watches it through a `FakeVcamProbe`),
+  `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
+  MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
+  `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
+  `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 
 **Not yet:** a platform that delivers or consumes GPU frames (the Windows
 `GpuInterop` opens the device and encode targets; its capture and encoders don't use them
-yet), webcam capture (an MJPEG `Codec` variant and a
-camera `CaptureTarget`), on-demand keyframes, and encoder selection by GPU adapter.
+yet), a platform implementation of `VideoDevices` (Media Foundation's source reader is
+C4b) and its place in `Backends`, an MJPEG `Codec` variant with a `CaptureDecoder` built
+from the platform's decoder, and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:418109e505e0d384", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read GpuFrame, FrameSync and the unsafe-import split against the gpu-pipeline sentence that names legacy_quad. Render still uses this device when present, opens its own otherwise, and does not write the NV12 encode target." }
+verified = { hash = "b3:6d45418b89299049", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Stale through ARCH#crate-map only (main's #141 platform-windows row plus G1's vcam-proto row); the jstream-platform row it relies on (GpuInterop with wgpu types) is unchanged, so the section holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

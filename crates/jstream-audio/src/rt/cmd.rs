@@ -72,7 +72,7 @@ impl ControlPlane {
     pub(crate) fn add(
         &self,
         format: AudioFormat,
-    ) -> Result<(InputProducer, u64, Arc<InputShared>), AudioError> {
+    ) -> Result<(InputProducer, u64, Arc<InputShared>, Arc<FrameRing>), AudioError> {
         if format.sample_format() != SampleFormat::F32Interleaved {
             return Err(AudioError::UnsupportedFormat);
         }
@@ -103,11 +103,11 @@ impl ControlPlane {
         let producer = InputProducer::new(
             format,
             engine,
-            ring,
+            Arc::clone(&ring),
             Arc::clone(&shared),
             self.retirer.clone(),
         );
-        Ok((producer, id, shared))
+        Ok((producer, id, shared, ring))
     }
 
     /// The collector this mixer's objects are retired to.
