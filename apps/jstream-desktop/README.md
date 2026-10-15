@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:01a3b30c4fd547ad", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9 merge: host.rs's Windows backends now include MfMediaDecoders, so 'wired as the daemon's is' still holds; re-read" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -51,7 +50,6 @@ folder.
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:1806a584c2b4f0f0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
 -->
 
 On Windows, with the UI built first:
@@ -92,7 +90,6 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:4c96fdf0a07d1a75", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (#282, #270) into C9: main only restamped; 'same wiring as the daemon' holds with MfMediaDecoders in host.rs; re-read" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS

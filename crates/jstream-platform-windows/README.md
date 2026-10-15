@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:b316e7326d6add8d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (e1e2a94: #295 clock-swap replan, G3b daemon vcam #297, Q3 #309, #286, #237) into C9: main's text kept beside C9's MfMediaDecoders bullet and delay-load list; re-read, holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

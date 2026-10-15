@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:312f0f2834f62465", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (e1e2a94: #295 clock-swap replan, G3b daemon vcam #297, Q3 #309, #286, #237) into C9: source.rs keeps main's walk_below split, with C9's open_inside returning the resolved path on Windows too; Assets text holds; re-read" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
