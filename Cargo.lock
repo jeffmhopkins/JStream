@@ -820,6 +820,7 @@ name = "jstream-graph"
 version = "0.0.0"
 dependencies = [
  "jstream-protocol",
+ "serde_json",
 ]
 
 [[package]]
@@ -912,7 +913,9 @@ dependencies = [
  "axum",
  "blake3",
  "futures-util",
+ "getrandom 0.3.4",
  "jstream-control",
+ "jstream-mcp",
  "jstream-protocol",
  "serde_json",
  "thiserror",

@@ -1,5 +1,5 @@
 //! The server's configuration: where it listens, the control token, which `Host` and
-//! `Origin` values it accepts beyond its own, and the connection limits.
+//! `Origin` values it accepts beyond its own, the connection limits, and the MCP transport.
 
 use crate::error::ServerError;
 use std::fmt;
@@ -15,6 +15,12 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The default [`ServerConfig::header_read_timeout`].
 const HEADER_READ_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The default [`ServerConfig::max_mcp_sessions`].
+const MAX_MCP_SESSIONS: usize = 16;
+
+/// The default [`ServerConfig::mcp_idle_timeout`].
+const MCP_IDLE_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 
 /// The control token every connection must present (ADR-0006).
 ///
@@ -92,11 +98,21 @@ pub struct ServerConfig {
     /// none, or was refused and kept the connection open) is dropped.
     /// [`ServerConfig::new`] sets 10 s.
     pub header_read_timeout: Duration,
+    /// Whether MCP's streamable-HTTP transport is served at
+    /// [`MCP_PATH`](crate::MCP_PATH), behind the same checks. [`ServerConfig::new`]
+    /// leaves it off; the host turns it on.
+    pub mcp: bool,
+    /// The most MCP sessions (one per `initialize`) open at once. An `initialize` beyond
+    /// it is refused with HTTP 503. [`ServerConfig::new`] sets 16.
+    pub max_mcp_sessions: usize,
+    /// How long an MCP session may go unused before it is ended, and its `Control`
+    /// session with it. [`ServerConfig::new`] sets 30 minutes.
+    pub mcp_idle_timeout: Duration,
 }
 
 impl ServerConfig {
     /// Listens on `127.0.0.1` with an ephemeral port, accepting only its own hosts and
-    /// origins, with the default connection limits.
+    /// origins, with the default connection limits and without MCP.
     pub fn new(token: Token) -> Self {
         ServerConfig {
             bind: SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
@@ -106,6 +122,9 @@ impl ServerConfig {
             max_connections: MAX_CONNECTIONS,
             handshake_timeout: HANDSHAKE_TIMEOUT,
             header_read_timeout: HEADER_READ_TIMEOUT,
+            mcp: false,
+            max_mcp_sessions: MAX_MCP_SESSIONS,
+            mcp_idle_timeout: MCP_IDLE_TIMEOUT,
         }
     }
 }

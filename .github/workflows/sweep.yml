@@ -23,7 +23,8 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: never
-  # The cargo-deny release the sweep installs; bump it by hand.
+  # The cargo-deny release the sweep installs; bump it by hand, in step with the release that
+  # ci.yml's cargo-deny-action bundles, so the weekly report and the `deny` gate agree.
   CARGO_DENY_VERSION: 0.20.2
   ISSUE_TITLE: Weekly sweep
 
@@ -57,7 +58,16 @@ jobs:
           mkdir -p "$RUNNER_TEMP/sweep"
           status=0
           cargo deny --color never --all-features --locked check > "$RUNNER_TEMP/deny.txt" 2>&1 || status=$?
+          # A run that got as far as checking ends with its summary line; anything else
+          # (a deny.toml that doesn't parse, say) is a tool failure, not a finding.
+          if ! tail -n 1 "$RUNNER_TEMP/deny.txt" | grep -Eq '^advisories (ok|FAILED), '; then
+            cat "$RUNNER_TEMP/deny.txt"
+            echo "::error::cargo deny check did not run to completion"
+            exit 1
+          fi
           {
+            echo "$(cargo deny --version), advisory DB fetched $(date -u +%Y-%m-%d)."
+            echo
             if [ "$status" -eq 0 ]; then
               echo "Passed."
             else

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:58c04b71d625be57", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (#158 C4a) into H1: re-read both; C4a's Video capture devices bullet, FakeVideoDevices/FakeCaptureDecoder and Not yet line are main's, unchanged; the IDs and errors bullet still names PlatformError::MissingComponent, which video_device.rs doesn't use" }
+verified = { hash = "b3:be1c4f369145d665", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (Y2 #169 OAuth tokens bullet, MemoryTokenStore) into H1: re-read both; Y2's text is main's, unchanged; the IDs and errors bullet still names PlatformError::MissingComponent, which keys.rs doesn't use" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -92,6 +92,12 @@ Contents:
   read only through `expose`, and its bytes are zeroed on drop (best effort).
   `Secret::from_utf8` takes a store's bytes and refuses non-UTF-8 without naming them.
   The engine holds the store apart from `Backends`, through `Engine::with_key_store`.
+- **OAuth tokens** (`keys.rs`): `OAuthTokenStore` (`Send + Sync`), the same seam for
+  OAuth refresh tokens ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `clear`
+  and `is_set`, one token per caller-chosen account ID, each carried as a `Secret`. It is
+  a separate trait from `StreamKeyStore`, so a token and a stream key never share a name.
+  Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
+  contain a token. `jstream-youtube` keeps its Google refresh token here.
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, audio,
   codec and GPU-interop backends and its optional virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
@@ -107,7 +113,8 @@ Contents:
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
   MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
-  `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail) and
+  `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
+  `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
@@ -122,7 +129,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:6d45418b89299049", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Stale through ARCH#crate-map only (main's #141 platform-windows row plus G1's vcam-proto row); the jstream-platform row it relies on (GpuInterop with wgpu types) is unchanged, so the section holds" }
+verified = { hash = "b3:40dc2bf9ee897a2a", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#141/G1 crate-map rows) into I1 #153: stale via ARCH#crate-map only; I1 just dropped (not built) from the mcp and server rows; nothing here relies on them" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

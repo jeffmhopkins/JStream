@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:8c01e3ac115def0d", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 touched apps/jstream-cli only for protocol 0.7 goldens and the new key_set/outputs fields; the CLI is still the remote client and doesn't link the engine; diagram and host table hold" }
+verified = { hash = "b3:348e93b0bafdf766", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; main's repo-tree comment change and I1's daemon row both hold" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:8c01e3ac115def0d", by = "agent:claude@session_01PiP5mMM8
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API only ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI yet ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:f93d77c61243e82a", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against H3: .github line now lists the new sweep workflow alongside ci, governance and review-gate; xtask main.rs entries and the rest of the tree unchanged" }
+verified = { hash = "b3:ae45fe9d9e867a96", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against .github/: the line now also names the workflow tests and the issue template next to the four workflows, Dependabot config and PR template; xtask and docs lines unchanged" }
 -->
 
 ```
@@ -107,7 +107,8 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md, generated README.md index)
 │   └── guides/
-└── .github/                # workflows (CI, governance, review-gate, sweep), Dependabot config, PR template
+└── .github/                # workflows (CI, governance, review-gate, sweep), their tests, Dependabot config,
+                            # issue and PR templates
 ```
 
 <a id="crate-map"></a>
@@ -115,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ca46183f040fa03c", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (#156 F2a) into H1: re-read the map; the jstream-outputs row (layer 4, recording listed) and G1's jstream-vcam-proto row (layer 0, unsafe no) are main's and match their manifests; H1 adds only two windows-crate features to platform-windows (LibraryLoader, Registry), no new edge, so its row holds" }
+verified = { hash = "b3:4071e3975df209bc", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (#134, #153, #155, #159, #165, #169) into H1: re-read the map; the rows are main's text, and H1 adds only two windows-crate features to platform-windows (LibraryLoader, Registry), no new edge, so its row (layer 2, unsafe yes) still holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -147,9 +148,9 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
-| 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` (not built) | no |
+| 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
-| 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks (not built) | no |
+| 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0034](adr/0034-youtube-interaction-scope-v2.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
@@ -164,8 +165,8 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:aa09a2850f43607f", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Built so far now includes outputs (kind Rtmp Generic url only, no key in the collection); Not yet adds an output's mix, buses, encoder profile, chains and the other kinds; checked against graph model/mod.rs" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
+verified = { hash = "b3:81cb37560b19b12c", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "ADR-0040 accepted: hotkey sentence now says deleting a binding's target removes the binding in the same undoable edit, delete.plan lists them, never a blocker (ADR-0040 §3); depends_on gains ADR-0040; the orphaned-override and shared-group bullets already match its §1-2; Built so far still lists hotkeys as not built" }
 -->
 
 ```
@@ -255,9 +256,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   display order, and a variant sits under its parent, never in a folder. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
-  decision. Deleting the scene, source or output a binding's action names succeeds: the
-  binding stays, is reported as broken, does nothing when pressed, and can be re-pointed
-  (a batch of `hotkey.clear` and `hotkey.set`, as ADR-0024 §5 rebinds); undoing the delete makes it work again. `Scene.background` (absent
+  decision. Deleting the scene, source or output a binding's action names also removes
+  that binding, in the same undoable edit, and undo restores both; `delete.plan` lists
+  the bindings it will remove, and a binding is never a delete blocker
+  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). `Scene.background` (absent
   means transparent) is scene model, not metadata, because the compositor draws it
   wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
@@ -336,14 +338,19 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   BT.709 limited range by default. HDR (FP16) capture is tone-mapped to SDR. HDR output is later.
 - **Undo** primitives (an edit plus its inverse) live in `jstream-graph`. The per-client
   undo stacks live in `jstream-core`.
-- **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind name or a nested
-  scene; no settings or filters yet), scenes in display order, and items in stacking
-  order with `source_id`, protocol 0.3's 2D transform (top-left corner and scale, which
-  ADR-0022 replaces), `crop` and `visible`. Items refer to sources; they never copy them.
-  Deleting a source an item still places, or a scene a source still shows, is rejected.
+- **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind ID or a nested
+  scene, with `settings` checked against the kind's descriptor and stored complete; no
+  filters yet), scenes in display order, and items in stacking order with `source_id`,
+  protocol 0.3's 2D transform (top-left corner and scale, which ADR-0022 replaces),
+  `crop` and `visible`. Items refer to sources; they never copy them. Scene and source
+  references in settings are dependency edges with items and nested scenes, so one
+  cycle check covers them all. Deleting a source an item still places or a setting
+  refers to, or a scene a source still shows or a setting refers to, is rejected. The
+  built-in kinds are stubs in `jstream-core` until `jstream-sources` exists.
   Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
   the URL checked to carry no credential. A stream key is never collection state: it
-  lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)). Not yet: settings, filters, source audio settings, `opacity`, `blend`, the reserved
+  lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
+  Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
   `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
   variants and overrides, folders, labels, favourites and other organisation metadata,
@@ -490,7 +497,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1297cb1237ce04ea", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#150, #151, #152) into #142: only verified lines conflicted; re-read the section: the 0.7 output edits, Stream keys and output.list bullets are #142's, Transport and Slow clients unaffected by #150's test-only change" }
+verified = { hash = "b3:1dbe914dd531c477", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Stale via jstream-server src (I1 413 from Content-Length): transport bullet's /mcp sentence still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -542,8 +549,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   naming the outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the JSON result,
-  longest side at most 1280, with the layout `rev`; later `audio.levels`).
+  `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the
+  JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
+  `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
+  schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); later `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)); the fields are in
@@ -573,8 +582,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
   list. The same server
-  serves MCP's streamable-HTTP transport on the control port, behind the same checks
-  ([MCP](#mcp)).
+  serves MCP's streamable-HTTP transport at `/mcp` on the control port, behind the same
+  checks, when the host turns it on ([MCP](#mcp)).
 - **Slow clients:** each connection gets a bounded event buffer, and the server keeps
   draining the engine's events while a client is slow to read. When the buffer
   overflows, the server drops the queued events and sends one `events.dropped {count}`
@@ -588,11 +597,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:e7a22d3fc6b340a6", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: tools.snap grew to about 70 KB with the output ops; tool grouping (output tool takes the new ops) unchanged; other bullets unaffected" }
+verified = { hash = "b3:90489d48b902b02d", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; tool groups gain kind and about 80 KB (main), Access bullet settles no-Origin at /mcp (I1)" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -602,7 +611,7 @@ verified = { hash = "b3:e7a22d3fc6b340a6", by = "agent:claude@session_01PiP5mMM8
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 70 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 80 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -616,13 +625,14 @@ verified = { hash = "b3:e7a22d3fc6b340a6", by = "agent:claude@session_01PiP5mMM8
   short placeholder in `png`, so the image doesn't flood the agent's context.
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
-  streamable-HTTP transport (not built) is served by `jstream-server` on the control port,
-  behind the same token and `Origin` checks as the WebSocket API, so it validates
+  streamable-HTTP transport is served by `jstream-server` at `/mcp` on the control port,
+  behind the same token, `Host` and `Origin` checks as the WebSocket API, so it validates
   `Origin`, as the
   [MCP transport spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
-  requires. Whether that transport also lets a request without `Origin` through, as the
-  WebSocket API does, is settled when it is built: browsers send `Origin` on a
-  cross-origin `fetch`, and the bearer token forces a preflight.
+  requires. Like the WebSocket API it lets a request without `Origin` through to the
+  token check: browsers send `Origin` on a cross-origin `fetch`, and the bearer token
+  forces a preflight, so only native clients send none
+  ([jstream-server › Design](../crates/jstream-server/README.md#design)).
 - Every agent action goes to the audit log with the client's name. Undo is per client,
   so an agent can never undo the user's work.
 
