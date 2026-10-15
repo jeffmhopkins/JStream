@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:02d324a7225d8f0c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "#219 review B1: dev-dependency list adds the cfg(windows) jstream-platform-windows dev-dependency and the hw-tests feature that compiles windows_gpu.rs; checked against Cargo.toml" }
+verified = { hash = "b3:dcfa185c51eb1555", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#214 ADR-0041) into #217, stamp-only conflicts: stale only through protocol#design; core text untouched by #217" }
 -->
 
 ### Engine and sessions
