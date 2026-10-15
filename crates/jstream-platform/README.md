@@ -137,7 +137,7 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:741ff6c1308043be", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4 merge-only round: stale via ARCH crate-map (main's e2e harness row); open_device on the media adapter still as the daemon's browser wiring uses it; holds" }
+verified = { hash = "b3:f34163dbfce39322", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH crate-map only (C8b4 B1: apps row now says only the daemon links jstream-browser, desktop wiring is #290); this section's own text makes no claim about that and holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

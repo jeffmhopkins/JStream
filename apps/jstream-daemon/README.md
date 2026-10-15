@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:aea6e3452c004ef3", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4 merge-only round (C8's branch, with main at e1e2a94, merged in): re-read; main's virtual camera publishing, the e2e test and the delay-load list hold beside this PR's cef browser wiring" }
+verified = { hash = "b3:7daf6f9ed6ca76b5", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH crate-map only (C8b4 B1: apps row now says only the daemon links jstream-browser, desktop wiring is #290); this section's own text makes no claim about that and holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -192,7 +192,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:70fcd1c55b856718", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4 merge-only round (C8's branch, with main at e1e2a94, merged in): re-read; main's virtual camera publishing, the e2e test and the delay-load list hold beside this PR's cef browser wiring" }
+verified = { hash = "b3:e19da543f8f6c2ea", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4 N1: browser cache is the data directory's cef folder, else the log directory's, as serve.rs cef_browser does; merged C8 at e4689ab, rest re-read and holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -273,7 +273,7 @@ verified = { hash = "b3:70fcd1c55b856718", by = "agent:claude@session_01YKRrREb5
   and hands it over with `use_device`, so a page's first paint already lands on it. CEF
   starts with the first page: its subprocess exe, `jstream-browser-helper.exe`, and CEF's
   runtime files must be next to `jstream-daemon.exe`; its cache is the data directory's
-  `cef` folder and its log the log directory's `cef.log`. Nothing about the browser
+  `cef` folder (else the log directory's) and its log the log directory's `cef.log`. Nothing about the browser
   stops the daemon: a device that won't open leaves pages playing audio with their
   frames dropped, and a daemon whose own path is unknown leaves browser sources empty;
   both are logged at `warn`. The program mix doesn't draw pages' frames yet (that is the

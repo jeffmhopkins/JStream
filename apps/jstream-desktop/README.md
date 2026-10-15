@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:ac7c8c9cc9a2eea4", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "C8b4: stale via ARCH crate-map apps row, which now says desktop links jstream-browser for a browser backend; the desktop app creates none yet (U5's next PR), and its purpose text makes no claim about it; holds" }
+verified = { hash = "b3:cd4eb3517efaebc5", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH crate-map only (C8b4 B1: apps row now says only the daemon links jstream-browser, desktop wiring is #290); this section's own text makes no claim about that and holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a

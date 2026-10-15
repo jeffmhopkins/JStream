@@ -716,10 +716,38 @@ mod tests {
     #[tokio::test]
     async fn browser_sources_open_pages_through_the_backend() {
         use jstream_browser::fake::FakeBrowser;
+        use jstream_browser::{BrowserBackend, BrowserError, BrowserPage, PageSpec};
         use jstream_control::protocol::{Settings, SourceId, SourceKind};
+        use jstream_platform::GpuContext;
+        use std::sync::Mutex;
+
+        /// The fake, recording the order of `use_device` and `open` calls.
+        struct Recording {
+            inner: Arc<FakeBrowser>,
+            calls: Mutex<Vec<&'static str>>,
+        }
+        impl BrowserBackend for Recording {
+            fn open(&self, spec: &PageSpec) -> Result<Box<dyn BrowserPage>, BrowserError> {
+                self.calls.lock().expect("calls").push("open");
+                self.inner.open(spec)
+            }
+            fn use_device(&self, gpu: Option<&GpuContext>) {
+                self.calls.lock().expect("calls").push("use_device");
+                self.inner.use_device(gpu);
+            }
+        }
 
         let browser = FakeBrowser::new();
-        let engine = super::browse(Engine::new(), browser.clone(), None);
+        let recording = Arc::new(Recording {
+            inner: browser.clone(),
+            calls: Mutex::new(Vec::new()),
+        });
+        let engine = super::browse(Engine::new(), recording.clone(), None);
+        assert_eq!(
+            *recording.calls.lock().expect("calls"),
+            ["use_device"],
+            "the device first"
+        );
         assert!(!browser.has_device(), "no device was given");
         let control = session(&engine).await;
         timely(
@@ -748,5 +776,9 @@ mod tests {
         let pages = browser.pages();
         assert_eq!(pages.len(), 1);
         assert!(!pages[0].is_closed());
+        assert_eq!(
+            *recording.calls.lock().expect("calls"),
+            ["use_device", "open"]
+        );
     }
 }

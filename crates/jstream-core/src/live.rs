@@ -43,8 +43,10 @@ pub(crate) trait LiveHost: Send + Sync {
 /// The live sources of one engine. Lives in the engine state, under the collection lock.
 pub(crate) struct LiveSources {
     registry: Arc<Registry>,
-    ctx: Context,
+    /// Declared before `ctx`, so the running sources drop first: a `browser` page closes
+    /// while the backend in `ctx` is still there.
     entries: BTreeMap<SourceId, Entry>,
+    ctx: Context,
     /// Numbers the builds, so a result installs only if nothing changed the source
     /// since it was asked for.
     tickets: u64,

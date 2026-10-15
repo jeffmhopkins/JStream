@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:dee8be93f154a517", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 doc fix: crate docs no longer intra-link CefBackend (cfg'd out of rustdoc); README text unaffected" }
+verified = { hash = "b3:8fdbc35ada7779d3", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 1 (#290 review N1): seam paragraph says use_device gets a device the host opens on the media adapter for now, not the engine's own; rest re-read against page.rs, audio.rs, fake.rs and cef/" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
@@ -26,8 +26,9 @@ download and build it ([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.m
 into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageSpec` (a
 location, a size, a frame-rate cap and the custom CSS) and returns a `BrowserPage`:
 its latest frame as a `GpuFrame`, its audio, and a way to replace its custom CSS while it
-runs. `use_device` gives the backend the engine's GPU device, which pages copy their
-paints onto; without one a page renders and plays but delivers no frames. Dropping the
+runs. `use_device` gives the backend a GPU device to copy the pages' paints onto. Today
+that is one the host opens on the media adapter, since the engine doesn't hand out its
+own device yet; without one a page renders and plays but delivers no frames. Dropping the
 page closes it.
 
 **Built everywhere:**
