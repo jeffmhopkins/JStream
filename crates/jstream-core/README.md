@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:c756266742ab9b6b", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; virtual camera thread bullet (main) then D5's Audio bullet, both hold against engine.rs and runtime" }
+verified = { hash = "b3:e5c958aef95fd7bf", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): only rustdoc in engine.rs, kinds.rs and tests.rs changed (stale C5 wording); the purpose text holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -180,7 +180,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:58f855faee967315", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; virtual camera joins the program stage, so the mixer runs and audio routing attaches as Audio routing says; holds" }
+verified = { hash = "b3:b92e026c64754943", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): the comment fixes change no behaviour; loading a pre-D5 collection now keeps the audio sources' master sends, as Audio routing assumes; holds" }
 -->
 
 ### Engine and sessions

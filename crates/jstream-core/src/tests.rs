@@ -147,7 +147,7 @@ fn scene_ids(control: &dyn Control) -> (Rev, Vec<String>) {
 }
 
 /// An engine that describes every kind of the parity fixture: the built-in ones, and
-/// `mic` until C5 adds the audio kinds.
+/// `mic`, the fixture's audio kind, which is not a built-in kind.
 fn parity_engine() -> Engine {
     Engine::new().with_extra_kinds(parity::kinds())
 }

@@ -36,8 +36,8 @@ mod tests {
     }
 
     /// The shared parity collection needs its kinds described exactly as the fixture
-    /// does, so every implementation reports the same settings. Its audio kind, `mic`,
-    /// waits for C5's audio kinds; the engine's parity tests add it themselves.
+    /// does, so every implementation reports the same settings. Its audio kind, `mic`, is
+    /// not a built-in kind; the engine's parity tests add it themselves.
     #[test]
     fn parity_kinds_are_builtin() {
         let kinds = builtin();

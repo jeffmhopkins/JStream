@@ -537,7 +537,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:0a6db70f9ed8b046", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio edits, bus.list and meters.tick say 0.19, virtual_cam 0.18; holds" }
+verified = { hash = "b3:84f1c8ab5494756e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B5, filters join the audio edits once they are in the protocol, the mixer has chains since D7b; rest holds at 0.19" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -564,8 +564,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
-  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19); filters join them once the
-  mixer has filter chains.
+  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19); filters join them once they are
+  in the protocol (the mixer has had filter chains since D7b).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -873,7 +873,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:036a2dc2f0fa6fa4", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; collections bullet holds; holds" }
+verified = { hash = "b3:e9fce11408a54542", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): collections bullet (schema_version, forward migrations, checks as edits) holds; the sends fix needs no migration since schema 1 files load as before" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
