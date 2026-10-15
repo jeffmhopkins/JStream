@@ -5,6 +5,7 @@
 
 mod collection;
 mod history;
+mod sources;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
@@ -421,6 +422,9 @@ fn queries_match_the_parity_fixture() {
             output_id: OutputId::new("rec"),
             state: OutputState::Stopped,
             key_set: false,
+            encoder: None,
+            encoder_sessions: 0,
+            hardware_sessions: 0,
         })
     );
     let missing = query(
@@ -1819,6 +1823,7 @@ fn deleting_a_source_drops_its_frame() {
 mod cpu_pipeline {
     use super::{
         batch, block_on, code, connected, drain, edits, output_call, output_state, output_steps,
+        query,
     };
     use crate::InProcessControl;
     use crate::runtime::{DrawFn, OpenDraw, cpu_draw};
@@ -1834,7 +1839,10 @@ mod cpu_pipeline {
         MediaClock, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
         VideoEncoderConfig, VideoSurface,
     };
-    use jstream_protocol::{Edit, Event, OutputId, OutputKind, OutputState, RecordContainer};
+    use jstream_protocol::{
+        Edit, EncoderProfile, EncoderProfileId, EncoderSessionInfo, Event, OutputId, OutputKind,
+        OutputState, Query, QueryResult, RateControl, RecordContainer,
+    };
     use std::panic::{self, AssertUnwindSafe};
     use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::{Arc, Condvar, Mutex, mpsc};
@@ -2484,11 +2492,9 @@ mod cpu_pipeline {
 
     // --- Item: a failed start's teardown does not overlap the next start.
 
-    /// Fails its first tag. `finish`, which the output thread calls after it has sent
-    /// that failure, opens `sent`.
-    struct FailFirstTag {
-        sent: Arc<Hold>,
-    }
+    /// Fails its first tag, the FLV header the output thread sends before the start
+    /// returns, so the start sees the failure.
+    struct FailFirstTag;
 
     impl LivePublish for FailFirstTag {
         fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
@@ -2500,7 +2506,6 @@ mod cpu_pipeline {
         }
 
         fn finish(&mut self) -> Result<(), PublishError> {
-            self.sent.signal();
             Ok(())
         }
     }
@@ -2592,7 +2597,6 @@ mod cpu_pipeline {
         let tearing_down = Arc::new(AtomicBool::new(false));
         let overlapped = Arc::new(AtomicBool::new(false));
         let release = Arc::new(Hold::default());
-        let sent = Arc::new(Hold::default());
         fakes.backends.audio = Arc::new(SlowTeardownAudio {
             inner: fakes.audio.clone(),
             armed: Arc::new(AtomicBool::new(true)),
@@ -2604,22 +2608,7 @@ mod cpu_pipeline {
             tearing_down: Arc::clone(&tearing_down),
             overlapped: Arc::clone(&overlapped),
         });
-        // The compositor "opens" only once the output thread has reported the publish
-        // failure, so the start sees that failure right after `launch` returns.
-        let draw: OpenDraw = {
-            let sent = Arc::clone(&sent);
-            Arc::new(move || {
-                sent.wait();
-                (cpu_draw())()
-            })
-        };
-        let engine = engine(
-            share(&fakes.backends),
-            draw,
-            Box::new(FailFirstTag {
-                sent: Arc::clone(&sent),
-            }),
-        );
+        let engine = engine(share(&fakes.backends), cpu_draw(), Box::new(FailFirstTag));
         let status = connected(&engine);
         let mut events = status.events();
         let first = connected(&engine);
@@ -3293,6 +3282,222 @@ mod cpu_pipeline {
         block_on(control.call(output_call("rec", false))).expect("output.stop");
         assert!(path.exists(), "the second start did not record");
     }
+
+    // --- Item: outputs that encode the same mix with the same profile share one
+    // encoder session (ADR-0027), so a recording can run while streaming.
+
+    /// The `yt` publish output and the `rec` recording output to `path`, on one engine.
+    fn streaming_and_recording(
+        fakes: &Fakes,
+        draw: OpenDraw,
+        publish: &RecordingPublish,
+        path: &std::path::Path,
+    ) -> (Engine, InProcessControl, EventStream) {
+        let engine = engine(share(&fakes.backends), draw, Box::new(publish.clone()));
+        let control = connected(&engine);
+        let events = control.events();
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: OutputKind::Record {
+                    path: path.to_str().expect("a UTF-8 temp path").into(),
+                    container: RecordContainer::Mp4,
+                },
+            }]),
+        )
+        .expect("output.create");
+        (engine, control, events)
+    }
+
+    /// `output.status` for `id`: its state, its encoder session, and the sessions open.
+    fn encoder_status(
+        control: &dyn Control,
+        id: &str,
+    ) -> (OutputState, Option<EncoderSessionInfo>, u32, u32) {
+        match query(
+            control,
+            Query::OutputStatus {
+                output_id: OutputId::new(id),
+            },
+        ) {
+            Ok(QueryResult::OutputStatus {
+                state,
+                encoder,
+                encoder_sessions,
+                hardware_sessions,
+                ..
+            }) => (state, encoder, encoder_sessions, hardware_sessions),
+            other => panic!("not an output status: {other:?}"),
+        }
+    }
+
+    fn video_tags(publish: &RecordingPublish) -> usize {
+        publish
+            .tags()
+            .iter()
+            .filter(|tag| tag.tag_type == TagType::Video)
+            .count()
+    }
+
+    /// Recording while streaming on the default profile opens one encoder session that
+    /// both outputs report sharing. Stopping the recording finishes its file and leaves
+    /// the stream running on the same session.
+    #[test]
+    fn a_recording_shares_the_streams_encoder() {
+        let dir = TempDir::new("shared");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &path);
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        for (id, other) in [("yt", "rec"), ("rec", "yt")] {
+            let (state, encoder, sessions, hardware) = encoder_status(&control, id);
+            assert_eq!(state, OutputState::Active, "{id}");
+            assert_eq!(
+                encoder,
+                Some(EncoderSessionInfo {
+                    profile_id: None,
+                    shared_with: vec![OutputId::new(other)],
+                    hardware: false,
+                }),
+                "{id}"
+            );
+            assert_eq!((sessions, hardware), (1, 0), "{id}");
+        }
+
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                engine
+                    .output_stats_of(&OutputId::new("rec"))
+                    .is_some_and(|stats| stats.video_subscriber.delivered >= 70)
+                    && video_tags(&publish) >= 70
+            }),
+            "media never reached both outputs"
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+
+        let (state, encoder, sessions, _) = encoder_status(&control, "yt");
+        assert_eq!(state, OutputState::Active);
+        assert_eq!(encoder.map(|encoder| encoder.shared_with), Some(vec![]));
+        assert_eq!(sessions, 1);
+        let before = video_tags(&publish);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || video_tags(&publish)
+                >= before + 30),
+            "the stream stopped with the recording"
+        );
+
+        let bytes = std::fs::read(&path).expect("the finished recording");
+        let found = boxes(&bytes);
+        assert_eq!(found.first().map(String::as_str), Some("ftyp"), "{found:?}");
+        assert_eq!(found.get(1).map(String::as_str), Some("moov"), "{found:?}");
+        assert!(found.iter().any(|name| name == "moof"), "{found:?}");
+
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+        assert_eq!(encoder_status(&control, "yt").2, 0);
+    }
+
+    /// A program-stage failure fails every output on it. A start after that waits for
+    /// the failed stage to go and opens a new one.
+    #[test]
+    fn a_render_panic_fails_every_output() {
+        let dir = TempDir::new("both-fail");
+        let fakes = fakes();
+        let armed = Arc::new(AtomicBool::new(false));
+        let draw: OpenDraw = {
+            let armed = Arc::clone(&armed);
+            Arc::new(move || {
+                let armed = Arc::clone(&armed);
+                let mut inner = (cpu_draw())()?;
+                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
+                    assert!(!armed.load(Ordering::Acquire), "compositor blew up");
+                    inner(shot, size, rgba, out)
+                });
+                Ok(draw)
+            })
+        };
+        let publish = RecordingPublish::new();
+        let (engine, control, _events) =
+            streaming_and_recording(&fakes, draw, &publish, &dir.join("show.mp4"));
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        assert!(pump_until(&fakes.clock, &fakes.audio, || readbacks(
+            &engine
+        ) >= 2));
+
+        armed.store(true, Ordering::Release);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                output_state(&control, "yt") == OutputState::Failed
+                    && output_state(&control, "rec") == OutputState::Failed
+                    && engine.output_stats().is_none()
+            }),
+            "a render panic left yt {:?} and rec {:?}",
+            output_state(&control, "yt"),
+            output_state(&control, "rec")
+        );
+
+        armed.store(false, Ordering::Release);
+        let engine = engine.with_publish(Box::new(RecordingPublish::new()));
+        std::fs::remove_file(dir.join("show.mp4")).ok();
+        block_on(control.call(output_call("yt", true))).expect("yt restart");
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || readbacks(&engine) >= 2),
+            "the new program stage never drew"
+        );
+        assert_eq!(output_state(&control, "yt"), OutputState::Active);
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
+
+    /// Outputs on different profiles each get a session of their own.
+    #[test]
+    fn different_profiles_open_separate_sessions() {
+        let dir = TempDir::new("separate");
+        let path = dir.join("show.mp4");
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let (_engine, control, mut events) =
+            streaming_and_recording(&fakes, cpu_draw(), &publish, &path);
+        let mut profile = EncoderProfile::DEFAULT;
+        profile.video.rate_control = RateControl::Cbr { kbps: 6000 };
+        batch(
+            &control,
+            edits(vec![
+                Edit::EncoderCreate {
+                    profile_id: EncoderProfileId::new("hq"),
+                    name: "Recording".into(),
+                    profile,
+                },
+                Edit::OutputSetEncoder {
+                    output_id: OutputId::new("rec"),
+                    profile_id: Some(EncoderProfileId::new("hq")),
+                },
+            ]),
+        )
+        .expect("encoder edits");
+        drain(&mut events);
+
+        block_on(control.call(output_call("yt", true))).expect("yt start");
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (_, yt, sessions, _) = encoder_status(&control, "yt");
+        let (_, rec, _, _) = encoder_status(&control, "rec");
+        assert_eq!(sessions, 2);
+        assert_eq!(
+            yt.map(|encoder| (encoder.profile_id, encoder.shared_with)),
+            Some((None, vec![]))
+        );
+        assert_eq!(
+            rec.map(|encoder| (encoder.profile_id, encoder.shared_with)),
+            Some((Some(EncoderProfileId::new("hq")), vec![]))
+        );
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
+        block_on(control.call(output_call("yt", false))).expect("yt stop");
+    }
 }
 
 fn rtmp_output(url: &str) -> jstream_protocol::OutputKind {
@@ -3372,6 +3577,7 @@ fn output_edits_configure_the_collection() {
         vec![OutputInfo {
             output_id: OutputId::new("out_yt"),
             kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+            encoder_profile: None,
         }]
     );
     assert_eq!(
@@ -3395,6 +3601,7 @@ fn output_edits_configure_the_collection() {
             vec![OutputInfo {
                 output_id: OutputId::new("out_yt"),
                 kind: rtmp_output("rtmps://a.rtmps.youtube.com:443/live2"),
+                encoder_profile: None,
             }]
         ),
         other => panic!("not a state: {other:?}"),

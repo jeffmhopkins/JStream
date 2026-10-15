@@ -85,6 +85,36 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "AudioCodec": {
+      "description": "An audio codec. Serialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "aac",
+          "description": "AAC-LC.",
+          "type": "string"
+        }
+      ]
+    },
+    "AudioEncoding": {
+      "description": "How the audio is encoded.",
+      "properties": {
+        "codec": {
+          "$ref": "#/$defs/AudioCodec",
+          "description": "The codec."
+        },
+        "kbps": {
+          "description": "The bit rate, in kilobits per second: 32..=320, else `invalid_argument`.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "codec",
+        "kbps"
+      ],
+      "type": "object"
+    },
     "Batch": {
       "description": "One or more edits, applied atomically.\n\nThe engine checks `expected_rev`, then applies the edits in order, each against the\nstate the previous one left. If any edit fails, nothing is applied and `rev` doesn't\nchange. On success `rev` increases by exactly one, whatever the number of edits, and\nthe batch becomes one undo step for the sending client.",
       "properties": {
@@ -1049,8 +1079,189 @@ source: crates/jstream-protocol/src/fixtures.rs
             "output_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "Chooses the encoder profile an output uses, or the engine's default. A running\noutput keeps its encoder session; the profile applies from its next\n`output.start`. Inverse: `output.set_encoder` with the previous profile.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output to change."
+            },
+            "profile_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EncoderProfileId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "description": "The profile, which must exist, else `not_found`. Absent or `null` means the\nengine's default."
+            },
+            "type": {
+              "const": "output.set_encoder",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Adds an encoder profile. Inverse: `encoder.delete`.",
+          "properties": {
+            "name": {
+              "description": "Display name.",
+              "type": "string"
+            },
+            "profile": {
+              "$ref": "#/$defs/EncoderProfile",
+              "description": "The encoding. Out-of-range values, and codecs or rate controls the engine\ndoesn't know, are rejected with `invalid_argument`."
+            },
+            "profile_id": {
+              "$ref": "#/$defs/EncoderProfileId",
+              "description": "The new profile's ID, chosen by the client. Rejected if it exists."
+            },
+            "type": {
+              "const": "encoder.create",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "profile_id",
+            "name",
+            "profile"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Replaces an encoder profile's name and encoding. Running outputs keep their\nencoder sessions; the new encoding applies from each output's next\n`output.start`. Inverse: `encoder.update` with the previous name and encoding.",
+          "properties": {
+            "name": {
+              "description": "The new display name.",
+              "type": "string"
+            },
+            "profile": {
+              "$ref": "#/$defs/EncoderProfile",
+              "description": "The new encoding, validated as in `encoder.create`."
+            },
+            "profile_id": {
+              "$ref": "#/$defs/EncoderProfileId",
+              "description": "The profile to change."
+            },
+            "type": {
+              "const": "encoder.update",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "profile_id",
+            "name",
+            "profile"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes an encoder profile. Rejected with `invalid_argument` while an output\nuses it: point those outputs elsewhere with `output.set_encoder` first (in the\nsame batch if needed). Inverse: `encoder.create` with its name and encoding.",
+          "properties": {
+            "profile_id": {
+              "$ref": "#/$defs/EncoderProfileId",
+              "description": "The profile to delete."
+            },
+            "type": {
+              "const": "encoder.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "profile_id"
+          ],
+          "type": "object"
         }
       ]
+    },
+    "EncoderProfile": {
+      "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on the software encoder,\nand AAC at 160 kbit/s.",
+      "properties": {
+        "audio": {
+          "$ref": "#/$defs/AudioEncoding",
+          "description": "The audio encoding."
+        },
+        "video": {
+          "$ref": "#/$defs/VideoEncoding",
+          "description": "The video encoding."
+        }
+      },
+      "required": [
+        "video",
+        "audio"
+      ],
+      "type": "object"
+    },
+    "EncoderProfileId": {
+      "description": "An encoder profile in the collection.",
+      "type": "string"
+    },
+    "EncoderProfileInfo": {
+      "description": "One encoder profile, as `encoder.list` and `state.get` report it.",
+      "properties": {
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "profile": {
+          "$ref": "#/$defs/EncoderProfile",
+          "description": "The encoding it describes."
+        },
+        "profile_id": {
+          "$ref": "#/$defs/EncoderProfileId",
+          "description": "The profile's ID."
+        }
+      },
+      "required": [
+        "profile_id",
+        "name",
+        "profile"
+      ],
+      "type": "object"
+    },
+    "EncoderSessionInfo": {
+      "description": "The encoder session a running output uses, as `output.status` reports it.",
+      "properties": {
+        "hardware": {
+          "description": "Whether the session's video encoder is a hardware one.",
+          "type": "boolean"
+        },
+        "profile_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EncoderProfileId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The profile the session was opened with, or absent for the engine's default.\nThe profile's settings at the time count: an output started after\n`encoder.update` gets a session of its own."
+        },
+        "shared_with": {
+          "default": [],
+          "description": "The other running outputs that share this session, ordered by ID. Empty when\nthe output has the session to itself.",
+          "items": {
+            "$ref": "#/$defs/OutputId"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "hardware"
+      ],
+      "type": "object"
     },
     "EntityKind": {
       "description": "The kinds of object an error can name.",
@@ -1073,6 +1284,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "output",
           "description": "An output.",
+          "type": "string"
+        },
+        {
+          "const": "encoder",
+          "description": "An encoder profile.",
           "type": "string"
         }
       ]
@@ -1271,6 +1487,26 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "fill",
           "description": "The smallest rectangle of the source's aspect ratio that covers the box,\ncentred. The part outside the box is clipped by the compositor.",
+          "type": "string"
+        }
+      ]
+    },
+    "HardwarePreference": {
+      "description": "Whether a video encoder runs on the GPU's encoder block. Serialized as a snake_case\nstring. Hardware encoders limit how many sessions run at once, per GPU vendor and\ndriver; the engine doesn't guess that limit, and `output.status` reports the\nhardware sessions in use.",
+      "oneOf": [
+        {
+          "const": "prefer",
+          "description": "Hardware if there is one, else software.",
+          "type": "string"
+        },
+        {
+          "const": "require",
+          "description": "Hardware only: `output.start` fails when there is none.",
+          "type": "string"
+        },
+        {
+          "const": "avoid",
+          "description": "Software only.",
           "type": "string"
         }
       ]
@@ -1628,6 +1864,17 @@ source: crates/jstream-protocol/src/fixtures.rs
     "OutputInfo": {
       "description": "One output, as `output.list` and `state.get` report it: its collection state.\nWhether it runs, and whether its stream key is set, are in `output.status`.",
       "properties": {
+        "encoder_profile": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EncoderProfileId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The encoder profile it uses (`output.set_encoder`). Absent means the engine's\ndefault, as from a server older than 0.13."
+        },
         "kind": {
           "$ref": "#/$defs/OutputKind",
           "description": "What it is and where it sends."
@@ -2108,7 +2355,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, and every output) at one revision: what a client reads on connecting, after\na `state.changed` it didn't cause, or before an edit it sends with `expected_rev`.",
+          "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, every output and every encoder profile) at one revision: what a client\nreads on connecting, after a `state.changed` it didn't cause, or before an edit it\nsends with `expected_rev`.",
           "properties": {
             "type": {
               "const": "state.get",
@@ -2176,6 +2423,19 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "Lists the collection's encoder profiles, ordered by ID.",
+          "properties": {
+            "type": {
+              "const": "encoder.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -2211,6 +2471,31 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The result of `output.status`. Output state is runtime state, not collection\nstate, so it carries no `rev`.",
           "properties": {
+            "encoder": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EncoderSessionInfo"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The encoder session the output uses while it runs: which profile, and which\nother running outputs share it. Absent while it isn't running, and from a\nserver older than 0.13."
+            },
+            "encoder_sessions": {
+              "default": 0,
+              "description": "How many video encoder sessions the engine has open now, for every output,\nand how many of them are hardware ones. Hardware encoders cap their\nconcurrent sessions per GPU vendor and driver, and the engine doesn't guess\nthe cap. Missing (from a server older than 0.13) parses as 0.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "hardware_sessions": {
+              "default": 0,
+              "description": "Of `encoder_sessions`, the hardware ones. Missing parses as 0.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
             "key_set": {
               "default": false,
               "description": "Whether the credential store holds a stream key for it. The key itself is\nnever reported. Missing (from a server older than 0.7) parses as `false`.",
@@ -2303,6 +2588,14 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "width": 1920
               },
               "description": "The canvas every scene is laid out on. Missing (from a server older than 0.11)\nparses as 1920×1080."
+            },
+            "encoders": {
+              "default": [],
+              "description": "Every encoder profile, ordered by ID. Missing (from a server older than\n0.13) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/EncoderProfileInfo"
+              },
+              "type": "array"
             },
             "outputs": {
               "default": [],
@@ -2446,6 +2739,84 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "rev",
             "outputs"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `encoder.list`.",
+          "properties": {
+            "encoders": {
+              "description": "The profiles, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/EncoderProfileInfo"
+              },
+              "type": "array"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the list was read at."
+            },
+            "type": {
+              "const": "encoder.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "rev",
+            "encoders"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "RateControl": {
+      "description": "How a video encoder spends bits. Serialized with an internal `type` tag.",
+      "oneOf": [
+        {
+          "description": "Constant bit rate, as RTMP ingest expects.",
+          "properties": {
+            "kbps": {
+              "description": "The target, in kilobits per second.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "cbr",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kbps"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Variable bit rate with a peak, for a recording.",
+          "properties": {
+            "kbps": {
+              "description": "The average target, in kilobits per second.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "max_kbps": {
+              "description": "The peak, in kilobits per second; at least `kbps`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "vbr",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kbps",
+            "max_kbps"
           ],
           "type": "object"
         }
@@ -2797,6 +3168,46 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "VideoCodec": {
+      "description": "A video codec. Serialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "h264",
+          "description": "H.264 (AVC).",
+          "type": "string"
+        }
+      ]
+    },
+    "VideoEncoding": {
+      "description": "How the video is encoded.",
+      "properties": {
+        "codec": {
+          "$ref": "#/$defs/VideoCodec",
+          "description": "The codec."
+        },
+        "hardware": {
+          "$ref": "#/$defs/HardwarePreference",
+          "default": "avoid",
+          "description": "Whether to use a hardware encoder. Omitted means `avoid`."
+        },
+        "keyframe_interval_s": {
+          "description": "Seconds from one keyframe to the next, 1..=10, else `invalid_argument`. Most\nstreaming services ask for 2.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rate_control": {
+          "$ref": "#/$defs/RateControl",
+          "description": "How the encoder spends bits. Rejected with `invalid_argument` outside\n100..=100000 kbit/s, or, for `vbr`, with a peak below the average or above\n200000 kbit/s."
+        }
+      },
+      "required": [
+        "codec",
+        "rate_control",
+        "keyframe_interval_s"
+      ],
+      "type": "object"
+    },
     "VisibleIf": {
       "description": "A UI hint: show a parameter only while parameter `param` equals `equals`. Hints never\naffect validation.",
       "properties": {
@@ -3104,5 +3515,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.12"
+  "title": "JStream protocol 0.14"
 }

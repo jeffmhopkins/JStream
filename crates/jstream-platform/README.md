@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:ac2dc8828f4a211b", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: platform traits text unchanged; holds" }
+verified = { hash = "b3:87b40743d1095a32", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b, #148 MF N editions): stamp-only conflict, main's text taken; F3 wrote nothing here that C1b or #148 changes; holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -102,7 +102,8 @@ Contents:
   codec and GPU-interop backends and its optional virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
-  (`HRESULT`, `OSStatus`, `errno`).
+  (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
+  as Media Foundation on a Windows N edition) says what the user must install.
 - **Fakes** (`fake.rs`, feature `fake`): deterministic in-memory backends for engine and
   scenario tests ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): `FakeClock` (time moves
   only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and
@@ -127,7 +128,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:344950a70125a10e", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH gpu-pipeline after merging B3: the interop design is unchanged; holds" }
+verified = { hash = "b3:3dde89dac49576a2", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the youtube and sources crate-map rows' ADR link (0034 -> 0041); main's E1 GPU lifetime text kept; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

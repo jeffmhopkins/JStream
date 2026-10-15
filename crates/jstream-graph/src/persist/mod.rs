@@ -15,8 +15,8 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    Canvas, Crop, Edit, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, ProtocolError,
-    Rev, SceneId, SceneRole, Settings, SourceId, SourceKind,
+    Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
+    OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneRole, Settings, SourceId, SourceKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -104,6 +104,10 @@ struct File {
     sources: Vec<FileSource>,
     /// Ordered by ID.
     outputs: Vec<FileOutput>,
+    /// Encoder profiles, ordered by ID; omitted when there are none, so a collection
+    /// without profiles saves as it did before they existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    encoders: Vec<FileEncoder>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -156,6 +160,17 @@ struct FileSource {
 struct FileOutput {
     id: OutputId,
     kind: OutputKind,
+    /// The output's encoder profile; omitted for the engine's default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    encoder_profile: Option<EncoderProfileId>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileEncoder {
+    id: EncoderProfileId,
+    name: String,
+    profile: EncoderProfile,
 }
 
 impl Graph {
@@ -217,6 +232,16 @@ impl Graph {
                 .map(|output| FileOutput {
                     id: output.id.clone(),
                     kind: output.kind.clone(),
+                    encoder_profile: output.encoder_profile.clone(),
+                })
+                .collect(),
+            encoders: state
+                .encoders
+                .values()
+                .map(|encoder| FileEncoder {
+                    id: encoder.id.clone(),
+                    name: encoder.name.clone(),
+                    profile: encoder.profile,
                 })
                 .collect(),
         };
@@ -307,7 +332,8 @@ fn migrate_with(value: &mut Value, migrations: &[Migration]) -> Result<(), LoadE
 /// The edits that build `file`'s collection from an empty one, each with the object it
 /// creates for the error message. The canvas comes first (when not the default), then
 /// scenes, empty, in display order and with their roles; then sources, each after the
-/// sources its settings refer to; then items, and outputs.
+/// sources its settings refer to; then items, encoder profiles, and outputs, each with
+/// its profile.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -384,14 +410,34 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             }
         }
     }
-    for output in &file.outputs {
+    for encoder in &file.encoders {
         edits.push((
-            format!("output `{}`", output.id),
+            format!("encoder `{}`", encoder.id),
+            Edit::EncoderCreate {
+                profile_id: encoder.id.clone(),
+                name: encoder.name.clone(),
+                profile: encoder.profile,
+            },
+        ));
+    }
+    for output in &file.outputs {
+        let object = format!("output `{}`", output.id);
+        edits.push((
+            object.clone(),
             Edit::OutputCreate {
                 output_id: output.id.clone(),
                 kind: output.kind.clone(),
             },
         ));
+        if output.encoder_profile.is_some() {
+            edits.push((
+                object,
+                Edit::OutputSetEncoder {
+                    output_id: output.id.clone(),
+                    profile_id: output.encoder_profile.clone(),
+                },
+            ));
+        }
     }
     Ok(edits)
 }
