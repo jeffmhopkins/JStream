@@ -13,7 +13,7 @@ use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, Hello,
-    IdempotencyKey, ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError,
+    IdempotencyKey, ItemId, KindCategory, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError,
     ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole, SourceId, SourceKind,
     parity,
 };
@@ -375,6 +375,89 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
             })
         ),
         Ok(Rev(2))
+    );
+}
+
+/// A CLAP scan adds each plugin as an audio-filter kind, which `kind.list` and
+/// `kind.describe` report and which can't be created as a source (ADR-0035).
+#[test]
+fn scanned_clap_plugins_are_audio_filter_kinds() {
+    use jstream_platform::plugin_host::fake::{FakePluginHosts, fake_param};
+    use jstream_platform::{HostRequest, PlatformError, PluginHost, PluginHosts};
+    use jstream_plugin_proto::control::PluginDesc;
+    use std::path::{Path, PathBuf};
+
+    struct OneDir(PathBuf, FakePluginHosts);
+    impl PluginHosts for OneDir {
+        fn search_paths(&self) -> Vec<PathBuf> {
+            vec![self.0.clone()]
+        }
+        fn scan(&self, file: &Path) -> Result<Vec<PluginDesc>, PlatformError> {
+            self.1.scan(file)
+        }
+        fn start(&self, request: &HostRequest) -> Result<Box<dyn PluginHost>, PlatformError> {
+            self.1.start(request)
+        }
+    }
+
+    let dir = std::env::temp_dir().join(format!("jstream-engine-clap-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("gain.clap");
+    std::fs::write(&file, b"").unwrap();
+    let fake = FakePluginHosts::new();
+    fake.add_file(
+        &file,
+        vec![PluginDesc {
+            id: "org.example.gain".into(),
+            name: "Gain".into(),
+            vendor: String::new(),
+            version: String::new(),
+            description: String::new(),
+            params: vec![fake_param()],
+        }],
+    );
+    let engine = Engine::new();
+    let scan = engine.scan_clap_plugins(&OneDir(dir.clone(), fake));
+    std::fs::remove_dir_all(&dir).unwrap();
+    assert_eq!(scan.kinds.len(), 1);
+    assert_eq!(scan.kinds[0].file, file);
+
+    let control = connected(&engine);
+    let Ok(QueryResult::KindList { kinds }) = query(&control, Query::KindList) else {
+        panic!("kind.list");
+    };
+    let clap = kinds
+        .iter()
+        .find(|k| k.kind_id == "clap/org.example.gain")
+        .expect("the CLAP kind is listed");
+    assert_eq!(clap.category, KindCategory::AudioFilter);
+    assert!(kinds.iter().any(|k| k.kind_id == "color"), "built-ins stay");
+    let Ok(QueryResult::KindDescribe { kind, .. }) = query(
+        &control,
+        Query::KindDescribe {
+            kind_id: "clap/org.example.gain".into(),
+        },
+    ) else {
+        panic!("kind.describe");
+    };
+    assert_eq!(kind.name, "Gain");
+    assert!(kind.param("1").is_some());
+    let error = batch(
+        &control,
+        Batch::single(Edit::SourceCreate {
+            source_id: SourceId::new("x"),
+            name: "x".into(),
+            kind: SourceKind::Builtin {
+                kind: "clap/org.example.gain".into(),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        }),
+    )
+    .expect_err("not a source kind");
+    assert!(
+        matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.kind.kind"),
+        "{error:?}"
     );
 }
 

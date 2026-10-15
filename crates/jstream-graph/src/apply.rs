@@ -12,9 +12,9 @@ use crate::target::{record_path_problem, rtmp_url_problem};
 use crate::touched::Touched;
 use jstream_protocol::{
     Batch, Blocker, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId,
-    ItemTransform, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
-    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, Settings, SourceAudio,
-    SourceId, SourceKind,
+    ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor,
+    ParamType, ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, Settings,
+    SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -543,6 +543,13 @@ fn apply_edit(
                             format!("there is no kind `{kind}`; `kind.list` names them"),
                         )
                     })?;
+                    if descriptor.category != KindCategory::Source {
+                        return Err(invalid(
+                            at,
+                            "kind.kind",
+                            format!("`{kind}` is a filter kind, not a source kind"),
+                        ));
+                    }
                     complete_settings(state, kinds, descriptor, source_id, settings, at)?
                 }
                 _ => {

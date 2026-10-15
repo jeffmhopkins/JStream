@@ -2430,6 +2430,7 @@ dependencies = [
  "jstream-mux",
  "jstream-outputs",
  "jstream-platform",
+ "jstream-plugin-proto",
  "jstream-protocol",
  "jstream-render",
  "jstream-sources",
@@ -2557,6 +2558,7 @@ name = "jstream-platform"
 version = "0.0.0"
 dependencies = [
  "jstream-media",
+ "jstream-plugin-proto",
  "thiserror 2.0.21",
  "wgpu",
 ]
@@ -2566,6 +2568,7 @@ name = "jstream-platform-windows"
 version = "0.0.0"
 dependencies = [
  "jstream-platform",
+ "jstream-plugin-proto",
  "jstream-vcam-proto",
  "wgpu",
  "windows",
@@ -2581,6 +2584,16 @@ dependencies = [
  "jstream-plugin-proto",
  "libloading 0.8.9",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "jstream-plugin-host"
+version = "0.0.0"
+dependencies = [
+ "assert_no_alloc",
+ "jstream-platform-windows",
+ "jstream-plugin-clap",
+ "jstream-plugin-proto",
 ]
 
 [[package]]

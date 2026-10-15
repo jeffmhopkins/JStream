@@ -90,7 +90,12 @@ refused when truncated, and refused over 2 MiB either way. Processing runs under
 `assert_no_alloc` with a flood of events. Loading files: a missing file is a load
 error, and on Linux the C library (a native library with no `clap_entry`) is refused.
 
-**Not yet:** loading and running a real plugin file (that comes with the host app and
-is checked on Windows), the plugin's editor window (the GUI extension), the `flush`
+**`test_plugin`** (feature `test-plugin`, never in a release build) exposes that
+built-in file, `test_plugin::library()`, with its plugin ids, the gain parameter, the
+parameter it echoes and its latency, so `jstream-plugin-host`'s tests host a real CLAP
+plugin without a file on disk.
+
+**Not yet:** loading and running a real plugin file (the host app does, checked on
+Windows hardware), the plugin's editor window (the GUI extension), the `flush`
 path for parameter changes while inactive, and the thread-check and log host
 extensions.

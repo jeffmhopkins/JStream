@@ -37,11 +37,16 @@ use clap_sys::process::{CLAP_PROCESS_CONTINUE, clap_process, clap_process_status
 use clap_sys::stream::{clap_istream, clap_ostream};
 use clap_sys::version::CLAP_VERSION;
 
-pub(crate) const GAIN_ID: &str = "org.jstream.test.gain";
-pub(crate) const SYNTH_ID: &str = "org.jstream.test.synth";
-pub(crate) const MONO_ID: &str = "org.jstream.test.mono";
-pub(crate) const SIDECHAIN_ID: &str = "org.jstream.test.sidechain";
-pub(crate) const WIDE_ID: &str = "org.jstream.test.wide";
+/// The stereo gain effect.
+pub const GAIN_ID: &str = "org.jstream.test.gain";
+/// An instrument, which the host refuses.
+pub const SYNTH_ID: &str = "org.jstream.test.synth";
+/// A mono effect, which the host refuses.
+pub const MONO_ID: &str = "org.jstream.test.mono";
+/// The gain effect with a mono sidechain input and a stereo auxiliary output.
+pub const SIDECHAIN_ID: &str = "org.jstream.test.sidechain";
+/// An effect with more ports than the host takes.
+pub const WIDE_ID: &str = "org.jstream.test.wide";
 
 /// Calls to `on_main_thread`, across every instance.
 pub(crate) static MAIN_THREAD_CALLS: AtomicU32 = AtomicU32::new(0);

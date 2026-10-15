@@ -128,7 +128,7 @@ impl Library {
     }
 
     /// A library from an entry built into this binary, for tests.
-    #[cfg(test)]
+    #[cfg(any(test, feature = "test-plugin"))]
     pub(crate) fn from_static(entry: &'static clap_plugin_entry) -> Result<Arc<Self>, ClapError> {
         // SAFETY: a static entry is valid for the whole program.
         unsafe { Self::init(entry, c"test", None) }
