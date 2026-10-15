@@ -7,8 +7,10 @@
 use leptos::prelude::*;
 
 pub mod outputs;
+pub mod studio;
 
 pub use outputs::Outputs;
+pub use studio::StudioMode;
 
 /// The scenes and sources tree.
 #[component]

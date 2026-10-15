@@ -37,7 +37,9 @@ Contents (the skeleton; [Design](#design) explains the choices):
   Placeholders for now, except `outputs.rs`: `Outputs`, the outputs panel under the
   inspector (creating, editing and deleting outputs, their stream keys, start and stop,
   go-live and the pipeline's health), and the calls and logic behind it, tested
-  natively against `MockEngine`.
+  natively against `MockEngine`; and `studio.rs`: `StudioMode`, the studio-mode bar
+  under the canvas (preview, program, Transition and Cut) with the transition presets
+  and each scene's overrides ([Design](#design)).
 - **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
   over a placeholder background, edits their geometry with the pointer and the
   keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
@@ -96,6 +98,30 @@ verified = { hash = "b3:cd268cea238292db", by = "agent:claude@session_01StfvJc4T
   panel. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
+- **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
+  The bar under the canvas reads the scenes (groups left out) and presets with
+  `state.get` and the studio state with `studio.get`, re-reads them on `state.changed`
+  and `events.dropped`, and takes `studio.changed` in place. The engine has no
+  studio-mode switch, so the bar is always there. Picking a scene sends
+  `studio.set_preview`. "Transition" sends `scene.switch` for the preview scene, naming
+  the preset picked beside it, or none so the engine resolves it; a line under the
+  button names the preset the engine will use and why, in the engine's order (the
+  switch's, the new scene's `transition_in`, the old scene's `transition_out`, the
+  default). "Cut" names a `cut` preset (the default if it is one), and is off when the
+  collection has none. With "Swap" on (the default), the scene that was on program
+  then goes on preview with a second `studio.set_preview`, as in other studio tools;
+  the engine itself never moves preview on a switch. While a transition runs, the bar
+  shows an indeterminate progress bar for the `duration_ms` `studio.changed` reported.
+  The presets section lists each preset, adds one (ID from its name, `-2`, `-3`… when
+  taken; a 300 ms ease-in-out fade by default), edits one with a `transition.update`
+  naming only what changed (after a kind change, the patch is against the new kind's
+  defaults, as the engine applies it), makes one the default and deletes any other.
+  The kind's parameters come from `kind.list` and `kind.describe` (category
+  `transition`), or the built-in `cut`, `fade` and `move` when the engine can't list
+  them; enum, boolean, number and text parameters are editable, others read-only.
+  Each scene's `transition_in` and `transition_out` are set with
+  `scene.set_transitions`. Items' own transition settings belong to the properties
+  panel and are not edited here.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
   password field is not bound to a signal: the panel reads it only on save, wraps it in
   a `SecretString` at once (trimming a pasted newline), empties the field and sends
@@ -168,7 +194,7 @@ scene and sends the edits. These three are pure and tested natively against
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:755c311fa103cf2c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: dropped 'until jstream-server accepts the token subprotocol'; trunk-served page still needs an extra origin; holds" }
+verified = { hash = "b3:a347b748596b8acf", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "Studio mode UI: Cargo.toml gains serde_json only; trunk build re-run locally with CI's pinned trunk and wasm-bindgen; holds" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for

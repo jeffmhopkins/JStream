@@ -204,7 +204,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
                 <button on:click=move |_| disconnect()>"Disconnect"</button>
             </header>
             <aside class="region scenes"><SceneTree /></aside>
-            <section class="region canvas"><Canvas /></section>
+            <section class="region canvas"><Canvas /><crate::panels::StudioMode /></section>
             <aside class="region inspector"><Inspector /><crate::panels::Outputs /></aside>
             <footer class="region mixer"><Mixer /></footer>
         </div>
