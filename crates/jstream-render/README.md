@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:d35d5306bc8ac01f", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: render's link to ARCH Threads for the cache hand-off still points at the model's State-to-RT-threads text; holds" }
+verified = { hash = "b3:1924da6cb96e69be", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the Filters section to lib.rs's Docs line; no text change needed; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -101,7 +101,8 @@ and calls this crate.
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's. Also not here: NV12 or
 P010 conversion, encode-target export and the D3D12 `PRESENT` transition, WGSL effect
-packs, 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
+packs, the video filter chain runtime (the built-in filters' passes are here, see
+[Filters](#filters)), 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
 stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
 fields stay neutral until M3. The GPU pipeline's encode
 steps stay in
@@ -112,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c91d3972472d19b9", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
+verified = { hash = "b3:397d9c094844c307", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the Filters section to lib.rs's Docs line; no text change needed; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -274,12 +275,63 @@ Adapter order when `OpenOptions` asks for software (the test and headless defaul
 
 Logging goes through `tracing` (adapter name at open). No `println!`.
 
+<a id="filters"></a>
+## Filters
+<!-- @section
+covers = ["crates/jstream-render/src/filter/**"]
+depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
+verified = { hash = "b3:62021571b756e63a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "New section: matches filter/mod.rs, pass.rs, params.rs, prelude.wgsl and testing.rs as written; no kinds yet" }
+-->
+
+The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
+descriptors for [ADR-0026](../../docs/adr/0026-source-filter-chains.md)'s video chain),
+and the GPU passes that draw them. Each kind lives in its own module under
+`src/filter/`: a `video_filter` descriptor, the mapping from its settings (complete, as
+the graph stores them) to shader values, and its WGSL.
+
+**Not wired yet.** The chain runtime (roadmap V0) is what keeps a `VideoFilter` per
+enabled filter of a source's video chain and runs them in order before placement.
+Until it lands nothing in the engine calls these passes, and the kinds are not in
+`kind.list`: `video_filter_descriptors()` is what V0 adds to `jstream-core`'s built-in
+kinds.
+
+**The harness.**
+
+- `VideoFilter::new(kind_id, settings)` builds a kind's pass; `set_settings` updates it
+  in place, keeping its state; `output_size` is the size it draws for a given input,
+  so a filter can change the source's reported size (aspect ratio, padding).
+- `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
+  new layer of that size, in one submit. `clock` is the media-clock time, for filters
+  that move or hold frames. An imported input's `FrameSync` is staged before the submit.
+- A pass records fullscreen draws through `Ctx::draw`. Every filter shader is appended
+  to one prelude (`prelude.wgsl`) that defines the fullscreen triangle, the bindings
+  (input, a linear clamp sampler, a `Frame` uniform with the input, output and aux
+  sizes and the time, an optional aux image, and the filter's `Params` uniform) and
+  colour helpers. `src` and `aux` always return premultiplied linear colour; an
+  imported input is premultiplied after sampling. A pipeline is built on first use and
+  kept for the compositor's life.
+- A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
+  its target or blends premultiplied src-over it.
+- Each draw creates its two small uniform buffers, two views and a bind group, and each
+  `apply_filter` its output layer. Pooling them is the chain runtime's job (V0); until
+  then a filter costs those small allocations per frame.
+
+**The kinds.** Each group documents its kinds here as it lands.
+
+The single-pass pack (V1): not yet.
+
+Aspect ratio (V1a): not yet.
+
+The multi-pass filters (V2): not yet.
+
+Assets and references (V3): not yet.
+
 <a id="testing"></a>
 ## Testing
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:c92966a4c0c88ccd", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 golden geometry tests) into E1: the E1 layer/cache test list and B3's golden tests are both in tests.rs; holds" }
+verified = { hash = "b3:74b89963f404a5db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Added the filter harness paragraph; the tests.rs helpers became pub(crate) for it, nothing else changed" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -290,6 +342,11 @@ Linux lavapipe for a render smoke, Windows WARP as the golden-frame reference.
 only through that command on WARP. This cut therefore does **not** add golden PNGs.
 It renders offscreen and checks pixels in the crate tests, with a tolerance, so the
 same tests run on lavapipe and on WARP.
+
+**Filters.** `filter::testing` runs one filter over a small uploaded image and reads
+the result back through a 1:1 scene on a transparent canvas, so each kind's golden
+test is a pixel or grid check like the ones below. A two-pass copy covers the harness
+itself, including a half-transparent texel round-tripping.
 
 **Why tolerance instead of a smoke-only Linux run.** Flat, opaque, channel-pure sRGB
 colours (0 and 1) round-trip through the linear FP16 target exactly, and a 1:1
