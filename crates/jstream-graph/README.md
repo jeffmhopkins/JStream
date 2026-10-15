@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:ad76a6a4b2e97a01", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at D5: re-read; model, sources, buses and sends are main's; built kinds come from jstream-sources; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:8981893f98104c7a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 round 2: Seams restate the Source contract (most kinds make frames on create/update; waveform and spectrum paint in a Painter, frame hands out the last painted) and add the Painter seam; AudioScope bullet says analysis runs in the painter; Kinds say create paints the first frame, row-by-row pool drawing, settled silence polls every 250 ms; Tests add the settling test; main's #224 Assets/Tests text kept; checked against src/scope and source.rs" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
