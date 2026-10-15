@@ -67,7 +67,7 @@
         },
         {
           "id": "i1",
-          "source_id": "cam",
+          "source_id": "cam_copy",
           "transform": {
             "position": {
               "x": 0.0,
@@ -130,6 +130,16 @@
       }
     },
     {
+      "id": "aux",
+      "name": "Aux",
+      "kind": {
+        "type": "builtin",
+        "kind": "webcam"
+      },
+      "kind_version": 1,
+      "duplicated_from": "gone"
+    },
+    {
       "id": "b_src",
       "name": "Scene B",
       "kind": {
@@ -145,6 +155,16 @@
         "kind": "webcam"
       },
       "kind_version": 1
+    },
+    {
+      "id": "cam_copy",
+      "name": "Camera copy",
+      "kind": {
+        "type": "builtin",
+        "kind": "webcam"
+      },
+      "kind_version": 1,
+      "duplicated_from": "cam"
     },
     {
       "id": "z_base",
@@ -167,7 +187,8 @@
         "type": "record",
         "path": "/home/me/Videos/show.mp4",
         "container": "mp4"
-      }
+      },
+      "encoder_profile": "hq"
     },
     {
       "id": "tw",
@@ -186,6 +207,48 @@
         "target": {
           "type": "generic",
           "url": "rtmps://a.rtmps.youtube.com:443/live2"
+        }
+      },
+      "encoder_profile": "low"
+    }
+  ],
+  "encoders": [
+    {
+      "id": "hq",
+      "name": "Recording",
+      "profile": {
+        "video": {
+          "codec": "h264",
+          "rate_control": {
+            "type": "vbr",
+            "kbps": 12000,
+            "max_kbps": 20000
+          },
+          "keyframe_interval_s": 4,
+          "hardware": "avoid"
+        },
+        "audio": {
+          "codec": "aac",
+          "kbps": 320
+        }
+      }
+    },
+    {
+      "id": "low",
+      "name": "Stream",
+      "profile": {
+        "video": {
+          "codec": "h264",
+          "rate_control": {
+            "type": "cbr",
+            "kbps": 3000
+          },
+          "keyframe_interval_s": 2,
+          "hardware": "prefer"
+        },
+        "audio": {
+          "codec": "aac",
+          "kbps": 128
         }
       }
     }

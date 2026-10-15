@@ -45,6 +45,7 @@ jstream-media = { path = "crates/jstream-media" }
 jstream-mux = { path = "crates/jstream-mux" }
 jstream-outputs = { path = "crates/jstream-outputs" }
 jstream-platform = { path = "crates/jstream-platform" }
+jstream-platform-windows = { path = "crates/jstream-platform-windows" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }
@@ -54,7 +55,7 @@ jstream-youtube = { path = "crates/jstream-youtube" }
 # PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.
-png = { version = "0.17", default-features = false }
+png = { version = "0.18", default-features = false }
 pulldown-cmark = { version = "0.13", default-features = false }
 # SHA-256 and the OS random source for OAuth PKCE (`jstream-youtube`). Already in the tree
 # as rustls' crypto provider (R-DEP-006), so this adds no crate; no default features.

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:fe561f1aff80b1fd", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B6-f: re-read; contents list holds (args.rs gains scene.set_role, item.move, item.set_geometry, canvas.set_size; run.rs prints scene roles)" }
+verified = { hash = "b3:7d6895f2ac3f8f89", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#226 A3, #229, #230) into B2-f3: re-read; contents list holds, main changed only its stamp context" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:077a65ad162bafdf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B6-f: Edits bullet now documents item.set_geometry, canvas.set_size, scene.set_role and item.move, and why scene_id stays out; Reads bullet names the ROLE column and group headings" }
+verified = { hash = "b3:923151b966533522", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; B5's Edits text and the No undo or redo command bullet hold" }
 -->
 
 ```sh
@@ -101,20 +101,24 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings. `source.set_settings`, and `source.create`
-  with settings, need a JSON argument form the CLI doesn't have yet, so a source it
-  creates gets its kind's defaults. `item.add` sends neither placement, so its item is
-  a legacy one; place it with `item.set_geometry <item-id> <center-x> <center-y>
-  <width> <height> <rotation-deg> stretch|fit|fill` in the same batch
-  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields are
-  always sent neutral, since the engine refuses anything else until it draws 3D.
+  protocol is supported except settings, encoder profiles and `source.create`'s
+  `duplicated_from`. `source.set_settings`,
+  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
+  and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
+  source it creates gets its kind's defaults and an output it creates the engine's
+  default encoder (MCP and the WebSocket API take them). `item.add` sends neither
+  placement, so its item is a legacy one; place it with `item.set_geometry <item-id>
+  <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
+  batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
+  are always sent neutral, since the engine refuses anything else until it draws 3D.
   `canvas.set_size <width> <height>` sets the canvas. Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
   <index>`: grouping is one batch that creates a scene, makes it a group, places it
   through a `scene:` source, and moves the items into it. The placement edits'
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
-  the item's own scene, which omitting it already means. Several edits on one line go as **one atomic batch**: one new
+  the item's own scene, which omitting it already means.
+  `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -123,6 +127,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
   the URL.
+- **No undo or redo command.** Undo history belongs to a client and ends with its
+  session ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), and each run of a
+  command is a new client, so a one-shot `undo` would always find nothing to undo.
+  `mcp` is one client for its whole run: its `history` tool undoes and redoes the
+  agent's own edits.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
@@ -151,7 +160,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   server URL, as `output.create` takes it). `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
   (<name>):` by its role, then the outputs. `output status` prints
-  `<id>: <state>, stream key set` (or `not set`). An empty list prints `no scenes`,
+  `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
+  `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
@@ -222,7 +232,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5bd2b920d9f4549b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B6-f: re-read; hand-rolled fixed-arity parsing and the writers hold with the four new edits" }
+verified = { hash = "b3:237f2c2d77fddc0e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

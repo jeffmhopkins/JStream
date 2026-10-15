@@ -15,7 +15,7 @@
 //! History is kept in memory for a client's session and dropped when the session ends.
 
 use jstream_protocol::{
-    ClientId, Edit, HistoryDirection, ItemId, OutputId, Rev, SceneId, SourceId,
+    ClientId, Edit, EncoderProfileId, HistoryDirection, ItemId, OutputId, Rev, SceneId, SourceId,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
@@ -29,6 +29,7 @@ enum Object {
     Item(ItemId),
     Source(SourceId),
     Output(OutputId),
+    Encoder(EncoderProfileId),
 }
 
 /// A property an edit sets, on its object.
@@ -44,10 +45,16 @@ enum Prop {
     Visible,
     /// An item's stacking position.
     Index,
+    /// Which source an item places (`item.set_source`, ADR-0023).
+    Source,
     /// One parameter of a source's settings.
     Setting(String),
     /// An output's publish target.
     Target,
+    /// The encoder profile an output uses.
+    EncoderChoice,
+    /// An encoder profile's encoding.
+    Encoding,
 }
 
 /// What a batch touched: computed from its edits and its inverse's, so a delete also
@@ -116,6 +123,10 @@ impl Touched {
             Edit::ItemReorder { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Index);
             }
+            Edit::ItemSetSource { item_id, source_id } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Source);
+                self.uses.insert(Object::Source(source_id.clone()));
+            }
             // A move sets the item's position, in the scene it names; its inverse names
             // the scene it left.
             Edit::ItemMove {
@@ -159,6 +170,23 @@ impl Touched {
             }
             Edit::OutputSetTarget { output_id, .. } => {
                 self.prop(Object::Output(output_id.clone()), Prop::Target);
+            }
+            Edit::OutputSetEncoder {
+                output_id,
+                profile_id,
+            } => {
+                self.prop(Object::Output(output_id.clone()), Prop::EncoderChoice);
+                if let Some(profile_id) = profile_id {
+                    self.uses.insert(Object::Encoder(profile_id.clone()));
+                }
+            }
+            Edit::EncoderCreate { profile_id, .. } | Edit::EncoderDelete { profile_id } => {
+                self.exists.insert(Object::Encoder(profile_id.clone()));
+            }
+            Edit::EncoderUpdate { profile_id, .. } => {
+                let encoder = Object::Encoder(profile_id.clone());
+                self.prop(encoder.clone(), Prop::Name);
+                self.prop(encoder, Prop::Encoding);
             }
             _ => self.unknown = true,
         }
@@ -441,7 +469,10 @@ impl History {
 #[cfg(test)]
 mod tests {
     use super::Touched;
-    use jstream_protocol::{Edit, ItemGeometry, ItemId, ItemTransform, SceneId, SourceId};
+    use jstream_protocol::{
+        Edit, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform, OutputId,
+        SceneId, SourceId,
+    };
 
     fn add(scene: &str, item: &str, source: &str) -> Edit {
         Edit::ItemAdd {
@@ -490,6 +521,34 @@ mod tests {
         }
     }
 
+    fn set_source(item: &str, source: &str) -> Edit {
+        Edit::ItemSetSource {
+            item_id: ItemId::new(item),
+            source_id: SourceId::new(source),
+        }
+    }
+
+    /// `item.set_source` sets the item's source and uses both sources (the inverse names
+    /// the old one), so a step that deletes either source conflicts with it.
+    #[test]
+    fn set_source_conflicts_with_its_own_property_and_both_sources() {
+        let retarget = Touched::of(&[set_source("i", "clone")], &[set_source("i", "cam")]);
+        assert!(retarget.conflicts_with(&Touched::of(
+            &[set_source("i", "other")],
+            &[set_source("i", "cam")]
+        )));
+        assert!(!retarget.conflicts_with(&Touched::of(&[transform("i")], &[transform("i")])));
+        for source in ["cam", "clone"] {
+            let deleted = Touched::of(
+                &[Edit::SourceDelete {
+                    source_id: SourceId::new(source),
+                }],
+                &[],
+            );
+            assert!(retarget.conflicts_with(&deleted), "{source}");
+        }
+    }
+
     fn item_move(item: &str, scene: &str) -> Edit {
         Edit::ItemMove {
             item_id: ItemId::new(item),
@@ -532,6 +591,46 @@ mod tests {
         assert!(!grouped.unknown);
         assert!(!grouped.conflicts_with(&other));
         assert!(grouped.conflicts_with(&grouped.clone()));
+    }
+
+    /// Encoder edits are known: a profile's update conflicts with another update of it
+    /// and with deleting it, and pointing an output at a profile uses the profile.
+    #[test]
+    fn encoder_edits_conflict_only_on_their_profile_or_output() {
+        let profile = |id: &str| EncoderProfileId::new(id);
+        let update = |id: &str| Edit::EncoderUpdate {
+            profile_id: profile(id),
+            name: "HQ".into(),
+            profile: EncoderProfile::DEFAULT,
+        };
+        let point = |output: &str, id: Option<&str>| Edit::OutputSetEncoder {
+            output_id: OutputId::new(output),
+            profile_id: id.map(profile),
+        };
+        let updated = Touched::of(&[update("hq")], &[update("hq")]);
+        assert!(!updated.unknown);
+        assert!(updated.conflicts_with(&updated.clone()));
+        assert!(!updated.conflicts_with(&Touched::of(&[update("low")], &[update("low")])));
+        assert!(!updated.conflicts_with(&Touched::of(&[transform("i")], &[transform("i")])));
+
+        let pointed = Touched::of(&[point("yt", Some("hq"))], &[point("yt", None)]);
+        assert!(!pointed.unknown);
+        let deleted = Touched::of(
+            &[Edit::EncoderDelete {
+                profile_id: profile("hq"),
+            }],
+            &[Edit::EncoderCreate {
+                profile_id: profile("hq"),
+                name: "HQ".into(),
+                profile: EncoderProfile::DEFAULT,
+            }],
+        );
+        assert!(pointed.conflicts_with(&deleted));
+        assert!(pointed.conflicts_with(&Touched::of(
+            &[point("yt", None)],
+            &[point("yt", Some("hq"))]
+        )));
+        assert!(!pointed.conflicts_with(&Touched::of(&[point("tw", None)], &[point("tw", None)])));
     }
 
     #[test]

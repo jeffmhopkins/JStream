@@ -107,35 +107,35 @@ fn field(at: usize, name: &str) -> String {
     format!("edits.{at}.{name}")
 }
 
-fn invalid(at: usize, name: &str, reason: impl Into<String>) -> ProtocolError {
+pub(crate) fn invalid(at: usize, name: &str, reason: impl Into<String>) -> ProtocolError {
     ProtocolError::InvalidArgument {
         field: field(at, name),
         reason: reason.into(),
     }
 }
 
-fn not_found(entity: EntityKind, id: &str) -> ProtocolError {
+pub(crate) fn not_found(entity: EntityKind, id: &str) -> ProtocolError {
     ProtocolError::NotFound {
         entity,
         id: id.to_owned(),
     }
 }
 
-fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
+pub(crate) fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
     ProtocolError::AlreadyExists {
         entity,
         id: id.to_owned(),
     }
 }
 
-fn check_id(id: &str, at: usize, name: &str) -> Result<(), ProtocolError> {
+pub(crate) fn check_id(id: &str, at: usize, name: &str) -> Result<(), ProtocolError> {
     if id.is_empty() {
         return Err(invalid(at, name, "must not be empty"));
     }
     Ok(())
 }
 
-fn check_name(value: &str, at: usize) -> Result<(), ProtocolError> {
+pub(crate) fn check_name(value: &str, at: usize) -> Result<(), ProtocolError> {
     if value.trim().is_empty() {
         return Err(invalid(at, "name", "must not be empty"));
     }
@@ -260,6 +260,9 @@ fn apply_edit(
     at: usize,
     running: &BTreeSet<OutputId>,
 ) -> Result<Vec<Edit>, ProtocolError> {
+    if let Some(applied) = crate::encoder::apply(state, edit, at) {
+        return applied;
+    }
     match edit {
         Edit::SceneCreate { scene_id, name } => {
             check_id(scene_id.as_str(), at, "scene_id")?;
@@ -374,19 +377,7 @@ fn apply_edit(
             if state.item_index(item_id).is_some() {
                 return Err(already_exists(EntityKind::Item, item_id.as_str()));
             }
-            let edge = (
-                Node::Scene(scene_id.clone()),
-                Node::Source(source_id.clone()),
-            );
-            if let Some(cycle) = deps::cycle(state, &edge.0, &edge.1) {
-                return Err(invalid(
-                    at,
-                    "source_id",
-                    format!(
-                        "placing source `{source_id}` in scene `{scene_id}` would create a cycle: {cycle}"
-                    ),
-                ));
-            }
+            check_placement_cycle(state, scene_id, source_id, at)?;
             let placement = match (transform, geometry) {
                 (Some(_), Some(_)) => {
                     return Err(invalid(
@@ -471,6 +462,22 @@ fn apply_edit(
                 height: old.height,
             }])
         }
+        Edit::ItemSetSource { item_id, source_id } => {
+            let (si, ii) = find_item(state, item_id)?;
+            if state.source(source_id).is_none() {
+                return Err(not_found(EntityKind::Source, source_id.as_str()));
+            }
+            // The item's current edge, scene -> old source, points away from the scene, so
+            // it can't be part of a path from the new source back to it.
+            let scene_id = state.scenes[si].id.clone();
+            check_placement_cycle(state, &scene_id, source_id, at)?;
+            let item = item_mut(state, (si, ii))?;
+            let old = std::mem::replace(&mut item.source_id, source_id.clone());
+            Ok(vec![Edit::ItemSetSource {
+                item_id: item_id.clone(),
+                source_id: old,
+            }])
+        }
         Edit::ItemSetCrop {
             item_id,
             scene_id,
@@ -502,9 +509,19 @@ fn apply_edit(
             name,
             kind,
             settings,
+            duplicated_from,
         } => {
             check_id(source_id.as_str(), at, "source_id")?;
             check_name(name, at)?;
+            // A plain link, so the source it names need not exist: `source.delete`'s
+            // inverse restores it after its original may have gone too.
+            if duplicated_from.as_ref() == Some(source_id) {
+                return Err(invalid(
+                    at,
+                    "duplicated_from",
+                    "must not name the source itself",
+                ));
+            }
             let settings = match kind {
                 SourceKind::Scene { scene_id } => {
                     find_scene(state, scene_id)?;
@@ -530,7 +547,14 @@ fn apply_edit(
                     return Err(unsupported(at, "kind", "this source kind"));
                 }
             };
-            let inverse = create_source(state, source_id, name, kind, settings)?;
+            let inverse = create_source(
+                state,
+                source_id,
+                name,
+                kind,
+                settings,
+                duplicated_from.clone(),
+            )?;
             check_reference_cycles(state, source_id, at, "settings")?;
             Ok(inverse)
         }
@@ -547,7 +571,14 @@ fn apply_edit(
             check_name(name, at)?;
             // The copy has the original's outgoing edges and none coming in, so it can't
             // close a cycle.
-            create_source(state, new_source_id, name, &kind, settings)
+            create_source(
+                state,
+                new_source_id,
+                name,
+                &kind,
+                settings,
+                Some(source_id.clone()),
+            )
         }
         Edit::SourceRename { source_id, name } => {
             check_name(name, at)?;
@@ -599,6 +630,7 @@ fn apply_edit(
                 name: source.name,
                 kind: source.kind,
                 settings: source.settings,
+                duplicated_from: source.duplicated_from,
             }])
         }
         Edit::OutputCreate { output_id, kind } => {
@@ -625,6 +657,7 @@ fn apply_edit(
                 Output {
                     id: output_id.clone(),
                     kind: kind.clone(),
+                    encoder_profile: None,
                 },
             );
             Ok(vec![Edit::OutputDelete {
@@ -658,10 +691,17 @@ fn apply_edit(
                 .outputs
                 .remove(output_id)
                 .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
-            Ok(vec![Edit::OutputCreate {
-                output_id: output.id,
+            let mut inverse = vec![Edit::OutputCreate {
+                output_id: output.id.clone(),
                 kind: output.kind,
-            }])
+            }];
+            if let Some(profile_id) = output.encoder_profile {
+                inverse.push(Edit::OutputSetEncoder {
+                    output_id: output.id,
+                    profile_id: Some(profile_id),
+                });
+            }
+            Ok(inverse)
         }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
     }
@@ -778,6 +818,7 @@ fn create_source(
     name: &str,
     kind: &SourceKind,
     settings: Settings,
+    duplicated_from: Option<SourceId>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     if state.sources.contains_key(id) {
         return Err(already_exists(EntityKind::Source, id.as_str()));
@@ -789,11 +830,33 @@ fn create_source(
             name: name.to_owned(),
             kind: kind.clone(),
             settings,
+            duplicated_from,
         },
     );
     Ok(vec![Edit::SourceDelete {
         source_id: id.clone(),
     }])
+}
+
+/// Rejects placing `source_id` in scene `scene_id` (`item.add`, `item.set_source`) if
+/// the scene would then contain itself, naming the cycle on `source_id`.
+fn check_placement_cycle(
+    state: &State,
+    scene_id: &SceneId,
+    source_id: &SourceId,
+    at: usize,
+) -> Result<(), ProtocolError> {
+    let from = Node::Scene(scene_id.clone());
+    match deps::cycle(state, &from, &Node::Source(source_id.clone())) {
+        Some(cycle) => Err(invalid(
+            at,
+            "source_id",
+            format!(
+                "placing source `{source_id}` in scene `{scene_id}` would create a cycle: {cycle}"
+            ),
+        )),
+        None => Ok(()),
+    }
 }
 
 /// The edits that put a removed `item` back in scene `scene_id` at stacking position

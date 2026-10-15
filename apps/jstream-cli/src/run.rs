@@ -322,9 +322,20 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             output_id,
             state,
             key_set,
+            encoder,
+            ..
         } => {
             let key = if *key_set { "set" } else { "not set" };
-            writeln!(out, "{output_id}: {}, stream key {key}", wire_name(state))?;
+            write!(out, "{output_id}: {}, stream key {key}", wire_name(state))?;
+            match encoder.as_ref().map(|encoder| &encoder.shared_with) {
+                Some(shared) if shared.is_empty() => write!(out, ", own encoder")?,
+                Some(shared) => {
+                    let names: Vec<_> = shared.iter().map(ToString::to_string).collect();
+                    write!(out, ", encoder shared with {}", names.join(", "))?;
+                }
+                None => {}
+            }
+            writeln!(out)?;
         }
         QueryResult::OutputList { rev, outputs } => {
             writeln!(out, "rev {rev}")?;

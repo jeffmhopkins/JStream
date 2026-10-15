@@ -105,6 +105,7 @@ fn populated() -> MockEngine {
                     kind: "webcam".into(),
                 },
                 settings: Default::default(),
+                duplicated_from: None,
             },
             Edit::ItemAdd {
                 scene_id: SceneId::new("main"),
@@ -337,7 +338,7 @@ fn state_get_golden() {
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
-            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[]}}}"#,
+            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[]}}}"#,
         ))
     );
     assert_eq!(
@@ -573,7 +574,7 @@ fn outputs_golden() {
         run_on(&engine, &["--json", "--mock", "output", "status", "out_1"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":"#,
-            r#"{"type":"output.status","output_id":"out_1","state":"active","key_set":false}}}"#,
+            r#"{"type":"output.status","output_id":"out_1","state":"active","key_set":false,"encoder_sessions":0,"hardware_sessions":0}}}"#,
             "\n"
         ))
     );
@@ -772,7 +773,7 @@ fn stream_keys_golden() {
         run_on(&engine, &["--json", "--mock", "output", "status", "yt"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":"#,
-            r#"{"type":"output.status","output_id":"yt","state":"stopped","key_set":false}}}"#,
+            r#"{"type":"output.status","output_id":"yt","state":"stopped","key_set":false,"encoder_sessions":0,"hardware_sessions":0}}}"#,
             "\n"
         ))
     );
@@ -1120,6 +1121,49 @@ fn mcp_serves_initialize_list_and_call_over_one_session() {
     // One session for the whole run, and the edit reached the engine.
     assert_eq!(sessions.load(Ordering::SeqCst), 1);
     assert_eq!(engine.rev(), Rev(1));
+}
+
+/// The proxy is one client for the whole run, so an agent can undo and redo its own
+/// edits through the `history` tool. A one-shot command can't: each run is a new
+/// client with an empty history.
+#[test]
+fn mcp_undoes_and_redoes_within_its_session() {
+    let engine = MockEngine::new();
+    let connector =
+        |_: &Connection| -> Result<Box<dyn Control>, CliError> { Ok(Box::new(engine.connect())) };
+    let input = mcp_input(&[
+        mcp_initialize(1),
+        mcp_call(
+            2,
+            "scene",
+            json!({"op": {"type": "scene.create", "scene_id": "main", "name": "Main"}}),
+        ),
+        mcp_call(3, "history", json!({"op": {"type": "history.undo"}})),
+        mcp_call(4, "scene", json!({"op": {"type": "scene.list"}})),
+        mcp_call(
+            5,
+            "history",
+            json!({"op": {"type": "history.redo"}, "expected_rev": 2}),
+        ),
+        mcp_call(6, "history", json!({"op": {"type": "history.redo"}})),
+    ]);
+    let outcome = run_with_input(&connector, &["mcp"], &input);
+    assert_eq!((outcome.code, outcome.err.as_str()), (exit::OK, ""));
+    let replies = mcp_replies(&outcome.out);
+    let result = |n: usize| &replies[n]["result"]["structuredContent"]["result"];
+    assert_eq!(
+        result(2),
+        &json!({"kind": "history", "rev": 2, "step_rev": 1, "undo_depth": 0, "redo_depth": 1})
+    );
+    assert_eq!(result(3)["result"]["scenes"], json!([]));
+    assert_eq!(
+        result(4),
+        &json!({"kind": "history", "rev": 3, "step_rev": 1, "undo_depth": 1, "redo_depth": 0})
+    );
+    let empty = &replies[5]["result"];
+    assert_eq!(empty["isError"], true, "{empty}");
+    assert!(empty.to_string().contains("history_empty"), "{empty}");
+    assert_eq!(engine.rev(), Rev(3));
 }
 
 #[test]

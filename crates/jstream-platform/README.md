@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:335720f0efb8e16e", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the enhanced-RTMP ADR link in media README (0034 -> 0041); main's E1 text kept; holds" }
+verified = { hash = "b3:d971ee7b8e1558a7", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: Backends gains video_devices (fake::backends fills it with FakeVideoDevices); CaptureStats gains frames_undecodable (counted by FakeVideoDevices and MfVideoDevices streams); Injection, Capture and Not yet lines updated to match backends.rs, capture.rs and fake.rs" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -50,7 +50,8 @@ Contents:
   [ARCH › Threads, clock and sync](../../docs/ARCHITECTURE.md#threading), and the render
   thread takes from it without blocking; `None` means "repeat the last frame". Spike S1
   drains Windows.Graphics.Capture's pool to the newest frame the same way.
-  `CaptureStats` counts captured and skipped frames.
+  `CaptureStats` counts captured and skipped frames, and the compressed frames a
+  `CaptureDecoder` rejected (`frames_undecodable`, always 0 for display capture).
 - **Video capture devices** (webcams and capture cards,
   [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
@@ -98,11 +99,13 @@ Contents:
   a separate trait from `StreamKeyStore`, so a token and a stream key never share a name.
   Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
   contain a token. `jstream-youtube` keeps its Google refresh token here.
-- **Injection:** `Backends`, a plain struct holding one platform's clock, capture, audio,
-  codec and GPU-interop backends and its optional virtual-camera sink.
+- **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
+  capture device, audio, codec and GPU-interop backends and its optional virtual-camera
+  sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
-  (`HRESULT`, `OSStatus`, `errno`).
+  (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
+  as Media Foundation on a Windows N edition) says what the user must install.
 - **Fakes** (`fake.rs`, feature `fake`): deterministic in-memory backends for engine and
   scenario tests ([R-TEST-004](../../docs/RULES.md#R-TEST-004)): `FakeClock` (time moves
   only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and
@@ -119,15 +122,17 @@ Contents:
   `Send`/`Sync` bounds above.
 
 **Not yet:** a platform that consumes GPU frames (Windows capture delivers them through
-`WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet), a platform implementation of `VideoDevices` (Media Foundation's source reader is
-C4b) and its place in `Backends`, an MJPEG `Codec` variant with a `CaptureDecoder` built
-from the platform's decoder, and encoder selection by GPU adapter.
+`WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet),
+an engine that opens `Backends::video_devices` (the field is filled, with
+`MfVideoDevices` on Windows and `MfMjpegDecoder` as its `CaptureDecoder`, but no source
+uses it, so `stats.tick` doesn't report `frames_undecodable`), an MJPEG `Codec` variant,
+and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:3dde89dac49576a2", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the youtube and sources crate-map rows' ADR link (0034 -> 0041); main's E1 GPU lifetime text kept; holds" }
+verified = { hash = "b3:6b6ae4d9b5d54f13", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH crate-map apps row only (A3: daemon links its OS platform crate); GPU frame design untouched" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

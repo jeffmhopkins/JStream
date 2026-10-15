@@ -72,6 +72,7 @@ Edits (each is its protocol command name followed by its arguments):
   item.reorder <item-id> <index>
   item.move <item-id> <scene-id> <index>
   item.set_visible <item-id> true|false
+  item.set_source <item-id> <source-id>
   item.set_crop <item-id> <left> <top> <right> <bottom>
   item.set_transform <item-id> <x> <y> <scale-x> <scale-y> <rotation-deg>
   item.set_geometry <item-id> <center-x> <center-y> <width> <height> <rotation-deg>
@@ -367,8 +368,8 @@ fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "scene.delete" | "source.delete" | "item.remove" | "output.delete" => 1,
         "scene.create" | "scene.rename" | "scene.reorder" | "scene.set_role" | "source.rename"
-        | "item.reorder" | "item.set_visible" | "output.create" | "output.set_target"
-        | "canvas.set_size" => 2,
+        | "item.reorder" | "item.set_visible" | "item.set_source" | "output.create"
+        | "output.set_target" | "canvas.set_size" => 2,
         "source.create" | "source.duplicate" | "item.add" | "item.move" => 3,
         "item.set_crop" => 5,
         "item.set_transform" => 6,
@@ -427,6 +428,7 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
             name: (*name).to_owned(),
             kind: source_kind(kind)?,
             settings: Default::default(),
+            duplicated_from: None,
         },
         ("source.rename", [id, name]) => Edit::SourceRename {
             source_id: SourceId::new(*id),
@@ -449,6 +451,10 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         },
         ("item.remove", [id]) => Edit::ItemRemove {
             item_id: ItemId::new(*id),
+        },
+        ("item.set_source", [id, source]) => Edit::ItemSetSource {
+            item_id: ItemId::new(*id),
+            source_id: SourceId::new(*source),
         },
         ("item.reorder", [id, index]) => Edit::ItemReorder {
             item_id: ItemId::new(*id),
@@ -841,6 +847,7 @@ mod tests {
                             kind: "webcam".into()
                         },
                         settings: Default::default(),
+                        duplicated_from: None,
                     },
                     Edit::SourceCreate {
                         source_id: SourceId::new("nest"),
@@ -849,6 +856,7 @@ mod tests {
                             scene_id: SceneId::new("s1")
                         },
                         settings: Default::default(),
+                        duplicated_from: None,
                     },
                     Edit::ItemAdd {
                         scene_id: SceneId::new("s1"),
@@ -928,10 +936,20 @@ mod tests {
             "canvas.set_size",
             "1280",
             "720",
+            "item.set_source",
+            "i",
+            "b",
         ];
         let Command::Edit(batch) = ok(&line).command else {
             panic!("not an edit");
         };
+        assert_eq!(
+            batch.edits.last(),
+            Some(&Edit::ItemSetSource {
+                item_id: ItemId::new("i"),
+                source_id: SourceId::new("b"),
+            })
+        );
         let names: Vec<&str> = batch.edits.iter().map(Edit::name).collect();
         assert_eq!(
             names,
@@ -947,6 +965,7 @@ mod tests {
                 "item.move",
                 "item.set_geometry",
                 "canvas.set_size",
+                "item.set_source",
             ]
         );
         assert_eq!(

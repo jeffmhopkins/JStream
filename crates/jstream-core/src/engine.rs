@@ -12,23 +12,25 @@ use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::history::{History, Touched};
+use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
-    Destination, Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent,
-    RenderHub, Running, launch, parts_from,
+    Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
+    Pending, PipelineEvent, RenderHub, Running, launch, launch_program, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
 use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, HistoryCall,
-    HistoryDirection, IdempotencyKey, OutputId, OutputKind, OutputState, ProtocolError, Query,
-    QueryResult, RecordContainer, RequestId, Rev, SecretString, SourceId,
+    Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
+    EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
+    OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    SecretString, SourceId,
 };
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
@@ -83,10 +85,12 @@ struct Shared {
 impl Default for Engine {
     fn default() -> Self {
         Self {
-            shared: Arc::new(Shared {
+            shared: Arc::new_cyclic(|shared: &Weak<Shared>| Shared {
                 state: Mutex::new({
                     let mut state = State::default();
                     state.graph = Graph::new().with_kinds(crate::kinds::builtin());
+                    let host: Weak<dyn LiveHost> = shared.clone();
+                    state.live = LiveSources::new(host);
                     state
                 }),
                 snapshots: SnapshotWorker::default(),
@@ -199,6 +203,11 @@ impl Engine {
             let state = &mut *state;
             state.graph = graph;
             state.outputs.sync(state.graph.state());
+            // `collection` asset references are relative to the file's folder.
+            state
+                .live
+                .set_collection_folder(opened.folder().map(Path::to_path_buf));
+            state.live.sync(state.graph.state());
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             *file = Some(opened);
@@ -255,6 +264,10 @@ impl Engine {
     /// output needs neither: its start records to the file the collection names.
     #[must_use]
     pub fn with_backends(mut self, backends: Backends) -> Self {
+        // Animated sources run on the platform's media clock from here on.
+        lock(&self.shared.state)
+            .live
+            .set_clock(Arc::clone(&backends.clock));
         let host = self.host();
         *lock(&host.backends) = Some(backends);
         self
@@ -287,10 +300,17 @@ impl Engine {
         self
     }
 
-    /// Encoder and subscriber counters for the running pipeline, if one is up.
+    /// Encoder and subscriber counters for the running output with the lowest ID, if
+    /// one is up. [`output_stats_of`](Self::output_stats_of) names the output.
     pub fn output_stats(&self) -> Option<OutputStats> {
         let host = self.media.as_ref()?;
-        lock(&host.gate).running.as_ref().map(Running::stats)
+        lock(&host.gate).running.values().next().map(Running::stats)
+    }
+
+    /// Encoder and subscriber counters for `output_id`, if it is running.
+    pub fn output_stats_of(&self, output_id: &OutputId) -> Option<OutputStats> {
+        let host = self.media.as_ref()?;
+        lock(&host.gate).running.get(output_id).map(Running::stats)
     }
 
     /// Registers `source` as a contributor to `stats.tick`.
@@ -613,11 +633,15 @@ impl Engine {
                     output_id,
                     state,
                     key_set: _,
+                    encoder: _,
+                    encoder_sessions: _,
+                    hardware_sessions: _,
                 },
         }) = result
         else {
             return result;
         };
+        let (encoder, encoder_sessions, hardware_sessions) = self.encoder_status(&output_id);
         let key_set = match self.key_store() {
             Some(store) => {
                 store
@@ -633,8 +657,47 @@ impl Engine {
                 output_id,
                 state,
                 key_set,
+                encoder,
+                encoder_sessions,
+                hardware_sessions,
             },
         })
+    }
+
+    /// The encoder session `output_id` runs on, with the other running outputs that
+    /// share it, and how many video sessions (and of those, hardware ones) every
+    /// running output holds together. Read from the running pipelines; the placeholder
+    /// path opens no encoders, so it reports none.
+    fn encoder_status(&self, output_id: &OutputId) -> (Option<EncoderSessionInfo>, u32, u32) {
+        let Some(host) = &self.media else {
+            return (None, 0, 0);
+        };
+        let gate = lock(&host.gate);
+        let mut sessions: Vec<&Arc<Encoders>> = Vec::new();
+        for encoders in gate.running.values().filter_map(Running::encoders) {
+            if !sessions.iter().any(|seen| Arc::ptr_eq(seen, encoders)) {
+                sessions.push(encoders);
+            }
+        }
+        let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+        let hardware = count(sessions.iter().filter(|e| e.hardware()).count());
+        let encoder = gate
+            .running
+            .get(output_id)
+            .and_then(Running::encoders)
+            .map(|own| EncoderSessionInfo {
+                profile_id: own.profile_id().cloned(),
+                shared_with: gate
+                    .running
+                    .iter()
+                    .filter(|(id, running)| {
+                        *id != output_id && running.encoders().is_some_and(|e| Arc::ptr_eq(e, own))
+                    })
+                    .map(|(id, _)| id.clone())
+                    .collect(),
+                hardware: own.hardware(),
+            });
+        (encoder, count(sessions.len()), hardware)
     }
 
     fn host(&mut self) -> Arc<MediaHost> {
@@ -665,13 +728,17 @@ impl Engine {
         let Some(host) = &self.media else {
             return Err(not_implemented("output.start"));
         };
+        // One start at a time: a second waits here until the first has settled, so
+        // only one ever opens the program stage. A stop never takes this lock.
+        let _starting = lock(&host.starts);
         let mut wake = Vec::new();
-        let (parts, publish, generation) = loop {
-            // A failed pipeline may still be joining. Wait that out before opening
-            // devices, and do not hold the collection lock across the wait.
+        let (parts, publish, generation, program, key) = loop {
+            // A failed pipeline may still be joining. When it held the program stage,
+            // wait that out before opening devices, and do not hold the collection
+            // lock across the wait.
             {
                 let mut gate = lock(&host.gate);
-                while gate.draining {
+                while gate.must_wait() {
                     gate = host
                         .gate_cv
                         .wait(gate)
@@ -680,7 +747,7 @@ impl Engine {
             }
             let mut state = lock(&self.shared.state);
             let mut gate = lock(&host.gate);
-            if gate.draining {
+            if gate.must_wait() {
                 continue;
             }
             let current = state.outputs.state(&output_id)?;
@@ -688,11 +755,12 @@ impl Engine {
             if !idle {
                 return Err(already_running(&output_id));
             }
-            if gate.running.is_some() || gate.pending.is_some() {
+            if gate.pending.is_some() {
                 return Err(ProtocolError::ActionFailed {
-                    reason: "another output is already running".into(),
+                    reason: "another output is starting".into(),
                 });
             }
+            let key = encode_key(&state.graph, &output_id);
             let publish = match record_path(&state.graph, &output_id) {
                 Some(path) => Target::Record(path),
                 None => match lock(&host.publish).take() {
@@ -735,7 +803,11 @@ impl Engine {
                     return Err(err);
                 }
             }
-            break (parts, publish, generation);
+            // A running program stage is shared; holding it here keeps it running
+            // until this start has its own hold, or gives up. Taken last, so no early
+            // return drops it under the locks.
+            let program = gate.program();
+            break (parts, publish, generation, program, key);
         };
         wake_all(std::mem::take(&mut wake));
 
@@ -746,15 +818,25 @@ impl Engine {
             armed: true,
         };
         let (fail_tx, fail_rx) = mpsc::channel();
-        let launched = publish
-            .open(&output_id)
-            .and_then(|destination| {
-                launch(parts, destination, output_id.clone(), generation, fail_tx)
-            })
-            .map(|mut running| {
-                running.arm_stats(self);
-                running
-            });
+        let launched = publish.open(&output_id).and_then(|destination| {
+            let program = match program {
+                Some(program) => program,
+                None => {
+                    let program = launch_program(self, parts)?;
+                    lock(&host.gate).set_program(&program);
+                    program
+                }
+            };
+            launch(
+                self,
+                program,
+                key,
+                destination,
+                output_id.clone(),
+                generation,
+                fail_tx,
+            )
+        });
         // A link change the output thread reported before `active` is replayed once
         // the start settles; the watcher takes every later one.
         let mut link_down = false;
@@ -786,7 +868,7 @@ impl Engine {
                                 &mut wake,
                             );
                             // Joined below, outside the locks. A new start waits.
-                            gate.draining = true;
+                            gate.draining += 1;
                             StartOutcome::Failed(Some(running), reason)
                         }
                         Ok(PipelineEvent::LinkDown | PipelineEvent::LinkUp)
@@ -798,7 +880,7 @@ impl Engine {
                                 &output_id,
                                 &mut wake,
                             );
-                            gate.draining = true;
+                            gate.draining += 1;
                             StartOutcome::Failed(
                                 Some(running),
                                 "the output thread ended before the pipeline was active".into(),
@@ -820,8 +902,8 @@ impl Engine {
                                     );
                                 }) {
                                 Ok(watcher) => {
-                                    gate.running = Some(running);
-                                    gate.watcher = Some(watcher);
+                                    gate.running.insert(output_id.clone(), running);
+                                    gate.watchers.insert(output_id.clone(), watcher);
                                     gate.pending = None;
                                     inflight.armed = false;
                                     host.gate_cv.notify_all();
@@ -851,7 +933,7 @@ impl Engine {
                                         &output_id,
                                         &mut wake,
                                     );
-                                    gate.draining = true;
+                                    gate.draining += 1;
                                     StartOutcome::Failed(
                                         Some(running),
                                         format!("starting the publish watcher: {err}"),
@@ -909,18 +991,12 @@ impl Engine {
                 pending.cancel = true;
                 (None, None, Some(pending.generation))
             } else {
-                let running = match gate.running.take() {
-                    Some(running) if running.output_id() == &output_id => Some(running),
-                    Some(other) => {
-                        gate.running = Some(other);
-                        None
-                    }
-                    None => None,
-                };
+                let running = gate.running.remove(&output_id);
                 let watcher = if running.is_some() {
-                    // A start for another output waits until this join ends.
-                    gate.draining = true;
-                    gate.watcher.take()
+                    // A start waits until this join ends, if it took the program stage
+                    // down with it.
+                    gate.draining += 1;
+                    gate.watchers.remove(&output_id)
                 } else {
                     None
                 };
@@ -990,6 +1066,26 @@ impl Engine {
     pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
         Arc::clone(&lock(&self.shared.state).render)
     }
+
+    /// Waits until the live sources have built everything asked of them, for tests.
+    #[cfg(test)]
+    pub(crate) fn settle_sources(&self) -> bool {
+        let worker = lock(&self.shared.state).live.worker();
+        worker.settled(Duration::from_secs(10))
+    }
+
+    /// Runs the live sources on `clock`, for tests that move time by hand.
+    #[cfg(test)]
+    pub(crate) fn set_source_clock(&self, clock: Arc<dyn jstream_platform::MediaClock>) {
+        lock(&self.shared.state).live.set_clock(clock);
+    }
+
+    /// Re-plans the program mix now, as the live sources' thread does when a frame is
+    /// due, for tests that move time by hand.
+    #[cfg(test)]
+    pub(crate) fn replan(&self) {
+        lock(&self.shared.state).publish_render();
+    }
 }
 
 /// What [`Engine::execute`] produced: an answer, or a snapshot still being drawn.
@@ -1010,6 +1106,20 @@ impl Drop for SettleOnDrop<'_> {
     fn drop(&mut self) {
         self.engine.settle(self.output_id, self.state);
     }
+}
+
+/// Which encoder sessions `output_id` shares: its profile and that profile's encoding
+/// now, or the engine's default for an output with none or one the host declared.
+fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
+    let state = graph.state();
+    let profile_id = state
+        .output(output_id)
+        .and_then(|output| output.encoder_profile())
+        .cloned();
+    let profile = state
+        .encoding_of(output_id)
+        .unwrap_or(EncoderProfile::DEFAULT);
+    (profile_id, profile)
 }
 
 /// Where a recording output in the collection records to, or `None` when the output
@@ -1144,9 +1254,9 @@ fn watch_publish(
     }
 }
 
-/// Whether the running pipeline is the one `generation` started for `output_id`.
+/// Whether `output_id`'s running pipeline is the one `generation` started.
 fn is_ours(gate: &Gate, output_id: &OutputId, generation: u64) -> bool {
-    gate.running.as_ref().is_some_and(|running| {
+    gate.running.get(output_id).is_some_and(|running| {
         running.output_id() == output_id && running.generation() == generation
     })
 }
@@ -1203,11 +1313,11 @@ fn publish_failed(
             emit_output(&mut state, output_id, OutputState::Failed, &mut wake);
             // The join happens below, outside the locks. A new start waits until
             // `draining` clears so it does not open devices over this teardown.
-            gate.draining = true;
+            gate.draining += 1;
             // Detach this watcher. `JoinHandle`'s drop does not join, so the
             // thread can go on to drop `Running` without joining itself.
-            drop(gate.watcher.take());
-            gate.running.take()
+            drop(gate.watchers.remove(output_id));
+            gate.running.remove(output_id)
         } else {
             None
         }
@@ -1240,7 +1350,7 @@ impl Drop for ClearDrain {
             return;
         }
         let mut gate = lock(&self.host.gate);
-        gate.draining = false;
+        gate.draining = gate.draining.saturating_sub(1);
         self.host.gate_cv.notify_all();
     }
 }
@@ -1326,8 +1436,13 @@ struct State {
     /// `rev`. A snapshot draws an item from this when the source is not itself a scene.
     /// An applied `source.delete` removes the deleted source's entry.
     frames: BTreeMap<SourceId, Frame>,
-    /// How many frames `set_source_frame` has stored: the next one's version.
+    /// How many frames `set_source_frame` has stored or live sources have produced: the
+    /// next one's version. One count for both, so a source that switches between them
+    /// is uploaded again.
     frame_versions: u64,
+    /// A running `jstream-sources` source for each source whose kind produces frames
+    /// (C1b). An item shows its source's stored frame if it has one, else this.
+    live: LiveSources,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -1513,6 +1628,7 @@ impl State {
         wake: &mut Vec<Waker>,
     ) {
         self.outputs.sync(self.graph.state());
+        self.live.sync(self.graph.state());
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -1559,11 +1675,15 @@ impl State {
         let result = match self.graph.query(query) {
             Some(result) => result?,
             None => match query {
-                // `key_set` is filled in after the lock is released (`with_key_set`).
+                // `key_set` and the encoder session are filled in after the lock is
+                // released (`with_key_set`).
                 Query::OutputStatus { output_id } => QueryResult::OutputStatus {
                     output_id: output_id.clone(),
                     state: self.outputs.state(output_id)?,
                     key_set: false,
+                    encoder: None,
+                    encoder_sessions: 0,
+                    hardware_sessions: 0,
                 },
                 other => return Err(not_implemented(other.name())),
             },
@@ -1571,10 +1691,25 @@ impl State {
         Ok(CallResult::Query { result })
     }
 
-    /// Re-plans the program mix and publishes it if it draws something new.
-    fn publish_render(&self) {
-        self.render
-            .publish(snapshot::plan(&self.graph, &self.frames));
+    /// Re-plans the program mix at the current time and publishes it if it draws
+    /// something new. A source's stored frame wins over its live one. The live sources
+    /// are told when the plan's next frame change is due, to re-plan then.
+    fn publish_render(&mut self) {
+        let Self {
+            graph,
+            frames,
+            frame_versions,
+            live,
+            render,
+            ..
+        } = self;
+        let now = live.now();
+        let (shot, wake) = snapshot::plan_with(graph, &mut |id| match frames.get(id) {
+            Some(frame) => Some((frame.clone(), None)),
+            None => live.frame(id, now, frame_versions),
+        });
+        render.publish(shot);
+        live.wake_at(wake);
     }
 
     fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {
@@ -1586,6 +1721,19 @@ impl State {
             },
             wake,
         );
+    }
+}
+
+impl LiveHost for Shared {
+    fn install(&self, built: Built) {
+        let mut state = lock(&self.state);
+        if state.live.install(built) {
+            state.publish_render();
+        }
+    }
+
+    fn replan(&self) {
+        lock(&self.state).publish_render();
     }
 }
 
