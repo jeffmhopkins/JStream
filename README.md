@@ -47,7 +47,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 83% | 29 | 3 | 3 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 32% | 6 | 7 | 6 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 32% | 6 | 8 | 5 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 13% | 1 | 0 | 7 |
 
 74 of 106 items are merged; 7 of those still wait on a run on Windows hardware.
@@ -182,7 +182,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U2b | Device pairing | 🔍 in review | #265 |
 | U3a | Scenes, sources, properties | 🔍 in review | #256 |
 | U3b | Outputs and go-live panel | ✅ merged | #254 |
-| U3c | Mixer panel | ⏳ planned |  |
+| U3c | Mixer panel | 🔍 in review | #308 |
 | U4 | Canvas editing | ✅ merged | #255 |
 | U4p | Live preview on canvas | ⏳ planned |  |
 | U1 | Preview stream | 🔍 in review | #251 |
