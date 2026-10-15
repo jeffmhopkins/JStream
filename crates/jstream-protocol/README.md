@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:c935ee6cafb73132", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:1c54a81391ca35ad", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 round 2 (merge of main with G3b virtual camera; mixes now 0.19): version line now 0.19 for video mixes with 0.18 = virtual_cam; Outputs bullet names virtual_cam and video_mix; parity fixture bullet has both" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -45,7 +45,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `scene.switch`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo` (with the `video_mix` it shows), and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
@@ -91,9 +91,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
   video mixes (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and
-  the mixes in `state.get` and `output.list`); 0.17 added `scene.create`'s optional
+  the mixes in `state.get` and `output.list`); 0.18 added the `virtual_cam` output
+  kind, 0.17 `scene.create`'s optional
   `role`, 0.16 `scene.switch`, `studio.get` and `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
@@ -108,7 +109,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a recording output, two
+  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output, two
   encoder profiles and two video mixes), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
   URL, recording path, encoder profile and video mix checks, and `item.set_source` and
@@ -127,7 +128,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:0e30e079fb40878a", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (scene.create role at 0.17, U2-U5, Q1-Q2, CL1, #275): re-read; main's changes and E2's video-mix text (now protocol 0.18) both hold" }
+verified = { hash = "b3:6f78dd2c7b4bb74d", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 round 2 (merge of main with G3b virtual camera; mixes now 0.19): B1 fixed: video mixes (0.19), video_mix.list (0.19), state.get 'pre-0.19'; code docs in output.rs/query.rs now say 'older than 0.19' and the snapshots are regenerated" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -336,7 +337,13 @@ no `..` segment and end in a file name, and
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
 so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
-record elsewhere. The
+record elsewhere. A `virtual_cam` output (0.18) has no fields: it offers the program
+video to other apps on the engine's machine as a webcam, with no audio, at the canvas
+size it has when it starts and 30 fps. `output.start` fails with `action_failed` when
+the engine has no virtual camera, the camera isn't registered on the machine, or it
+can't offer that size. It has no target either, so `output.set_target` refuses it too,
+and it encodes nothing, so its encoder profile is stored but unused. A 0.9 to 0.17
+client reads it as `Unknown`. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
@@ -359,7 +366,7 @@ no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe 
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
 
-Video mixes (0.18) are collection state too: what an output's video shows.
+Video mixes (0.19) are collection state too: what an output's video shows.
 `video_mix.create` and `video_mix.update` take a `mix_id`, a `name` and a `VideoMix`: an
 `input` (`program`, the scene on program; `preview`, which shows the program until
 studio mode has a preview scene; or `scene` with a `scene_id`, one scene whatever is on
@@ -406,7 +413,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty), every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty) and every video mix
-  (`video_mixes`, ordered by ID; missing from a pre-0.18 server, it parses as empty). A client reads it on connecting, and again after a
+  (`video_mixes`, ordered by ID; missing from a pre-0.19 server, it parses as empty). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
@@ -418,7 +425,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   its `OutputKind`, `encoder_profile` (absent for the default) and `video_mix` (absent
   for the program), at a `rev`.
 - `encoder.list`: the encoder profiles, ordered by ID, at a `rev` (0.13).
-- `video_mix.list`: the video mixes, ordered by ID, at a `rev` (0.18).
+- `video_mix.list`: the video mixes, ordered by ID, at a `rev` (0.19).
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the
   credential store holds its key (missing from a pre-0.7 server, it parses as
   `false`). While it runs, `encoder` names its session's profile (absent for the
