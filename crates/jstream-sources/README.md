@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:a5e2e80619a5977e", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221 C2 text): resolved by hand; Kinds lists text (main's paragraph) and C5's audio-only kinds, described-only list is now display/media/webcam/window; Tests paragraph names both the text distance transform and the audio target unit test; matches registry.rs and lib.rs" }
+verified = { hash = "b3:09aba095c77b4b2f", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review N6: Tests paragraph rewrapped, no wording change; rest re-read, holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -153,8 +153,8 @@ features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmainta
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
 distance transform and reading an audio target from settings. `tests/sources.rs` checks
 the registry and runs the colour and image kinds through the public API on files in a
-temporary folder: PNG, GIF and
-lossless WebP files are encoded by the test, and `tests/data` holds a JPEG, a lossy
-WebP and an animated WebP made once with Pillow, as the test's header describes. `tests/text.rs` draws with the
-bundled font: wrapping, alignment, padding, outline, live updates, font assets and
-limits, plus golden PNGs in `tests/data/text` (`JSTREAM_BLESS=1` rewrites them).
+temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
+`tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
+the test's header describes. `tests/text.rs` draws with the bundled font: wrapping,
+alignment, padding, outline, live updates, font assets and limits, plus golden PNGs in
+`tests/data/text` (`JSTREAM_BLESS=1` rewrites them).
