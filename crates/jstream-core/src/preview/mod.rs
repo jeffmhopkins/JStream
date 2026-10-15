@@ -247,25 +247,6 @@ impl SessionPreviews {
                 reason: "this session has no binary channel to send preview frames on".into(),
             });
         };
-        {
-            let mut streams = lock(&self.streams);
-            streams.retain(|_, stream| !stream.ended.load(Ordering::Acquire));
-            if streams.contains_key(&channel) {
-                return Err(ProtocolError::invalid_argument(
-                    "channel",
-                    format!("this session already has preview channel {channel} open"),
-                ));
-            }
-            if streams.len() >= PreviewSettings::MAX_PER_SESSION {
-                return Err(ProtocolError::invalid_argument(
-                    "channel",
-                    format!(
-                        "this session already has {} preview streams open",
-                        PreviewSettings::MAX_PER_SESSION
-                    ),
-                ));
-            }
-        }
         let has_h264 = opening.codecs.as_ref().is_some_and(|codecs| {
             codecs.list().is_ok_and(|list| {
                 list.iter()
@@ -292,8 +273,29 @@ impl SessionPreviews {
             closed: AtomicBool::new(false),
             ended: AtomicBool::new(false),
         });
+        {
+            // The checks and the insert under one lock, so two subscriptions in
+            // flight can't both pass them.
+            let mut streams = lock(&self.streams);
+            streams.retain(|_, stream| !stream.ended.load(Ordering::Acquire));
+            if streams.contains_key(&channel) {
+                return Err(ProtocolError::invalid_argument(
+                    "channel",
+                    format!("this session already has preview channel {channel} open"),
+                ));
+            }
+            if streams.len() >= PreviewSettings::MAX_PER_SESSION {
+                return Err(ProtocolError::invalid_argument(
+                    "channel",
+                    format!(
+                        "this session already has {} preview streams open",
+                        PreviewSettings::MAX_PER_SESSION
+                    ),
+                ));
+            }
+            streams.insert(channel, Arc::clone(&stream));
+        }
         tracing::debug!(channel, codec = ?codec, "preview stream opened");
-        lock(&self.streams).insert(channel, Arc::clone(&stream));
         if let Err(reason) = hub.add(&stream, source) {
             lock(&self.streams).remove(&channel);
             stream.end(opening.rev, &reason);

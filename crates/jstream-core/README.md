@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:ae5c5dd195ed5eb5", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: main's audio text beside the Preview bullet and preview tests; holds" }
+verified = { hash = "b3:77898ea3e2a5bc83", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 review round 2 fixes N2: subscribe now checks the channel and the limit and inserts under one streams lock; Preview bullet unchanged; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -191,7 +191,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fbef51a65175ecce", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: Preview streams subsection unchanged and matches preview/mod.rs; Locking takes main's mixer and meters sentences, and the preview-lock sentence now follows the snapshot-thread sentence whole (it had split its 'the queue to it' referent)" }
+verified = { hash = "b3:85a2e9272042f0ed", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 review round 2 fixes N4a: a stream ends when more than 30 draws in a row fail (draw_errors > MAX_DRAW_ERRORS), or after a panic; rest of Preview streams and Locking unchanged; holds" }
 -->
 
 ### Engine and sessions
@@ -547,7 +547,7 @@ keyframe; one whose queue is full isn't drawn. H.264 runs on a `jstream-encode`
 session), VBR, with a keyframe every 2 s, reopened when the picture size changes; its
 packets go out with the `rev` of the picture they encode. If it can't be opened the
 stream falls back to JPEG when the client accepts JPEG, and ends with an end frame
-otherwise, as it does after 30 failed draws in a row or a panic on the thread. When a
+otherwise, as it does when more than 30 draws in a row fail, or after a panic on the thread. When a
 frame finds the queue full, the stream's frames are dropped up to the next keyframe,
 which the hub then forces (`KeyframeGate`).
 
@@ -1063,7 +1063,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:419b20458c8e8f93", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: runtime text is main's (audio routing, meters); preview hub outside the program stage; holds" }
+verified = { hash = "b3:459fe756409fcded", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 review round 2 fixes: stale via ARCH#threading's reworded Preview row only; runtime text is main's; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

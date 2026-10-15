@@ -51,8 +51,8 @@ impl PreviewCodec {
 }
 
 /// The settings of one preview stream, from `preview.subscribe`'s fields with their
-/// defaults filled in and checked. The engine and the mock both resolve them with
-/// [`PreviewSettings::resolve`], so they accept and refuse the same requests.
+/// defaults filled in and checked by [`PreviewSettings::resolve`], which the engine
+/// uses to accept or refuse a request.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PreviewSettings {
     /// The longest the picture may be, in pixels.

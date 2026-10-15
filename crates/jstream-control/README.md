@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:471c915de5e6cc5b", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: main's text plus binary()/BinaryStream; holds" }
+verified = { hash = "b3:2852865ebbd56031", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 review round 2 fixes N5: ws_web.rs deliver now takes the queue cloned out of the State borrow before waking; trait bullet unchanged; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -47,7 +47,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:9740aa50a0557bca", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: binary() bullet now protocol 0.20; WebSocket binary sentence holds for both clients" }
+verified = { hash = "b3:65bec65a0c0ef7c4", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 review round 2 fixes N3: binary() bullet says reopening ends the stream returned before; in-process it also ends that channel's preview streams, over WebSocket the engine's streams go on into the new one (ws.rs/ws_web.rs binary only close the old client queue); matches control.rs's trait doc" }
 -->
 
 ### The trait
@@ -68,7 +68,9 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
   engine goes away.
 - `binary() -> BinaryStream`: the session's binary channel, the preview frames of its
   `preview.subscribe` streams (protocol 0.20). A session has one: opening it again
-  ends the one before and the streams on it, and `preview.subscribe` fails with
+  ends the stream returned before (in-process it also ends that channel's preview
+  streams; over WebSocket the engine's streams go on into the new one), and
+  `preview.subscribe` fails with
   `action_failed` until it is open. Unlike events its frames are bounded: a reader
   that falls behind loses frames up to the next keyframe (`KeyframeGate`), so what it
   reads decodes. The default implementation is a stream that ends at once, for an
