@@ -22,6 +22,8 @@ blake3.workspace = true
 # The control token's random bytes, from the OS.
 getrandom.workspace = true
 jstream-core.workspace = true
+# `Codec`, for the startup check that Media Foundation has an AAC encoder.
+jstream-media.workspace = true
 # `Backends`, and the stream key store the publish opener reads.
 jstream-platform.workspace = true
 # `OutputId`, for `--output`; `OutputKind`, for the publish opener.
@@ -44,8 +46,6 @@ jstream-platform-windows.workspace = true
 # The tests drive the daemon through the WebSocket client, as the CLI does.
 futures-util.workspace = true
 jstream-control = { workspace = true, features = ["ws"] }
-# The publish opener's tests: an in-memory key store, and the fake backends with their
-# clock's `Timebase`.
-jstream-media.workspace = true
+# The publish opener's tests: an in-memory key store, and the fake backends.
 jstream-platform = { workspace = true, features = ["fake"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "signal", "time"] }

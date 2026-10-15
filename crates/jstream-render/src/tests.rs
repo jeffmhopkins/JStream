@@ -8,7 +8,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use jstream_media::{ColorInfo, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrameInfo};
 use jstream_platform::{FrameSync, GpuFrame, PlatformError};
 
-use crate::{Color, Compositor, Crop, Item, OpenOptions, Placement, RenderError, Scene, Snapshot};
+use crate::{
+    Color, Compositor, Crop, Image, Item, LegacyTransform, OpenOptions, Placement, RenderError,
+    ResourceCache, Scene, Snapshot,
+};
 
 /// A compositor whose device drops before the WARP lock.
 ///
@@ -128,10 +131,10 @@ fn opaque_rect_stacks_over_the_background() {
         item(&red, Placement::IDENTITY, Crop::NONE, 1.0),
         item(
             &blue,
-            Placement {
+            Placement::Legacy(LegacyTransform {
                 position: [2.0, 2.0],
-                ..Placement::IDENTITY
-            },
+                ..LegacyTransform::IDENTITY
+            }),
             Crop::NONE,
             1.0,
         ),
@@ -185,10 +188,10 @@ fn integer_scale_covers_the_destination() {
     let red = solid(&opened.compositor, 2, 2, [255, 0, 0, 255]);
     let items = [item(
         &red,
-        Placement {
+        Placement::Legacy(LegacyTransform {
             scale: [2.0, 2.0],
-            ..Placement::IDENTITY
-        },
+            ..LegacyTransform::IDENTITY
+        }),
         Crop::NONE,
         1.0,
     )];
@@ -205,11 +208,11 @@ fn rotation_about_the_top_left_is_clockwise() {
     let red = solid(&opened.compositor, 20, 10, [255, 0, 0, 255]);
     let items = [item(
         &red,
-        Placement {
+        Placement::Legacy(LegacyTransform {
             position: [30.0, 30.0],
             rotation_deg: 90.0,
-            ..Placement::IDENTITY
-        },
+            ..LegacyTransform::IDENTITY
+        }),
         Crop::NONE,
         1.0,
     )];
@@ -249,10 +252,10 @@ fn transparent_edges_filter_without_a_dark_fringe() {
     // between the texel centres.
     let offset = [item(
         &image,
-        Placement {
+        Placement::Legacy(LegacyTransform {
             position: [0.5, 0.0],
-            ..Placement::IDENTITY
-        },
+            ..LegacyTransform::IDENTITY
+        }),
         Crop::NONE,
         1.0,
     )];
@@ -263,10 +266,10 @@ fn transparent_edges_filter_without_a_dark_fringe() {
     // give red 225 and 137 there.
     let scaled = [item(
         &image,
-        Placement {
+        Placement::Legacy(LegacyTransform {
             scale: [2.0, 1.0],
-            ..Placement::IDENTITY
-        },
+            ..LegacyTransform::IDENTITY
+        }),
         Crop::NONE,
         1.0,
     )];
@@ -275,6 +278,144 @@ fn transparent_edges_filter_without_a_dark_fringe() {
     near(&snapshot, 1, 0, [255, 0, 0, 191], 2);
     near(&snapshot, 2, 0, [255, 0, 0, 64], 2);
     near(&snapshot, 3, 0, [0, 0, 0, 0], 1);
+}
+
+fn layer(compositor: &mut Compositor, width: u32, height: u32, items: &[Item<'_>]) -> Image {
+    let scene = Scene {
+        canvas: FrameSize::new(width, height).expect("invariant: the test canvas is non-zero"),
+        background: Color::TRANSPARENT,
+        items,
+    };
+    compositor.render_image(&scene).expect("render_image")
+}
+
+/// A nested scene: a transparent 4x4 scene with a red 2x2 square at (1, 1), rendered to
+/// an image and placed at (2, 2) in a black 8x8 scene. The square lands at (3, 3) and
+/// the inner scene's transparent pixels show the outer background.
+#[test]
+fn a_rendered_image_places_like_its_scene() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = solid(&opened.compositor, 2, 2, [255, 0, 0, 255]);
+    let at_one = Placement::Legacy(LegacyTransform {
+        position: [1.0, 1.0],
+        ..LegacyTransform::IDENTITY
+    });
+    let inner = layer(
+        &mut opened.compositor,
+        4,
+        4,
+        &[item(&red, at_one, Crop::NONE, 1.0)],
+    );
+    assert_eq!((inner.width(), inner.height()), (4, 4));
+    assert_eq!(inner.texture().format(), wgpu::TextureFormat::Rgba16Float);
+
+    // Another render in between must not touch the image's texels.
+    let white = solid(&opened.compositor, 1, 1, [255, 255, 255, 255]);
+    let _ = draw(
+        &mut opened.compositor,
+        8,
+        8,
+        Color::WHITE,
+        &[item(&white, Placement::IDENTITY, Crop::NONE, 1.0)],
+    );
+
+    let placed = [item(
+        &inner,
+        Placement::Legacy(LegacyTransform {
+            position: [2.0, 2.0],
+            ..LegacyTransform::IDENTITY
+        }),
+        Crop::NONE,
+        1.0,
+    )];
+    let snapshot = draw(&mut opened.compositor, 8, 8, Color::BLACK, &placed);
+    for (x, y) in [(3, 3), (4, 3), (3, 4), (4, 4)] {
+        near(&snapshot, x, y, [255, 0, 0, 255], 0);
+    }
+    for (x, y) in [(0, 0), (2, 2), (5, 5), (5, 3), (7, 7)] {
+        near(&snapshot, x, y, [0, 0, 0, 255], 0);
+    }
+}
+
+/// A rendered image is premultiplied linear light: half-opaque black inside the nested
+/// scene, placed over white, blends exactly as the same item drawn directly would.
+#[test]
+fn a_rendered_image_keeps_partial_alpha_in_linear_light() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let black = solid(&opened.compositor, 2, 2, [0, 0, 0, 255]);
+    let inner = layer(
+        &mut opened.compositor,
+        2,
+        2,
+        &[item(&black, Placement::IDENTITY, Crop::NONE, 0.5)],
+    );
+    let placed = [item(&inner, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::WHITE, &placed);
+    let encoded = (linear_to_srgb(0.5) * 255.0).round() as u8;
+    near(&snapshot, 1, 1, [encoded, encoded, encoded, 255], 2);
+}
+
+/// Nesting twice: a rendered image placed in a scene that is itself rendered to an
+/// image, scaled by 2 at each level.
+#[test]
+fn rendered_images_nest() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let green = solid(&opened.compositor, 1, 1, [0, 255, 0, 255]);
+    let double = Placement::Legacy(LegacyTransform {
+        scale: [2.0, 2.0],
+        ..LegacyTransform::IDENTITY
+    });
+    let deepest = layer(
+        &mut opened.compositor,
+        1,
+        1,
+        &[item(&green, Placement::IDENTITY, Crop::NONE, 1.0)],
+    );
+    let middle = layer(
+        &mut opened.compositor,
+        2,
+        2,
+        &[item(&deepest, double, Crop::NONE, 1.0)],
+    );
+    let placed = [item(&middle, double, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 6, 6, Color::BLACK, &placed);
+    for (x, y) in [(0, 0), (1, 2), (3, 3)] {
+        near(&snapshot, x, y, [0, 255, 0, 255], 0);
+    }
+    for (x, y) in [(4, 4), (5, 0), (0, 5)] {
+        near(&snapshot, x, y, [0, 0, 0, 255], 0);
+    }
+}
+
+/// A rendered image belongs to its compositor like an upload does.
+#[test]
+fn a_rendered_image_is_refused_by_another_compositor() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = solid(&opened.compositor, 1, 1, [255, 0, 0, 255]);
+    let inner = layer(
+        &mut opened.compositor,
+        1,
+        1,
+        &[item(&red, Placement::IDENTITY, Crop::NONE, 1.0)],
+    );
+    let mut other = opened.compositor.sibling();
+    let scene = Scene {
+        canvas: FrameSize::new(1, 1).expect("invariant: non-zero"),
+        background: Color::BLACK,
+        items: &[item(&inner, Placement::IDENTITY, Crop::NONE, 1.0)],
+    };
+    assert!(matches!(
+        other.render_image(&scene),
+        Err(RenderError::Invalid { what: "image", .. })
+    ));
 }
 
 /// An imported sRGB texture is straight alpha, so at a texel centre half-transparent red
@@ -403,10 +544,10 @@ fn a_gpu_frame_is_staged_once_and_a_hidden_one_is_not() {
         item(&image, Placement::IDENTITY, Crop::NONE, 1.0),
         item(
             &image,
-            Placement {
+            Placement::Legacy(LegacyTransform {
                 position: [1.0, 0.0],
-                ..Placement::IDENTITY
-            },
+                ..LegacyTransform::IDENTITY
+            }),
             Crop::NONE,
             1.0,
         ),
@@ -496,4 +637,394 @@ fn linear_to_srgb(c: f32) -> f32 {
     } else {
         1.055 * c.powf(1.0 / 2.4) - 0.055
     }
+}
+
+/// A layer drawn into again keeps its texture and shows only the newest composite.
+#[test]
+fn a_layer_is_redrawn_in_place() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = solid(&opened.compositor, 2, 2, [255, 0, 0, 255]);
+    let blue = solid(&opened.compositor, 1, 1, [0, 0, 255, 255]);
+    let target = opened.compositor.layer(2, 2).expect("layer");
+    let canvas = FrameSize::new(2, 2).expect("invariant: non-zero");
+    let first = [item(&red, Placement::IDENTITY, Crop::NONE, 1.0)];
+    opened
+        .compositor
+        .render_into(
+            &Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &first,
+            },
+            &target,
+        )
+        .expect("first composite");
+    let placed = [item(&target, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &placed);
+    near(&snapshot, 1, 1, [255, 0, 0, 255], 0);
+
+    // The second composite clears the layer: red must not show through.
+    let second = [item(&blue, Placement::IDENTITY, Crop::NONE, 1.0)];
+    opened
+        .compositor
+        .render_into(
+            &Scene {
+                canvas,
+                background: Color::TRANSPARENT,
+                items: &second,
+            },
+            &target,
+        )
+        .expect("second composite");
+    let snapshot = draw(&mut opened.compositor, 2, 2, Color::BLACK, &placed);
+    near(&snapshot, 0, 0, [0, 0, 255, 255], 0);
+    near(&snapshot, 1, 1, [0, 0, 0, 255], 0);
+}
+
+/// A layer refuses to be drawn into while the scene places it, at another size, or
+/// when it is not a layer at all.
+#[test]
+fn render_into_refuses_a_bad_target() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let target = opened.compositor.layer(2, 2).expect("layer");
+    let upload = solid(&opened.compositor, 2, 2, [255, 0, 0, 255]);
+    let canvas = FrameSize::new(2, 2).expect("invariant: non-zero");
+    let itself = [item(&target, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let cases: [(&[Item<'_>], FrameSize, &Image); 3] = [
+        (&itself, canvas, &target),
+        (
+            &[],
+            FrameSize::new(3, 2).expect("invariant: non-zero"),
+            &target,
+        ),
+        (&[], canvas, &upload),
+    ];
+    for (items, canvas, target) in cases {
+        let scene = Scene {
+            canvas,
+            background: Color::TRANSPARENT,
+            items,
+        };
+        assert!(matches!(
+            opened.compositor.render_into(&scene, target),
+            Err(RenderError::Invalid { what: "layer", .. })
+        ));
+    }
+    assert!(matches!(
+        opened.compositor.layer(0, 2),
+        Err(RenderError::Invalid { what: "layer", .. })
+    ));
+}
+
+/// Rewriting an upload keeps its texture and changes what it shows; a layer is refused.
+#[test]
+fn an_upload_is_rewritten_in_place() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let image = solid(&opened.compositor, 1, 1, [255, 0, 0, 255]);
+    let before = image.texture().clone();
+    opened
+        .compositor
+        .rewrite_rgba8(&image, &[0, 255, 0, 255])
+        .expect("rewrite");
+    assert!(image.texture() == &before);
+    let placed = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let snapshot = draw(&mut opened.compositor, 1, 1, Color::BLACK, &placed);
+    near(&snapshot, 0, 0, [0, 255, 0, 255], 0);
+
+    assert!(matches!(
+        opened.compositor.rewrite_rgba8(&image, &[0, 0, 0]),
+        Err(RenderError::ImageBytes { .. })
+    ));
+    let target = opened.compositor.layer(1, 1).expect("layer");
+    assert!(matches!(
+        opened.compositor.rewrite_rgba8(&target, &[0, 0, 0, 255]),
+        Err(RenderError::Invalid { what: "image", .. })
+    ));
+}
+
+/// The cache reuses a texture while the key's size holds, rewrites it for a new
+/// version, and replaces it for a new size.
+#[test]
+fn the_cache_reuses_textures_by_key() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let compositor = &opened.compositor;
+    let mut cache: ResourceCache<&str> = ResourceCache::new();
+    cache.begin_frame();
+    let first = cache
+        .upload(compositor, &"a", 1, 1, 1, &[255, 0, 0, 255])
+        .expect("upload")
+        .texture()
+        .clone();
+    let layer = cache
+        .layer(compositor, &"layer", 2, 2)
+        .expect("layer")
+        .texture()
+        .clone();
+    drop(cache.end_frame(compositor));
+
+    cache.begin_frame();
+    let same = cache
+        .upload(compositor, &"a", 1, 1, 1, &[0, 0, 0, 0])
+        .expect("same version")
+        .texture()
+        .clone();
+    let rewritten = cache
+        .upload(compositor, &"a", 2, 1, 1, &[0, 255, 0, 255])
+        .expect("new version")
+        .texture()
+        .clone();
+    let same_layer = cache
+        .layer(compositor, &"layer", 2, 2)
+        .expect("layer")
+        .texture()
+        .clone();
+    assert!(same == first && rewritten == first && same_layer == layer);
+    assert_eq!(cache.pending(), 0);
+
+    let resized = cache
+        .upload(compositor, &"a", 3, 2, 1, &[0; 8])
+        .expect("new size")
+        .texture()
+        .clone();
+    assert!(resized != first);
+    assert_eq!((cache.live(), cache.pending()), (2, 1));
+}
+
+/// An entry no frame uses is retired, and is handed back only once the GPU has
+/// finished the last frame that used it.
+#[test]
+fn the_cache_frees_after_the_frame_fence() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let compositor = &opened.compositor;
+    let mut cache: ResourceCache<&str> = ResourceCache::new();
+    let frame = cache.begin_frame();
+    let _ = cache
+        .upload(compositor, &"kept", 1, 1, 1, &[255, 0, 0, 255])
+        .expect("upload");
+    let _ = cache
+        .upload(compositor, &"swapped", 1, 1, 1, &[255, 0, 0, 255])
+        .expect("upload");
+    // Replaced in the frame that used it: its fence is this frame's, not yet armed.
+    let _ = cache
+        .upload(compositor, &"swapped", 2, 2, 1, &[0; 8])
+        .expect("resize");
+    assert_eq!(cache.pending(), 1);
+    assert!(cache.reclaim().is_none(), "frame {frame} has not ended");
+    drop(cache.end_frame(compositor));
+
+    // The next frame uses only "kept": "swapped" retires after this frame's fence.
+    cache.begin_frame();
+    let _ = cache
+        .upload(compositor, &"kept", 1, 1, 1, &[255, 0, 0, 255])
+        .expect("reuse");
+    let early = cache.end_frame(compositor).map_or(0, |freed| freed.len());
+    compositor
+        .device()
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("poll");
+    let late = cache.reclaim().map_or(0, |freed| freed.len());
+    assert_eq!(early + late, 2, "both retired textures come back");
+    assert_eq!((cache.live(), cache.pending()), (1, 0));
+    assert_eq!(cache.drain().len(), 1);
+}
+
+/// An image of equal-width vertical bands, one colour each, `height` rows tall.
+fn bands(
+    compositor: &Compositor,
+    band_width: u32,
+    height: u32,
+    colors: &[[u8; 4]],
+) -> crate::Image {
+    let width = band_width * colors.len() as u32;
+    let row: Vec<[u8; 4]> = colors
+        .iter()
+        .flat_map(|c| std::iter::repeat_n(*c, band_width as usize))
+        .collect();
+    let pixels: Vec<u8> = std::iter::repeat_n(row, height as usize)
+        .flatten()
+        .flatten()
+        .collect();
+    compositor
+        .upload_rgba8(width, height, &pixels)
+        .expect("invariant: the image bytes match")
+}
+
+fn geometry(
+    center: [f32; 2],
+    size: [f32; 2],
+    fit_mode: jstream_protocol::FitMode,
+    rotation_deg: f32,
+) -> Placement {
+    Placement::Geometry(jstream_protocol::ItemGeometry {
+        fit_mode,
+        rotation_deg: jstream_protocol::Finite32::new(rotation_deg).expect("finite"),
+        ..jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(center[0], center[1]).expect("finite"),
+            jstream_protocol::Size::try_new(size[0], size[1]).expect("positive"),
+        )
+        .expect("positive")
+    })
+}
+
+/// The snapshot sampled every `step` pixels, at the centre of each `step`×`step` cell,
+/// one character per sample: `.` black, `R`, `G`, `B`, `W`, or `?` for anything more than
+/// a few levels from all of them.
+///
+/// Every edge in the golden scenes falls on a cell boundary, and every band boundary in
+/// their images is more than a texel from a sample, so the grid is the same on any
+/// conformant adapter.
+fn grid(snapshot: &Snapshot, step: u32) -> String {
+    const PALETTE: [(char, [u8; 3]); 5] = [
+        ('.', [0, 0, 0]),
+        ('R', [255, 0, 0]),
+        ('G', [0, 255, 0]),
+        ('B', [0, 0, 255]),
+        ('W', [255, 255, 255]),
+    ];
+    let mut out = String::new();
+    for y in (step / 2..snapshot.height()).step_by(step as usize) {
+        for x in (step / 2..snapshot.width()).step_by(step as usize) {
+            let pixel = snapshot
+                .pixel(x, y)
+                .expect("invariant: inside the snapshot");
+            let class = PALETTE
+                .iter()
+                .find(|(_, rgb)| (0..3).all(|c| pixel[c].abs_diff(rgb[c]) <= 4))
+                .map_or('?', |(name, _)| *name);
+            out.push(class);
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// Golden test of ADR-0022 geometry on a 64×36 canvas, sampled every 4 pixels:
+/// - fit: an 8×4 red|green image letterboxed into a 16×16 box centred at (12, 12);
+/// - fill: a 32×8 red|green|blue|white image in a 16×16 box centred at (36, 12), clipped
+///   to the box, so only the middle green|blue half shows;
+/// - stretch, rotated 90° clockwise about the centre (56, 16): the red|green image in a
+///   16×8 box, so red is on top;
+/// - legacy: an 8×8 blue square with its top-left at (4, 24), beside the boxes.
+#[test]
+fn golden_geometry_fit_fill_stretch_and_rotation() {
+    use jstream_protocol::FitMode;
+
+    let Some(mut opened) = open() else {
+        return;
+    };
+    const R: [u8; 4] = [255, 0, 0, 255];
+    const G: [u8; 4] = [0, 255, 0, 255];
+    const B: [u8; 4] = [0, 0, 255, 255];
+    const W: [u8; 4] = [255, 255, 255, 255];
+    let halves = bands(&opened.compositor, 4, 4, &[R, G]);
+    let quarters = bands(&opened.compositor, 8, 8, &[R, G, B, W]);
+    let blue = solid(&opened.compositor, 8, 8, B);
+    let items = [
+        item(
+            &halves,
+            geometry([12.0, 12.0], [16.0, 16.0], FitMode::Fit, 0.0),
+            Crop::NONE,
+            1.0,
+        ),
+        item(
+            &quarters,
+            geometry([36.0, 12.0], [16.0, 16.0], FitMode::Fill, 0.0),
+            Crop::NONE,
+            1.0,
+        ),
+        item(
+            &halves,
+            geometry([56.0, 16.0], [16.0, 8.0], FitMode::Stretch, 90.0),
+            Crop::NONE,
+            1.0,
+        ),
+        item(
+            &blue,
+            Placement::Legacy(LegacyTransform {
+                position: [4.0, 24.0],
+                ..LegacyTransform::IDENTITY
+            }),
+            Crop::NONE,
+            1.0,
+        ),
+    ];
+    let snapshot = draw(&mut opened.compositor, 64, 36, Color::BLACK, &items);
+    let expected = "\
+................
+.......GGBB.....
+.RRGG..GGBB..RR.
+.RRGG..GGBB..RR.
+.......GGBB..GG.
+.............GG.
+.BB.............
+.BB.............
+................
+";
+    assert_eq!(grid(&snapshot, 4), expected);
+}
+
+/// Golden test of crop with a geometry: cropping the red band off a red|green|blue image
+/// leaves green|blue stretched across the whole 32×16 box, whatever the source size.
+#[test]
+fn golden_geometry_crops_before_fitting() {
+    use jstream_protocol::FitMode;
+
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let image = bands(
+        &opened.compositor,
+        8,
+        8,
+        &[[255, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]],
+    );
+    let crop = Crop {
+        left: 8,
+        ..Crop::NONE
+    };
+    let items = [item(
+        &image,
+        geometry([16.0, 8.0], [32.0, 16.0], FitMode::Stretch, 0.0),
+        crop,
+        1.0,
+    )];
+    let snapshot = draw(&mut opened.compositor, 32, 16, Color::BLACK, &items);
+    assert_eq!(
+        grid(&snapshot, 4),
+        "GGGGBBBB\nGGGGBBBB\nGGGGBBBB\nGGGGBBBB\n"
+    );
+}
+
+/// A geometry with an arbitrary rotation turns about its centre: the centre keeps the
+/// image's colour, and a point just outside the unrotated box but inside the rotated
+/// one is covered.
+#[test]
+fn a_rotated_geometry_turns_about_its_centre() {
+    use jstream_protocol::FitMode;
+
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = solid(&opened.compositor, 4, 4, [255, 0, 0, 255]);
+    let items = [item(
+        &red,
+        geometry([32.0, 32.0], [40.0, 8.0], FitMode::Stretch, 90.0),
+        Crop::NONE,
+        1.0,
+    )];
+    let snapshot = draw(&mut opened.compositor, 64, 64, Color::BLACK, &items);
+    near(&snapshot, 32, 32, [255, 0, 0, 255], 1);
+    // Vertical after the turn: (32, 16) is inside, (16, 32) is not.
+    near(&snapshot, 32, 16, [255, 0, 0, 255], 1);
+    near(&snapshot, 16, 32, [0, 0, 0, 255], 0);
 }

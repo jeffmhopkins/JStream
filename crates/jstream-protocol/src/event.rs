@@ -1,5 +1,6 @@
 //! Events: what the server pushes to every connected client after the handshake.
 
+use crate::history::HistoryDirection;
 use crate::id::{ClientId, OutputId, RequestId, Rev};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,9 @@ pub enum Event {
         /// That client's request ID, so it can match the event to its own response.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<RequestId>,
+        /// `undo` or `redo` when a history call made the change; absent for a batch.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cause: Option<HistoryDirection>,
     },
     /// An output changed state, for example after `output.start`.
     #[serde(rename = "output.state_changed")]

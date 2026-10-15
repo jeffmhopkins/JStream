@@ -25,7 +25,7 @@
 //! # Ok::<(), jstream_audio::AudioError>(())
 //! ```
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-audio/README.md#purpose, crates/jstream-audio/README.md#realtime, crates/jstream-audio/README.md#meters, crates/jstream-audio/README.md#filters, docs/adr/0028-audio-model-v2.md, docs/adr/0014-media-clock.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-audio/README.md#purpose, crates/jstream-audio/README.md#realtime, crates/jstream-audio/README.md#meters, crates/jstream-audio/README.md#filters, docs/adr/0028-audio-model-v2.md, docs/adr/0014-media-clock.md
 
 #![forbid(unsafe_code)]
 
@@ -36,7 +36,7 @@ pub mod meter;
 mod rt;
 
 pub use error::AudioError;
-pub use handle::{BusControl, BusStats, InputControl, InputStats};
+pub use handle::{BusControl, BusStats, InputControl, InputId, InputStats};
 pub use rt::input::InputProducer;
-pub use rt::mixer::{Block, Mixer, MixerConfig};
+pub use rt::mixer::{Block, Mixer, MixerConfig, MixerControl};
 pub use rt::shared::MeterReading;

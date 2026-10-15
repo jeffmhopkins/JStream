@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:3014a97ef3a6df99", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read after the sweep bullet changed to point at the ttl not-built list instead of naming only link and fact checks; other bullets and Not yet (docs index) unchanged" }
+verified = { hash = "b3:b098625e37cae5f4", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (docs merge-main bullet) into ADR-0042: the hash bullet adds the #jstream-meta covers view, implemented in hash.rs with tests; merge-main and other bullets are main's and unchanged" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -36,7 +36,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   placeholder was replaced, each after a re-read, in the PR that added hashing. Hashes
   skip metadata blocks, `depends_on` can name one table row, and `cargo xtask docs rehash`
   is the one-time migration to that rule
-  ([ADR-0039](adr/0039-hash-ignores-metadata-and-row-dependencies.md)).
+  ([ADR-0039](adr/0039-hash-ignores-metadata-and-row-dependencies.md)). A `covers` entry
+  can hash manifests as their `#jstream-meta` view
+  ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)).
 - **Unmatched globs** ([R-DOC-012](RULES.md#R-DOC-012)): `covers` globs that match no
   tracked file fail (warn in drafts; retired docs are exempt); `applies_to` globs are
   checked for validity only. `verify` refuses while untracked files match the section's
@@ -54,6 +56,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **History and TTL review** ([History](#history), [Time-based review](#ttl)):
   `cargo xtask docs log` derives a doc's or section's history from git, and
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
+- **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
+  `origin/main`, resolves conflicts that are only between `verified` stamps, and lists
+  the sections left stale.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -127,6 +132,12 @@ verified = { hash = "b3:4f1c9a0e7d2b8c61", by = "agent:claude@<session-url>", no
 - The `<a id>` anchor is the section's permanent ID. It is independent of the heading
   text, so the heading can be renamed freely.
 - `covers`: code globs, relative to the repo root, that this section describes. Optional.
+  An entry may end in `#jstream-meta` (`crates/*/Cargo.toml#jstream-meta`): it covers
+  the same files, but hashes each matched `Cargo.toml` as its jstream view only
+  ([Hash-bound verification](#verification)). `#` is reserved in globs, and no other view
+  exists ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)). Narrow `covers` to
+  what the text states: a section re-verified on most PRs is too broad (see
+  [Verification notes](#notes)).
 - `depends_on`: the **sections** this one relies on, as `path#anchor` or
   `path` for a whole ADR. A `path#anchor` may also name a rule (`docs/RULES.md#R-…`),
   whose text up to the next rule or section is what is hashed
@@ -228,7 +239,15 @@ It lists:
    of its contents. In Markdown files, metadata blocks are removed first. In workflow
    files (`.github/workflows/`), the commit SHA and version comment of `uses:` pins are
    ignored, so Dependabot pin bumps don't make the specifying doc stale
-   ([ADR-0018](adr/0018-ci-supply-chain-policy.md));
+   ([ADR-0018](adr/0018-ci-supply-chain-policy.md)). A file matched only through
+   `#jstream-meta` entries contributes the hash of its **jstream view** instead: its
+   `package.name`, its whole `[package.metadata.jstream]` table, and every entry of
+   `[dependencies]`, `[dev-dependencies]`, `[build-dependencies]` and their
+   `[target.<cfg>.…]` variants whose key or `package =` value starts with `jstream-`,
+   rendered canonically (sorted keys), so comments, formatting and other tables don't
+   count. A file that isn't a `Cargo.toml` or doesn't parse is hashed whole, and so is
+   one that a plain entry also matches
+   ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md));
 3. for each `depends_on` target: its reference plus a hash of its normalized body
    (metadata blocks removed), or of its one row for a `path#anchor/<key>` reference. A
    rule anchor (`RULES.md#R-…`) names the rule's text, up to the next rule or section. A
@@ -269,8 +288,17 @@ cargo xtask docs review ARCH \
     --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
 cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
+cargo xtask docs merge-main                    # merge origin/main; stamp-only conflicts take main's
 cargo xtask docs rehash                        # one-time ADR-0039 migration (below)
 ```
+
+`docs merge-main` fetches and merges `origin/main` into a clean working tree. A conflict
+whose two sides are only `verified` lines inside `@section` blocks takes main's line,
+because the section has to be re-read against the combined change whichever stamp is
+kept. Any other conflict, including one in a file that also has stamp conflicts, is left
+exactly as git wrote it, and the merge stays open for you to finish by hand. When every
+conflict was a stamp conflict it commits the merge and prints the sections that are now
+stale, for `docs verify` after a re-read.
 
 `docs rehash` moved stored hashes to the rule above when it was introduced. It rewrites
 a section's `hash` (keeping `by` and `note`) only when the stored hash is what the

@@ -288,7 +288,7 @@ fn connect_rtmp_with(
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{LinkState, LivePublish, connect_rtmp, connect_rtmp_with};
+    use super::{LinkState, LivePublish, RtmpPublish, connect_rtmp, connect_rtmp_with};
     use jstream_mux::amf0::Amf0Value;
     use jstream_mux::flv::{FlvTag, TagType};
     use jstream_outputs::rtmp::ReconnectPolicy;
@@ -470,31 +470,44 @@ pub(crate) mod tests {
         }
     }
 
-    /// Sends a keyframe and polls every 5 ms until `done`, for at most five seconds.
-    fn send_until(
-        publish: &mut dyn LivePublish,
+    /// Sends a keyframe and polls every 5 ms until `done`, which is always checked right
+    /// after a send and a poll, so a reconnect that finished meanwhile is collected first.
+    /// `limit` only stops a test that would otherwise hang: a stalled test process (#189)
+    /// can use it all up while nothing runs, so a test must not rely on it for timing.
+    fn send_until<P: LivePublish>(
+        publish: &mut P,
         timestamp: &mut u32,
-        mut done: impl FnMut(&dyn LivePublish) -> bool,
+        limit: Duration,
+        mut done: impl FnMut(&P) -> bool,
     ) -> bool {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while Instant::now() < deadline {
+        let deadline = Instant::now() + limit;
+        loop {
             if done(publish) {
                 return true;
+            }
+            if Instant::now() >= deadline {
+                return false;
             }
             *timestamp += 33;
             publish.send_tag(&keyframe(*timestamp)).expect("send");
             publish.poll().expect("poll");
             thread::sleep(Duration::from_millis(5));
         }
-        done(publish)
     }
 
     /// A server that hangs up mid-stream is reconnected to with the same publish
     /// sequence: the link goes `Reconnecting`, tags sent meanwhile are dropped and
-    /// counted instead of failing the send, and it is `Active` again on the second
-    /// connection.
+    /// counted instead of failing the send, and the first attempt brings it back
+    /// `Active` on the second connection.
+    ///
+    /// The test waits for that attempt's outcome, not for a time budget (#189). The
+    /// attempt runs on a thread of its own and is bounded by the 10 s I/O timeout, so
+    /// it always ends; a budget shorter than that failed when the test process stalled
+    /// for a few seconds on a loaded runner, though the attempt would have succeeded.
     #[test]
     fn connect_rtmp_reconnects_after_the_server_hangs_up() {
+        /// Stops a hung test only: longer than one attempt's 10 s I/O timeout.
+        const HANG: Duration = Duration::from_secs(30);
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
         let port = listener.local_addr().expect("addr").port();
         let server = thread::spawn(move || {
@@ -503,8 +516,9 @@ pub(crate) mod tests {
             // Let some media arrive, then hang up.
             thread::sleep(Duration::from_millis(100));
             first.shutdown(Shutdown::Both).expect("hang up");
-            let _ = drain.join();
+            // Accept the reconnect without waiting for the first drain to end.
             let (second, _) = listener.accept().expect("accept the reconnect");
+            let _ = drain.join();
             let _ = serve(second, Duration::ZERO).join();
         });
 
@@ -519,14 +533,25 @@ pub(crate) mod tests {
         let mut timestamp = 0;
         assert_eq!(publish.link_state(), LinkState::Active);
         assert!(
-            send_until(&mut publish, &mut timestamp, |p| p.link_state()
+            send_until(&mut publish, &mut timestamp, HANG, |p| p.link_state()
                 == LinkState::Reconnecting),
             "the hang-up was not noticed"
         );
-        assert!(
-            send_until(&mut publish, &mut timestamp, |p| p.link_state()
-                == LinkState::Active),
-            "never reconnected"
+        let stats = |p: &RtmpPublish| p.inner.as_ref().expect("publishing").stats();
+        // Until the first attempt has either published or failed.
+        let settled = send_until(&mut publish, &mut timestamp, HANG, |p| {
+            p.link_state() == LinkState::Active || stats(p).failed_attempts > 0
+        });
+        let after = stats(&publish);
+        assert!(settled, "the reconnect attempt never ended: {after:?}");
+        assert_eq!(
+            (
+                publish.link_state(),
+                after.reconnects,
+                after.failed_attempts
+            ),
+            (LinkState::Active, 1, 0),
+            "the first attempt did not reconnect: {after:?}"
         );
         assert!(publish.dropped() > 0, "nothing was counted while down");
         publish.finish().expect("finish");

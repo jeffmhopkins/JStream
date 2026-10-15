@@ -1,7 +1,9 @@
 //! Queries: reads with no effect on state, and their results.
 
-use crate::command::{Crop, ItemTransform, SourceKind};
+use crate::command::{Crop, ItemTransform, SceneRole, SourceKind};
+use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
+use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::output::OutputInfo;
@@ -37,9 +39,10 @@ pub enum Query {
         /// The scene whose items to list.
         scene_id: SceneId,
     },
-    /// Reads the whole collection state (every source, every scene with its items, and
-    /// every output) at one revision: what a client reads on connecting, after a `state.changed` it
-    /// didn't cause, or before an edit it sends with `expected_rev`.
+    /// Reads the whole collection state (the canvas, every source, every scene with its
+    /// items, every output and every encoder profile) at one revision: what a client
+    /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
+    /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
     StateGet,
     /// The current program mix, as a PNG.
@@ -65,6 +68,9 @@ pub enum Query {
     /// sends. Outputs have no display order of their own.
     #[serde(rename = "output.list")]
     OutputList,
+    /// Lists the collection's encoder profiles, ordered by ID.
+    #[serde(rename = "encoder.list")]
+    EncoderList,
 }
 
 impl Query {
@@ -80,6 +86,7 @@ impl Query {
             Query::KindList => "kind.list",
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
+            Query::EncoderList => "encoder.list",
         }
     }
 }
@@ -109,6 +116,20 @@ pub enum QueryResult {
         /// never reported. Missing (from a server older than 0.7) parses as `false`.
         #[serde(default)]
         key_set: bool,
+        /// The encoder session the output uses while it runs: which profile, and which
+        /// other running outputs share it. Absent while it isn't running, and from a
+        /// server older than 0.13.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        encoder: Option<EncoderSessionInfo>,
+        /// How many video encoder sessions the engine has open now, for every output,
+        /// and how many of them are hardware ones. Hardware encoders cap their
+        /// concurrent sessions per GPU vendor and driver, and the engine doesn't guess
+        /// the cap. Missing (from a server older than 0.13) parses as 0.
+        #[serde(default)]
+        encoder_sessions: u32,
+        /// Of `encoder_sessions`, the hardware ones. Missing parses as 0.
+        #[serde(default)]
+        hardware_sessions: u32,
     },
     /// The result of `source.list`.
     #[serde(rename = "source.list")]
@@ -133,6 +154,10 @@ pub enum QueryResult {
     StateGet {
         /// The revision the state was read at.
         rev: Rev,
+        /// The canvas every scene is laid out on. Missing (from a server older than 0.11)
+        /// parses as 1920×1080.
+        #[serde(default)]
+        canvas: Canvas,
         /// Every source, ordered by ID.
         sources: Vec<SourceInfo>,
         /// Every scene with its items, in display order.
@@ -141,6 +166,10 @@ pub enum QueryResult {
         /// as empty.
         #[serde(default)]
         outputs: Vec<OutputInfo>,
+        /// Every encoder profile, ordered by ID. Missing (from a server older than
+        /// 0.13) parses as empty.
+        #[serde(default)]
+        encoders: Vec<EncoderProfileInfo>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -177,6 +206,14 @@ pub enum QueryResult {
         /// The outputs, ordered by ID.
         outputs: Vec<OutputInfo>,
     },
+    /// The result of `encoder.list`.
+    #[serde(rename = "encoder.list")]
+    EncoderList {
+        /// The revision the list was read at.
+        rev: Rev,
+        /// The profiles, ordered by ID.
+        encoders: Vec<EncoderProfileInfo>,
+    },
 }
 
 impl QueryResult {
@@ -192,6 +229,7 @@ impl QueryResult {
             QueryResult::KindList { .. } => "kind.list",
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
+            QueryResult::EncoderList { .. } => "encoder.list",
         }
     }
 }
@@ -203,6 +241,10 @@ pub struct SceneSummary {
     pub scene_id: SceneId,
     /// Its display name.
     pub name: String,
+    /// What it is for: a `group` that clients hide from the scene list, or a `scene`.
+    /// Omitted for a `scene`.
+    #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
+    pub role: SceneRole,
     /// How many items it has.
     pub item_count: u32,
 }
@@ -229,6 +271,10 @@ pub struct SceneInfo {
     pub scene_id: SceneId,
     /// Its display name.
     pub name: String,
+    /// What it is for: a `group` that clients hide from the scene list, or a `scene`.
+    /// Omitted for a `scene`.
+    #[serde(default, skip_serializing_if = "SceneRole::is_scene")]
+    pub role: SceneRole,
     /// Its items, in stacking order: the first is at the bottom.
     pub items: Vec<ItemInfo>,
 }
@@ -241,8 +287,19 @@ pub struct ItemInfo {
     pub item_id: ItemId,
     /// The source it places.
     pub source_id: SourceId,
-    /// Where it sits in its scene.
+    /// Which form its placement is stored in. Missing (from a server older than 0.11)
+    /// parses as `legacy`.
+    #[serde(default)]
+    pub placement: PlacementForm,
+    /// **Deprecated** since 0.11 (ADR-0022), removed in 1.0: read `geometry`. For a
+    /// legacy item, the stored transform exactly as written. For a geometry item, a
+    /// view computed from the geometry alone: the box's rotated top-left corner, its
+    /// rotation, and scale (1, 1).
     pub transform: ItemTransform,
+    /// The stored geometry. Absent for a legacy item, whose box depends on the source's
+    /// runtime size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<ItemGeometry>,
     /// How much of the source it cuts off.
     pub crop: Crop,
     /// Whether it is drawn.

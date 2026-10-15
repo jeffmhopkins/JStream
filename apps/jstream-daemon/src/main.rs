@@ -14,6 +14,9 @@
 #![forbid(unsafe_code)]
 
 mod args;
+// Windows runs it at startup; its decision is tested everywhere.
+#[cfg(any(windows, test))]
+mod components;
 mod crash;
 mod logs;
 mod serve;
@@ -174,15 +177,22 @@ fn init_logging(dir: &Path, filter: Targets) -> Result<(), Failure> {
     Ok(())
 }
 
-/// Checks that Windows has Media Foundation, before anything could call into it. The
-/// binary delay-loads `mfplat.dll` (`build.rs`), so on an N edition without it the
-/// daemon still starts and gets here, and exits with advice instead of a loader error.
+/// Checks that Windows has Media Foundation and its AAC encoder, before anything else
+/// calls into it. The binary delay-loads the Media Foundation DLLs (`build.rs`), so on
+/// an N edition without them the daemon still starts and gets here, and exits with
+/// advice instead of a loader error.
 #[cfg(windows)]
 fn check_media_foundation() -> Result<(), Failure> {
-    jstream_platform_windows::check_media_foundation().map_err(|error| {
+    use jstream_platform::Codecs;
+    let missing = |error: jstream_platform::PlatformError| {
         tracing::error!(%error, "a Windows component is missing");
         Failure::MissingComponent(error.to_string())
-    })
+    };
+    jstream_platform_windows::check_media_foundation().map_err(missing)?;
+    let codecs = jstream_platform_windows::MfCodecs::new()
+        .list()
+        .context("could not list the Media Foundation codecs")?;
+    components::aac_encoder(&codecs).map_err(missing)
 }
 
 /// Loads or creates the token, then serves until a signal arrives.

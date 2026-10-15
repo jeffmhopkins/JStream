@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:a6159ef933958b49", by = "agent:claude@session_01L5hE1i9KRciNcKrq7DGnVM", note = "Merge of main (#133 add_input keep-alive) into D7a: took main's verified line and re-read the section: main's InputControl keep-alive sentence sits beside D7a's filter kernels in the API list, 'come later' list and Errors; both match handle.rs, mixer.rs, meter/ and filter/" }
+verified = { hash = "b3:f07236117b959ad7", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: stale via ARCH#threading's Collector row rewording only (program-stage collector fed by render and mixer; mixer's own for input rings); this section's text unchanged and consistent; holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -40,13 +40,18 @@ stamped on the clock, and no device is the master.
 - `Mixer::new(MixerConfig)`: engine rate, block size (default 1024 frames, one AAC
   access unit), latency (default 1440 frames, 30 ms) and ring size (default 16384
   frames) per input. `MixerConfig::validate` checks the ranges.
-- `Mixer::add_input(format)` takes the stream's format (device rate, mono, stereo or 5.1,
-  interleaved `f32`; 8 to 192 kHz at a 48 kHz engine) and returns an `InputProducer`, which
-  implements `jstream_platform::AudioInputHandler` and goes to `AudioIo::open_input` as
-  the stream's handler, and an `InputControl` for the control plane. It allocates, so it
-  is called while setting up. The control plane keeps an `InputControl` until the
-  stream is closed and the mixer is dropped, so the input's shared state is freed there
-  (see [Real-time design](#realtime)).
+- `Mixer::add_input(format)` and `MixerControl::add_input` (from `Mixer::control`)
+  take the stream's format (device rate, mono, stereo or 5.1, interleaved `f32`; 8 to
+  192 kHz at a 48 kHz engine) and return an `InputProducer`, which implements
+  `jstream_platform::AudioInputHandler` and goes to `AudioIo::open_input` as the
+  stream's handler, and an `InputControl` for the control plane. Both allocate on the
+  caller. `Mixer::add_input` installs the input before it returns. `MixerControl` does
+  not borrow the mixer, so another thread can add or `InputControl::remove` while
+  `poll` runs; the mixer applies those commands at the start of the next block and
+  does not allocate to do it. At most 64 inputs.
+  The `InputControl` also holds a reference to the input's ring and counters, so
+  whichever handle is dropped last, the free never happens on a real-time thread (see
+  [Real-time design](#realtime)).
 - `Mixer::poll(now, out)` mixes the next block once the media clock `now` has passed its
   end by the latency, into `out` (interleaved stereo), and returns its `Block` (first
   frame, length, and `pts` in ticks of `1 / rate`). The first call starts the time line
@@ -65,7 +70,9 @@ stamped on the clock, and no device is the master.
   sidechain key), `Limiter` and `Delay`, not yet run by the mixer ([Filters](#filters)).
 
 **Errors** (`AudioError`): an invalid configuration (including a loudness meter's
-rate, or a filter's rate or settings), an unsupported input rate or sample layout, or a wrong output length. No variant allocates.
+rate, or a filter's rate or settings), an unsupported input rate or sample layout, a
+wrong output length, more than 64 inputs, a full input command queue, or a collector
+thread that could not start. No variant allocates.
 
 **Tests.** The unit tests in each `src/rt/` module cover:
 - ring: underrun, drop-oldest overrun, late frames, forward jumps, and a two-thread test
@@ -75,7 +82,10 @@ rate, or a filter's rate or settings), an unsupported input rate or sample layou
 - the controller, drift fit, continuity and downmix coefficients, ported from S3 with
   S3's tests;
 - the input's anchoring, outlier runs, discontinuities and silent packets;
-- the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling.
+- the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
+- inputs added from another thread while the mixer runs, then removed, the 64-input
+  limit, and the ring freed on the collector thread whichever of the mixer and the
+  producer lets go last, and the collector ending with its last handle.
 
 `tests/sim.rs` runs simulated devices through the public API on a simulated 100 ns
 clock, with no real devices or threads ([R-TEST-004](../../docs/RULES.md#R-TEST-004)).
@@ -91,6 +101,10 @@ be.
   restart. Each is counted as it should be, and the audio is back on the time line
   afterwards.
 
+`tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
+under `assert_no_alloc`, through the same kinds of glitches and live input changes
+([Real-time design](#realtime)).
+
 The crate is built with `opt-level = 3` in the dev profile (root `Cargo.toml`). Debug
 builds of the app need a resampler fast enough for a real-time thread, and the
 simulations need it to finish in seconds.
@@ -100,7 +114,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:8c88bd69420113d8", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#133 review N1: add_input rustdoc now says to keep the InputControl until the stream is closed and the mixer dropped, else the free moves to an RT thread; doc comment only, no code change; re-read the section and its keep-alive / no-collector wording still matches" }
+verified = { hash = "b3:4b14be3ec63e284a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: stale via ARCH#threading's Collector row rewording only (program-stage collector fed by render and mixer; mixer's own for input rings); this section's text unchanged and consistent; holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -184,20 +198,40 @@ ramps the bus gain, replaces any non-finite output with 0, and meters inputs (po
 and the bus. Peaks use a `fetch_max` on the bits, which order like the values for
 non-negative floats.
 
+**Adding and removing inputs** (`cmd.rs`, `retire.rs`). The control thread allocates the
+ring and the producer and sends them on a bounded lock-free queue (`crossbeam-channel`,
+128 commands). The mixer applies that queue at the start of the next block. Its input
+list is reserved for 64 inputs, so installing one does not allocate, and removing one
+unlinks it. The mixer and the producer each hold an `Arc` of the ring. Releasing either
+reference hands that `Arc` to the collector thread, which is where the ring is freed
+([R-RT-003](../../docs/RULES.md#R-RT-003)), including when the producer is dropped on
+the audio thread after the mixer is already gone. Each mixer starts its own collector in
+`Mixer::new` and hands it to its control plane and producers, so nothing is global
+([R-RS-008](../../docs/RULES.md#R-RS-008)). It ends once the mixer, every producer and
+its control handles are gone. It polls its queue every 10 ms rather than blocking on it,
+so a hand-off is a `try_send` that never wakes a thread or takes the channel's lock.
+Each `InputControl` also holds a reference to its input's ring and counters, so when the
+control plane drops the last one it frees them there, also off the real-time threads. A
+full command queue refuses the add or the removal rather than blocking the mixer.
+
+**No allocation, tested** (`tests/no_alloc.rs`). The test R-RT-001 names,
+`rt::callback_does_not_allocate`, runs in its own test binary with `assert_no_alloc`'s
+allocator installed globally. After 15 s of warm-up, it runs 30 s of simulated 10 ms
+ticks. In each tick, every input's `on_packet`, `Mixer::poll` and the filter kernels and
+meters on each mixed block run inside an `assert_no_alloc` scope. Any allocation or free
+there fails the test, in debug and release builds alike. Five inputs (mono 44.1 kHz,
+stereo 48 and 96 kHz, 5.1, and 32 kHz added while running) drift and jitter. The checked phase also
+covers timestamp outliers and missing stamps, lost packets, a discontinuity, a stalled
+audio thread that catches up, a 3 s device gap that resets the mapping, silent and
+non-finite packets, a mixer stall long enough to overrun the rings and skip frames,
+and an input added and one removed while the mixer runs. The test checks that each of
+those paths ran. Control-plane calls and dropping a producer (stream teardown) run
+outside the scope. Locks, blocking and logging are still left to review.
+
 **Not yet enforced or measured:**
-- No test proves the absence of allocation. R-RT-001 names
-  `jstream_audio::rt::callback_does_not_allocate`, which needs `assert_no_alloc`, not yet
-  a dependency. Until then, review enforces it.
 - CPU cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 - Catching a panic at the thread boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) is the engine's job, where the threads are.
-- There is no collector thread yet ([R-RT-003](../../docs/RULES.md#R-RT-003)). Instead,
-  each `InputControl` holds a reference to its input's ring and counters, so as long as
-  the control plane keeps one until the input's stream is closed and the mixer is
-  dropped, the last reference is released on the control plane, never on the audio or
-  mixer thread. The producer's and the mixer's own buffers are freed on their threads
-  as those threads end. The collector hand-off comes with adding and removing inputs
-  while running.
 
 <a id="meters"></a>
 ## Meters
@@ -259,7 +293,7 @@ true-peak cases from files) are not run; they would add binary fixtures.
 <!-- @section
 covers = ["crates/jstream-audio/src/filter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:ba0f2869af941025", by = "agent:claude@session_01L5hE1i9KRciNcKrq7DGnVM", note = "New section, checked against src/filter/: trait methods, each kernel's ranges, defaults, detector, ramps, latency (limiter look-ahead, delay 0 as a deliberate shift per ADR-0028 D15), limiter algorithm and clamp, tests listed; ADR-0028 decision (keys, latency reporting, delay ring allocated at max on construction, allocation-free) matches" }
+verified = { hash = "b3:cb02503c16657318", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4: dropped the no-allocation test from Not yet and noted tests/no_alloc.rs runs all five kernels (compressor keyed) on the bus under the check; kernel table and tests list unchanged" }
 -->
 
 `src/filter/` holds the audio filter kernels
@@ -296,11 +330,12 @@ static curve, soft knee, attack and release time constants, and ducking from a k
 the limiter's latency, ceiling under bursts, transients and +12 dB overload at several
 look-aheads, its ramp ahead of a peak and its recovery; the delay's shift, maximum and
 changes; block-size independence and reset where state is kept; rejected settings.
+`tests/no_alloc.rs` runs all five, the compressor keyed, on the mixed bus under the
+allocation check ([Real-time design](#realtime)).
 
 **Not yet:** running them in the mixer (filter chains on sources and buses, keys and
 latency compensation in the audio graph), their settings in kind descriptors and the
-protocol, a no-allocation test ([Real-time design](#realtime)), and a CPU measurement:
-their cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
+protocol, and a CPU measurement: their cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 
 <a id="follow-ups"></a>
 ## Not yet
@@ -312,14 +347,11 @@ their cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
   the format to build the producer. Until the platform API reports it up front (for
   example, a format query per target, or the format in the first callback), the engine
   must know the device format before opening the stream.
-- **Adding and removing inputs while the mixer runs,** through a lock-free command queue,
-  with dropped rings going to the collector thread.
-- **State snapshots** ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). The
-  mixer's live state is atomics for the gains plus an input list fixed when it is built.
-  That fits ARCH's "continuous parameters bypass snapshots": a fader move is a store to
-  an atomic, and nothing structural changes while the mixer runs. The `arc-swap`
-  snapshot ARCH gives each subsystem comes with adding and removing inputs live (above),
-  when the input list starts to change.
+- **State snapshots** ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). Gains
+  stay atomics, which is ARCH's "continuous parameters bypass snapshots". The input
+  list changes through the command queue in [Real-time design](#realtime), not through
+  an `arc-swap` snapshot. The snapshot ARCH gives each subsystem, for the rest of the
+  audio graph (sends beyond the implicit master, filters), is still later.
 - **A panic in `on_packet` or `Mixer::poll`**
   ([R-RT-006](../../docs/RULES.md#R-RT-006)). Nothing in this crate catches one or
   mutes the bus. The test R-RT-006 names, `scenarios::rt_panic_is_reported`, doesn't
@@ -335,6 +367,6 @@ their cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
   master bus and subscribed buses and sources) with their meter-stream fields and
   `audio.reset_loudness`, and monitor taps; and render-side resampling for output
   devices.
-- **A no-allocation test** with `assert_no_alloc`, and a CPU measurement on hardware.
+- **A CPU measurement** of the mixer on hardware.
 - **Feeding the fitted drift forward** into the controller, which would shorten the
   start-up transient (about 0.46 · drift / (2π · 0.02 Hz): 0.55 ms at 150 ppm).
