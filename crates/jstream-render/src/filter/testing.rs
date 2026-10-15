@@ -150,4 +150,27 @@ mod tests {
         near(&snapshot, 0, 1, C, 1);
         near(&snapshot, 1, 1, R, 1);
     }
+
+    /// Every kind is a unique `video_filter` with valid defaults and a pass that its
+    /// defaults build.
+    #[test]
+    fn every_kind_is_described_and_built_from_its_defaults() {
+        use jstream_protocol::KindCategory;
+        let kinds = crate::filter::descriptors();
+        let mut ids: Vec<&str> = kinds.iter().map(|k| k.kind_id.as_str()).collect();
+        ids.dedup();
+        assert_eq!(ids.len(), kinds.len(), "kind IDs are unique");
+        for kind in &kinds {
+            assert_eq!(kind.category, KindCategory::VideoFilter, "{}", kind.kind_id);
+            for p in &kind.params {
+                assert_eq!(p.check(&p.default), Ok(()), "{}.{}", kind.kind_id, p.id);
+            }
+            let settings = super::settings(&kind.kind_id, serde_json::json!({}));
+            assert!(
+                VideoFilter::new(&kind.kind_id, &settings).is_some(),
+                "{} builds",
+                kind.kind_id
+            );
+        }
+    }
 }

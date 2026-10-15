@@ -13,6 +13,10 @@
     reason = "Lane V: the harness lands before the filter groups that use it"
 )]
 
+mod aspect;
+mod assets;
+mod multipass;
+mod pack;
 mod params;
 mod pass;
 #[cfg(test)]
@@ -32,17 +36,20 @@ pub struct FilterClock {
 
 /// Every built-in video filter kind, ordered by ID.
 pub fn descriptors() -> Vec<KindDescriptor> {
-    let mut kinds: Vec<KindDescriptor> = Vec::new();
-    // Each filter module adds its kinds here.
+    let mut kinds = pack::descriptors();
+    kinds.extend(aspect::descriptors());
+    kinds.extend(multipass::descriptors());
+    kinds.extend(assets::descriptors());
     kinds.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
     kinds
 }
 
 /// The pass for a filter of `kind_id`, or `None` when it is not a built-in video kind.
 fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>> {
-    // Each filter module adds its kinds here.
-    let _ = (kind_id, settings);
-    None
+    pack::build(kind_id, settings)
+        .or_else(|| aspect::build(kind_id, settings))
+        .or_else(|| multipass::build(kind_id, settings))
+        .or_else(|| assets::build(kind_id, settings))
 }
 
 /// One built-in video filter with its settings read, ready to draw. It keeps whatever

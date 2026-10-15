@@ -714,7 +714,7 @@ verified = { hash = "b3:2f74f99cfb552b17", by = "agent:claude@session_01BL6HM3DJ
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:54b2c835161170c3", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the Filters section to lib.rs's Docs line; no text change needed; holds" }
+verified = { hash = "b3:9ba79b329d2ac3c8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
