@@ -101,7 +101,9 @@ pub fn App() -> impl IntoView {
                     let mut events = opened.control.events();
                     studio.reset();
                     studio.load(&opened);
-                    session.0.set_value(Some(opened.clone()));
+                    // The context holds the only lasting handle: dropping it on Disconnect
+                    // drops the connection, which closes the socket and ends `events`.
+                    session.0.set_value(Some(opened));
                     status.set(Status::Connected);
                     while let Some(event) = events.next().await {
                         if generation.get_value() != mine {
@@ -110,7 +112,9 @@ pub fn App() -> impl IntoView {
                         if let Event::StateChanged { rev, .. } = &event {
                             info.update(|info| info.rev = rev.to_string());
                         }
-                        studio.on_event(&opened, &event);
+                        if let Some(current) = session.get() {
+                            studio.on_event(&current, &event);
+                        }
                     }
                     if generation.get_value() == mine {
                         end_session(Some("the connection to the engine closed".into()));

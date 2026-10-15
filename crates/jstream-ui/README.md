@@ -76,7 +76,9 @@ verified = { hash = "b3:47d8eeec8a98d65f", by = "agent:claude@session_01FnBvDaHW
   Panels never edit the copy: they send edits and the copy follows from the
   `state.changed` that comes back, so every client's change shows the same way. When
   the stream ends (the engine closed the connection) the UI goes back to the connect
-  form with the reason. Disconnecting drops the session, which closes the socket.
+  form with the reason. The loop reads the session from the context per event and
+  holds no handle of its own, so Disconnecting drops the last one, which closes the
+  socket.
 - **Selection.** `Selection` is the scene being edited (shown by the sources list, and
   by the canvas once it draws) and an item in it (edited by the properties form). It
   is fixed up after every change: a deleted scene falls back to the program scene, then
