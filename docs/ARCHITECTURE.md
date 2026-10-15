@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:b1fa4484ef1c0a26", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: stamp-only; E1's text taken as is; C1a's kinds sentence holds" }
+verified = { hash = "b3:27c03211dbd9d783", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b: kinds sentence now says the engine runs a source per built kind (color, image), rebuilt on settings change, and the program mix shows its frames with animations on the media clock; matches core live.rs" }
 -->
 
 ```
@@ -354,8 +354,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
-  built-in kinds' descriptors come from `jstream-sources`, whose `color` and `image`
-  kinds produce frames; the engine doesn't render from them yet.
+  built-in kinds come from `jstream-sources`. The engine runs a source of each one
+  whose kind is built (`color` and `image`), rebuilt when its settings change, and
+  the program mix shows its frames, animations advancing on the media clock.
   Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
   the URL checked to carry no credential, or `Record { path, container: mp4 }`, the path
   checked to be absolute and to end in a file name. A stream key is never collection state: it

@@ -12,6 +12,7 @@ use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::history::{History, Touched};
+use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
@@ -28,7 +29,7 @@ use jstream_protocol::{
     QueryResult, RecordContainer, RequestId, Rev, SecretString, SourceId,
 };
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
@@ -83,10 +84,12 @@ struct Shared {
 impl Default for Engine {
     fn default() -> Self {
         Self {
-            shared: Arc::new(Shared {
+            shared: Arc::new_cyclic(|shared: &Weak<Shared>| Shared {
                 state: Mutex::new({
                     let mut state = State::default();
                     state.graph = Graph::new().with_kinds(crate::kinds::builtin());
+                    let host: Weak<dyn LiveHost> = shared.clone();
+                    state.live = LiveSources::new(host);
                     state
                 }),
                 snapshots: SnapshotWorker::default(),
@@ -199,6 +202,11 @@ impl Engine {
             let state = &mut *state;
             state.graph = graph;
             state.outputs.sync(state.graph.state());
+            // `collection` asset references are relative to the file's folder.
+            state
+                .live
+                .set_collection_folder(opened.folder().map(Path::to_path_buf));
+            state.live.sync(state.graph.state());
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             *file = Some(opened);
@@ -255,6 +263,10 @@ impl Engine {
     /// output needs neither: its start records to the file the collection names.
     #[must_use]
     pub fn with_backends(mut self, backends: Backends) -> Self {
+        // Animated sources run on the platform's media clock from here on.
+        lock(&self.shared.state)
+            .live
+            .set_clock(Arc::clone(&backends.clock));
         let host = self.host();
         *lock(&host.backends) = Some(backends);
         self
@@ -990,6 +1002,26 @@ impl Engine {
     pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
         Arc::clone(&lock(&self.shared.state).render)
     }
+
+    /// Waits until the live sources have built everything asked of them, for tests.
+    #[cfg(test)]
+    pub(crate) fn settle_sources(&self) -> bool {
+        let worker = lock(&self.shared.state).live.worker();
+        worker.settled(Duration::from_secs(10))
+    }
+
+    /// Runs the live sources on `clock`, for tests that move time by hand.
+    #[cfg(test)]
+    pub(crate) fn set_source_clock(&self, clock: Arc<dyn jstream_platform::MediaClock>) {
+        lock(&self.shared.state).live.set_clock(clock);
+    }
+
+    /// Re-plans the program mix now, as the live sources' thread does when a frame is
+    /// due, for tests that move time by hand.
+    #[cfg(test)]
+    pub(crate) fn replan(&self) {
+        lock(&self.shared.state).publish_render();
+    }
 }
 
 /// What [`Engine::execute`] produced: an answer, or a snapshot still being drawn.
@@ -1326,8 +1358,13 @@ struct State {
     /// `rev`. A snapshot draws an item from this when the source is not itself a scene.
     /// An applied `source.delete` removes the deleted source's entry.
     frames: BTreeMap<SourceId, Frame>,
-    /// How many frames `set_source_frame` has stored: the next one's version.
+    /// How many frames `set_source_frame` has stored or live sources have produced: the
+    /// next one's version. One count for both, so a source that switches between them
+    /// is uploaded again.
     frame_versions: u64,
+    /// A running `jstream-sources` source for each source whose kind produces frames
+    /// (C1b). An item shows its source's stored frame if it has one, else this.
+    live: LiveSources,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -1513,6 +1550,7 @@ impl State {
         wake: &mut Vec<Waker>,
     ) {
         self.outputs.sync(self.graph.state());
+        self.live.sync(self.graph.state());
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -1571,10 +1609,25 @@ impl State {
         Ok(CallResult::Query { result })
     }
 
-    /// Re-plans the program mix and publishes it if it draws something new.
-    fn publish_render(&self) {
-        self.render
-            .publish(snapshot::plan(&self.graph, &self.frames));
+    /// Re-plans the program mix at the current time and publishes it if it draws
+    /// something new. A source's stored frame wins over its live one. The live sources
+    /// are told when the plan's next frame change is due, to re-plan then.
+    fn publish_render(&mut self) {
+        let Self {
+            graph,
+            frames,
+            frame_versions,
+            live,
+            render,
+            ..
+        } = self;
+        let now = live.now();
+        let (shot, wake) = snapshot::plan_with(graph, &mut |id| match frames.get(id) {
+            Some(frame) => Some((frame.clone(), None)),
+            None => live.frame(id, now, frame_versions),
+        });
+        render.publish(shot);
+        live.wake_at(wake);
     }
 
     fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {
@@ -1586,6 +1639,19 @@ impl State {
             },
             wake,
         );
+    }
+}
+
+impl LiveHost for Shared {
+    fn install(&self, built: Built) {
+        let mut state = lock(&self.state);
+        if state.live.install(built) {
+            state.publish_render();
+        }
+    }
+
+    fn replan(&self) {
+        lock(&self.state).publish_render();
     }
 }
 
