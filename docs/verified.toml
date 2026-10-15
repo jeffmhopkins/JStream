@@ -321,7 +321,7 @@ stamp = { hash = "b3:edefe86e076ea4e3" }
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:23193768000a7279" }
+stamp = { hash = "b3:69a83bcc7bc7abfe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
@@ -363,7 +363,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:9d53e1d6be49311f" }
+stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -381,7 +381,7 @@ stamp = { hash = "b3:13f2fa2d982a7e24" }
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:e9b7b4a0b8273b20" }
+stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
@@ -882,7 +882,7 @@ stamp = { hash = "b3:f8d3caba075c6078", by = "agent:claude@session_01PpGi5RaafND
 stamp = { hash = "b3:4b7f99a329a36029" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:ebcd6a8ffeb177da" }
+stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d638c6ca8019b15d" }
@@ -1407,10 +1407,10 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:21668f51b28f0233" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:0dc62dd9aff85fab", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B6, sends is written whenever a channel source or send exists and a file without it keeps default master sends; the file format, loading and tests paragraphs now say so; holds" }
+stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:ebcd6a8ffeb177da" }
+stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1452,7 +1452,7 @@ stamp = { hash = "b3:c5dfc4f94c042e67" }
 stamp = { hash = "b3:490d41a1b4731026" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/target.rs"]
-stamp = { hash = "b3:a8d9aadd1dbe050a" }
+stamp = { hash = "b3:675f46eea33b1c83", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
 stamp = { hash = "b3:534ac6c88886c8f2" }
@@ -1929,7 +1929,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:ebcd6a8ffeb177da", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio, bus.list, meters.tick and the envelope example say 0.19; virtual_cam stays 0.18; holds" }
+stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -1986,7 +1986,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:9d53e1d6be49311f" }
+stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -2004,7 +2004,7 @@ stamp = { hash = "b3:13f2fa2d982a7e24" }
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:e9b7b4a0b8273b20" }
+stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
@@ -2049,7 +2049,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:353359feae2606b3" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:9d53e1d6be49311f" }
+stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:9199a0226a0eda2b" }
@@ -2067,7 +2067,7 @@ stamp = { hash = "b3:13f2fa2d982a7e24" }
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:e9b7b4a0b8273b20" }
+stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
