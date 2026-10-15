@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:77ddb8e8f9eb794c", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Engine, Kinds, Runtime and Tests bullets; #133 only reorders Running's fields and launch's bindings so input rings drop off the real-time thread, which no bullet describes" }
+verified = { hash = "b3:5ca589e8ea016a80", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#155 B4 kinds, #133, #153, #156-#160) into C6 #147: main's Kinds bullet and Engine/Outputs text kept; C6's nested-scene tests in the Tests bullet; Snapshot bullet still matches snapshot.rs, which main did not touch" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -69,7 +69,8 @@ state machine. Contents:
 - **Tests** (`tests.rs`, `tests/mcp.rs`, `tests/scenarios.rs`): the protocol rules through
   `InProcessControl`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
-  `video.snapshot` on the software adapter, the pipeline against the platform fakes
+  `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
+  bound, cycles) and its pixels through two levels in `snapshot.rs`, the pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
   stage-failure, late-tick, teardown, final-tick, link-loss and stalled-stop tests run
   without one),
@@ -97,7 +98,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:7180c1c7b826cd03", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (I1 #153 /mcp) into A5: only the verified line conflicted; re-read the connector/MCP-session sentence (each /mcp session calls Engine::connect) and the differential-script paragraph (parity collection with outputs, passes against the merged mock); both hold" }
+verified = { hash = "b3:7c10ce67683278ba", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (C6 #147, #134, #163) into A5: only the verified line conflicted; re-read C6's Nested scenes paragraph (inside-out passes, depth bound 8, cycle draws nothing, runtime still one scene) and the tests line, with A5's differential-script paragraph (parity collection with outputs against the merged mock); both hold" }
 -->
 
 ### Engine and sessions
@@ -207,11 +208,24 @@ state exists, that scene is the first one in display order. `Program` will follo
 
 The canvas is [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s default,
 1920×1080. `canvas.set_size` is not a message yet, so every snapshot uses that size.
-A nested `scene` source is composited at the canvas size and then placed. Hidden
-items are skipped. A source with no stored frame is skipped, not drawn as a
+Hidden items are skipped. A source with no stored frame is skipped, not drawn as a
 placeholder. Opacity is 1 and the only blend is src-over: the graph does not store
-either yet, and the compositor's blend is src-over. The graph already rejects a
-cycle at `item.add`; a cycle in the copied shot paints black for the repeated scene.
+either yet, and the compositor's blend is src-over.
+
+**Nested scenes.** A `scene` source shows its scene composited at the canvas size,
+then placed like any image. The shot is scheduled inside out: each nested scene is
+one `Compositor::render_image` pass, which stays on the GPU as premultiplied linear
+`Rgba16Float` (no sRGB round trip, no readback), and is dropped after the last pass
+that places it. A nested scene has no background yet, so it is transparent where it
+draws nothing and the scene under it shows through; the program scene is drawn over
+opaque black. A scene placed more than once at the same depth is composited once.
+Depth is bounded: the program scene is depth 0, and a scene source more than 8
+levels below it draws nothing (logged at `debug`). Width is not bounded: an image
+stays alive until the last pass that places it, so a scene with *k* distinct nested
+scene sources holds *k* canvas-sized FP16 textures at once. The graph already rejects cycles at every
+edit that adds nesting; if a copied shot had one, the scene source that closes it
+draws nothing. The live pipeline's render thread (`runtime/`) still composites one
+scene and does not draw nested scenes yet.
 
 `Engine::set_source_frame` stores the latest straight sRGB RGBA8 frame for a source
 id. It changes no `rev` and emits no event, and a frame may arrive before the source
