@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:803e46c89152eb71", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; meters.tick note in step 4 holds; holds" }
+verified = { hash = "b3:336b7adb18bc9d53", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -77,7 +77,7 @@ $cli = 'target\release\jstream-cli.exe'
    comes about once a second. Its counters are running totals of dropped frames and
    packets since the daemon started, so all zeros is healthy. A counter that keeps
    climbing is worth an issue. While the program runs, `meters.tick` lines, the audio
-  levels, come about ten a second as well.
+   levels, come about ten a second as well.
 5. **Go live:** the `output` tool with `{"op": {"type": "output.start", "output_id":
    "live"}}`, or `& $cli --url ws://127.0.0.1:4460 output start live`.
    Check: the events show `output.state_changed` going `starting`, then `active`, and

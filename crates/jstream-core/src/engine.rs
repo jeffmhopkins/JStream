@@ -1897,7 +1897,6 @@ impl State {
         live.wake_at(wake);
     }
 
-    /// Emits one `meters.tick`, if the program mixer runs.
     /// Brings the program mixer in line with the collection's audio, the audio sources'
     /// inputs included.
     fn route_audio(&mut self) {

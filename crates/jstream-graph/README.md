@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:baeac9102ab0dd76", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; persist fixture line unions D5's audio with main's vcam removal (persist/tests.rs deletes vcam, v1.json carries audio); holds" }
+verified = { hash = "b3:38433d0bcbf22574", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B6, sends is written whenever a channel source or send exists and a file without it keeps default master sends; the file format, loading and tests paragraphs now say so; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -205,7 +205,9 @@ and `visible`), sources ordered by ID (with `kind_version`, the descriptor versi
 when it names a deleted source), outputs ordered by ID (each with its
 `encoder_profile`, omitted for the default), encoder profiles (`encoders`) ordered by
 ID, omitted when there are none, `buses` (omitted while the master is the only one and
-at its defaults) and `sends`, omitted when there are none. A source's `audio` is saved
+at its defaults) and `sends`, written whenever there is a send or a source with a
+channel of its own (so an empty list means every master send was removed) and omitted
+otherwise. A source's `audio` is saved
 only where it differs from its kind's defaults. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
@@ -221,7 +223,9 @@ the engine's; this crate does no I/O.
   sources its settings refer to), then items in their placement form with their crop
   and visibility, then encoder profiles, then outputs with their profiles, then the
   buses (the master renamed or faded as saved), each source's audio and the sends
-  (with a `send.remove` of a default master send the file doesn't have). A
+  (with a `send.remove` of a default master send the file doesn't list; a file
+  without `sends`, such as one saved before sends existed, keeps every default master
+  send). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
@@ -273,7 +277,9 @@ settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); a file without `encoders` or any
-`encoder_profile` (as saved before profiles existed) loading with none; a profile's
+`encoder_profile` (as saved before profiles existed) loading with none; a file
+without `sends`, `buses` or source `audio` (as saved before audio existed) keeping
+its audio sources' master sends at 0 dB; a removed master send's round trip; a profile's
 round trip; a virtual camera's round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an

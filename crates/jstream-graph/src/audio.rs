@@ -39,7 +39,7 @@ pub(crate) fn default_audio(
 
 /// Whether a source of `kind` with `audio` has a channel of its own, and so sends: an
 /// audio source that is not a `scene` source.
-fn has_channel(kind: &SourceKind, audio: Option<&SourceAudio>) -> bool {
+pub(crate) fn has_channel(kind: &SourceKind, audio: Option<&SourceAudio>) -> bool {
     audio.is_some() && !matches!(kind, SourceKind::Scene { .. })
 }
 
