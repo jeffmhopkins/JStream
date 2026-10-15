@@ -134,7 +134,8 @@ pub struct ServerConfig {
     /// Whether the server pairs devices at all (ADR-0044, ADR-0047). Off, it answers no
     /// `pairing.start`, `device.list` or `device.revoke` itself: they reach the session,
     /// which answers `unsupported`, so a host's UI hides its pairing panel. No code is
-    /// then ever drawn, so no device token exists and none is accepted.
+    /// then drawn, and the gate accepts no device token or cookie, even one already in
+    /// `device_file`.
     /// [`ServerConfig::new`] leaves it on; a host whose engine serves only itself, like
     /// the desktop app's webview, turns it off.
     pub pairing: bool,

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:7123a0b529574b0d", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
+verified = { hash = "b3:3b7f05d14e4c6ed7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "config.rs pairing doc and gate.rs device check changed; the contents list (config, the pairing switch, devices, gate) still describes them; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -71,7 +71,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:d2e25aa902ea0496", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main 94fb25d, pairing now protocol 0.20) into the ADR-0047 build: stamp-only conflicts; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention in this PR's text; holds" }
+verified = { hash = "b3:f9dfbddb4cb2ae7a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "B1 (#288 round 2): Pairing off bullet now says the gate accepts no device token or cookie, even one already in the device file; matches gate.rs (devices_allowed needs config.pairing, checked on the bearer/subprotocol and cookie paths) and the new test; rest unchanged; holds" }
 -->
 
 ### Listening and admission
@@ -231,8 +231,10 @@ its own from a short code instead of the control token.
   ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
 - **Pairing off.** With `ServerConfig::pairing` off (on in `ServerConfig::new`), the
   server answers none of the three calls: they reach the session, which answers
-  `unsupported`, so a host's UI hides its pairing panel. No code is ever drawn, and
-  `GET /pair` is 404. `jstream-desktop` turns it off.
+  `unsupported`, so a host's UI hides its pairing panel. No code is ever drawn,
+  `GET /pair` is 404, and the gate accepts no device token or cookie, not even one
+  already in the device file, since nothing could list or revoke it. `jstream-desktop`
+  turns it off.
 - **The exchange.** `POST /api/v1/pair` (`PAIR_PATH`) with
   `{"code": "...", "name": "..."}`, and `"browser": true` from the pairing page, is
   answered without a token; it still passes the `Host` and `Origin` checks. The name is

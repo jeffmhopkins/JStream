@@ -242,7 +242,7 @@ impl Gate {
         Gate {
             token: config.token.clone(),
             devices,
-            devices_allowed: local.ip().is_loopback() || config.tls,
+            devices_allowed: config.pairing && (local.ip().is_loopback() || config.tls),
             tls: config.tls,
             port,
             hosts,
@@ -312,8 +312,8 @@ impl Gate {
 
     /// Checks the device cookie, on a TLS listener, for a request with neither
     /// `Authorization` nor a token subprotocol: there must be exactly one, the request
-    /// must be same-origin or typed by the user, and it must be a device's token. It is
-    /// never compared with the control token.
+    /// must be same-origin or typed by the user, pairing must be on, and it must be a
+    /// device's token. It is never compared with the control token.
     fn check_cookie(&self, headers: &HeaderMap) -> Result<Credential, Refusal> {
         let token = match device_cookie(headers) {
             Cookie::Absent => return Err(Refusal::Token),
@@ -324,6 +324,9 @@ impl Gate {
             single(headers, &SEC_FETCH_SITE).is_some_and(|site| COOKIE_FETCH_SITES.contains(&site));
         if !same_origin {
             return Err(Refusal::CookieSite);
+        }
+        if !self.devices_allowed {
+            return Err(Refusal::Token);
         }
         match self.devices.admit_cookie(token, unix_now()) {
             Some((id, name, renew_cookie)) => Ok(Credential::Device {
@@ -696,6 +699,34 @@ pub(crate) mod tests {
             Err(Refusal::Token)
         );
         assert_eq!(open.check(&headers(&good())), Ok(Credential::Control));
+    }
+
+    /// With pairing off, a device already in the store is refused: nothing could list or
+    /// revoke it, so its token and its cookie are not credentials.
+    #[test]
+    fn with_pairing_off_a_known_device_is_refused() {
+        let Ok(token) = Token::new("t0ken") else {
+            panic!("a valid token");
+        };
+        let mut config = ServerConfig::new(token);
+        config.pairing = false;
+        let devices = devices();
+        let device = paired(&devices, "Tablet");
+        let local = SocketAddr::from(([127, 0, 0, 1], 4455));
+        let plain = Gate::new(&config, local, Arc::clone(&devices));
+        let bearer = format!("Bearer {device}");
+        assert_eq!(
+            plain.check(&with(header::AUTHORIZATION, Some(bearer.leak()))),
+            Err(Refusal::Token)
+        );
+        assert_eq!(plain.check(&headers(&good())), Ok(Credential::Control));
+        config.tls = true;
+        let tls = Gate::new(&config, local, devices);
+        let cookie = format!("{DEVICE_COOKIE}={device}");
+        assert_eq!(
+            tls.check(&browser(&[&cookie], Some("same-origin"))),
+            Err(Refusal::Token)
+        );
     }
 
     /// A gate on a TLS listener (ADR-0047) on loopback port 4455, with one paired device,

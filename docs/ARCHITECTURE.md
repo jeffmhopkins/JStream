@@ -538,7 +538,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:4f8f98add188f92b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main 94fb25d, pairing now protocol 0.20) into the ADR-0047 build: stamp-only conflicts; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention in this PR's text; holds" }
+verified = { hash = "b3:bd7a72ac0812a433", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from jstream-server Design (pairing off refuses known devices); this section says nothing about the pairing switch, and its pairing text is unchanged; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
