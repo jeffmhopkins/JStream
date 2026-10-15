@@ -50,8 +50,8 @@ portable folder ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 <a id="usage"></a>
 ## Usage
 <!-- @section
-covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:ea77775577946bf9", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data folder bullet unchanged in behaviour, now names jstream-platform paths; covers drops the deleted data.rs" }
+covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "crates/jstream-platform/src/paths.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
+verified = { hash = "b3:451ba8acdc4de983", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers swaps the deleted data.rs for jstream-platform's paths.rs, which now finds the data folder; the Data folder bullet matches it" }
 -->
 
 On Windows, with the UI built first:
