@@ -700,7 +700,7 @@ verified = { hash = "b3:55a0e0a9c09649f1", by = "agent:claude@session_01Wfrx1wPt
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:dc199b6560c865f5", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
+verified = { hash = "b3:c544d32a1529613b", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "Q4: only crates/jstream-render/benches/composite.rs and a criterion dev-dependency were added; the pipeline steps and one-scene compositor text are unchanged and hold" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

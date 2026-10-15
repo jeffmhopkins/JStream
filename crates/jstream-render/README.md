@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:d35d5306bc8ac01f", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: render's link to ARCH Threads for the cache hand-off still points at the model's State-to-RT-threads text; holds" }
+verified = { hash = "b3:f13def7d6162e7bd", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "Q4: Cargo.toml gains only a criterion dev-dependency and the composite bench target; purpose text untouched and holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -279,7 +279,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:c92966a4c0c88ccd", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 golden geometry tests) into E1: the E1 layer/cache test list and B3's golden tests are both in tests.rs; holds" }
+verified = { hash = "b3:5c1f864f42948985", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "Q4: replaced 'not measured' with the benches/composite.rs scenarios, how to run them, the bench workflow, and that lavapipe numbers are CPU rasterisation; hardware GPU frame time still not measured" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -356,7 +356,15 @@ so the missing adapter panics and the job fails. The `macos` job is
 Editing the workflow is a governance change because `.github/**` is protected; it
 adds a package so tests can render, and it does not weaken a check.
 
-**Not measured** ([R-RT-005](../../docs/RULES.md#R-RT-005)). No frame-time numbers.
+**Benchmarks** (`benches/composite.rs`, criterion, [R-RT-005](../../docs/RULES.md#R-RT-005)).
+A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with readback
+(`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
+and refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
+`cargo bench -p jstream-render --bench composite`; the `bench` workflow records them on
+lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
+software adapter's numbers are CPU rasterisation: they track regressions in what the
+compositor submits, and say nothing about GPU frame time. **Not measured:** frame time on
+a hardware GPU.
 
 <a id="open-questions"></a>
 ## Open questions

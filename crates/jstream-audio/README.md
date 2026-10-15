@@ -176,7 +176,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:b5eca1518191949b", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; ARCH#threading's render-snapshot change doesn't touch the mixer; this PR's CLAP filters paragraph checked against rt/host.rs and chain.rs" }
+verified = { hash = "b3:fc79b7d5b1ec036d", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "Q4: added the benches/mix.rs paragraph (mix_block, input_push at 48 and 44.1 kHz, measured ~200 us per push on the cloud container) beside tests/cost.rs; resampling cost is now measured, Windows hardware still not" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -387,8 +387,17 @@ with 8 stereo 48 kHz inputs. Measured on a cloud container (4 vCPUs of an Intel 
 Run it on the target machine with
 `cargo test --release -p jstream-audio --test cost -- --ignored --nocapture`.
 
+**Benchmarks** (`benches/mix.rs`, criterion). `mix_block` times the same three mixer
+scenarios per block, and `input_push` times one 1024-frame device packet through
+`InputProducer::push_packet` (downmix and adaptive resampling) at 48 kHz and 44.1 kHz.
+Measured on a cloud container (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux 6.18), release
+build, mean: `input_push` about 200 µs at either rate (0.9% of the block period). The
+`bench` workflow records them on every push to `main`
+([R-GIT-003](../../docs/RULES.md#R-GIT-003)). Run them with
+`cargo bench -p jstream-audio --bench mix`.
+
 **Not yet enforced or measured:**
-- The cost on Windows hardware, and of resampling, is not measured.
+- The cost on Windows hardware is not measured.
 - Catching a panic at the thread boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) is the engine's job, where the threads are.
 
