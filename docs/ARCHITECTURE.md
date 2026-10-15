@@ -519,7 +519,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:160cce3c32ad09ff", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; delete.plan and blockers at 0.15 beside main's 0.14 text; #203 changes no wire shape" }
+verified = { hash = "b3:e3339de6471cb011", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; transport bullet now says the server serves the UI files behind the same checks with Basic credentials; rest unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
