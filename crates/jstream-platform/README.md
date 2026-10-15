@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:2cc94e3bb7c4c313", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main into D7b: took main's stamp; re-read; stale only via ARCH#threading's Collector row (mixer collector frees removed buses and filter chains), which this crate doesn't rely on; holds" }
+verified = { hash = "b3:f7828f81626ffbed", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 cascade from ARCH#threading: re-read; the only change there is the CLAP plugin hosts paragraph's build status and dry-signal bypass, which this section doesn't rely on or mention; holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -137,7 +137,7 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:c6e56f3ac4e834a3", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: stale only via ARCH crate-map (jstream-ui row now layer 3); GPU frame design untouched" }
+verified = { hash = "b3:8c428570e20f0cf1", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 cascade from ARCH#crate-map: re-read; only the jstream-plugin-proto row changed (now built, L0, no unsafe); GPU frame design untouched; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

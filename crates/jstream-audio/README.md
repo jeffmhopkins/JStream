@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:03c444bb6cb7b1b1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1 (B1): re-read the whole section against handle.rs and mixer.rs: MasterControl/OutputTapControl API bullet (master(), add_output_tap, output_block pts minus tap latency, None until the tap has run, 16-tap limit), latency_frames and pts including the master chain, poll writing the post-master master bus and bus_block as the pre-master monitor tap, the error list (TooManyOutputTaps, removed output tap) against error.rs, and the new master-chain/output-tap tests bullet against mixer.rs tests" }
+verified = { hash = "b3:319c37c56c3fbc38", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: re-read; new insert_host_filter bullet (input, bus, output tap; master refused; block initialised and host ready) against handle.rs and cmd.rs add_host_filter, host.rs tests bullet and no_alloc CLAP-filter mention against the tests; rest unchanged" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -66,7 +66,13 @@ stamped on the clock, and no device is the master.
   filter (`FilterSpec`: gain, noise gate, compressor, limiter or delay, built at the
   engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
   edits it and `remove` removes it. They go through the command queue like inputs. At
-  most 8 filters and 100 ms of latency per chain. `Mixer::latency_frames` is the
+  most 8 filters and 100 ms of latency per chain. `insert_host_filter(index, memory)`
+  on `InputControl`, `BusControl` and `OutputTapControl` adds a CLAP filter instead:
+  the mixer's side of an out-of-process plugin host, through its shared block
+  (`HostMemory`, a [`jstream-plugin-proto`](../jstream-plugin-proto/README.md)
+  `Shared` however it is mapped). The block must be initialised for the mixer's rate
+  and block size and its host ready; the master chain refuses one, since each bus's
+  copy would need its own host. `Mixer::latency_frames` is the
   chains' latency the mixer compensates, and each block's `pts` is its first frame minus
   it, the master chain's included.
 - `Mixer::master` and `MixerControl::master` return the `MasterControl`, whose
@@ -123,6 +129,10 @@ not start. No variant allocates.
   meter, sends ramping in and out, a muted input feeding no bus, buses added from
   another thread and removed, a send to a removed bus not reaching the bus that reuses
   its buffer, the 16-bus limit, and a removed bus's state freed once its handle is gone;
+- CLAP filters (`host.rs`): the host's output heard `depth` blocks late, a missing
+  host bypassed with the same latency and each miss counted, the crossfades both ways,
+  non-finite host samples as silence, a reset passed on to the host, and blocks that
+  aren't ready or don't match refused;
 - filter chains: an input's chain before its fader and a bus's on its sum, edits and
   removal applied live, latency compensation (a limiter on one input and one bus: every
   input and bus lines up, and `pts` moves back by the total, then returns when they are
@@ -152,7 +162,8 @@ be.
 
 `tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
 under `assert_no_alloc`, through the same kinds of glitches and live input, bus, send,
-filter, master-chain and output-tap changes ([Real-time design](#realtime)).
+filter, master-chain, output-tap and CLAP-filter changes
+([Real-time design](#realtime)).
 `tests/cost.rs` is an ignored measurement of what a block costs
 ([Real-time design](#realtime)).
 
@@ -165,7 +176,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:699277ef64ec49a9", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1: re-read; only change is mixer.rs output_block returning None until a tap has run (Tap.pts is Option) and the MAX_BUSES <= 32 const assert on the feeds mask; section's master chain and output tap paragraphs still hold" }
+verified = { hash = "b3:c57be892976fae28", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: re-read; new CLAP filters paragraph against rt/host.rs (write n, read n-depth, latency depth*block+plugin, dry fallback with same latency, miss counters, 2 ms crossfade capped at a block, non-finite to 0, reset bumps reset_seq) and chain.rs Kernel::Host / FilterBook spec Option; rest unchanged" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -291,6 +302,25 @@ consumer sees a gap or an overlap there. The master chain has the same filters o
 every bus, so its latency needs no compensation: it is subtracted from `pts` too. An
 output tap's latency is subtracted only from that tap's `pts`, since each tap feeds its
 own encode.
+
+**CLAP filters** (`host.rs`,
+[ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)). A CLAP plugin runs in
+its own host process; its filter in a chain is the mixer's side of the shared block
+the two use ([`jstream-plugin-proto`](../jstream-plugin-proto/README.md)). Each block
+it writes its dry input into the input ring as block `n` and reads the host's block
+`n − depth` from the output ring, with plain atomic loads and stores: no syscall, lock
+or wait. Its latency, fixed when it is built, is `depth` blocks plus the plugin's own
+reported latency, so the chain compensates it like any filter's. When the host's block
+isn't there (late, hung or dead), the filter passes its own dry signal delayed by that
+same latency, so timing doesn't jump, and counts the miss in the block's status
+(`mixer_misses`, and `mixer_miss_run` for misses in a row) for the control thread to
+report. Switching between the two is a crossfade over 2 ms (at most one block): dry to
+the plugin's output when it comes back, and from the plugin's last frame to dry when it
+goes missing, since the missing block can't be faded. The host's samples are another
+process's data, so non-finite ones become 0. A chain reset clears the dry delay and
+bumps `reset_seq` for the host to reset the plugin; block numbers carry on, so the
+rings stay in step. The shared block (`HostMemory`) is dropped on the collector like
+any removed filter.
 
 **Master chain and output taps** (`tap.rs`,
 [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)). The master chain
@@ -502,6 +532,11 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
 - **The rest of ADR-0027's audio half:** the master chain and `output.audio_chain` in
   the protocol, and the engine giving an output with its own chain its own audio encode
   from an output tap; the privacy screen's mute.
+- **The engine side of CLAP filters**
+  ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the mixer's side is
+  here (`insert_host_filter`), but mapping the shared block, starting and watching the
+  host process, reporting `mixer_misses` in `stats.tick` and the degraded event, and the
+  plugin's parameters as the filter's settings come with the host.
 - **A CPU measurement** of the mixer on Windows hardware, and of resampling
   ([Real-time design](#realtime) has a cloud machine's numbers for the mix).
 - **Feeding the fitted drift forward** into the controller, which would shorten the

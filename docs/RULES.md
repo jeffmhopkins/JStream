@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:2fe1e753ac46d93d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b cascade from ARCH#threading (Collector row: the mixer's own collector also frees removed buses' state, filter chains and filters): re-read; rule text unchanged; chains and filters retired via the collector are within R-RT-003" }
+verified = { hash = "b3:694aed3120f74da4", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 cascade from ARCH#threading (CLAP paragraph status only): re-read; rule text unchanged; the mixer's CLAP filter makes no syscall, lock or allocation (tests/no_alloc.rs covers it) and its removed shared block goes to the collector, within R-RT-001 and R-RT-003" }
 -->
 
 <a id="R-RT-001"></a>
