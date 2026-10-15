@@ -4104,10 +4104,13 @@ mod cpu_pipeline {
         );
 
         for run in 1..=2u64 {
+            // The log keeps the first run's frames, and that run can publish more than
+            // five before it stops, so this run's five are counted from here.
+            let before = log.lock().expect("vcam log").pixels.len();
             start_output(&control, &mut events, "cam");
             assert!(
                 pump_until(&fakes.clock, &fakes.audio, || {
-                    log.lock().expect("vcam log").pixels.len() >= 5 * run as usize
+                    log.lock().expect("vcam log").pixels.len() >= before + 5
                 }),
                 "the camera got no frames"
             );

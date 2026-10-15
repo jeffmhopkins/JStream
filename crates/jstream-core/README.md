@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:99ae2302957e5ff1", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review N1/N3/N4: re-read; capture start now returns the reason and the capture thread logs it (warn once per failing streak); purpose text unchanged, holds" }
+verified = { hash = "b3:069e9a67f3f1daa7", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "vcam test counts each run's frames from its start (macOS CI race); test-only, text holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -177,7 +177,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bd9f293c39da5d06", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review N2/N3: sharing is by target value (empty display target vs the primary's ID captures twice); per-tick allocations list the capture keys' target copies; matches snapshot.rs compose" }
+verified = { hash = "b3:8ffc115e847eed59", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "vcam test counts each run's frames from its start (macOS CI race); test-only, text holds" }
 -->
 
 ### Engine and sessions
