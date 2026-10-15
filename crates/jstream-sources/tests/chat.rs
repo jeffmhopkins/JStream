@@ -1,4 +1,4 @@
-//! The `youtube_chat` kind through the public API, drawn with the bundled font.
+//! The `chat_message` kind through the public API, drawn with the bundled font.
 
 use jstream_media::{MediaTime, PixelFormat, Timebase, VideoFrame};
 use jstream_protocol::Settings;
@@ -14,7 +14,7 @@ fn ms(t: i64) -> MediaTime {
 /// The kind's defaults, with `patch` over them, as the graph would store them.
 fn settings(patch: &[(&str, Value)]) -> Settings {
     let registry = Registry::builtin();
-    let kind = registry.descriptor("youtube_chat").expect("the chat kind");
+    let kind = registry.descriptor("chat_message").expect("the chat kind");
     let mut settings: Settings = kind
         .params
         .iter()
@@ -49,7 +49,7 @@ fn message(text: &str) -> FeaturedMessage {
 #[test]
 fn the_kind_is_registered_with_live_styling() {
     let registry = Registry::builtin();
-    let kind = registry.descriptor("youtube_chat").expect("registered");
+    let kind = registry.descriptor("chat_message").expect("registered");
     assert!(kind.video && !kind.audio);
     let ids: Vec<_> = kind.params.iter().map(|p| p.id.as_str()).collect();
     assert_eq!(
@@ -76,7 +76,7 @@ fn the_kind_is_registered_with_live_styling() {
 fn nothing_featured_draws_one_transparent_pixel() {
     let ctx = Context::default();
     let mut source = Registry::builtin()
-        .create("youtube_chat", &settings(&[]), &ctx)
+        .create("chat_message", &settings(&[]), &ctx)
         .expect("a source");
     let frame = source.frame(ms(0)).expect("a frame");
     assert_eq!(size(&frame), (1, 1));
@@ -92,7 +92,7 @@ fn a_featured_message_is_drawn_and_redrawn_when_it_changes() {
     let padding = 10;
     let mut source = Registry::builtin()
         .create(
-            "youtube_chat",
+            "chat_message",
             &settings(&[
                 ("background", json!("#102030ff")),
                 ("padding", json!(padding)),
@@ -129,7 +129,7 @@ fn long_messages_wrap_at_the_maximum_width() {
     ctx.chat.set(Some(message(&"word ".repeat(200))));
     let mut source = Registry::builtin()
         .create(
-            "youtube_chat",
+            "chat_message",
             &settings(&[("max_width", json!(300)), ("padding", json!(10))]),
             &ctx,
         )
@@ -145,7 +145,7 @@ fn markup_and_control_characters_are_plain_text() {
     // Drawn as the characters they are: the frame is as wide as the literal text.
     let ctx = Context::default();
     let mut source = Registry::builtin()
-        .create("youtube_chat", &settings(&[("max_width", json!(0))]), &ctx)
+        .create("chat_message", &settings(&[("max_width", json!(0))]), &ctx)
         .expect("a source");
     let short = |text: &str| FeaturedMessage {
         author: "a".into(),
@@ -176,7 +176,7 @@ fn a_restyle_redraws_and_the_font_needs_a_restart() {
     let ctx = Context::default();
     ctx.chat.set(Some(message("hi")));
     let mut source = Registry::builtin()
-        .create("youtube_chat", &settings(&[]), &ctx)
+        .create("chat_message", &settings(&[]), &ctx)
         .expect("a source");
     let small = size(&source.frame(ms(0)).expect("a frame"));
     source

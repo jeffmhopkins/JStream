@@ -66,7 +66,7 @@ pub struct Context {
     pub assets: AssetRoots,
     /// Size limits for decoded assets.
     pub limits: Limits,
-    /// The featured chat message `youtube_chat` sources draw. Clones share it.
+    /// The featured chat message `chat_message` sources draw. Clones share it.
     pub chat: crate::ChatFeature,
 }
 

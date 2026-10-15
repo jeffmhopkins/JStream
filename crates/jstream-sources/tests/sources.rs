@@ -85,6 +85,7 @@ fn the_registry_describes_every_builtin_kind_in_order() {
         [
             "app_audio",
             "audio_input",
+            "chat_message",
             "color",
             "desktop_audio",
             "display",
@@ -92,8 +93,7 @@ fn the_registry_describes_every_builtin_kind_in_order() {
             "media",
             "text",
             "webcam",
-            "window",
-            "youtube_chat"
+            "window"
         ]
     );
     for kind in registry.descriptors() {

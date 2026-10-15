@@ -1,6 +1,6 @@
-//! The `youtube_chat` source: the featured live chat message (ADR-0041 §2), drawn as
+//! The `chat_message` source: the featured live chat message (ADR-0041 §2), drawn as
 //! plain text. A [`ChatFeature`] in the [`Context`] holds the message; whoever reads the
-//! chat sets it, and every `youtube_chat` source made from that context draws it.
+//! chat sets it, and every `chat_message` source made from that context draws it.
 
 use crate::color::rgba_frame;
 use crate::describe::{asset, kind, param};
@@ -96,7 +96,7 @@ impl ChatFeature {
     }
 }
 
-/// The `youtube_chat` kind.
+/// The `chat_message` kind.
 pub(crate) struct ChatKind(KindDescriptor);
 
 impl ChatKind {
@@ -166,7 +166,7 @@ impl ChatKind {
                     json!("#000000ff"),
                 )),
             ],
-            ..kind("youtube_chat", "YouTube chat message", true, false)
+            ..kind("chat_message", "Chat message", true, false)
         })
     }
 }
@@ -205,7 +205,7 @@ impl SourceKind for ChatKind {
     }
 }
 
-/// A running `youtube_chat` source. It redraws when the featured message or its
+/// A running `chat_message` source. It redraws when the featured message or its
 /// settings change.
 struct ChatSource {
     descriptor: KindDescriptor,

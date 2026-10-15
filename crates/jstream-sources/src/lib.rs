@@ -6,7 +6,7 @@
 //! Built so far: `color` (a solid RGBA colour of a given size), `image` (PNG, JPEG,
 //! WebP and GIF, animated GIF and WebP included, decoded with pure-Rust crates) and
 //! `text` (a string drawn with a TrueType or OpenType font, read with `skrifa`), and
-//! `youtube_chat` (the featured live chat message, ADR-0041 §2, which the host sets
+//! `chat_message` (the featured live chat message, ADR-0041 §2, which the host sets
 //! through the context's [`ChatFeature`]). The
 //! audio-only kinds (`audio_input`, `desktop_audio` and `app_audio`) make no frames: the
 //! engine records the [`AudioTarget`] their settings name. The other built-in kinds are

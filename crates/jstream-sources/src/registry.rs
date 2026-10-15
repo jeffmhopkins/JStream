@@ -18,8 +18,8 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0031, docs/adr/0031-source-types-and-decoding-scope.md).
-    /// `color`, `image`, `text` and `youtube_chat` produce frames. `audio_input`, `desktop_audio` and
-    /// `app_audio` are audio-only: the engine records them, and `create` fails with
+    /// `chat_message`, `color`, `image` and `text` produce frames. `audio_input`,
+    /// `desktop_audio` and `app_audio` are audio-only: the engine records them, and `create` fails with
     /// [`SourceError::AudioOnly`]. `display`, `media`, `webcam` and `window` are
     /// described only, so their sources can be created and configured but fail to start
     /// with [`SourceError::NotBuilt`].

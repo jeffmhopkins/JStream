@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:db6f0a92ee46ebe3", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4: re-read; youtube_chat kind (ChatFeature slot in Context, header over text, fit-then-wrap, plain-text caps, 1x1 when empty, 100 ms next_change, redraw on change) checked against chat.rs, raster::stack and tests/chat.rs; frame allocation caveat added" }
+verified = { hash = "b3:f67af1b034a4aaea", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1: kind renamed youtube_chat -> chat_message (the browser preset takes youtube_chat, #375); re-read, and it now says it belongs to the optional user-supplied-client path" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -30,7 +30,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
   `Arc<VideoFrame>`. The built-in kinds make their frames when created or updated (and
-  `youtube_chat` when its featured message changes), so `frame` doesn't block and
+  `chat_message` when its featured message changes), so `frame` doesn't block and
   otherwise doesn't allocate, and a frame handed out stays valid after an
   update. `next_change(at)` says when that frame is next replaced (`None`: never), so
   a renderer can skip re-uploading a still. `update(settings)` applies a change to
@@ -41,7 +41,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `jstream-sources` thread, never under its collection lock or on the render thread,
   and its program mix asks each source for `frame` and `next_change` (see
   `jstream-core`'s *Live sources*).
-- `Context`: the featured chat message (`chat`, see `youtube_chat`), the folders
+- `Context`: the featured chat message (`chat`, see `chat_message`), the folders
   behind the `collection` and `app` asset roots (`AssetRoots`), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
   sides and 1 GiB of decoded memory by default. The image's size is checked before
   anything is allocated for it, and the decoded-memory cap counts the frames kept plus
@@ -101,8 +101,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`.
-- `youtube_chat` (named "YouTube chat message"): the featured live chat message
-  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) §2). The message is
+- `chat_message` (named "Chat message"): the featured live chat message
+  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) §2). It belongs to
+  the optional API path: messages come from the Live API's chat, which needs a Google
+  OAuth client the user configured. Chat with no sign-in is the browser source's
+  YouTube chat preset. The message is
   runtime state, not a setting: `Context::chat` holds a `ChatFeature`, a shared slot
   the host fills with `set(Some(FeaturedMessage { author, badge, text, amount }))` or
   clears with `set(None)`, and every source created from that context draws what it
