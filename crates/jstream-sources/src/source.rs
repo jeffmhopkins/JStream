@@ -306,14 +306,25 @@ fn open_held(path: &Path) -> std::io::Result<File> {
 /// inside `base` however the path's folders change meanwhile.
 ///
 /// Stable Rust has no file IDs on Windows, so the path is held still instead: its
-/// resolved form is walked from `base` one component at a time, each opened as itself
-/// (not followed if it is a reparse point) and without `FILE_SHARE_DELETE`, so it can't
-/// be renamed, deleted or replaced while the walk holds it. A component that is a link by
-/// then (a name-surrogate reparse point: symlink, junction, WSL link) was swapped after
+/// resolved form is walked from `base` one component at a time (see [`walk_below`]).
+/// A path that resolves outside `base` is refused before the walk.
+#[cfg(windows)]
+fn open_inside(base: &Path, rel: &str) -> Result<(File, PathBuf), Opened> {
+    let canonical = base.join(rel).canonicalize()?;
+    let below = canonical.strip_prefix(base).map_err(|_| Opened::Escapes)?;
+    let file = walk_below(base, below)?;
+    Ok((file, canonical))
+}
+
+/// Opens `below`, a path relative to the canonical folder `base` that was resolved
+/// already, one component at a time, each opened as itself (not followed if it is a
+/// reparse point) and without `FILE_SHARE_DELETE`, so it can't be renamed, deleted or
+/// replaced while the walk holds it. A component that is a link by then (a
+/// name-surrogate reparse point: symlink, junction, WSL link) was swapped after
 /// resolving, and is refused. Other reparse points, such as OneDrive placeholders and
 /// dedup files, are files `canonicalize` left in place, and are read.
 #[cfg(windows)]
-fn open_inside(base: &Path, rel: &str) -> Result<(File, PathBuf), Opened> {
+fn walk_below(base: &Path, below: &Path) -> Result<File, Opened> {
     use std::fs::OpenOptions;
     use std::os::windows::fs::OpenOptionsExt;
     // Win32 values (winnt.h, winbase.h).
@@ -322,8 +333,6 @@ fn open_inside(base: &Path, rel: &str) -> Result<(File, PathBuf), Opened> {
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
 
-    let canonical = base.join(rel).canonicalize()?;
-    let below = canonical.strip_prefix(base).map_err(|_| Opened::Escapes)?;
     let parts: Vec<_> = below.components().collect();
     let mut at = base.to_path_buf();
     // Handles on the folders walked so far, held until the file is open.
@@ -345,7 +354,7 @@ fn open_inside(base: &Path, rel: &str) -> Result<(File, PathBuf), Opened> {
             return Err(Opened::Escapes);
         }
         if last {
-            return Ok((handle, canonical.clone()));
+            return Ok(handle);
         }
         held.push(handle);
     }
@@ -476,5 +485,115 @@ mod tests {
         // The file the path names, opened and checked, is accepted.
         let inside = File::open(&joined).expect("open");
         assert!(check_opened(&inside, &base, &joined).is_ok());
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::{AssetRoots, Opened, open_inside, walk_below};
+    use crate::SourceError;
+    use jstream_protocol::AssetRoot;
+    use std::fs;
+    use std::io::Write;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    /// Removes the folder however the test ends, a failed assertion included.
+    struct TempDir(PathBuf);
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Checks that `rel`, which goes through a link inside `root` to `outside.png`
+    /// outside it, is refused by `resolve`, `read` and `open_inside` (at the resolve
+    /// step), and by the walk on its own, as if the link had been swapped in after the
+    /// path resolved, while the target is reachable through the link.
+    fn refused(roots: &AssetRoots, base: &Path, rel: &str) {
+        assert_eq!(
+            fs::read(base.join(rel)).expect("the link leads to the file outside"),
+            b"outside"
+        );
+        assert!(matches!(
+            roots.resolve(AssetRoot::Collection, rel),
+            Err(SourceError::AssetEscapesRoot { .. })
+        ));
+        assert!(matches!(
+            roots.read(AssetRoot::Collection, rel, 1024),
+            Err(SourceError::AssetEscapesRoot { .. })
+        ));
+        assert!(matches!(open_inside(base, rel), Err(Opened::Escapes)));
+        // The walk's own link check, which `open_inside` reaches only when a link
+        // appears between resolving and walking.
+        assert!(matches!(
+            walk_below(base, Path::new(rel)),
+            Err(Opened::Escapes)
+        ));
+    }
+
+    #[test]
+    fn links_inside_the_root_to_outside_are_refused() {
+        let temp = TempDir(
+            std::env::temp_dir().join(format!("jstream-sources-links-{}", std::process::id())),
+        );
+        let dir = &temp.0;
+        let _ = fs::remove_dir_all(dir);
+        let root = dir.join("root");
+        let outside = dir.join("outside");
+        fs::create_dir_all(&root).expect("a temp folder");
+        fs::create_dir_all(&outside).expect("a temp folder");
+        fs::write(root.join("a.png"), b"inside").expect("a file");
+        fs::write(outside.join("outside.png"), b"outside").expect("a file");
+        let roots = AssetRoots {
+            collection: Some(root.clone()),
+            app: None,
+        };
+        let base = root.canonicalize().expect("the root");
+
+        // A file inside the root reads.
+        assert_eq!(
+            roots
+                .read(AssetRoot::Collection, "a.png", 1024)
+                .expect("inside"),
+            b"inside"
+        );
+        // The walk opens a plain file inside the root.
+        assert!(walk_below(&base, Path::new("a.png")).is_ok());
+
+        // A junction needs no privilege, so it is always tested.
+        let made = Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(root.join("junction"))
+            .arg(&outside)
+            .output()
+            .expect("cmd runs");
+        assert!(made.status.success(), "mklink /J: {made:?}");
+        refused(&roots, &base, "junction/outside.png");
+
+        // Symbolic links need a privilege (or Developer Mode) the runner may not have.
+        match std::os::windows::fs::symlink_dir(&outside, root.join("dirlink")) {
+            Ok(()) => refused(&roots, &base, "dirlink/outside.png"),
+            Err(e) => {
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "note: directory symlink not tested, can't create one: {e}"
+                );
+            }
+        }
+        match std::os::windows::fs::symlink_file(
+            outside.join("outside.png"),
+            root.join("filelink.png"),
+        ) {
+            Ok(()) => refused(&roots, &base, "filelink.png"),
+            Err(e) => {
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "note: file symlink not tested, can't create one: {e}"
+                );
+            }
+        }
     }
 }

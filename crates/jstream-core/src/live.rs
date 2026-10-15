@@ -159,14 +159,27 @@ impl LiveSources {
 
     /// The clock animations run on: the platform's media clock once the host injects
     /// backends, else a monotonic clock of the engine's own.
+    ///
+    /// Times on the old clock mean nothing on the new one, so every running source
+    /// restarts its timing now, and the re-plan the thread was waiting for, timed on the
+    /// old clock, is dropped: the thread re-plans at once on the new clock, which times
+    /// the next frame change afresh.
     pub(crate) fn set_clock(&mut self, clock: Arc<dyn MediaClock>) {
         let now = clock.now();
-        lock(&self.worker.queue).clock = clock;
-        // Times on the old clock mean nothing on the new one: restart the timing.
-        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
-            running.start = now;
+        let mut running = false;
+        for source in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+            source.start = now;
+            running = true;
         }
         self.audio_changed = true;
+        let replan = running || lock(&self.worker.queue).wake.is_some();
+        if replan {
+            self.start();
+        }
+        let mut queue = lock(&self.worker.queue);
+        queue.clock = clock;
+        queue.wake = replan.then_some(now);
+        self.worker.wake.notify_all();
     }
 
     /// The platform's media files, which `media` sources play through. Sources built
