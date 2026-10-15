@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:fd304808d003ca32", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#185 shared capture mailbox) into A3: mailbox wording is main's; A3's line that jstream-daemon's startup calls check_media_foundation and main's per-backend delay-load list both hold" }
+verified = { hash = "b3:2a8305fb1449a221", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (A3, #185, B5, #229) into D7b: main's text and stamp kept; stale only via D7b's ARCH#threading Collector row (mixer's collector also frees removed buses' state, chains and filters); re-read; main's shared-mailbox and A3 text unaffected by the audio collector" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

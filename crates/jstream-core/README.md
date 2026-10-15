@@ -811,7 +811,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:a7e45af16f8c9a7d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3 made PublishError::new public in runtime/publish.rs; the section's description of the publish target and opener flow is unchanged and holds" }
+verified = { hash = "b3:b2c8a6f3c4853af3", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (A3, #185, B5, #229) into D7b: main's text and stamp kept; stale only via D7b's ARCH#threading Collector row (mixer's collector also frees removed buses' state, chains and filters); re-read; D7b's collector sentence sits after main's runtime text and still matches retire.rs" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
