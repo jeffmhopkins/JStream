@@ -105,6 +105,7 @@ fn populated() -> MockEngine {
                     kind: "webcam".into(),
                 },
                 settings: Default::default(),
+                duplicated_from: None,
             },
             Edit::ItemAdd {
                 scene_id: SceneId::new("main"),

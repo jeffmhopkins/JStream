@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:de16a5604c93ab73", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read; contents list holds" }
+verified = { hash = "b3:2625f47b7e5a9809", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; mock contents hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:b56d64fcc22337ac", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read the merged Mock section; undo bullet now also says a deleted output comes back with its encoder profile and encoder edits undo to the old profile, matching jstream-graph's encoder.rs and OutputDelete inverses; F3's encoder bullets kept" }
+verified = { hash = "b3:3e1ca5f158d1ed96", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: mock bullet keeps nesting cycles from item.add/item.set_source and the duplicated_from rules beside F3's encoder checks, matching mock.rs" }
 -->
 
 ### The trait
@@ -114,7 +114,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or
     either while a source's settings refer to it;
-  - nesting cycles;
+  - nesting cycles from `item.add` and `item.set_source`;
+  - a `source.create` whose `duplicated_from` names the source itself. Like the graph,
+    the mock stores `duplicated_from` as a plain link (`source.duplicate` sets it) and
+    reports it only while the source it names exists;
   - RTMP server URLs in `output.create` and `output.set_target` (`jstream-graph`'s
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
@@ -158,7 +161,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Each batch is a step built
   from the same inverse edits `jstream-graph` returns: a removed item comes back at its
   index with its placement in its own form (transform or geometry), crop and
-  visibility, a deleted scene at its position with its items, a placement, crop or
+  visibility, a deleted scene at its position with its items, a deleted source with its
+  settings and `duplicated_from`, `item.set_source` back to the item's previous source,
+  a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
   back with its encoder profile, encoder profile edits undo to the profile as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then

@@ -82,6 +82,7 @@ fn webcam() -> Edit {
             kind: "webcam".into(),
         },
         settings: Default::default(),
+        duplicated_from: None,
     }
 }
 
@@ -369,6 +370,7 @@ fn kinds_are_described_and_settings_checked() {
                 kind: "color".into(),
             },
             settings: serde_json::from_value(settings).expect("a settings map"),
+            duplicated_from: None,
         })
     };
     let error =
@@ -1424,6 +1426,7 @@ fn the_render_snapshot_follows_the_program_mix() {
             kind: "display".into(),
         },
         settings: Default::default(),
+        duplicated_from: None,
     };
     let edits = Batch {
         edits: vec![create("main"), display, add("main", "shown", "screen")],
@@ -1620,6 +1623,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
                         scene_id: SceneId::new("inner"),
                     },
                     settings: Default::default(),
+                    duplicated_from: None,
                 },
                 add("program", "nest", "inner_src"),
             ],

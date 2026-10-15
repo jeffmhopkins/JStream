@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:ac0cfad6d298e0be", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read; contents list holds" }
+verified = { hash = "b3:16b874071b55a63f", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; contents hold; CLI adds only item.set_source" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:079207a109799dd6", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read; Edits and No undo or redo command bullets hold" }
+verified = { hash = "b3:755df2de125dafe1", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Edits bullet merges F3's encoder edits and B5's duplicated_from as not in the CLI, with B5's item.set_source form" }
 -->
 
 ```sh
@@ -101,7 +101,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings and encoder profiles. `source.set_settings`,
+  protocol is supported except settings, encoder profiles and `source.create`'s
+  `duplicated_from`. `source.set_settings`,
   `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
   and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
@@ -109,7 +110,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `item.set_geometry` and `item.add`'s `geometry`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
   yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
-  the placement edits' optional `scene_id` are not in the CLI either. Several edits on one line go as **one atomic batch**: one new
+  the placement edits' optional `scene_id` are not in the CLI either.
+  `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -221,7 +223,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b0ca54f78240dfe3", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#208 F3 encoder profiles 0.13, #167, #172, #179, #222, #177 and others) into B2-f3: re-read; holds" }
+verified = { hash = "b3:5e47f224376d60e5", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; parser has item.set_source beside F3's output status encoder suffix" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
