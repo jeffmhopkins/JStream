@@ -293,10 +293,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
 /// nothing, so afterwards the collection is still at [`COLLECTION_REV`] and [`reads`]
 /// still holds.
 pub fn rejected() -> Vec<(Batch, ProtocolError)> {
-    let invalid = |field: &str, reason: &str| ProtocolError::InvalidArgument {
-        field: field.into(),
-        reason: reason.into(),
-    };
+    let invalid = |field: &str, reason: &str| ProtocolError::invalid_argument(field, reason);
     vec![
         // The revision check comes before the empty-batch check.
         (

@@ -7,7 +7,8 @@
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
 //! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
 //! pipeline on the Windows backends and publishes over RTMP(S), after checking that
-//! Media Foundation is installed. With `--collection` it loads the collection from a file
+//! Media Foundation is installed, and `--register-vcam` registers the virtual camera's
+//! media source (`register`). With `--collection` it loads the collection from a file
 //! and saves every change there, and it records every batch, undo, redo and action in an
 //! audit log next to its log files. Not yet: the web UI.
 //!
@@ -21,6 +22,7 @@ mod args;
 mod components;
 mod crash;
 mod logs;
+mod register;
 mod serve;
 mod token;
 
@@ -91,6 +93,9 @@ fn main() -> ExitCode {
             "jstream-daemon {}, protocol {PROTOCOL_VERSION}\n",
             env!("CARGO_PKG_VERSION")
         )),
+        Ok(Invocation::RegisterVcam) => register::register()
+            .map_err(Failure::Failed)
+            .and_then(|message| print(&message)),
         Ok(Invocation::Serve(options)) => run(options),
         Err(message) => Err(Failure::Usage(format!(
             "{message}\n(run `jstream-daemon --help` for usage)"
@@ -215,6 +220,8 @@ fn run(options: Options) -> Result<(), Failure> {
     init_logging(&logs, filter)?;
     #[cfg(windows)]
     check_media_foundation()?;
+    #[cfg(windows)]
+    register::log_status();
     // Next to the log files: every batch, undo, redo and action, without their
     // arguments (R-SEC-001).
     let audit = AuditFile::open(&logs)

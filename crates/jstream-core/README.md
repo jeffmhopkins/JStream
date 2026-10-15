@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:5fecff8a820e0cd0", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: Live sources bullet now says videos advance on the clock, show is called on re-reach, media plays through the injected backends; re-read" }
+verified = { hash = "b3:15b4c97bf3867340", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (C2 #221 text source, G3c #235) into B9 at 0.15: took main's stamp; section text unchanged by the merge, re-read; C2 adds a text-source test in src/tests/sources.rs; Live sources and Tests text hold; B9 only swaps error constructors" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -143,7 +143,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4a6450936aaec973", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9: Live sources paragraph covers begin_plan/planned and Source::show, set_media via with_backends (rebuilds sources), NoBackend before injection; re-read against live.rs and engine.rs" }
+verified = { hash = "b3:8d46495e477ef886", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (C2 #221 text source, G3c #235) into B9 at 0.15: took main's stamp; section text unchanged by the merge, re-read; C2 and G3c change no core behavior described here; B9 changes none" }
 -->
 
 ### Engine and sessions
