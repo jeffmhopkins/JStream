@@ -21,11 +21,11 @@ use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
     Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EntityKind, Event,
-    GeometryError, Hello, HistoryCall, HistoryDirection, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId,
-    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind,
-    Welcome,
+    GeometryError, Hello, HistoryCall, HistoryDirection, IdempotencyKey, ItemGeometry, ItemId,
+    ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION,
+    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
+    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings,
+    SourceId, SourceInfo, SourceKind, Welcome,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:b340c8ccb1e16eef", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; mock contents hold; set_role/item.move unimplemented in the mock as stated" }
+verified = { hash = "b3:96677b86eb3c80ef", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; contents list holds, mock still lacks set_role/item.move" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:3503e916c128a77f", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: mock bullet: every edit but 0.12's set_role/item.move; check list has both B3's geometry/canvas checks and B6's scene_id own-scene check, which set_geometry now also takes" }
+verified = { hash = "b3:016dc02e9c8393b9", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; undo bullet now says placement/crop/visible inverses keep the edit's scene_id, as jstream-graph's do; rest holds" }
 -->
 
 ### The trait
@@ -153,7 +153,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Each batch is a step built
   from the same inverse edits `jstream-graph` returns: a removed item comes back at its
   index with its placement in its own form (transform or geometry), crop and
-  visibility, a deleted scene at its position with its items, and `canvas.set_size`
+  visibility, a deleted scene at its position with its items, a placement, crop or
+  visibility edit undoes with the `scene_id` it was sent with, and `canvas.set_size`
   undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with

@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:21e7aa336865c4f0", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: cascade; re-read, server names no protocol minor or edit" }
+verified = { hash = "b3:e19c24ddd7595598", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; per-session undo history wording holds against control design" }
 -->
 
 ### Listening and admission

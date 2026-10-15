@@ -122,7 +122,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3ca7612494ac158c", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (#182): re-read Collection file subsection against engine.rs and collection.rs; unchanged" }
+verified = { hash = "b3:ed760e9f5b45af12", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read the mock references (differential script, internal for unimplemented calls) against the control design change; hold" }
 -->
 
 ### Engine and sessions

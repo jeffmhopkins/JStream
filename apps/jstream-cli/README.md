@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:a312cbb31b9ce11a", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; contents list holds; CLI gains neither B3's nor B6's commands" }
+verified = { hash = "b3:ecc8e83688272d34", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; contents list holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:ce7283c86927a586", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Edits bullet keeps B3's 0.11 canvas/geometry note and says 0.12's set_role/item.move/scene_id aren't in the CLI" }
+verified = { hash = "b3:619fb179490614ee", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; Edits bullet (0.12 not in CLI) and no-undo bullet hold" }
 -->
 
 ```sh
@@ -218,7 +218,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ba6b3375fe9da05d", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; parsing and writers hold with scene_id: None on the placement constructors" }
+verified = { hash = "b3:9faa5f5b0da298f0", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#184 B6 scene roles/groups/scene_id 0.12, #205 B1 persistence, #182) into B2-f3: re-read; parser, connector and mcp design hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
