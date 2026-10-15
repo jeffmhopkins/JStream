@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:05e5aadce048bfa9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (e1e2a94) into #219: stale via core#design; re-read main's daemon design (WindowsVcam, mfsensorgroup delay-load); daemon still hands WindowsGpu and WgcCapture via with_backends, engine moves capture onto the context itself; holds" }
+verified = { hash = "b3:cbd7f4412a1fc7fc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#360, #299 D6, #381) into #328: took main's stamp; re-read; main changes no daemon code, only core#design's activity-gain text, which the daemon text doesn't name; this PR's /DELAYLOAD, LNK4199 and delay_load.rs text still matches build.rs; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -224,7 +224,8 @@ verified = { hash = "b3:05e5aadce048bfa9", by = "agent:claude@session_01VJKy1iBU
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
-  `build.rs` links the binary (not its test binaries) with `/DELAYLOAD` for each DLL
+  `build.rs` links the binary (and its unit-test harness, which `link-arg-bins` also
+  reaches, but not the integration tests) with `/DELAYLOAD` for each DLL
   the daemon's backends import from (`mfplat.dll` for `MfCodecs` and
   `MfVideoDevices`, `mf.dll` and `mfreadwrite.dll` for `MfVideoDevices`,
   `mfsensorgroup.dll` for `WindowsVcam`) and
@@ -234,14 +235,20 @@ verified = { hash = "b3:05e5aadce048bfa9", by = "agent:claude@session_01VJKy1iBU
   then lists `MfCodecs`' codecs and requires an AAC encoder (`components.rs`, plain
   data in and out, tested everywhere), since every stream's audio needs one. Either
   failure is a `MissingComponent`, mapped to exit code 3 with its advice.
-  Only DLLs the binary imports from are listed: delay-loading one it doesn't is linker
-  warning LNK4199, which CI's `-D warnings` turns into an error. The startup check
+  Only DLLs the binary imports from are listed. The linker ignores one it doesn't with
+  warning LNK4199, which doesn't fail CI: rustc reports it through the `linker_messages`
+  lint, which ignores `-D warnings`. `tests/delay_load.rs` is what catches a stale entry
+  (below). The startup check
   doesn't cover `mfsensorgroup.dll`, since the daemon serves without a camera:
   `WindowsVcam::start` checks that it exports `MFCreateVirtualCamera` before calling
   it, so a Windows 10 gets an `output.start` error, not a delay-load
   exception.
-  `tests/delay_load.rs` checks the built binary's import tables, so CI's Windows job
-  proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib imports.
+  `tests/delay_load.rs` checks the built binary's import tables: each DLL in its own
+  copy of the list must be in the delay-import table and none in the import table. So
+  CI's Windows job proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib
+  imports, and fails when a listed DLL is no longer imported. It checks only the DLLs
+  it lists, so a DLL added to `build.rs` alone, or a new Media Foundation import listed
+  nowhere, gets past it.
 - **Virtual camera registration** (`register.rs`). `--register-vcam` is a separate mode
   that exits without serving, so it creates no logs or token. The registry and ACL work
   is `jstream-platform-windows`'s (`register_vcam`), because the daemon has no `unsafe`.
