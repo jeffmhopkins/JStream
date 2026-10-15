@@ -2488,6 +2488,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-anim"
+version = "0.0.0"
+
+[[package]]
 name = "jstream-audio"
 version = "0.0.0"
 dependencies = [
