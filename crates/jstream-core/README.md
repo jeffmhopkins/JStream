@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5248ce9c9c185f8d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14, item.set_source history) into A3: Outputs paragraph keeps A3's daemon opener line and main's Record sentence; Pipeline keeps the PublishError::new line; history paragraph is main's" }
+verified = { hash = "b3:b2aaa77c52d1d1f2", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#226 A3, #229, #230) into B2-f3: re-read; A3's publish-opener wording from main kept (daemon wires it on Windows, PublishError::new); mock references hold against the control Mock undo bullet" }
 -->
 
 ### Engine and sessions
