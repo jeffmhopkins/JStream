@@ -2,14 +2,14 @@
 id = "ADR-0040"
 title = "Scene structure: orphaned overrides, shared groups and deleted hotkey targets"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0040: Scene structure: orphaned overrides, shared groups and deleted hotkey targets
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
