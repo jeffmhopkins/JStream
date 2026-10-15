@@ -56,6 +56,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
+| `jstream-plugin-host` | Not a host of the engine: the out-of-process CLAP plugin host, one process per CLAP filter instance, started by the engine ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). It talks to the engine only through a shared-memory block and framed messages on its stdin and stdout, never the protocol ([its README](../apps/jstream-plugin-host/README.md#purpose)). |
 
 <a id="principles"></a>
 ## Core principles
@@ -132,14 +133,14 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
-| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`. The **single owner** of the encoder and decoder traits. | no |
+| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035). The **single owner** of the encoder and decoder traits. | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0041](adr/0041-youtube-interaction-scope-v3.md)). No media code. | no |
-| 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
+| 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block, CEF browser backend (ADR-0021) | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
@@ -151,10 +152,10 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
-| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
+| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; CLAP filter kinds from plugin scans and the host supervisor (ADR-0035) | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host (plugin-clap, which only it may link, plugin-proto, and the Windows platform crate for its shared block; [ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -425,11 +426,15 @@ mixer threads in [`jstream-audio`'s real-time design](../crates/jstream-audio/RE
 model; a change that would contradict it edits it in the same PR.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), M3, in progress: the shared block
-(`jstream-plugin-proto`) and the mixer's side of it (`jstream-audio`) are built; the
-host process, its restarts and the `stats.tick` count are not yet. Each CLAP filter
+(`jstream-plugin-proto`), the mixer's side of it (`jstream-audio`) and the host
+process (`jstream-plugin-host`) are built, and so are starting hosts
+(`jstream-platform-windows`) and watching and restarting them on a control thread
+(`jstream-core`'s `HostSupervisor`); CLAP filters in the graph, which would run that
+supervisor, and the `stats.tick` count are not yet. Each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
 with MMCSS "Pro Audio" and woken by its own timer on the media clock, which both
-processes read from the same OS counter. Audio crosses through shared-memory rings, and
+processes read from the same OS counter (not built yet: for now the host sleeps a
+quarter block between passes). Audio crosses through shared-memory rings, and
 the mixer never waits on the host: it writes block *n* and reads the processed block
 *n − d* (by default *d* is two engine blocks), with no syscall or lock for the plugin
 ([R-RT-001](RULES.md#R-RT-001)). A late block is bypassed with a short crossfade, by

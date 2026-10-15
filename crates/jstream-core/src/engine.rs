@@ -17,6 +17,7 @@ use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
+use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
     Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program, launch_vcam,
@@ -27,7 +28,7 @@ use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameErr
 use crate::studio::Studio;
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
-use jstream_platform::{Backends, Secret, StreamKeyStore};
+use jstream_platform::{Backends, PluginHosts, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
     EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
@@ -164,6 +165,20 @@ impl Engine {
     pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
         *lock(&self.shared.keys) = Some(store);
         self
+    }
+
+    /// Scans the CLAP search directories with `hosts` (ADR-0035) and adds each audio
+    /// effect found to `kind.list` and `kind.describe` as an audio-filter kind,
+    /// `clap/<plugin id>`, with the plugin's parameters as its settings. A kind an
+    /// earlier scan found stays. Each plugin file is scanned in its own host process, so
+    /// this can take seconds: call it from a worker thread. The engine's locks are held
+    /// only to add the kinds, after the scan.
+    pub fn scan_clap_plugins(&self, hosts: &dyn PluginHosts) -> ClapScan {
+        let scan = clap_kinds::scan(hosts);
+        let mut state = lock(&self.shared.state);
+        state.graph = std::mem::take(&mut state.graph)
+            .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
+        scan
     }
 
     /// Records every batch, undo, redo and action this engine executes in `sink`, after

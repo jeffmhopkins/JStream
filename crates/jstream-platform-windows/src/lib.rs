@@ -4,7 +4,8 @@
 //! codecs (`MfCodecs`), webcams and capture cards (`MfVideoDevices`, with the MJPEG
 //! decode hook `MfMjpegDecoder`), GPU interop (`WindowsGpu`), the Credential Manager
 //! store for stream keys (`WindowsCredentials`), the virtual camera's engine side
-//! (`WindowsVcam`), and `check_media_foundation`, which reports a Windows N edition
+//! (`WindowsVcam`), the shared block of an out-of-process CLAP filter (`PluginBlock`,
+//! both ends) with the plugin host's MMCSS registration (`ProAudioThread`), and `check_media_foundation`, which reports a Windows N edition
 //! without Media Foundation; video decoders follow. Layer 2, and one of the few crates allowed
 //! `unsafe` (R-UNSAFE-001): every OS call is wrapped here behind safe APIs.
 //!
@@ -25,6 +26,10 @@ mod gpu;
 // Its decision logic is tested on every platform.
 #[cfg(any(windows, test))]
 mod n_edition;
+#[cfg(windows)]
+mod plugin_block;
+#[cfg(windows)]
+mod plugin_hosts;
 mod vcam;
 // Its path comparison is tested on every platform.
 #[cfg(any(windows, test))]
@@ -47,6 +52,10 @@ pub use credential::WindowsCredentials;
 pub use gpu::WindowsGpu;
 #[cfg(windows)]
 pub use n_edition::check_media_foundation;
+#[cfg(windows)]
+pub use plugin_block::{PluginBlock, ProAudioThread};
+#[cfg(windows)]
+pub use plugin_hosts::{PLUGIN_HOST_EXE, WindowsPluginHosts};
 #[cfg(windows)]
 pub use vcam::WindowsVcam;
 #[cfg(windows)]

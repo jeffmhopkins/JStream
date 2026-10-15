@@ -34,9 +34,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, [Design](#design)), installs
-  the signal handlers that stop it, then binds the server with MCP on and, with
-  `--ui-dir`, the web UI's files.
+  file and the placeholder outputs; on Windows a live one that scans the CLAP plugins,
+  [Design](#design)), installs the signal handlers that stop it, then binds the server
+  with MCP on and, with `--ui-dir`, the web UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
@@ -211,7 +211,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   Windows 11) or before `--register-vcam`), `WindowsCredentials` as its
   stream key store (`with_key_store`), and a publish opener (`with_publish_opener`).
   Creating the backends opens no device; each opens what it needs when a pipeline
-  starts. Elsewhere there are no backends yet, so outputs stay the placeholder state
+  starts. A `jstream-clap-scan` thread then scans the CLAP plugins with
+  `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
+  audio-filter kinds once found, and logs each file it couldn't scan; the daemon
+  serves meanwhile. Without `jstream-plugin-host.exe` beside the daemon every file
+  fails to scan, and is logged. Elsewhere there are no backends yet, so outputs stay the placeholder state
   machine ([jstream-core › Design](../../crates/jstream-core/README.md#design)).
 - **The publish opener.** On each `output.start` it reads the output's server URL with
   `Engine::output_kind` and its key from the store, then calls `connect_rtmp`, so each

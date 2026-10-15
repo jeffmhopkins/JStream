@@ -3098,3 +3098,30 @@ fn deleting_a_bus_takes_its_sends_and_undoes_exactly() {
         )
     );
 }
+
+#[test]
+fn a_filter_kind_cannot_be_created_as_a_source() {
+    let mut graph = graph().with_kinds([KindDescriptor {
+        kind_id: "clap/org.example.gain".into(),
+        category: KindCategory::AudioFilter,
+        name: "Gain".into(),
+        version: 1,
+        video: false,
+        audio: true,
+        params: vec![],
+    }]);
+    let (field, reason) = invalid_reason(apply_err(
+        &mut graph,
+        vec![Edit::SourceCreate {
+            source_id: SourceId::new("x"),
+            name: "x".into(),
+            kind: SourceKind::Builtin {
+                kind: "clap/org.example.gain".into(),
+            },
+            settings: Settings::new(),
+            duplicated_from: None,
+        }],
+    ));
+    assert_eq!(field, "edits.0.kind.kind");
+    assert!(reason.contains("filter kind"), "{reason}");
+}

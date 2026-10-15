@@ -22,6 +22,11 @@ print_stderr = "deny"                     # R-RS-005
 allow_attributes_without_reason = "deny"  # R-RS-009
 undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
+[features]
+# `test_plugin`: a CLAP plugin built into the crate, for the plugin host's tests. Never
+# enabled in a release build.
+test-plugin = []
+
 [dependencies]
 clap-sys.workspace = true
 jstream-plugin-proto.workspace = true

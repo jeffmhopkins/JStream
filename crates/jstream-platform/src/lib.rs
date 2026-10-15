@@ -1,7 +1,8 @@
 //! Platform backend traits: the seam between the engine and the OS. Platform crates
 //! (`jstream-platform-windows` first) implement them, and the engine holds the backends as
 //! injected trait objects, so engine code never names a platform API. Layer 1: depends
-//! only on `jstream-media`, `thiserror` and `wgpu` (for the GPU-frame types).
+//! only on `jstream-media`, `jstream-plugin-proto` (the CLAP plugin hosts' contract),
+//! `thiserror` and `wgpu` (for the GPU-frame types).
 //!
 //! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-platform/README.md#purpose, docs/adr/0031-source-types-and-decoding-scope.md, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0014-media-clock.md, docs/adr/0020-portable-windows-distribution.md
 
@@ -18,6 +19,7 @@ pub mod fake;
 mod gpu;
 mod id;
 mod keys;
+pub mod plugin_host;
 mod surface;
 #[cfg(test)]
 mod tests;
@@ -40,6 +42,7 @@ pub use error::PlatformError;
 pub use gpu::{AdapterId, FrameSync, GpuContext, GpuFrame, GpuInterop};
 pub use id::DeviceId;
 pub use keys::{OAuthTokenStore, Secret, StreamKeyStore};
+pub use plugin_host::{HostBlock, HostRequest, PluginHost, PluginHosts};
 pub use surface::VideoSurface;
 pub use vcam::{VcamFormat, VcamSink};
 pub use video_device::{

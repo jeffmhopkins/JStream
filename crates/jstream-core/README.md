@@ -32,7 +32,7 @@ state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_audit`, `with_history_limit` and
-  `with_collection_file`;
+  `with_collection_file`; `scan_clap_plugins` adds the CLAP filter kinds;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
@@ -51,6 +51,33 @@ state machine. Contents:
 - **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)),
   taken from `jstream-sources`' built-in registry.
+- **CLAP plugins** (`plugins/`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)):
+  - `Engine::scan_clap_plugins(&dyn PluginHosts)` scans the CLAP search directories
+    (recursively, for `.clap` entries, each scanned in its own host process) and adds
+    every audio effect found to the graph's kinds as an audio-filter kind,
+    `clap/<plugin id>` (`CLAP_KIND_PREFIX`), so `kind.list` and `kind.describe` report
+    it. Its settings are the plugin's parameters, by CLAP id in decimal, all live: a
+    stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
+    read-only and bypass parameters and ones without a finite range are left out. When
+    two files offer one plugin id, the first found wins. The scan returns a `ClapScan`
+    with each kind's file and plugin id, and the files that failed. Kinds stay until
+    the engine ends. It is slow, so a host calls it on a worker thread; the engine's
+    lock is held only to add the kinds.
+  - `HostSupervisor` keeps one CLAP filter instance's host process running, on a
+    control thread, driven by `tick(now)`, which returns `HostEvent`s. A host is
+    `Ready` (with its block and latency) once its block says so. One that exits, isn't
+    ready within `start_timeout` (it may load the plugin without beating until then),
+    or, once ready, stops its heartbeat for `LIVENESS_MS` has `Crashed`: it is killed and restarted after a wait that doubles from `first_retry`
+    up to `max_retry`. After `max_crashes` crashes with no stable run (`stable_after`)
+    between them, or at once when the host marks a failure a restart can't fix (load,
+    not an effect, activate, configuration), it is `Disabled` until `enable`. The
+    supervisor asks for the plugin's state whenever the plugin marks it changed, keeps
+    the latest (`saved_state`, `StateSaved`) and restarts with it. A run of
+    `degraded_after` consecutive late blocks in the mixer is `Degraded`, and its end
+    `Recovered`. `stop` asks the host to stop and kills it after `STOP_GRACE`.
+  - **Not yet:** audio filters in the graph and protocol, so nothing creates a CLAP
+    filter instance, its settings or its saved state, and nothing runs a supervisor or
+    reports its events; the plugin's editor; rescanning.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -221,7 +248,9 @@ the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its d
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
 publisher and the recording file sink), `jstream-sources` (the built-in kinds: their
-descriptors and the sources that draw them), `png`
+descriptors and the sources that draw them), `jstream-plugin-proto` (the CLAP host
+supervisor's block and control messages), `serde_json` (the CLAP kinds' parameter
+defaults), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
@@ -229,8 +258,8 @@ descriptors and the sources that draw them), `png`
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
-`tests/scenarios.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
-values and saved collection files in `src/tests.rs`, `src/tests/` and `tests/mcp.rs`). All of them
+`tests/scenarios.rs`, and the CLAP fake hosts) and `jstream-mcp` (`tests/mcp.rs`);
+the tests also use `serde_json` for settings values and saved collection files. All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
@@ -270,7 +299,7 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   same `Graph::apply_with_running` (see *Undo and redo*).
 - **Queries** that read the collection, and the kind queries, go to `Graph::query`,
   `output.list` and the `outputs` of `state.get` included; the graph holds the built-in
-  kinds the engine gave it (`kinds.rs`). `output.status` reads the outputs' runtime state
+  kinds the engine gave it (`kinds.rs`), and the CLAP filter kinds a scan added. `output.status` reads the outputs' runtime state
   (`not_found` for an unknown one) and fills `key_set` from the key store after the
   collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
