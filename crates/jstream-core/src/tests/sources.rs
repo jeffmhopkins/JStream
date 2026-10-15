@@ -257,6 +257,20 @@ fn a_missing_file_shows_nothing() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// Waits until the sources thread, on its own, makes the program mix show `want`. The
+/// thread re-reads a clock that is not wall time at least once a second, so the deadline
+/// leaves room for a loaded machine.
+fn shows_by_itself(engine: &Engine, want: (usize, u8)) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    while colour(engine) != want {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    true
+}
+
 #[test]
 fn the_sources_thread_advances_an_animation_by_itself() {
     let dir = temp_dir("by-itself");
@@ -264,6 +278,10 @@ fn the_sources_thread_advances_an_animation_by_itself() {
     let engine = Engine::new()
         .with_collection_file(dir.join("scenes.json"))
         .expect("collection file");
+    // Time moves only when the test moves it, so each frame stays shown until the test
+    // has seen it, however slow the machine (#293).
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
     let control = connected(&engine);
     let file = Reference::Asset {
         root: AssetRoot::Collection,
@@ -278,28 +296,12 @@ fn the_sources_thread_advances_an_animation_by_itself() {
         ]),
     )
     .expect("created");
-    // On the engine's own clock the thread re-plans when each frame is due; no call
-    // touches the engine meanwhile.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    let mut seen = Vec::new();
-    while std::time::Instant::now() < deadline {
-        let now = colour(&engine);
-        if seen.last() != Some(&now) {
-            seen.push(now);
-        }
-        if now == (2, 128) {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-    assert_eq!(
-        seen.last(),
-        Some(&(2, 128)),
-        "reached the last frame: {seen:?}"
-    );
-    assert!(
-        seen.contains(&(1, 0xff)),
-        "showed green on the way: {seen:?}"
-    );
+    assert_eq!(colour(&engine), (0, 0xff), "red first");
+    // The thread re-plans when each frame is due; no call touches the engine meanwhile.
+    clock.advance(100);
+    assert!(shows_by_itself(&engine, (1, 0xff)), "green at 100 ms");
+    // Past both plays (2 x 600 ms), the last frame stays.
+    clock.advance(2_000);
+    assert!(shows_by_itself(&engine, (2, 128)), "blue at alpha 128");
     let _ = fs::remove_dir_all(dir);
 }
