@@ -54,7 +54,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b6caf2a658257e88", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
+verified = { hash = "b3:5fcf46f45f095622", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main 94fb25d, pairing now protocol 0.20) into the ADR-0047 build: stamp-only conflicts; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention in this PR's text; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

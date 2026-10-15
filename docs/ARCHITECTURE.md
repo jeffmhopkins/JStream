@@ -538,7 +538,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f4c8990fb2334507", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
+verified = { hash = "b3:4f8f98add188f92b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main 94fb25d, pairing now protocol 0.20) into the ADR-0047 build: stamp-only conflicts; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention in this PR's text; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
