@@ -749,7 +749,8 @@ status = "planned"
 id = "K2"
 milestone = "M2"
 title = "Keyframe scenes: model and evaluator"
-status = "planned"
+status = "review"
+prs = [350]
 
 # M3
 
