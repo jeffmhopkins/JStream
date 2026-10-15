@@ -208,7 +208,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
 | E3c | Encode from GPU frames | ⏳ planned |  |
-| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned |  |
+| X1 | Full 3D transforms and WGSL effect packs | ⏳ planned | #359 |
 | 3D1 | 3D transforms: rendering ADR and spike | 🔍 in review | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned |  |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
