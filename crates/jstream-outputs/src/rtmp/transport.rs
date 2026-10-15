@@ -66,7 +66,10 @@ impl Transport {
     /// a write fails with [`TimedOut`](io::ErrorKind::TimedOut) without touching the
     /// socket. So a peer that reads a few bytes at a time cannot stretch one message
     /// past it, as it can with a write timeout alone, which each partial write
-    /// restarts. `None` stops cutting, and leaves the last timeout set in place; set
+    /// restarts. Each socket write also sends at most 16 KiB, because on macOS and the
+    /// BSDs the timeout of one write restarts whenever the peer frees buffer space; there
+    /// a trickling peer can still hold a write for as long as it takes to read 16 KiB.
+    /// `None` stops cutting, and leaves the last timeout set in place; set
     /// another with [`set_write_timeout`](Self::set_write_timeout).
     pub fn set_write_deadline(&mut self, deadline: Option<Instant>) {
         self.write_deadline = deadline;
@@ -161,6 +164,10 @@ impl Write for Transport {
     }
 }
 
+/// The most one socket write sends while a write deadline is set
+/// ([`DeadlineSocket`]): one TLS record's worth.
+const MAX_DEADLINE_WRITE: usize = 16 * 1024;
+
 /// A TCP socket whose every write is bounded by `deadline`
 /// ([`Transport::set_write_deadline`]). Reads pass straight through.
 struct DeadlineSocket<'a> {
@@ -192,7 +199,12 @@ impl Write for DeadlineSocket<'_> {
         // A zero timeout means "none" to the OS, so never go below 1 ms.
         self.tcp
             .set_write_timeout(Some(left.max(Duration::from_millis(1))))?;
-        self.tcp.write(buf)
+        // On macOS and the BSDs the timeout restarts each time the peer frees some
+        // buffer space, so one large write to a trickle-reading peer can block far past
+        // it. Capping each write bounds the overshoot to the time the peer takes to
+        // read this much; Linux bounds the whole write by the timeout anyway.
+        let len = buf.len().min(MAX_DEADLINE_WRITE);
+        self.tcp.write(&buf[..len])
     }
 
     fn flush(&mut self) -> io::Result<()> {

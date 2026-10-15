@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:505abc81c7ee1db4", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read Transport bullet against #138: Transport is now a struct (TCP or TLS inside), and set_write_deadline re-cuts the write timeout before every socket write, over TLS via a socket wrapper; Reconnect bullet unchanged" }
+verified = { hash = "b3:d2722f14d5148e13", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "#207 macOS fix: Transport bullet now says deadline writes send at most 16 KiB each (BSD/macOS restart SO_SNDTIMEO on progress); re-read the whole section against transport.rs; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
@@ -78,7 +78,8 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   past it. `Transport::set_write_deadline` bounds them all: before each socket write,
   over TLS too (rustls's own writes go through a socket wrapper that does this), the
   timeout is cut to the time left, and past the deadline a write fails with `TimedOut`
-  (#138). `Transport::shutdown` sends TLS `close_notify` before closing the socket.
+  (#138). Each socket write then sends at most 16 KiB, because on macOS and the BSDs a
+  write's timeout restarts whenever the peer frees buffer space. `Transport::shutdown` sends TLS `close_notify` before closing the socket.
 - **URLs and keys** (`url`): `rtmp(s)://host[:port]/app[/...]`, with the whole path as the
   application name and the stream key separate. `StreamKey` prints as `***`, and no error
   carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The server's
