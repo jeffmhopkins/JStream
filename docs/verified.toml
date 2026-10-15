@@ -2385,7 +2385,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:263637b2f03e8558", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
+stamp = { hash = "b3:041c75b0f70d216e", by = "agent:u3a-builder", note = "Re-read after merging main; main changed only the connecting bullet (a URL the page policy blocks reads the same as other refused upgrades); this PR's events, selection, scenes and sources, form and routing bullets still match the code" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
@@ -2541,7 +2541,7 @@ stamp = { hash = "b3:adf0e4e847f64861", by = "agent:deps-thread", note = "Re-rea
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:744e22f629ca14db", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet against connect.spec.js: the policy-refused test is no longer test.fail and asserts an alert and Connect re-enabled; text matches." }
+stamp = { hash = "b3:93efc6eabdbb842b", by = "agent:u3a-builder", note = "Re-read after merging main; resolved the conflict by taking main's #305 connecting text and keeping this PR's scenes bullet and the Outputs-page note; both match the specs" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
 stamp = { hash = "b3:e05f245bcdd1b64e" }
