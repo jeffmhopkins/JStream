@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:090f00774c2e20dd", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#crate-map/jstream-sources, whose only change on this branch is the YouTube chat message ADR link (0034 -> 0041, same source kind restated in ADR-0041 §2); C1a's color and image text holds" }
+verified = { hash = "b3:964af01323331c1c", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#214 ADR-0041) into png 0.18: ARCH crate-map change is the YouTube ADR link only; png 0.18 maps a usize-overflowing frame size to a decode error; seams and kind text hold" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
