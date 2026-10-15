@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:5ac6cd1098e75c8c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 (ADR-0051 proposed, Jeff: avoid requiring an OAuth client): re-read; YouTube is off unless the host passes a user-supplied client: unavailable wording and NO_YOUTUBE_CLIENT errors match engine.rs, youtube.rs and protocol youtube.rs" }
+verified = { hash = "b3:00e0a7eb982d1200", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "round 7 fixes: re-read; the YouTube bullet still holds (a thread per running youtube output reads health)" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -173,7 +173,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4aa74c093a3cc3af", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 (ADR-0051 proposed, Jeff: avoid requiring an OAuth client): re-read; YouTube is off unless the host passes a user-supplied client: unavailable wording and NO_YOUTUBE_CLIENT errors match engine.rs, youtube.rs and protocol youtube.rs" }
+verified = { hash = "b3:3af9ee4985694f14", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "round 7 B5/B6/N8: re-read; sign-out waits for a call in flight, the rotated token is stored under the client mutex, a replacing sign-in revokes the old token, and each youtube output has its own health thread, matching youtube.rs" }
 -->
 
 ### Engine and sessions
@@ -616,13 +616,16 @@ token found there at setup signs the engine in.
   answers the consent URL and emits `signing_in`. A thread waits for the redirect (up
   to `SIGN_IN_TIMEOUT`, 5 minutes), exchanges the code, stores the refresh token and
   emits `signed_in`; a declined or timed-out sign-in goes back to the state before it.
-  A second `sign_in` while one waits answers the same URL. `youtube.sign_out` clears
-  the store first (its failure is `action_failed` and changes nothing), abandons a
-  waiting sign-in, emits `signed_out`, then revokes the token at Google, logging a
-  failure. An abandoned sign-in's thread doesn't exchange a code that arrives later,
+  A second `sign_in` while one waits answers the same URL, and a finished sign-in that
+  replaces an account revokes the replaced account's token (best effort).
+  `youtube.sign_out` waits for a Live API call in flight, clears the store (its
+  failure is `action_failed` and changes nothing), abandons a waiting sign-in, emits
+  `signed_out`, then revokes the token at Google, logging a failure. An abandoned sign-in's thread doesn't exchange a code that arrives later,
   and revokes the token of one already exchanged.
 - Each Live API call runs on the one `LiveClient` under its own mutex, so YouTube
-  calls run one at a time; a rotated refresh token is stored after the call. A refresh
+  calls run one at a time; a rotated refresh token is stored before the client's mutex
+  is released, so a sign-out or sign-in waiting for it never leaves an older token
+  behind. A refresh
   Google refuses (`SignInRequired`) drops the client and the stored token and emits
   `signed_out`. `jstream-youtube` errors become `action_failed`, prefixed "YouTube's
   API quota is used up" for quota reasons (ADR-0041 §5); none carries a token.
@@ -633,7 +636,7 @@ token found there at setup signs the engine in.
   with `connect_rtmp`; the host's publish target and opener are not used. A broadcast
   with no bound stream fails the start with a reason naming `youtube.bind_broadcast`.
   The key goes only to the connection ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
-- Once such an output is `active`, a `jstream-youtube-health` thread reads the
+- Once such an output is `active`, its own `jstream-youtube-health` thread reads the
   stream's health every `HEALTH_INTERVAL` (15 s, one quota unit each) and emits
   `youtube.health_changed` on the first reading and whenever the status, rating or
   issues change. While signed out it skips its reads. It ends when the output stops,

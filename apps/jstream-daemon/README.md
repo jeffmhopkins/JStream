@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:b664e6270665d37b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "YA2 change to Y3 (no required OAuth client): re-read; nothing here names the client or the tool list, so the text holds (the daemon still calls no with_youtube; the server's MCP endpoint gets Server::new, so it lists no youtube tool until A6b adds one)" }
+verified = { hash = "b3:6e34abd08bc783ee", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after core design changed: nothing here touches YouTube sign-out, token rotation or health polls; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
