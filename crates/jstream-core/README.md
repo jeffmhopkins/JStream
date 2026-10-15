@@ -151,7 +151,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0da4c3ab8acb187b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2 round 2: stale only through ARCH#protocol and control design; core's server mentions unchanged; holds" }
+verified = { hash = "b3:24ce24aaf3375494", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: cascade; main's text kept, mock text unaffected by this branch" }
 -->
 
 ### Engine and sessions
@@ -883,7 +883,7 @@ history and idempotency keys are not saved.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:b3aa03c26ec8a3f6", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#196 B5, #226 A3, #207, #233, #229, #230): stamp-only conflicts, both sides kept; runtime text has C5's audio-inputs sentences; main's #207 stop wait is in Design; holds" }
+verified = { hash = "b3:9cb93b65cd929904", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (C5 audio sources, B9) into D7b: kept C5's audio-sources sentences and D7b's mixer-collector sentence (rings, removed buses' state, filter chains and filters, per retire.rs); re-read; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -928,7 +928,8 @@ or mixer panic) is a channel message to a watcher the control thread started; th
 watcher emits `failed` and stops the pipeline. A program-stage failure reaches every
 running output. Frame hand-off is the encoder session queues. The audio and outputs
 snapshots and a GPU encode target are still rows of the ARCH thread table, not this
-cut. The mixer also has its own collector, which frees only input rings and their
-counters. The program stage's `jstream-audio-sources` thread opens and closes the audio
-sources' inputs as the collection changes (see *Audio sources* in Design); it takes
-no engine lock and is joined, and every input closed, after the mixer thread stops.
+cut. The mixer also has its own collector, which frees input rings and their counters,
+removed buses' state, and removed filter chains and filters. The program stage's
+`jstream-audio-sources` thread opens and closes the audio sources' inputs as the
+collection changes (see *Audio sources* in Design); it takes no engine lock and is
+joined, and every input closed, after the mixer thread stops.

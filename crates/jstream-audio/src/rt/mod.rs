@@ -8,6 +8,7 @@
 //! Docs: docs/ARCHITECTURE.md#threading, crates/jstream-audio/README.md#realtime
 
 pub(crate) mod bus;
+pub(crate) mod chain;
 pub(crate) mod cmd;
 pub(crate) mod continuity;
 pub(crate) mod control;
