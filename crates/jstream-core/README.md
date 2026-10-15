@@ -184,7 +184,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:44658da5476d1f40", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at D6 (#299): D6's activity-gain bullet and routing sync are main's; C10's Live sources painter text and Locking sources-thread text hold beside them" }
+verified = { hash = "b3:44658da5476d1f40", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 round 3: re-read the RTMP stop-drain paragraph: its new sentence says output_loop checks the deadline before each of a pass's video and audio sends, so a slow target overruns by one send at most, matching a58541b; D6's activity-gain bullet, C10's Live sources painter text and the Locking sources-thread text hold" }
 -->
 
 ### Engine and sessions
@@ -1045,7 +1045,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:0f11a4a64328885b", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10: stop-drain paragraph now says the output thread checks the deadline before each of a pass's video and audio sends, so a slow target overruns by one send at most (inside OUTPUT_GRACE); matches output_loop; rest of the runtime text holds after merging D6" }
+verified = { hash = "b3:0f11a4a64328885b", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 round 3: re-read against a58541b: the output-thread, collector, failure-watcher and mixer paragraphs say nothing about the stop deadline (that is in Design's RTMP paragraph); the mixer's metering and audio-scope push, program stage sharing and stats text hold" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
