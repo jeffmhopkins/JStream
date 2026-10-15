@@ -694,6 +694,13 @@ status = "review"
 prs = [309]
 
 [[item]]
+id = "Q5"
+milestone = "M2"
+title = "Threat model"
+status = "review"
+prs = [358]
+
+[[item]]
 id = "T1"
 milestone = "M2"
 title = "Studio mode and transitions"

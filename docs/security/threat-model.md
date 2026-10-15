@@ -85,7 +85,7 @@ Every arrow into the engine crosses one of five boundaries:
 ## Control server
 <!-- @section
 depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:cbc9c6878a2c72df", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+verified = { hash = "b3:9ee4513532c005a7", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "#358 B1: Accepted now names the control token cached by a browser through the Basic prompt (gate.rs Basic path, ADR-0047 consequences); rest unchanged" }
 -->
 
 **Threats:** a foreign web page driving the API (CSRF, DNS rebinding), a network peer,
@@ -107,7 +107,9 @@ a stolen token, local denial of service.
 - On Unix the token file is created `0600` and refused if group or others can read it.
 
 **Accepted:** the token is full access with no tiers ([ADR-0006](../adr/0006-mcp-full-access.md)).
-It doesn't expire or rotate; deleting the file and restarting makes a new one.
+It doesn't expire or rotate; deleting the file and restarting makes a new one. A browser
+can be given the control token through the `Basic` prompt, and then holds it as a cached,
+ambient credential until it is closed.
 
 **Gaps:** the Windows token file only inherits its folder's ACL (#344); connections
 before authentication and calls in flight per connection are not capped (#354).
@@ -116,7 +118,7 @@ before authentication and calls in flight per connection are not capped (#354).
 ## Pairing and remote browsers
 <!-- @section
 depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md"]
-verified = { hash = "b3:2530013597bd1403", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+verified = { hash = "b3:924140d411537f71", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "#358 B1: narrowed to what ADR-0047 and R-SEC-002 promise: a paired browser holds only its device token, and the cookie never carries the control token" }
 -->
 
 **In flight** (#265 for codes and device tokens, #288 for the pairing page and cookie).
@@ -131,7 +133,8 @@ a device that should no longer have access.
 time, 40 bits, two minutes, void after five wrong attempts; 256-bit device tokens kept
 as digests, revocable, dropped after 30 days unused; the browser's copy only as a
 `__Host-` cookie that is `Secure`, `HttpOnly` and `SameSite=Strict`, on a TLS listener,
-with `Sec-Fetch-Site` checked; a browser never holds the control token.
+with `Sec-Fetch-Site` checked. A paired browser holds only its device token, and the
+cookie never carries the control token.
 
 **Accepted:** a device token has the control token's full power ("no tiers").
 
@@ -180,8 +183,8 @@ makes Windows contact a remote host.
   decoders are memory-safe Rust.
 - Recordings must be absolute paths without `..`, are written to a `.part` file created
   new, and never replace an existing file.
-- Fuzz targets cover the protocol, collection loading, AMF0, H.264, HEVC, AV1, AAC and
-  the muxers (`fuzz/`).
+- Fuzz targets cover the protocol, source and output kind settings, collection loading,
+  AMF0, H.264, HEVC, AV1, AAC and the muxers (`fuzz/`).
 
 **Accepted:** a token holder may read any file the user can, as an image or font, and
 write recordings anywhere the user can. That follows from ADR-0006's full access.
