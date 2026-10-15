@@ -8,9 +8,11 @@
 //! - `data:` and `blob:` are allowed: they hold only what the page itself made.
 //! - `about:blank` and `about:srcdoc` are allowed; other `about:` pages are not.
 //! - `file:` is allowed only for a page loaded from a local file, and only for files in
-//!   that file's folder or below it. Both sides are compared after resolving symbolic
-//!   links and `..`, so a link inside the folder can't reach out of it. A file that
-//!   doesn't exist is refused.
+//!   that file's folder or below it. The path is first compared by name, with `..`
+//!   resolved, and only a path inside the folder is ever opened: a URL naming another
+//!   server or a device is refused without touching it. Then both sides are compared
+//!   again after resolving symbolic links, so a link inside the folder can't reach out
+//!   of it. A file that doesn't exist is refused.
 //! - Every other scheme (Chromium's internal pages, `filesystem:`, extensions) is
 //!   refused.
 //!
@@ -18,7 +20,7 @@
 //! (`jstream-sources`): something that can write inside it can also swap a file for a
 //! link between the check and Chromium opening it.
 
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::PageLocation;
@@ -26,10 +28,19 @@ use crate::PageLocation;
 /// A page's request rules, and how many requests it refused.
 #[derive(Debug)]
 pub struct RequestPolicy {
-    /// The folder a file page may read below, resolved. `None` for a web or blank page,
-    /// and for a file page whose folder could not be resolved: then no file is allowed.
-    folder: Option<PathBuf>,
+    /// The folder a file page may read below. `None` for a web or blank page, and for a
+    /// file page whose folder could not be resolved: then no file is allowed.
+    folder: Option<Folder>,
     denied: AtomicU64,
+}
+
+/// A file page's folder, both ways the policy compares it.
+#[derive(Debug)]
+struct Folder {
+    /// By name ([`lexical`]): checked before anything is opened.
+    named: Vec<String>,
+    /// With links resolved: checked after.
+    resolved: PathBuf,
 }
 
 /// Whether one request may go ahead.
@@ -45,7 +56,12 @@ impl RequestPolicy {
     /// The rules for a page loaded from `location`.
     pub fn for_location(location: &PageLocation) -> Self {
         let folder = match location {
-            PageLocation::File(file) => file.parent().and_then(|dir| dir.canonicalize().ok()),
+            PageLocation::File(file) => file.parent().and_then(|dir| {
+                Some(Folder {
+                    named: lexical(dir)?,
+                    resolved: dir.canonicalize().ok()?,
+                })
+            }),
             PageLocation::Blank | PageLocation::Web(_) => None,
         };
         Self {
@@ -74,7 +90,7 @@ impl RequestPolicy {
         };
         match scheme.to_ascii_lowercase().as_str() {
             "http" | "https" | "ws" | "wss" | "data" | "blob" => Verdict::Allow,
-            "about" if matches!(rest, "blank" | "srcdoc") => Verdict::Allow,
+            "about" if matches!(before_query(rest), "blank" | "srcdoc") => Verdict::Allow,
             "file" => self.file(rest),
             _ => Verdict::Deny("the page may not load this kind of URL"),
         }
@@ -88,12 +104,79 @@ impl RequestPolicy {
         let Some(path) = file_path(rest) else {
             return Verdict::Deny("the file URL is malformed");
         };
+        // By name first: opening a path outside the folder is itself the access the
+        // policy refuses (on Windows, a server's name makes an SMB connection).
+        match lexical(&path) {
+            Some(named) if named.starts_with(&folder.named) => {}
+            _ => return Verdict::Deny("the file is outside the page's folder"),
+        }
         match path.canonicalize() {
-            Ok(path) if path.starts_with(folder) => Verdict::Allow,
-            Ok(_) => Verdict::Deny("the file is outside the page's folder"),
+            Ok(path) if path.starts_with(&folder.resolved) => Verdict::Allow,
+            Ok(_) => Verdict::Deny("the file resolves to outside the page's folder"),
             Err(_) => Verdict::Deny("the file does not exist or can't be read"),
         }
     }
+}
+
+/// What precedes a URL's query and fragment.
+fn before_query(rest: &str) -> &str {
+    rest.split(['?', '#']).next().unwrap_or_default()
+}
+
+/// An absolute path as names to compare, without touching the file system: `.` dropped
+/// and `..` applied by name. On Windows, a drive or server-and-share comes first, in
+/// lower case as is every name (Windows compares names without case), with `\\?\`
+/// forms the same as plain ones. `None` for a relative path, a `..` above the root, a
+/// device path (`\\.\`, `\\?\` without a drive or share) or a name that isn't UTF-8.
+fn lexical(path: &Path) -> Option<Vec<String>> {
+    let mut names: Vec<String> = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(prefix) => names.push(prefix_name(prefix.kind())?),
+            Component::RootDir if names.is_empty() => names.push("/".to_owned()),
+            Component::RootDir | Component::CurDir => {}
+            Component::ParentDir => {
+                if names.len() < 2 {
+                    return None;
+                }
+                names.pop();
+            }
+            Component::Normal(_) if names.is_empty() => return None,
+            Component::Normal(name) => names.push(fold(name.to_str()?)),
+        }
+    }
+    (!names.is_empty()).then_some(names)
+}
+
+#[cfg(windows)]
+fn prefix_name(prefix: std::path::Prefix<'_>) -> Option<String> {
+    use std::path::Prefix;
+    match prefix {
+        Prefix::Disk(drive) | Prefix::VerbatimDisk(drive) => {
+            Some(format!("{}:", char::from(drive).to_ascii_lowercase()))
+        }
+        Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => Some(fold(&format!(
+            r"\\{}\{}",
+            server.to_str()?,
+            share.to_str()?
+        ))),
+        Prefix::Verbatim(_) | Prefix::DeviceNS(_) => None,
+    }
+}
+
+#[cfg(not(windows))]
+fn prefix_name(_: std::path::Prefix<'_>) -> Option<String> {
+    None
+}
+
+#[cfg(windows)]
+fn fold(name: &str) -> String {
+    name.to_lowercase()
+}
+
+#[cfg(not(windows))]
+fn fold(name: &str) -> String {
+    name.to_owned()
 }
 
 /// The host path a `file:` URL names, given what follows `file:`: `//host/path` with an
@@ -101,8 +184,7 @@ impl RequestPolicy {
 /// Windows. The query and fragment are ignored. `None` for anything else, or a path
 /// that doesn't decode to UTF-8 without NULs.
 fn file_path(rest: &str) -> Option<PathBuf> {
-    let rest = rest.split(['?', '#']).next().unwrap_or_default();
-    let rest = rest.strip_prefix("//")?;
+    let rest = before_query(rest).strip_prefix("//")?;
     let slash = rest.find('/')?;
     let (host, path) = rest.split_at(slash);
     let path = percent_decode(path)?;
@@ -150,10 +232,13 @@ fn percent_decode(text: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// The folder a policy allows files below, for tests.
+/// The folder a policy allows files below, resolved, for tests.
 #[cfg(test)]
-fn folder(policy: &RequestPolicy) -> Option<&std::path::Path> {
-    policy.folder.as_deref()
+fn folder(policy: &RequestPolicy) -> Option<&Path> {
+    policy
+        .folder
+        .as_ref()
+        .map(|folder| folder.resolved.as_path())
 }
 
 #[cfg(test)]
@@ -208,6 +293,8 @@ mod tests {
             ("data:image/png;base64,AAAA".to_owned(), true),
             ("blob:file:///0b7c".to_owned(), true),
             ("about:blank".to_owned(), true),
+            ("about:blank#frame".to_owned(), true),
+            ("about:srcdoc?x".to_owned(), true),
             ("about:version".to_owned(), false),
             ("chrome://settings".to_owned(), false),
             ("filesystem:file:///temporary/x".to_owned(), false),
@@ -252,7 +339,10 @@ mod tests {
         std::os::unix::fs::symlink(root.join("secret.txt"), root.join("page/link.txt"))
             .expect("symlink");
         let policy = RequestPolicy::for_location(&PageLocation::File(root.join("page/index.html")));
-        assert!(deny(policy.check(&file_url(&root.join("page/link.txt")))));
+        assert_eq!(
+            policy.check(&file_url(&root.join("page/link.txt"))),
+            Verdict::Deny("the file resolves to outside the page's folder")
+        );
         // Through a linked folder too.
         std::os::unix::fs::symlink(&root, root.join("page/up")).expect("symlink");
         assert!(deny(
@@ -263,6 +353,57 @@ mod tests {
             Verdict::Allow
         );
         assert_eq!(policy.denied(), 2);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn paths_compare_by_name_before_anything_is_opened() {
+        #[cfg(not(windows))]
+        {
+            let names = |p: &str| lexical(Path::new(p));
+            assert_eq!(
+                names("/a/./b/../c"),
+                Some(vec!["/".into(), "a".into(), "c".into()])
+            );
+            assert_eq!(names("/a/.."), Some(vec!["/".into()]));
+            assert_eq!(names("/.."), None);
+            assert_eq!(names("a/b"), None);
+        }
+        #[cfg(windows)]
+        {
+            let names = |p: &str| lexical(Path::new(p));
+            assert_eq!(names(r"C:\A\b"), names(r"\\?\c:\a\B"));
+            assert_eq!(names(r"\\Server\Share\x"), names(r"\\?\UNC\server\share\X"));
+            assert_eq!(names(r"\\.\pipe\x"), None);
+            assert_eq!(names(r"\\?\GLOBALROOT\x"), None);
+            assert_eq!(names(r"C:\.."), None);
+        }
+    }
+
+    /// A URL naming another server, or a device, is refused by name: the policy never
+    /// opens it, which on Windows would connect to that server.
+    #[cfg(windows)]
+    #[test]
+    fn a_server_or_device_url_is_refused_without_opening_it() {
+        let root = tree("unc");
+        let policy = RequestPolicy::for_location(&PageLocation::File(root.join("page/index.html")));
+        for url in [
+            "file://attacker.example/share/x.png",
+            "file://./pipe/x",
+            "file://localhost/%5C%5Cattacker.example/share/x.png",
+        ] {
+            let verdict = policy.check(url);
+            assert!(
+                matches!(
+                    verdict,
+                    Verdict::Deny(
+                        "the file is outside the page's folder" | "the file URL is malformed"
+                    )
+                ),
+                "{url}: {verdict:?}"
+            );
+        }
+        assert_eq!(policy.denied(), 3);
         let _ = std::fs::remove_dir_all(root);
     }
 

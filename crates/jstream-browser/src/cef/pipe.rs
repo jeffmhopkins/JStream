@@ -16,6 +16,7 @@ use windows::Win32::Storage::FileSystem::{
     FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAGS_AND_ATTRIBUTES, PIPE_ACCESS_INBOUND,
     PIPE_ACCESS_OUTBOUND,
 };
+use windows::Win32::System::IO::CancelSynchronousIo;
 use windows::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, GetNamedPipeClientProcessId, PIPE_READMODE_BYTE,
     PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
@@ -109,12 +110,7 @@ impl Pending {
         let (to_helper, from_helper) = match outcome {
             Ok(pipes) => pipes,
             Err(reason) => {
-                // The waiter may still be blocked in `ConnectNamedPipe`: connecting to
-                // each pipe here ends that wait.
-                let _ = OpenOptions::new().write(true).open(path(&name, "in"));
-                let _ = OpenOptions::new().read(true).open(path(&name, "out"));
-                let _ = rx.recv_timeout(Duration::from_secs(1));
-                let _ = waiter.join();
+                stop_waiting(&name, waiter);
                 return Err(start(reason));
             }
         };
@@ -129,6 +125,25 @@ impl Pending {
             }
         }
         Ok((File::from(from_helper), File::from(to_helper)))
+    }
+}
+
+/// Ends a waiter that may still be blocked in `ConnectNamedPipe`, never waiting long
+/// for it. Connecting to each pipe the way the helper does (it reads `-in` and writes
+/// `-out`) ends the wait; cancelling the waiter's blocked call is the backstop. A waiter
+/// that still hasn't finished after that is left to finish on its own.
+fn stop_waiting(name: &str, waiter: std::thread::JoinHandle<()>) {
+    let _ = OpenOptions::new().read(true).open(path(name, "in"));
+    let _ = OpenOptions::new().write(true).open(path(name, "out"));
+    for _ in 0..20 {
+        if waiter.is_finished() {
+            let _ = waiter.join();
+            return;
+        }
+        // SAFETY: the handle is the waiter's thread's, live until the `JoinHandle` is
+        // dropped; cancelling I/O that isn't pending does nothing.
+        let _ = unsafe { CancelSynchronousIo(HANDLE(waiter.as_raw_handle())) };
+        std::thread::sleep(Duration::from_millis(50));
     }
 }
 
@@ -186,4 +201,42 @@ fn client_pid(pipe: &OwnedHandle) -> Result<u32, BrowserError> {
 
 fn start(reason: String) -> BrowserError {
     BrowserError::Start { reason }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn connect_to(mut child: Child, timeout: Duration) -> (BrowserError, Duration) {
+        let pipes = Pending::create().expect("pipes");
+        let started = Instant::now();
+        let error = pipes
+            .connect(&mut child, timeout)
+            .expect_err("nothing connects");
+        let _ = child.kill();
+        let _ = child.wait();
+        (error, started.elapsed())
+    }
+
+    #[test]
+    fn a_helper_that_exits_before_connecting_fails_the_start() {
+        let child = std::process::Command::new("cmd")
+            .args(["/c", "exit 1"])
+            .spawn()
+            .expect("cmd");
+        let (error, took) = connect_to(child, Duration::from_secs(15));
+        assert!(matches!(error, BrowserError::Start { .. }), "{error:?}");
+        assert!(took < Duration::from_secs(10), "{took:?}");
+    }
+
+    #[test]
+    fn a_helper_that_never_connects_times_out() {
+        let child = std::process::Command::new("cmd")
+            .args(["/c", "ping -n 30 127.0.0.1 >nul"])
+            .spawn()
+            .expect("cmd");
+        let (error, took) = connect_to(child, Duration::from_secs(1));
+        assert!(matches!(error, BrowserError::Start { .. }), "{error:?}");
+        assert!(took < Duration::from_secs(5), "{took:?}");
+    }
 }
