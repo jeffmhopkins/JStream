@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:91e0c7812431e300", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: D5's Audio bullet and tests as on main, plus D6's activity-gain additions; holds against engine.rs, audio.rs, activity.rs" }
+verified = { hash = "b3:0b14bb91f4448a5e", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -182,7 +182,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5b697bdecbe6e96f", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: Audio routing is main's plus D6's activity-gain bullet; Not yet lists transition-weighted gains (T1); holds" }
+verified = { hash = "b3:9b817c7bfb94016b", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
 -->
 
 ### Engine and sessions

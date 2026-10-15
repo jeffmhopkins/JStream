@@ -143,12 +143,9 @@ impl AudioRouting {
             let Some(audio) = state.source(id).and_then(|s| s.audio()) else {
                 continue;
             };
-            input.set_gain_db(audio.gain_db.get());
-            // Off, the program stage closes the source's input (`crate::audio_sources`);
-            // until it has, the input is silent and unmetered here. A mute keeps the
-            // sends but silences them, so the input's post-fader meter still reads
-            // (ADR-0028).
-            input.set_muted(!audio.enabled);
+            // The activity gain and the sends go first: a new input opens muted, and
+            // the mixer may run a block between these stores, so it must not become
+            // audible before its routing is in place.
             input.set_activity_gain(activity.get(id).copied().unwrap_or(1.0));
             let master = (BusId::master(), attached.master.id());
             let others = attached
@@ -164,6 +161,12 @@ impl AudioRouting {
                     }
                 }
             }
+            input.set_gain_db(audio.gain_db.get());
+            // Off, the program stage closes the source's input (`crate::audio_sources`);
+            // until it has, the input is silent and unmetered here. A mute keeps the
+            // sends but silences them, so the input's post-fader meter still reads
+            // (ADR-0028).
+            input.set_muted(!audio.enabled);
         }
     }
 
