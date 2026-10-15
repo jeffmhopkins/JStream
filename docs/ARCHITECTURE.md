@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:2b244546dfef74f8", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Crate-map daemon row (N3) now says the daemon registers and publishes the virtual camera via a virtual_cam output, matching serve.rs windows_backends" }
+verified = { hash = "b3:26e6f3f28698aa59", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge-only round (main e1e2a94): main's daemon row (registers and publishes the virtual camera) kept, with this PR's first cut serving the UI's built files (--ui-dir)" }
 -->
 
 ```

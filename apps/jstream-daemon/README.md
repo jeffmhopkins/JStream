@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:4de3470a3fc6e2e5", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b follow-up: re-read; Serving bullet holds (the live engine now carries WindowsVcam, detailed in Design); Tests bullet's delay_load.rs sentence covers mfsensorgroup.dll now in the delayed list" }
+verified = { hash = "b3:fe07ad25e9f9e987", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge-only round (main e1e2a94): main's text kept; this PR's Serving (UI files with --ui-dir), Tests (raw HTTP UI requests) and Not-here-yet edits re-read and still hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -197,7 +197,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:f374fa071e988674", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#297 daemon vcam, #237): re-read main's design (WindowsVcam backend, mfsensorgroup delay-load, MFCreateVirtualCamera probe); stale via core#design's clock-swap sentence from this PR; daemon still supplies QpcClock via with_backends; holds" }
+verified = { hash = "b3:3081b7a4840470a7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge-only round (main e1e2a94): main's text kept; Listening names port, MCP and UI directory, matching serve.rs:178-180; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
