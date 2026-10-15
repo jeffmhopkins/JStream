@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:5359a037fc331799", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2: re-read; added the jstream-anim row (layer 0, no dependencies, no unsafe, ADR-0049 keyframe-scene model); summary matches its Cargo.toml; lint-deps passes" }
+stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -40,6 +40,9 @@ stamp = { hash = "b3:e5fef95eb12cb895" }
 
 ["ARCH#crate-map"."file:crates/jstream-core/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:a8d2d95e5d1a7c3b" }
+
+["ARCH#crate-map"."file:crates/jstream-effects/Cargo.toml#jstream-meta"]
+stamp = { hash = "b3:100b037ae75599a7", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-encode/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:8b934df550ca875e" }
@@ -1289,6 +1292,45 @@ stamp = { hash = "b3:99e633ebddadb039" }
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/main.rs"]
 stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
+["CRATE-jstream-effects#purpose"."body"]
+stamp = { hash = "b3:43dd619147c37ef5", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "Round 1 (B1, N1-N3): re-read; hot reload now stamps the manifest plus named shaders and retries duplicate-refused folders when an ID is freed; contract adds overrides; prelude validated alone" }
+
+["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
+stamp = { hash = "b3:43d3c8a43e07d1d8" }
+
+["CRATE-jstream-effects#purpose"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
+stamp = { hash = "b3:b655210653447199" }
+
+["CRATE-jstream-effects#purpose"."dep:docs/adr/0035-clap-plugins-out-of-process.md"]
+stamp = { hash = "b3:56b6301e2e6a132b" }
+
+["CRATE-jstream-effects#purpose"."dep:docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
+stamp = { hash = "b3:b5397b5d6407b040" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/error.rs"]
+stamp = { hash = "b3:86e5ac6016021cc2" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/lib.rs"]
+stamp = { hash = "b3:d8bdadac3cc97bf5" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/manifest.rs"]
+stamp = { hash = "b3:b65c103b271db580" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/pack.rs"]
+stamp = { hash = "b3:9bd6619c606101df" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/shader.rs"]
+stamp = { hash = "b3:3ae83479a3f82d0e" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/tests.rs"]
+stamp = { hash = "b3:cf107bf4051a2857" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/src/watch.rs"]
+stamp = { hash = "b3:c605dc3799e8d4cc" }
+
+["CRATE-jstream-effects#purpose"."file:crates/jstream-effects/tests/fixtures/host-prelude.wgsl"]
+stamp = { hash = "b3:08d1db37fb68e030" }
+
 ["CRATE-jstream-encode#design"."body"]
 stamp = { hash = "b3:469ca075b74bfbaf", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Performance bullet matches benches/session.rs" }
 
@@ -1644,7 +1686,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:5359a037fc331799" }
+stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge cascade from ARCH#crate-map: re-read; the crate-map body is unchanged apart from the stamp move, nothing in it bears on GPU frames; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
