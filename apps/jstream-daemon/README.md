@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:9fb3137def312b27", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (e1e2a94) into pairing: main took protocol 0.18 for virtual_cam, so pairing ships as 0.19; re-read main's text beside this PR's pairing text and checked every pairing version mention says 0.19 and virtual_cam's stays 0.18; holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -79,7 +78,6 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:446e95ad0e568f7e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Paired devices bullet (token.devices beside the token file, digests only, refusal at startup), audit log names device:<name>, exit 1 row adds the device file; checked against token.rs, main.rs, devices.rs load" }
 -->
 
 ```sh
@@ -201,7 +199,6 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:f6f298fdb91903b0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from jstream-server Design (pairing off refuses known devices); this section says nothing about the pairing switch, and its pairing text is unchanged; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -234,7 +231,8 @@ verified = { hash = "b3:f6f298fdb91903b0", by = "agent:claude@session_01WbL3WRbc
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
-  `build.rs` links the binary (not its test binaries) with `/DELAYLOAD` for each DLL
+  `build.rs` links the binary (and its unit-test harness, which `link-arg-bins` also
+  reaches, but not the integration tests) with `/DELAYLOAD` for each DLL
   the daemon's backends import from (`mfplat.dll` for `MfCodecs` and
   `MfVideoDevices`, `mf.dll` and `mfreadwrite.dll` for `MfVideoDevices`,
   `mfsensorgroup.dll` for `WindowsVcam`) and
@@ -244,14 +242,20 @@ verified = { hash = "b3:f6f298fdb91903b0", by = "agent:claude@session_01WbL3WRbc
   then lists `MfCodecs`' codecs and requires an AAC encoder (`components.rs`, plain
   data in and out, tested everywhere), since every stream's audio needs one. Either
   failure is a `MissingComponent`, mapped to exit code 3 with its advice.
-  Only DLLs the binary imports from are listed: delay-loading one it doesn't is linker
-  warning LNK4199, which CI's `-D warnings` turns into an error. The startup check
+  Only DLLs the binary imports from are listed. The linker ignores one it doesn't with
+  warning LNK4199, which doesn't fail CI: rustc reports it through the `linker_messages`
+  lint, which ignores `-D warnings`. `tests/delay_load.rs` is what catches a stale entry
+  (below). The startup check
   doesn't cover `mfsensorgroup.dll`, since the daemon serves without a camera:
   `WindowsVcam::start` checks that it exports `MFCreateVirtualCamera` before calling
   it, so a Windows 10 gets an `output.start` error, not a delay-load
   exception.
-  `tests/delay_load.rs` checks the built binary's import tables, so CI's Windows job
-  proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib imports.
+  `tests/delay_load.rs` checks the built binary's import tables: each DLL in its own
+  copy of the list must be in the delay-import table and none in the import table. So
+  CI's Windows job proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib
+  imports, and fails when a listed DLL is no longer imported. It checks only the DLLs
+  it lists, so a DLL added to `build.rs` alone, or a new Media Foundation import listed
+  nowhere, gets past it.
 - **Virtual camera registration** (`register.rs`). `--register-vcam` is a separate mode
   that exits without serving, so it creates no logs or token. The registry and ACL work
   is `jstream-platform-windows`'s (`register_vcam`), because the daemon has no `unsafe`.

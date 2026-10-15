@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:3b7f05d14e4c6ed7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "config.rs pairing doc and gate.rs device check changed; the contents list (config, the pairing switch, devices, gate) still describes them; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -71,7 +70,6 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f9dfbddb4cb2ae7a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "B1 (#288 round 2): Pairing off bullet now says the gate accepts no device token or cookie, even one already in the device file; matches gate.rs (devices_allowed needs config.pairing, checked on the bearer/subprotocol and cookie paths) and the new test; rest unchanged; holds" }
 -->
 
 ### Listening and admission

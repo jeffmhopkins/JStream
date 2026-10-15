@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:534db9b6f7b6c5cc", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +45,6 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:85ff14a5b21d6c43", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main 94fb25d, pairing now protocol 0.20) into the ADR-0047 build: stamp-only conflicts; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention in this PR's text; holds" }
 -->
 
 ### The trait

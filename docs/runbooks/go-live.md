@@ -17,7 +17,6 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:18cd4472efb91ec3", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: daemon usage gained the device file bullet; prerequisites unaffected; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +35,6 @@ verified = { hash = "b3:18cd4472efb91ec3", by = "agent:claude@session_01WbL3WRbc
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:5a47d5a42791858c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from jstream-server Design (pairing off refuses known devices); this section says nothing about the pairing switch, and its pairing text is unchanged; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -100,7 +98,6 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:2363e773d506d1ce", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:6aa0f9e06d1d5b20", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "host.rs gains config.pairing = false; purpose (Tauri window, in-process engine over the loopback WebSocket API) unchanged; holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -51,7 +50,6 @@ folder.
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:1806a584c2b4f0f0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
 -->
 
 On Windows, with the UI built first:
@@ -92,7 +90,6 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:7d3e024cb3b64f37", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of the updated pairing branch (main e1e2a94, pairing now protocol 0.19) into the ADR-0047 build: stamp conflicts only plus gate.rs/lib.rs using jstream_control's WS_PROTOCOL/WS_TOKEN_PROTOCOL_PREFIX; re-read this PR's pairing-page, cookie, pairing-switch and panel text beside the merged text; no version mention here; holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS

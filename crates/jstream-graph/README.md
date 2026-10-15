@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:cc68edd008abc19a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
