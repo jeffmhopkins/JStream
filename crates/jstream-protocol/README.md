@@ -346,8 +346,14 @@ never a type per kind.
   a UNC share or a device, and opening one on Windows hands the engine's credentials to
   that host), no `:` but the drive letter's, and no `?` or `*` (Win32 never allows
   them in a file name, and `\??\UNC\…` or `\??\GLOBALROOT\Device\…` is an NT object
-  path that reaches the same hosts and devices). An asset that doesn't exist yet is
-  accepted.
+  path that reaches the same hosts and devices). Its last component must not name a
+  DOS device, which Win32 opens in place of a file in any folder: a stem (the name
+  before the first `.`, without trailing spaces, in any case) of `CON`, `PRN`, `AUX`,
+  `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or
+  `CONOUT$`, so `C:\x\nul`, `\CON .png` and `/x/aux.txt` are refused and
+  `CONSOLE.png` or `COM10.png` is not. Earlier components may use these names: Win32
+  fails to open such a path, and elsewhere they are ordinary folders. An asset that
+  doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
