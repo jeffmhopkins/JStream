@@ -3,8 +3,9 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Edit, KindCategory, KindDescriptor, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId,
-    SceneRole, SourceId, SourceKind, parity,
+    Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId,
+    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId, SourceKind,
+    parity,
 };
 use serde_json::{Value, json};
 
@@ -125,6 +126,69 @@ fn an_empty_collection_round_trips() {
         }))
     );
     assert_eq!(load(&json), Ok(graph));
+}
+
+#[test]
+fn encoder_profiles_and_an_outputs_profile_round_trip() {
+    let mut graph = fixture_graph();
+    let mut profile = EncoderProfile::DEFAULT;
+    profile.video.keyframe_interval_s = 4;
+    let applied = graph.apply(
+        &[
+            Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new("mid"),
+                name: "Middle".into(),
+                profile,
+            },
+            Edit::OutputSetEncoder {
+                output_id: OutputId::new("tw"),
+                profile_id: Some(EncoderProfileId::new("mid")),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let value: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        // Ordered by ID, after the fixture's `hq` and `low`.
+        value["encoders"][2],
+        json!({"id": "mid", "name": "Middle", "profile": serde_json::to_value(profile).ok()})
+    );
+    assert_eq!(value["outputs"][1]["encoder_profile"], json!("mid"));
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// A file saved before encoder profiles existed has neither `encoders` nor any
+/// output's `encoder_profile`. It loads with no profiles, every output on the default.
+#[test]
+fn a_file_without_encoder_profiles_loads() {
+    let file = edit_file(|v| {
+        v.as_object_mut().map(|o| o.remove("encoders"));
+        for output in v["outputs"].as_array_mut().into_iter().flatten() {
+            output.as_object_mut().map(|o| o.remove("encoder_profile"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    assert_eq!(graph.state().encoders().len(), 0);
+    assert!(
+        graph
+            .state()
+            .outputs()
+            .all(|o| o.encoder_profile().is_none())
+    );
+}
+
+#[test]
+fn an_output_naming_a_missing_profile_is_refused() {
+    let file = edit_file(|v| v["outputs"][0]["encoder_profile"] = json!("gone"));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "output `rec`"),
+        "{:?}",
+        load(&file)
+    );
 }
 
 #[test]

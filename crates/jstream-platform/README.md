@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:89d3b616a97df7e9", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (H1 MissingComponent) into C4b: main added the MissingComponent error line; C4b's Not yet (MfVideoDevices/MfMjpegDecoder exist, not in Backends; CaptureStats decode count; MJPEG Codec variant) re-read against src and lib.rs and holds" }
+verified = { hash = "b3:87b40743d1095a32", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b, #148 MF N editions): stamp-only conflict, main's text taken; F3 wrote nothing here that C1b or #148 changes; holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

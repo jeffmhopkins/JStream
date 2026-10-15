@@ -147,6 +147,8 @@ pub enum EntityKind {
     Source,
     /// An output.
     Output,
+    /// An encoder profile.
+    Encoder,
 }
 
 impl fmt::Display for EntityKind {
@@ -156,6 +158,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Item => "item",
             EntityKind::Source => "source",
             EntityKind::Output => "output",
+            EntityKind::Encoder => "encoder",
         })
     }
 }
