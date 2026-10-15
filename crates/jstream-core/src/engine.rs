@@ -215,7 +215,7 @@ impl Engine {
                 .live
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
-            state.audio.sync(state.graph.state());
+            state.audio.sync(state.graph.state(), state.live.audio());
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             *file = Some(opened);
@@ -278,6 +278,20 @@ impl Engine {
             .set_clock(Arc::clone(&backends.clock));
         let host = self.host();
         *lock(&host.backends) = Some(backends);
+        self
+    }
+
+    /// Gives `browser` sources the browser engine they open their pages in (ADR-0021).
+    /// Without one, a `browser` source shows nothing and logs that no backend is set.
+    /// The engine's own GPU device is handed to the backend by the host.
+    #[must_use]
+    pub fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
+        {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            state.live.set_browser(browser);
+            state.live.sync(state.graph.state());
+        }
         self
     }
 
@@ -1659,7 +1673,7 @@ impl State {
     ) {
         self.outputs.sync(self.graph.state());
         self.live.sync(self.graph.state());
-        self.audio.sync(self.graph.state());
+        self.audio.sync(self.graph.state(), self.live.audio());
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -1793,7 +1807,10 @@ impl State {
 impl LiveHost for Shared {
     fn install(&self, built: Built) {
         let mut state = lock(&self.state);
+        let state = &mut *state;
         if state.live.install(built) {
+            // A source built with audio of its own is recorded from now on.
+            state.audio.sync(state.graph.state(), state.live.audio());
             state.publish_render();
         }
     }

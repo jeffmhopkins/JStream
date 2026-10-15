@@ -13,6 +13,9 @@
 //! its frame at the current time on the media clock, and when that frame next changes.
 //! The thread re-plans at the earliest such time, so an animated image advances on the
 //! clock; a still frame is planned once.
+//!
+//! A source with audio of its own (`browser`) hands it to the program stage's audio
+//! inputs once it is built ([`LiveSources::audio`], `crate::audio_sources`).
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -23,7 +26,7 @@ use std::time::{Duration, Instant};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::MediaClock;
 use jstream_protocol::{Settings, SourceId, SourceKind};
-use jstream_sources::{Context, Registry, Source, SourceError};
+use jstream_sources::{BrowserBackend, Context, Registry, Source, SourceAudio, SourceError};
 
 use crate::lock;
 use crate::snapshot::Frame;
@@ -124,6 +127,23 @@ impl LiveSources {
         for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
             running.start = now;
         }
+    }
+
+    /// The browser engine `browser` sources open their pages in. Sources of that kind
+    /// built before have none, so they are built again.
+    pub(crate) fn set_browser(&mut self, browser: Arc<dyn BrowserBackend>) {
+        self.ctx.browser = Some(browser);
+        for entry in self.entries.values_mut().filter(|e| e.kind == "browser") {
+            entry.settings = Settings::new();
+        }
+    }
+
+    /// The audio of every running source that has its own, by source.
+    pub(crate) fn audio(&self) -> BTreeMap<SourceId, Arc<dyn SourceAudio>> {
+        self.entries
+            .iter()
+            .filter_map(|(id, entry)| Some((id.clone(), entry.running.as_ref()?.source.audio()?)))
+            .collect()
     }
 
     /// The folder behind `collection` asset references: the collection file's.

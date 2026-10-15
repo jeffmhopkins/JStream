@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:50bc892eab491877", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (B6-f CLI groups): args.rs keeps B6-f's scene.set_role/item.move/set_geometry and adds scene.create's optional trailing role:; purpose holds" }
+verified = { hash = "b3:5e104d55dfa93792", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via ARCH crate-map apps row, which only adds jstream-browser-helper; the CLI text is unaffected" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
