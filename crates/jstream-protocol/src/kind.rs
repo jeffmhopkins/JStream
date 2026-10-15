@@ -423,6 +423,28 @@ fn reference(value: &Value, want: &str) -> Result<Option<Reference>, String> {
         .ok_or_else(|| format!("must be a {want} reference or null"))
 }
 
+/// Whether Win32 opens the path component `name` as a DOS device rather than a file.
+///
+/// The stem (the name before its first `.`, without trailing spaces, compared without
+/// regard to ASCII case) is `CON`, `PRN`, `AUX`, `NUL`, `COM0`–`COM9`, `COM¹`–`COM³`,
+/// `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`. So `nul`, `NUL `, `nul.`,
+/// `Con.png` and `CON .png` are devices, and `CONSOLE.png`, `nul1.png` and `COM10.png`
+/// are not. Only the last component matters: Win32 opens a device named there in any
+/// folder (`C:\x\CON`), while a device name earlier in the path fails to open, and on
+/// other systems it is an ordinary folder name.
+fn is_dos_device_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or(name).trim_end_matches(' ');
+    let upper = stem.to_ascii_uppercase();
+    match upper.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" => true,
+        _ => ["COM", "LPT"].iter().any(|port| {
+            upper.strip_prefix(port).is_some_and(|n| {
+                matches!(n.as_bytes(), [b'0'..=b'9']) || matches!(n, "\u{b9}" | "\u{b2}" | "\u{b3}")
+            })
+        }),
+    }
+}
+
 /// The path rules of an asset reference under `root`.
 ///
 /// Under `collection` and `app` the path is relative: `/` separators, and no empty or
@@ -432,7 +454,10 @@ fn reference(value: &Value, want: &str) -> Result<Option<Reference>, String> {
 /// device (`\\.\…`, `\\?\…`): opening one would send the engine's credentials to that
 /// host. Nor may it contain `:` other than a drive letter's, or `?` or `*`, which
 /// Win32 never allows in a file name and which name an NT object path (`\??\UNC\…`,
-/// `\??\GLOBALROOT\Device\…`).
+/// `\??\GLOBALROOT\Device\…`). Nor may its last component name a DOS device, which
+/// Win32 opens in place of a file in any folder: a stem (the name before its first `.`,
+/// without trailing spaces, in any ASCII case) of `CON`, `PRN`, `AUX`, `NUL`,
+/// `COM0`–`COM9`, `COM¹`–`COM³`, `LPT0`–`LPT9`, `LPT¹`–`LPT³`, `CONIN$` or `CONOUT$`.
 pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
     if path.is_empty() {
         return Err("the asset path must not be empty".into());
@@ -458,6 +483,8 @@ pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
                 // Win32 never allows `?` or `*` in a file name; `\??\…` is an NT object
                 // path (`\??\UNC\host\…`, `\??\GLOBALROOT\Device\…`).
                 Err("an `absolute` asset path must not contain `?` or `*`".into())
+            } else if segments().next_back().is_some_and(is_dos_device_name) {
+                Err("an `absolute` asset path must not end in a DOS device name".into())
             } else {
                 Ok(())
             }
@@ -636,7 +663,8 @@ mod tests {
         assert!(super::check_asset_path(AssetRoot::App, "x/y.png").is_ok());
     }
 
-    /// Issue #345: UNC, device and stream paths are refused under `absolute`.
+    /// Issues #345 and #384: UNC, device, stream and DOS device paths are refused under
+    /// `absolute`.
     #[test]
     fn absolute_asset_paths_refuse_unc_device_and_stream_forms() {
         let check = |path: &str| super::check_asset_path(AssetRoot::Absolute, path);
@@ -646,6 +674,16 @@ mod tests {
             "C:\\a.png",
             "C:/a.png",
             "c:\\img/a.png",
+            // Near misses of a DOS device name, and device names before the last component.
+            "C:\\x\\CONSOLE.png",
+            "C:\\x\\nul1.png",
+            "C:\\x\\COM10.png",
+            "C:\\x\\LPT.png",
+            "C:\\x\\COM\u{b9}0.png",
+            "C:\\x\\icon.png",
+            "C:\\x\\a.con",
+            "C:\\CON\\a.png",
+            "/mnt/aux/a.png",
         ] {
             assert!(check(good).is_ok(), "{good}");
         }
@@ -668,6 +706,24 @@ mod tests {
             "\\??\\GLOBALROOT\\Device\\NamedPipe\\x",
             "/img/a?.png",
             "/img/*.png",
+            // Issue #384: a DOS device name as the last component.
+            "C:\\x\\CON",
+            "\\NUL",
+            "/x/nul",
+            "C:\\x\\Con.png",
+            "C:\\x\\aux.tar.gz",
+            "C:\\x\\prn.",
+            "C:\\x\\NUL ",
+            "C:\\x\\CON .png",
+            "C:\\x\\com1.png",
+            "C:\\x\\COM9",
+            "C:\\x\\com0.png",
+            "C:\\x\\LPT1.png",
+            "C:\\x\\lpt9",
+            "C:\\x\\COM\u{b9}.png",
+            "C:\\x\\LPT\u{b3}",
+            "C:\\x\\CONIN$",
+            "C:\\x\\conout$.png",
         ] {
             assert!(check(bad).is_err(), "{bad}");
         }

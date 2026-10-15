@@ -23,6 +23,12 @@ arc-swap = { version = "1.9", default-features = false }
 assert_no_alloc = { version = "1", default-features = false, features = ["warn_debug", "warn_release"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
+# CEF's C API for browser sources (ADR-0021, picked by spike S4; ADR-0046), pinned
+# exactly: the version carries the CEF build it was generated from (154.0.34), and its
+# sys crate's build script downloads that exact CEF distribution. No default features:
+# `sandbox` needs CEF's bootstrap layout, and `build-util`/`resources` are app-bundling
+# helpers. Only `jstream-browser`'s `cef` feature pulls it in.
+cef = { version = "=154.5.0", default-features = false }
 # Benchmarks (`benches/` in jstream-render, jstream-audio and jstream-encode), dev-only.
 # No default features: no `rayon` or `plotters`, so no HTML plots; the JSON estimates under
 # `target/criterion` are what the `bench` workflow records. `cargo_bench_support` keeps
@@ -50,6 +56,7 @@ insta = { version = "1", default-features = false }
 # JavaScript built-ins (`Array`) for the browser WebSocket client. Part of wasm-bindgen.
 js-sys = { version = "0.3", default-features = false, features = ["std"] }
 jstream-audio = { path = "crates/jstream-audio" }
+jstream-browser = { path = "crates/jstream-browser" }
 jstream-control = { path = "crates/jstream-control" }
 jstream-core = { path = "crates/jstream-core" }
 jstream-effects = { path = "crates/jstream-effects" }
