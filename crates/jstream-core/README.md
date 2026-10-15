@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:7f298db656dba720", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; Engine bullet (#142 key store) and Kinds bullet (B4 kinds.rs stubs) both match engine.rs and kinds.rs" }
+verified = { hash = "b3:77ddb8e8f9eb794c", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Engine, Kinds, Runtime and Tests bullets; #133 only reorders Running's fields and launch's bindings so input rings drop off the real-time thread, which no bullet describes" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -97,7 +97,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:707208991ad6199d", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Queries bullet merged: Graph::query answers collection reads incl. output.list and the kind queries from kinds.rs; output.status key_set path from #142; Outputs, Stream keys and Dependencies (serde_json) checked" }
+verified = { hash = "b3:8e54430793e482ea", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Calls (kind queries), Outputs, Pipeline and Locking; #133's drop order changes no described state, error, lock or deadline" }
 -->
 
 ### Engine and sessions

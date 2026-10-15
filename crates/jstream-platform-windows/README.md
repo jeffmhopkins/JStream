@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:be8227866ebde360", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: WindowsCredentials implements StreamKeyStore via CredentialTarget::stream_key; get returns jstream-platform's Secret, non-UTF-8 refused; Tests bullet drops the removed redaction test and adds the non-UTF-8 read and the StreamKeyStore Windows test" }
+verified = { hash = "b3:e7521abb9d8188bb", by = "agent:claude@session_017dgMHhk9KuuwXxpbutfCzi", note = "Merge of main (#142 WindowsCredentials as StreamKeyStore, kept as main wrote it) into C4a: stale also through jstream-platform#purpose, which adds the VideoDevices trait; this section claims no VideoDevices backend (C4b adds it), so it holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
