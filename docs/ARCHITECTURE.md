@@ -386,7 +386,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:5062054110900026", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b (#228 N5): re-read; Collector row now says the mixer's own collector also frees removed buses' state, filter chains and filters (retire.rs Retired::Bus/Chain/Kernel); mixer row (filters with keys, latency compensation) still the model; rest unchanged" }
+verified = { hash = "b3:4fed165b737c2267", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (#231 D7b): kept #231's mixer-collector wording (removed buses' state, filter chains, filters); only diff from main is the render-snapshot paragraph, still matching Engine::video_snapshot and RenderReader::adopt" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
