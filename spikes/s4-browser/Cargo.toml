@@ -1,4 +1,4 @@
-# Spike S4 (ROADMAP M0, Track B; ADR-0021). Throwaway; not a member of the root workspace.
+# Spike S4 (ROADMAP M1b, ADR-0021). Throwaway; not a member of the root workspace.
 [package]
 name = "s4-browser"
 version = "0.0.0"

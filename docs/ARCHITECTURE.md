@@ -722,6 +722,70 @@ node per output with a video chain, and a privacy node per output. The privacy s
 comes last, so no output chain can undo it, and it fails closed: if its pass can't run,
 the output gets a black frame. None of this is built yet.
 
+<a id="browser-source"></a>
+## Browser source
+<!-- @section
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native-interop.md"]
+verified = { hash = "b3:df9dc95bad832d19", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "New section: S4 result from the maintainer's Windows run (zip s4-results-20261014-222955), each figure checked against same/separate/4k JSON; bindings and helper choice match spike README; sandbox left open per ADR-0021" }
+-->
+
+A browser source is a CEF off-screen browser
+([ADR-0021](adr/0021-browser-source.md)), not built yet. Each `OnAcceleratedPaint`
+hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
+and no fence. CEF takes the texture back into its pool when the callback returns. So the
+callback opens the handle on the wgpu D3D12 device, imports it through hal as in the GPU
+pipeline's step 2, copies it into a texture the source owns, and waits for that copy
+before it returns. The source's audio comes from CEF's audio handler as planar float PCM.
+
+**Choices made by spike S4:**
+- **Bindings:** the `cef` crate (tauri-apps/cef-rs), pinned exactly, with default
+  features off. It is generated from CEF's C API and released for each CEF version. Its
+  sys crate downloads the CEF binary distribution and builds CEF's C++ wrapper with CMake
+  and Ninja, so it needs the lint-deps allowlist entry and governance change that
+  ADR-0021 names.
+- **Helper processes:** a separate small `jstream-browser-helper.exe`, set as CEF's
+  `browser_subprocess_path`, so the engine exe never runs as a Chromium subprocess. Both
+  layouts that ADR-0021 allows measured the same.
+- **Not yet decided:** the sandbox. On Windows, CEF sandboxes subprocesses only in its
+  bootstrap layout, where CEF's `bootstrap.exe` is the exe and loads the application as a
+  DLL. S4 ran unsandboxed and didn't test that layout, so the browser source has to pick
+  it or run unsandboxed before it ships.
+
+**S4 result**, on the S1 machine with CEF 154.0.34 (Chromium 154.0.8037.98). Each run
+measured 30 s of the built-in test page, which has a frame counter, alpha probes and a
+440 Hz / 660 Hz stereo tone:
+
+| Run | Paint rate | Intervals over 1.5 frames | Callback p50 / p99 | CPU, all processes | Private memory |
+|---|---|---|---|---|---|
+| 1920x1080, helper is the engine exe | 60.03 fps | 3 of 1799 | 2.6 / 3.9 ms | 22% of one core | 587 MB |
+| 1920x1080, separate helper exe | 60.02 fps | 0 of 1799 | 2.2 / 3.7 ms | 21% of one core | 569 MB |
+| 3840x2160, helper is the engine exe | 60.01 fps | 1 of 1799 | 4.1 / 6.6 ms | 22% of one core | 700 MB |
+
+- **Video:** all 1800 paints per run were accelerated, with no failures. The page's frame
+  counter showed every page frame once, none skipped, repeated or out of order. The
+  alpha probes held on every frame: the page texture is transparent and premultiplied,
+  and blending it over an opaque background gave the expected colours. CEF reused about
+  250 distinct texture handles at 1080p and 430 at 4K.
+- **Audio:** CEF honoured the requested 48 kHz stereo in 480-frame (10 ms) packets. Both
+  tones came through at the right pitch and level on the right channels. One run
+  received 2999 packets and another 3000, as expected for 30 s.
+- **Audio timestamps:** a packet's `pts` is not Unix-epoch milliseconds, as CEF's header
+  says. It differed from the wall clock by the same offset to the millisecond in all
+  three runs, which fits milliseconds since boot (Chromium's QPC-based `TimeTicks`).
+  That is inferred, not checked against QPC. If it holds, packets map onto the media
+  clock directly.
+- **Shutdown:** every run reported one audio error, "Socket closed unexpectedly", while
+  the browser closed. The source must treat it as the end of the stream, not a fault.
+- **Codecs:** the page reports no H.264 or AAC support, and VP8, VP9, AV1, Opus, Vorbis,
+  FLAC, MP3 and WAV playable. That is the royalty-free set ADR-0021 expects.
+- **Runtime size:** the CEF runtime is about 400 MB uncompressed, 290 MB of it
+  `libcef.dll`. Its compressed size in the zip wasn't measured. The runtime includes
+  CEF's `CREDITS.html`.
+
+Still open: other GPU vendors and multi-GPU machines (Chromium must render on the
+adapter the engine imports on), several browsers at once, pages with video, input
+events, and the sandboxed layout.
+
 <a id="persistence"></a>
 ## Persistence, config and secrets
 <!-- @section
