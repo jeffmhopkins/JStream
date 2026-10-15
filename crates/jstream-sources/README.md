@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:018baf5cda58feac", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "#217 N1: only the unit test's temp-folder cleanup changed (drop guard); the Assets paragraph on open_inside/check_opened still holds" }
+verified = { hash = "b3:ac15a26828d08135", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Assets paragraph now states hard links inside the root are part of the trusted-root assumption (issue 220); checked against AssetRoots::read's dev/ino check in source.rs, which can't distinguish a hard link from its target" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -36,9 +36,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
   needs a new source instead.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
-  `create(id, settings, ctx)`. Rendering sources from the registry on the engine's
-  render thread comes later; that work calls `create` off the render thread and hands
-  the frames over.
+  `create(id, settings, ctx)`. The engine creates its sources through it on its own
+  `jstream-sources` thread, never under its collection lock or on the render thread,
+  and its program mix asks each source for `frame` and `next_change` (see
+  `jstream-core`'s *Live sources*).
 - `Context`: the folders behind the `collection` and `app` asset roots
   (`AssetRoots`), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
   sides and 1 GiB of decoded memory by default. The image's size is checked before
@@ -71,11 +72,59 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
-- `display`, `media`, `text`, `webcam` and `window` are described only, with the
-  settings B4 gave them: sources of them can be created and configured, and `create`
-  fails with `SourceError::NotBuilt`.
+- `audio_input` (a `device` ID; empty follows the system's default input),
+  `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
+  found again when the application restarts) are audio-only: their descriptors have
+  audio and no video, `create` fails with `SourceError::AudioOnly`, and the engine
+  records them through the platform's audio I/O from the `AudioTarget` that
+  `AudioTarget::of(kind, settings)` reads from their settings (see `jstream-core`'s
+  *Audio sources*). Both settings are free text rather than a list of what is present,
+  so a collection naming an unplugged device still loads.
+- `text`: the `text` string drawn with the `font` asset (TrueType or OpenType, or the
+  first font of a collection), or with the bundled font when it is `null`. Fonts are
+  read with `skrifa` and glyph outlines rasterised with `ab_glyph_rasterizer`, unhinted.
+  `size` is the em size in pixels, as CSS's `font-size`. Lines break at `\n`; with a
+  `wrap_width` above 0 they also wrap at spaces, and a word wider than the wrap breaks
+  inside the word. The line box is as wide as the widest line, or `wrap_width` when it
+  wraps, and `align` places each line within it. `outline_width` grows the glyphs by
+  that many pixels in `outline_color`, drawn under the fill; `background` fills the
+  whole frame, which is the line box plus `padding` on every side, grown to fit any
+  glyph ink or outline that reaches past it. Every setting but `font` is live: an update
+  redraws the frame, and a new font needs a new source. There is no shaping and no
+  kerning: each character is its font's glyph for that code point, placed by its
+  advance, so kerning, ligatures, complex scripts and right-to-left text need a shaper
+  later. A character the font lacks draws its `.notdef` box; tabs draw as one space and
+  other control characters are dropped. The outline comes from an exact Euclidean
+  distance transform of the fill, so its cost doesn't grow with its width. Fill, outline
+  and background are blended on sRGB values, not in linear light. The frame must fit
+  `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
+  with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
+  naming `text`.
+- `display`, `media`, `webcam` and `window` are described only, with the settings B4
+  gave them: sources of them can be created and configured, and `create` fails with
+  `SourceError::NotBuilt`.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
+
+**Bundled font.** `assets/fonts/Roboto-Regular-subset.ttf` is the text source's
+default font and the one its tests draw with: Roboto Regular by Google, under the
+Apache License 2.0 (`assets/fonts/LICENSE-Roboto.txt`). It was cut from
+`src/hinted/Roboto-Regular.ttf` in [googlefonts/roboto](https://github.com/googlefonts/roboto)
+(Roboto 2.001047, SHA-256
+`56a45233d29f11b4dfb86d248e921939d115778f87325e7ae8cc108383d6664d`) with fontTools 4.67:
+
+```sh
+fonttools subset Roboto-Regular.ttf \
+  --unicodes="U+0020-007E,U+00A0-017F,U+2010-2027,U+2030-203A,U+20AC,U+2122,U+FFFD" \
+  --no-hinting --layout-features='' --drop-tables+=GPOS,GSUB,GDEF,gasp \
+  --name-IDs='*' --notdef-outline --output-file=Roboto-Regular-subset.ttf
+```
+
+The subset keeps Basic Latin, Latin-1, Latin Extended-A, common punctuation, the euro
+and trademark signs and the replacement character, about 22 KB. Hinting and the
+OpenType layout tables are dropped, because the text source neither hints nor shapes.
+The name table, which carries the copyright and licence notice, is kept whole. Text in
+other scripts needs a `font` asset that covers it.
 
 **Assets.** `AssetRoots::resolve` resolves a `collection` or `app` path through
 symlinks and rejects one that leaves its root; an `absolute` path is used as it is.
@@ -85,8 +134,13 @@ Unix the opened file must be, by device and inode, the file its path resolves to
 the root afterwards. Stable Rust has no file IDs on Windows, so there the resolved path
 is walked from the root and each folder on it is held open without delete sharing,
 which stops it being renamed or replaced until the file is open; one that has become a
-reparse point is refused. The root folder itself is the host's configuration and is
-trusted.
+link (a symlink, junction or other name-surrogate reparse point) is refused, while a
+OneDrive placeholder or dedup file, also a reparse point, is read. The root folder
+itself is the host's configuration and is trusted, and so is what is in it: a hard link
+inside the root to a file outside is read, because the link and its target are the same
+file and neither check can tell them apart. Making one needs write access inside the
+root, and refusing every file with more than one link would also refuse deduplicated
+files.
 Errors name an asset by the root and path its setting holds, never by the host path
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). A missing or
 undecodable file is an error from `create`, never from the edit that set it.
@@ -94,10 +148,17 @@ undecodable file is an error from `create`, never from the edit that set it.
 **Dependencies.** `jstream-media` (frames and the media clock), `jstream-protocol`
 (descriptors, settings and references), `serde_json` (setting values), `thiserror`
 (`SourceError`), and the pure-Rust decoders `png`, `zune-jpeg` with `zune-core`,
-`image-webp` and `gif`, each with default features off
+`image-webp` and `gif`, and for fonts `skrifa` (with `read-fonts`, `font-types`,
+`bytemuck`, `yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with default
+features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
+(RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
-**Tests.** Unit tests cover colour parsing and animation timing. `tests/sources.rs`
-runs every kind through the public API on files in a temporary folder: PNG, GIF and
-lossless WebP files are encoded by the test, and `tests/data` holds a JPEG, a lossy
-WebP and an animated WebP made once with Pillow, as the test's header describes.
+**Tests.** Unit tests cover colour parsing, animation timing, the text outline's
+distance transform and reading an audio target from settings. `tests/sources.rs` checks
+the registry and runs the colour and image kinds through the public API on files in a
+temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
+`tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
+the test's header describes. `tests/text.rs` draws with the bundled font: wrapping,
+alignment, padding, outline, live updates, font assets and limits, plus golden PNGs in
+`tests/data/text` (`JSTREAM_BLESS=1` rewrites them).

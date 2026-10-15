@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:d439e909a8893434", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (C1a, ADR-0041 depends_on) into E3b: took main's section; stale via platform Purpose (Capture::on_context); OAuthTokenStore/Secret text unchanged; holds" }
+verified = { hash = "b3:e9853d1a30dc8449", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: stale via platform#purpose only (Capture bullet, Not yet); Secret and OAuth token store text unchanged; holds" }
 -->
 
 Layer-2 client for Google sign-in and the

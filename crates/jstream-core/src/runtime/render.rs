@@ -5,7 +5,8 @@
 //!
 //! The control side publishes an immutable [`RenderSnapshot`] through `arc-swap`, under
 //! the collection lock, and only when what the program mix draws changed. The render
-//! thread and the snapshot thread load it without taking that lock. The render thread
+//! thread loads it without taking that lock. `video.snapshot` reads it with `rev` under
+//! the lock and hands it to the snapshot thread, which never loads it. The render thread
 //! stamps the generation it adopted in [`RenderHub`]'s reader slot, so the control side
 //! can tell when a committed change is on screen; a snapshot it lets go of goes to the
 //! pipeline's collector thread to be freed (R-RT-003).
@@ -16,8 +17,10 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 
 use arc_swap::ArcSwap;
+use jstream_encode::{AudioInput, VideoInput};
 use jstream_render::Reclaimed;
 
+use crate::runtime::vcam::VcamTap;
 use crate::snapshot::Shot;
 
 /// The reader slot's value while no render thread is adopting snapshots: the thread is
@@ -49,7 +52,7 @@ impl RenderSnapshot {
 }
 
 /// The render subsystem's snapshot and its one reader slot. The engine keeps one, shared
-/// with the render thread of whichever output is running.
+/// with the program stage's render thread while any output runs.
 pub(crate) struct RenderHub {
     current: ArcSwap<RenderSnapshot>,
     /// The generation the render thread adopted last, or [`STOPPED`] / [`STARTING`].
@@ -182,18 +185,27 @@ impl Drop for RenderReader {
 }
 
 /// What a real-time thread hands the collector instead of dropping it.
-#[derive(Debug)]
 pub(crate) enum Garbage {
     /// A render snapshot the render thread replaced; it may hold the last reference.
     Snapshot(Arc<RenderSnapshot>),
     /// GPU images whose last frame the GPU has finished.
     Images(Reclaimed),
+    /// A finished encoder session's video input, let go of by the render thread. Once
+    /// the session itself has dropped, it holds the last reference to the session's
+    /// shared state and input channel.
+    Video(VideoInput),
+    /// The same for the audio input the mixer thread let go of.
+    Audio(AudioInput),
+    /// A virtual camera's tap the render thread let go of. Once its camera thread has
+    /// ended, it holds the last reference to its channels and the output's stop flag.
+    Vcam(VcamTap),
 }
 
-/// The sending side of a pipeline's collector thread (R-RT-003). Sending moves the
+/// The sending side of a program stage's collector thread (R-RT-003): the render
+/// thread's reader and the render and mixer threads each hold one. Sending moves the
 /// object; the thread drops it. A send after the thread is gone drops it here, which
 /// only happens during teardown.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct Collector {
     tx: Sender<Garbage>,
 }
@@ -230,6 +242,9 @@ fn collect(rx: Receiver<Garbage>) {
         match garbage {
             Garbage::Snapshot(snapshot) => drop(snapshot),
             Garbage::Images(images) => drop(images),
+            Garbage::Video(input) => drop(input),
+            Garbage::Audio(input) => drop(input),
+            Garbage::Vcam(tap) => drop(tap),
         }
     }
 }

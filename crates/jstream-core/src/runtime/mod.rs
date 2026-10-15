@@ -11,17 +11,20 @@ mod pipeline;
 mod publish;
 mod render;
 mod sink;
+mod vcam;
 
 pub use pipeline::OutputStats;
 #[cfg(test)]
 pub(crate) use pipeline::{DrawFn, STOP_DRAIN, gpu_draw, open_capture};
 pub(crate) use pipeline::{
-    Gate, MediaHost, OpenDraw, Pending, PipelineEvent, Running, cpu_draw, launch, parts_from,
+    EncodeKey, Encoders, Gate, MediaHost, OpenDraw, Pending, PipelineEvent, Running, cpu_draw,
+    launch, launch_program, launch_vcam, parts_from,
 };
 #[cfg(test)]
 pub(crate) use publish::tests::serve as serve_rtmp;
 pub use publish::{
     LinkState, LivePublish, OpenPublish, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
 };
-pub(crate) use render::{Collector, RenderHub, RenderReader, RenderSnapshot};
+pub(crate) use render::{Collector, Garbage, RenderHub, RenderReader, RenderSnapshot};
 pub(crate) use sink::Destination;
+pub(crate) use vcam::VcamOut;

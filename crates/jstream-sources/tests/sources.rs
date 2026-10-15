@@ -8,7 +8,9 @@
 
 use jstream_media::{MediaTime, PixelFormat, Timebase, VideoFrame};
 use jstream_protocol::{AssetRoot, Reference, Settings};
-use jstream_sources::{AssetRoots, Context, Limits, Registry, SourceError, needs_restart};
+use jstream_sources::{
+    AssetRoots, AudioTarget, Context, Limits, Registry, SourceError, needs_restart,
+};
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -80,7 +82,16 @@ fn the_registry_describes_every_builtin_kind_in_order() {
     assert_eq!(
         ids,
         [
-            "color", "display", "image", "media", "text", "webcam", "window"
+            "app_audio",
+            "audio_input",
+            "color",
+            "desktop_audio",
+            "display",
+            "image",
+            "media",
+            "text",
+            "webcam",
+            "window"
         ]
     );
     for kind in registry.descriptors() {
@@ -93,6 +104,18 @@ fn the_registry_describes_every_builtin_kind_in_order() {
         registry.create("webcam", &Settings::new(), &ctx),
         Err(SourceError::NotBuilt { kind_id }) if kind_id == "webcam"
     ));
+    for kind_id in ["app_audio", "audio_input", "desktop_audio"] {
+        let kind = registry.descriptor(kind_id).expect("an audio kind");
+        assert!(kind.audio && !kind.video, "{kind_id}");
+        assert!(
+            AudioTarget::of(kind_id, &complete(kind_id, &[])).is_some(),
+            "{kind_id}"
+        );
+        assert!(matches!(
+            registry.create(kind_id, &complete(kind_id, &[]), &ctx),
+            Err(SourceError::AudioOnly { kind_id: k }) if k == kind_id
+        ));
+    }
     assert!(matches!(
         registry.create("teleport", &Settings::new(), &ctx),
         Err(SourceError::UnknownKind { .. })

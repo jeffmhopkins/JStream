@@ -3,8 +3,9 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Edit, KindCategory, KindDescriptor, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId,
-    SceneRole, SourceId, SourceKind, parity,
+    Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId, OutputKind,
+    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId, SourceKind,
+    parity,
 };
 use serde_json::{Value, json};
 
@@ -61,11 +62,14 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
             kind: "color".into(),
         },
         settings: [("follow", follow)].into_iter().collect(),
+        duplicated_from: None,
     }
 }
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
-/// after it, and scene `b` made a group, in one more batch: rev 2.
+/// after it, and scene `b` made a group, in one more batch: rev 2. That batch also
+/// deletes the virtual camera `vcam`, which the parity collection gained after the
+/// fixture was written; `a_virtual_camera_round_trips` covers it.
 fn fixture_graph() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds());
     let applied = graph.apply_batch(&parity::collection());
@@ -77,6 +81,9 @@ fn fixture_graph() -> Graph {
             Edit::SceneSetRole {
                 scene_id: SceneId::new("b"),
                 role: SceneRole::Group,
+            },
+            Edit::OutputDelete {
+                output_id: OutputId::new("vcam"),
             },
         ],
         None,
@@ -125,6 +132,125 @@ fn an_empty_collection_round_trips() {
         }))
     );
     assert_eq!(load(&json), Ok(graph));
+}
+
+/// A virtual camera output saves as its bare kind and loads back the same.
+#[test]
+fn a_virtual_camera_round_trips() {
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[Edit::OutputCreate {
+            output_id: OutputId::new("cam"),
+            kind: OutputKind::VirtualCam,
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert!(
+        saved["outputs"].as_array().is_some_and(
+            |outputs| outputs.contains(&json!({"id": "cam", "kind": {"type": "virtual_cam"}}))
+        ),
+        "{json}"
+    );
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// A copy's `duplicated_from` survives a save and load, also once its original is gone,
+/// and a source saved without one loads with none.
+#[test]
+fn clone_links_round_trip() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let duplicate = Edit::SourceDuplicate {
+        source_id: SourceId::new("orig"),
+        new_source_id: SourceId::new("copy"),
+        name: "copy".into(),
+    };
+    let delete = Edit::SourceDelete {
+        source_id: SourceId::new("orig"),
+    };
+    let applied = graph.apply(
+        &[color("orig", None), color("plain", None), duplicate],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let applied = graph.apply(&[delete], None);
+    assert!(applied.is_ok(), "{applied:?}");
+    let loaded = load(&graph.to_collection_json());
+    assert_eq!(loaded.as_ref(), Ok(&graph));
+    let link = |id: &str| {
+        loaded
+            .as_ref()
+            .ok()
+            .and_then(|g| g.state().source(&SourceId::new(id)))
+            .map(|s| s.duplicated_from().cloned())
+    };
+    assert_eq!(link("copy"), Some(Some(SourceId::new("orig"))));
+    assert_eq!(link("plain"), Some(None));
+}
+
+#[test]
+fn encoder_profiles_and_an_outputs_profile_round_trip() {
+    let mut graph = fixture_graph();
+    let mut profile = EncoderProfile::DEFAULT;
+    profile.video.keyframe_interval_s = 4;
+    let applied = graph.apply(
+        &[
+            Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new("mid"),
+                name: "Middle".into(),
+                profile,
+            },
+            Edit::OutputSetEncoder {
+                output_id: OutputId::new("tw"),
+                profile_id: Some(EncoderProfileId::new("mid")),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let value: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(
+        // Ordered by ID, after the fixture's `hq` and `low`.
+        value["encoders"][2],
+        json!({"id": "mid", "name": "Middle", "profile": serde_json::to_value(profile).ok()})
+    );
+    assert_eq!(value["outputs"][1]["encoder_profile"], json!("mid"));
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// A file saved before encoder profiles existed has neither `encoders` nor any
+/// output's `encoder_profile`. It loads with no profiles, every output on the default.
+#[test]
+fn a_file_without_encoder_profiles_loads() {
+    let file = edit_file(|v| {
+        v.as_object_mut().map(|o| o.remove("encoders"));
+        for output in v["outputs"].as_array_mut().into_iter().flatten() {
+            output.as_object_mut().map(|o| o.remove("encoder_profile"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    assert_eq!(graph.state().encoders().len(), 0);
+    assert!(
+        graph
+            .state()
+            .outputs()
+            .all(|o| o.encoder_profile().is_none())
+    );
+}
+
+#[test]
+fn an_output_naming_a_missing_profile_is_refused() {
+    let file = edit_file(|v| v["outputs"][0]["encoder_profile"] = json!("gone"));
+    assert!(
+        matches!(load(&file), Err(LoadError::Invalid { ref object, .. }) if object == "output `rec`"),
+        "{:?}",
+        load(&file)
+    );
 }
 
 #[test]
@@ -182,8 +308,9 @@ fn a_collection_an_edit_would_refuse_is_refused() {
     assert!(
         matches!(
             load(&dangling),
-            Err(LoadError::Invalid { ref object, error: ProtocolError::NotFound { .. } })
+            Err(LoadError::Invalid { ref object, ref error })
                 if object.starts_with("item `")
+                    && matches!(**error, ProtocolError::NotFound { .. })
         ),
         "{:?}",
         load(&dangling)

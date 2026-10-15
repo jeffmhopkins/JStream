@@ -852,6 +852,7 @@ impl CaptureStream for WgcStream {
         CaptureStats {
             frames_captured: self.shared.captured.load(Ordering::Relaxed),
             frames_skipped: self.shared.skipped.load(Ordering::Relaxed),
+            frames_undecodable: 0,
         }
     }
 }

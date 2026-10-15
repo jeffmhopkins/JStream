@@ -7,16 +7,20 @@
 //!
 //! Docs: docs/ARCHITECTURE.md#threading, crates/jstream-audio/README.md#realtime
 
+pub(crate) mod bus;
+pub(crate) mod chain;
 pub(crate) mod cmd;
 pub(crate) mod continuity;
 pub(crate) mod control;
 pub(crate) mod downmix;
 pub(crate) mod drift;
+pub(crate) mod host;
 pub(crate) mod input;
 pub(crate) mod mixer;
 pub(crate) mod retire;
 pub(crate) mod ring;
 pub(crate) mod shared;
 pub(crate) mod sinc;
+pub(crate) mod tap;
 #[cfg(test)]
 pub(crate) mod testutil;

@@ -10,10 +10,12 @@
 //! Docs: crates/jstream-protocol/README.md#purpose
 
 use crate::{
-    Batch, Canvas, Crop, Edit, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemInfo,
-    ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind, PlacementForm,
-    ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo,
-    SceneRole, SceneSummary, Size, SourceId, SourceInfo, SourceKind, Vec2,
+    AudioCodec, AudioEncoding, Batch, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId,
+    EncoderProfileInfo, EntityKind, Finite32, FitMode, HardwarePreference, ItemGeometry, ItemId,
+    ItemInfo, ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind,
+    PlacementForm, ProtocolError, Query, QueryResult, RateControl, RecordContainer, Rev,
+    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId, SourceInfo,
+    SourceKind, Vec2, VideoCodec, VideoEncoding,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -39,10 +41,15 @@ pub fn kinds() -> Vec<KindDescriptor> {
 /// scenes `b` then `a` (created `a` first, then reordered), source `cam` placed twice in
 /// `a` (the second placement moved, cropped, hidden and reordered to the bottom) and once
 /// in `b` with a geometry, scene `b` nested in `a` through the scene source `b_src`, the
-/// RTMP outputs `yt` and `tw` (`tw`'s target changed after it was created), and the
-/// recording output `rec`.
+/// RTMP outputs `yt` and `tw` (`tw`'s target changed after it was created), the
+/// virtual camera `vcam`, the
+/// recording output `rec`, and the encoder profiles `hq` (updated after it was created,
+/// used by `rec`) and `low` (used by `yt`, `tw` keeping the engine's default). Then the
+/// references and clones of ADR-0023: `cam` is duplicated as `cam_copy` and `i1` is
+/// switched to place the copy, keeping its ID and position; `aux` is created with a
+/// `duplicated_from` naming a source that doesn't exist, which reads as absent.
 ///
-/// Sources and outputs are created in the opposite order of their IDs, so reads that
+/// Sources, outputs and encoder profiles are created in the opposite order of their IDs, so reads that
 /// order them by ID can't pass by echoing creation order.
 pub fn collection() -> Batch {
     let source = |s: SourceInfo| Edit::SourceCreate {
@@ -50,6 +57,7 @@ pub fn collection() -> Batch {
         name: s.name,
         kind: s.kind,
         settings: s.settings,
+        duplicated_from: s.duplicated_from,
     };
     let add = |item: &str, source: &str| Edit::ItemAdd {
         scene_id: SceneId::new("a"),
@@ -67,10 +75,13 @@ pub fn collection() -> Batch {
             Edit::SceneCreate {
                 scene_id: SceneId::new("a"),
                 name: "A".into(),
+                role: None,
             },
+            // `b` is placed in `a` through `b_src`, so it is created as a group.
             Edit::SceneCreate {
                 scene_id: SceneId::new("b"),
                 name: "B".into(),
+                role: Some(SceneRole::Group),
             },
             source(nested_b()),
             source(cam()),
@@ -112,6 +123,10 @@ pub fn collection() -> Batch {
                 kind: youtube().kind,
             },
             Edit::OutputCreate {
+                output_id: OutputId::new("vcam"),
+                kind: OutputKind::VirtualCam,
+            },
+            Edit::OutputCreate {
                 output_id: OutputId::new("tw"),
                 kind: rtmp("rtmp://old.example.com/app"),
             },
@@ -125,6 +140,50 @@ pub fn collection() -> Batch {
                 output_id: OutputId::new("rec"),
                 kind: recording().kind,
             },
+            Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new("low"),
+                name: low().name,
+                profile: low().profile,
+            },
+            Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new("hq"),
+                name: "Draft".into(),
+                profile: EncoderProfile::DEFAULT,
+            },
+            Edit::EncoderUpdate {
+                profile_id: EncoderProfileId::new("hq"),
+                name: hq().name,
+                profile: hq().profile,
+            },
+            Edit::OutputSetEncoder {
+                output_id: OutputId::new("rec"),
+                profile_id: Some(EncoderProfileId::new("hq")),
+            },
+            Edit::OutputSetEncoder {
+                output_id: OutputId::new("yt"),
+                profile_id: Some(EncoderProfileId::new("low")),
+            },
+            Edit::OutputSetEncoder {
+                output_id: OutputId::new("tw"),
+                profile_id: Some(EncoderProfileId::new("low")),
+            },
+            Edit::OutputSetEncoder {
+                output_id: OutputId::new("tw"),
+                profile_id: None,
+            },
+            Edit::SourceDuplicate {
+                source_id: SourceId::new("cam"),
+                new_source_id: SourceId::new("cam_copy"),
+                name: "Camera copy".into(),
+            },
+            Edit::ItemSetSource {
+                item_id: ItemId::new("i1"),
+                source_id: SourceId::new("cam_copy"),
+            },
+            source(SourceInfo {
+                duplicated_from: Some(SourceId::new("gone")),
+                ..aux()
+            }),
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
@@ -145,7 +204,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     SceneSummary {
                         scene_id: scene("b"),
                         name: "B".into(),
-                        role: SceneRole::Scene,
+                        role: SceneRole::Group,
                         item_count: 1,
                     },
                     SceneSummary {
@@ -162,7 +221,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
             Query::SourceList,
             Ok(QueryResult::SourceList {
                 rev: COLLECTION_REV,
-                sources: vec![nested_b(), cam()],
+                sources: sources(),
             }),
         ),
         (
@@ -199,12 +258,12 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
             Ok(QueryResult::StateGet {
                 rev: COLLECTION_REV,
                 canvas: CANVAS,
-                sources: vec![nested_b(), cam()],
+                sources: sources(),
                 scenes: vec![
                     SceneInfo {
                         scene_id: scene("b"),
                         name: "B".into(),
-                        role: SceneRole::Scene,
+                        role: SceneRole::Group,
                         items: items_of_b(),
                     },
                     SceneInfo {
@@ -215,6 +274,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                     },
                 ],
                 outputs: outputs(),
+                encoders: encoders(),
             }),
         ),
         // Outputs by ID, whatever order they were created in.
@@ -225,6 +285,14 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 outputs: outputs(),
             }),
         ),
+        // Encoder profiles by ID, too.
+        (
+            Query::EncoderList,
+            Ok(QueryResult::EncoderList {
+                rev: COLLECTION_REV,
+                encoders: encoders(),
+            }),
+        ),
     ]
 }
 
@@ -233,10 +301,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
 /// nothing, so afterwards the collection is still at [`COLLECTION_REV`] and [`reads`]
 /// still holds.
 pub fn rejected() -> Vec<(Batch, ProtocolError)> {
-    let invalid = |field: &str, reason: &str| ProtocolError::InvalidArgument {
-        field: field.into(),
-        reason: reason.into(),
-    };
+    let invalid = |field: &str, reason: &str| ProtocolError::invalid_argument(field, reason);
     vec![
         // The revision check comes before the empty-batch check.
         (
@@ -262,6 +327,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             Batch::single(Edit::SceneCreate {
                 scene_id: SceneId::new(""),
                 name: String::new(),
+                role: None,
             }),
             invalid("edits.0.scene_id", "must not be empty"),
         ),
@@ -269,6 +335,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             Batch::single(Edit::SceneCreate {
                 scene_id: SceneId::new("a"),
                 name: "Again".into(),
+                role: None,
             }),
             ProtocolError::AlreadyExists {
                 entity: EntityKind::Scene,
@@ -287,6 +354,36 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 entity: EntityKind::Source,
                 id: "ghost".into(),
             },
+        ),
+        (
+            Batch::single(Edit::ItemSetSource {
+                item_id: ItemId::new("ghost"),
+                source_id: SourceId::new("cam"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::ItemSetSource {
+                item_id: ItemId::new("i1"),
+                source_id: SourceId::new("ghost"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Source,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::SourceCreate {
+                source_id: SourceId::new("loop"),
+                name: "Loop".into(),
+                kind: cam().kind,
+                settings: crate::Settings::new(),
+                duplicated_from: Some(SourceId::new("loop")),
+            }),
+            invalid("edits.0.duplicated_from", "must not name the source itself"),
         ),
         (
             Batch::single(Edit::ItemReorder {
@@ -490,6 +587,15 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             }),
             invalid("edits.0.output_id", "the output is not an RTMP output"),
         ),
+        (
+            Batch::single(Edit::OutputSetTarget {
+                output_id: OutputId::new("vcam"),
+                target: RtmpTarget::Generic {
+                    url: "rtmp://host/app".into(),
+                },
+            }),
+            invalid("edits.0.output_id", "the output is not an RTMP output"),
+        ),
         // A delete inside the batch applies, the second fails, and the output is back.
         (
             Batch {
@@ -509,7 +615,216 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 id: "yt".into(),
             },
         ),
+        (
+            Batch::single(Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new("hq"),
+                name: "Again".into(),
+                profile: EncoderProfile::DEFAULT,
+            }),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Encoder,
+                id: "hq".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new(""),
+                name: "Empty".into(),
+                profile: EncoderProfile::DEFAULT,
+            }),
+            invalid("edits.0.profile_id", "must not be empty"),
+        ),
+        (
+            Batch::single(Edit::EncoderUpdate {
+                profile_id: EncoderProfileId::new("ghost"),
+                name: "Ghost".into(),
+                profile: EncoderProfile::DEFAULT,
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Encoder,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new("new"),
+                name: "Slow".into(),
+                profile: with_video_kbps(50),
+            }),
+            invalid(
+                "edits.0.profile.video.rate_control.kbps",
+                "must be in 100..=100000",
+            ),
+        ),
+        (
+            Batch::single(Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new("new"),
+                name: "Peak".into(),
+                profile: EncoderProfile {
+                    video: VideoEncoding {
+                        rate_control: RateControl::Vbr {
+                            kbps: 6000,
+                            max_kbps: 4000,
+                        },
+                        ..EncoderProfile::DEFAULT.video
+                    },
+                    ..EncoderProfile::DEFAULT
+                },
+            }),
+            invalid(
+                "edits.0.profile.video.rate_control.max_kbps",
+                "must be at least `kbps` and at most 200000",
+            ),
+        ),
+        (
+            Batch::single(Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new("new"),
+                name: "Keyframes".into(),
+                profile: EncoderProfile {
+                    video: VideoEncoding {
+                        keyframe_interval_s: 0,
+                        ..EncoderProfile::DEFAULT.video
+                    },
+                    ..EncoderProfile::DEFAULT
+                },
+            }),
+            invalid(
+                "edits.0.profile.video.keyframe_interval_s",
+                "must be in 1..=10",
+            ),
+        ),
+        (
+            Batch::single(Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new("new"),
+                name: "Loud".into(),
+                profile: EncoderProfile {
+                    audio: AudioEncoding {
+                        codec: AudioCodec::Aac,
+                        kbps: 512,
+                    },
+                    ..EncoderProfile::DEFAULT
+                },
+            }),
+            invalid("edits.0.profile.audio.kbps", "must be in 32..=320"),
+        ),
+        (
+            Batch::single(Edit::EncoderCreate {
+                profile_id: EncoderProfileId::new("new"),
+                name: "Later".into(),
+                profile: EncoderProfile {
+                    video: VideoEncoding {
+                        codec: VideoCodec::Unknown,
+                        ..EncoderProfile::DEFAULT.video
+                    },
+                    ..EncoderProfile::DEFAULT
+                },
+            }),
+            invalid(
+                "edits.0.profile.video.codec",
+                "is not a video codec this engine knows",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputSetEncoder {
+                output_id: OutputId::new("yt"),
+                profile_id: Some(EncoderProfileId::new("ghost")),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Encoder,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::OutputSetEncoder {
+                output_id: OutputId::new("ghost"),
+                profile_id: None,
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            },
+        ),
+        // A profile an output uses can't be deleted, until the output moves off it.
+        (
+            Batch::single(Edit::EncoderDelete {
+                profile_id: EncoderProfileId::new("hq"),
+            }),
+            invalid(
+                "edits.0.profile_id",
+                "encoder profile `hq` is used by output `rec`; point it elsewhere first",
+            ),
+        ),
+        (
+            Batch::single(Edit::EncoderDelete {
+                profile_id: EncoderProfileId::new("ghost"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Encoder,
+                id: "ghost".into(),
+            },
+        ),
     ]
+}
+
+/// Profile `low`: 3000 kbit/s CBR, a keyframe every 2 s, hardware preferred, AAC at
+/// 128 kbit/s.
+fn low() -> EncoderProfileInfo {
+    EncoderProfileInfo {
+        profile_id: EncoderProfileId::new("low"),
+        name: "Stream".into(),
+        profile: EncoderProfile {
+            video: VideoEncoding {
+                codec: VideoCodec::H264,
+                rate_control: RateControl::Cbr { kbps: 3000 },
+                keyframe_interval_s: 2,
+                hardware: HardwarePreference::Prefer,
+            },
+            audio: AudioEncoding {
+                codec: AudioCodec::Aac,
+                kbps: 128,
+            },
+        },
+    }
+}
+
+/// Profile `hq`, as `encoder.update` left it: 12000 kbit/s VBR peaking at 20000, a
+/// keyframe every 4 s, AAC at 320 kbit/s.
+fn hq() -> EncoderProfileInfo {
+    EncoderProfileInfo {
+        profile_id: EncoderProfileId::new("hq"),
+        name: "Recording".into(),
+        profile: EncoderProfile {
+            video: VideoEncoding {
+                codec: VideoCodec::H264,
+                rate_control: RateControl::Vbr {
+                    kbps: 12000,
+                    max_kbps: 20000,
+                },
+                keyframe_interval_s: 4,
+                hardware: HardwarePreference::Avoid,
+            },
+            audio: AudioEncoding {
+                codec: AudioCodec::Aac,
+                kbps: 320,
+            },
+        },
+    }
+}
+
+/// The collection's encoder profiles, ordered by ID.
+fn encoders() -> Vec<EncoderProfileInfo> {
+    vec![hq(), low()]
+}
+
+/// The default profile at another constant video bit rate.
+fn with_video_kbps(kbps: u32) -> EncoderProfile {
+    EncoderProfile {
+        video: VideoEncoding {
+            rate_control: RateControl::Cbr { kbps },
+            ..EncoderProfile::DEFAULT.video
+        },
+        ..EncoderProfile::DEFAULT
+    }
 }
 
 /// The server URL output `tw` ends up with.
@@ -532,6 +847,7 @@ fn recording() -> OutputInfo {
     OutputInfo {
         output_id: OutputId::new("rec"),
         kind: record("/home/me/Videos/show.mp4"),
+        encoder_profile: Some(EncoderProfileId::new("hq")),
     }
 }
 
@@ -539,6 +855,7 @@ fn youtube() -> OutputInfo {
     OutputInfo {
         output_id: OutputId::new("yt"),
         kind: rtmp("rtmps://a.rtmps.youtube.com:443/live2"),
+        encoder_profile: Some(EncoderProfileId::new("low")),
     }
 }
 
@@ -549,9 +866,40 @@ fn outputs() -> Vec<OutputInfo> {
         OutputInfo {
             output_id: OutputId::new("tw"),
             kind: rtmp(TWITCH_URL),
+            encoder_profile: None,
+        },
+        OutputInfo {
+            output_id: OutputId::new("vcam"),
+            kind: OutputKind::VirtualCam,
+            encoder_profile: None,
         },
         youtube(),
     ]
+}
+
+/// The collection's sources, ordered by ID.
+fn sources() -> Vec<SourceInfo> {
+    vec![
+        aux(),
+        nested_b(),
+        cam(),
+        SourceInfo {
+            source_id: SourceId::new("cam_copy"),
+            name: "Camera copy".into(),
+            duplicated_from: Some(SourceId::new("cam")),
+            ..cam()
+        },
+    ]
+}
+
+/// Created with a `duplicated_from` naming a source that doesn't exist, so it reads as
+/// absent.
+fn aux() -> SourceInfo {
+    SourceInfo {
+        source_id: SourceId::new("aux"),
+        name: "Aux".into(),
+        ..cam()
+    }
 }
 
 fn cam() -> SourceInfo {
@@ -562,6 +910,7 @@ fn cam() -> SourceInfo {
             kind: "webcam".into(),
         },
         settings: crate::Settings::new(),
+        duplicated_from: None,
     }
 }
 
@@ -573,6 +922,7 @@ fn nested_b() -> SourceInfo {
             scene_id: SceneId::new("b"),
         },
         settings: crate::Settings::new(),
+        duplicated_from: None,
     }
 }
 
@@ -655,7 +1005,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             crop: CROP,
             visible: false,
         },
-        plain("i1", "cam"),
+        plain("i1", "cam_copy"),
         plain("i2", "b_src"),
     ]
 }

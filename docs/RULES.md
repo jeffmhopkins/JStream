@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:892f22ab2f9a07aa", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: R-RT rules unchanged; render and mixer collectors still satisfy R-RT-003" }
+verified = { hash = "b3:e23ff09bf4f04289", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
 -->
 
 <a id="R-RT-001"></a>
@@ -320,7 +320,7 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:cee5defb3a32a048", by = "agent:claude@session_01H77oW1hhSxiNfijCpkEKPw", note = "Re-read R-DEP-001..006 against H2: R-DEP-005 now says multiple-versions is deny (M1d) and duplicates need a skip entry with a reason, which deny.toml now has for all eight; other rules unchanged" }
+verified = { hash = "b3:d555bf7414bec253", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -377,9 +377,9 @@ status = "active"
 enforced_by = ["deny:bans"]
 applies_to = ["Cargo.lock"]
 -->
-Duplicates need a `deny.toml` skip entry with a reason. Known duplicates (several `windows`
-crate versions via Tauri, wgpu and windows-rs) are expected. `multiple-versions` is `deny`
-(M1d, [ROADMAP](../ROADMAP.md#m1)).
+Duplicates need a `deny.toml` skip entry with a reason. The `skip` list in `deny.toml` is
+the record of today's known duplicates and the crate that pins each one. `multiple-versions`
+is `deny` (M1d, [ROADMAP](../ROADMAP.md#m1)).
 
 <a id="R-DEP-006"></a>
 ### R-DEP-006: TLS through rustls with the ring provider
@@ -423,7 +423,7 @@ tags (`@v4`) and branches are not allowed. Dependabot keeps the pins current
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/**"]
+applies_to = ["crates/**", "apps/**"]
 -->
 Every bug fix includes a test that fails without the fix.
 
@@ -451,7 +451,7 @@ The PR shows before and after.
 <!-- @rule
 status = "active"
 enforced_by = ["ci:test"]
-applies_to = ["crates/**", "tests/**"]
+applies_to = ["crates/**", "apps/**", "tests/**"]
 -->
 Tests need no network, real devices or physical GPU, unless they are platform tests
 behind `hw-tests`.
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:0b37bf85a0c9c88d", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#protocol, whose only change is the YouTube bullet's ADR link (0034 -> 0041); R-API-001..004 text unchanged and holds" }
+verified = { hash = "b3:c648e1b3e74a9eb0", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
 -->
 
 <a id="R-API-001"></a>
@@ -540,9 +540,13 @@ status = "active"
 enforced_by = ["test:jstream_server::rejects_missing_token", "test:jstream_server::rejects_foreign_origin"]
 applies_to = ["crates/jstream-server/**", "crates/jstream-mcp/**"]
 -->
-Every HTTP, WebSocket and MCP listener requires the control token (even on localhost) and
-validates the `Host` header, and the `Origin` header when one is present. Listeners bind
-to `127.0.0.1` by default
+Every HTTP, WebSocket and MCP listener requires the control token or a paired device's
+token (even on localhost), except `POST /api/v1/pair` while a pairing code is open
+([ADR-0044](adr/0044-pairing-remote-browsers.md)) and `GET /pair` on a TLS listener
+([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)). A browser may present a
+device token, never the control token, as the `__Host-jstream_device` cookie. Every
+listener validates the `Host` header, and
+the `Origin` header when one is present. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)).
 
 <a id="R-SEC-003"></a>

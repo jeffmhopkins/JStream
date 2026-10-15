@@ -68,6 +68,10 @@ opaque_id!(
     OutputId
 );
 opaque_id!(
+    /// An encoder profile in the collection.
+    EncoderProfileId
+);
+opaque_id!(
     /// A connected client, assigned by the server in `welcome`. Undo history and the
     /// audit log are keyed by it.
     ClientId

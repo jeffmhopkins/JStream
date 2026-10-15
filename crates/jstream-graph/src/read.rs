@@ -1,14 +1,15 @@
 //! Reading the graph as protocol query results: what an engine answers to the queries
 //! that read collection state (`scene.list`, `source.list`, `item.list`, `output.list`,
-//! `state.get`), and to the kind queries (`kind.list`, `kind.describe`).
+//! `encoder.list`, `state.get`), to the kind queries (`kind.list`, `kind.describe`), and
+//! to `delete.plan` (`plan.rs`).
 //!
 //! Reads never change the graph. Each collection result carries the revision it was
 //! read at; kinds are not collection state, so their results carry none.
 
-use crate::model::{Graph, Item, Output, Placement, Scene, Source};
+use crate::model::{Encoder, Graph, Item, Output, Placement, Scene, Source, State};
 use jstream_protocol::{
-    EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query, QueryResult, SceneId,
-    SceneInfo, SceneSummary, SourceInfo,
+    EncoderProfileInfo, EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query,
+    QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
 };
 
 impl Graph {
@@ -16,8 +17,9 @@ impl Graph {
     /// graph doesn't hold (`output.status` reads runtime state) or is a query this crate
     /// doesn't know.
     ///
-    /// Fails only with `not_found`, for an `item.list` of a missing scene, and with
-    /// `invalid_argument` on `kind_id`, for a `kind.describe` of a kind it doesn't have.
+    /// Fails only with `not_found`, for an `item.list` of a missing scene or a
+    /// `delete.plan` of a missing target, and with `invalid_argument` on `kind_id`, for a
+    /// `kind.describe` of a kind it doesn't have.
     pub fn query(&self, query: &Query) -> Option<Result<QueryResult, ProtocolError>> {
         Some(match query {
             Query::SceneList => Ok(self.scene_list()),
@@ -27,6 +29,8 @@ impl Graph {
             Query::KindList => Ok(self.kind_list()),
             Query::KindDescribe { kind_id } => self.kind_describe(kind_id),
             Query::OutputList => Ok(self.output_list()),
+            Query::EncoderList => Ok(self.encoder_list()),
+            Query::DeletePlan { target } => self.delete_plan(target),
             _ => return None,
         })
     }
@@ -41,12 +45,12 @@ impl Graph {
     /// The `kind.describe` result for `kind_id`: its descriptor and settings schema.
     /// Fails with `invalid_argument` on `kind_id` if there is no such kind.
     pub fn kind_describe(&self, kind_id: &str) -> Result<QueryResult, ProtocolError> {
-        let kind = self
-            .kind(kind_id)
-            .ok_or_else(|| ProtocolError::InvalidArgument {
-                field: "kind_id".into(),
-                reason: format!("there is no kind `{kind_id}`; `kind.list` names them"),
-            })?;
+        let kind = self.kind(kind_id).ok_or_else(|| {
+            ProtocolError::invalid_argument(
+                "kind_id",
+                format!("there is no kind `{kind_id}`; `kind.list` names them"),
+            )
+        })?;
         Ok(QueryResult::KindDescribe {
             settings_schema: kind.settings_schema(),
             kind: kind.clone(),
@@ -75,7 +79,11 @@ impl Graph {
     pub fn source_list(&self) -> QueryResult {
         QueryResult::SourceList {
             rev: self.rev,
-            sources: self.state.sources().map(Source::to_info).collect(),
+            sources: self
+                .state
+                .sources()
+                .map(|s| s.to_info(&self.state))
+                .collect(),
         }
     }
 
@@ -104,27 +112,45 @@ impl Graph {
         }
     }
 
+    /// The `encoder.list` result: every encoder profile, ordered by ID.
+    pub fn encoder_list(&self) -> QueryResult {
+        QueryResult::EncoderList {
+            rev: self.rev,
+            encoders: self.state.encoders().map(Encoder::to_info).collect(),
+        }
+    }
+
     /// The `state.get` result: the canvas, every source by ID, every scene with its items
-    /// in display order, and every output by ID.
+    /// in display order, and every output and encoder profile by ID.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
             canvas: self.state.canvas(),
-            sources: self.state.sources().map(Source::to_info).collect(),
+            sources: self
+                .state
+                .sources()
+                .map(|s| s.to_info(&self.state))
+                .collect(),
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
+            encoders: self.state.encoders().map(Encoder::to_info).collect(),
         }
     }
 }
 
 impl Source {
-    /// This source as query results report it.
-    pub fn to_info(&self) -> SourceInfo {
+    /// This source as query results report it, in `state`, which holds it: its
+    /// `duplicated_from` only while `state` still has that source.
+    pub fn to_info(&self, state: &State) -> SourceInfo {
         SourceInfo {
             source_id: self.id.clone(),
             name: self.name.clone(),
             kind: self.kind.clone(),
             settings: self.settings.clone(),
+            duplicated_from: self
+                .duplicated_from
+                .clone()
+                .filter(|original| state.source(original).is_some()),
         }
     }
 }
@@ -135,6 +161,18 @@ impl Output {
         OutputInfo {
             output_id: self.id.clone(),
             kind: self.kind.clone(),
+            encoder_profile: self.encoder_profile.clone(),
+        }
+    }
+}
+
+impl Encoder {
+    /// This profile as `encoder.list` and `state.get` report it.
+    pub fn to_info(&self) -> EncoderProfileInfo {
+        EncoderProfileInfo {
+            profile_id: self.id.clone(),
+            name: self.name.clone(),
+            profile: self.profile,
         }
     }
 }
@@ -251,6 +289,7 @@ mod tests {
                 sources: vec![],
                 scenes: vec![],
                 outputs: vec![],
+                encoders: vec![],
             }
         );
         assert_eq!(

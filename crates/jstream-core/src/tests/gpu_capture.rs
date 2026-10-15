@@ -17,7 +17,9 @@ use jstream_media::{
     ChannelLayout, ColorInfo, ColorRange, FrameSize, MediaTime, PixelFormat, Timebase,
     VideoFrameInfo,
 };
-use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+use jstream_platform::fake::{
+    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+};
 use jstream_platform::wgpu;
 use jstream_platform::{
     AdapterId, Backends, Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
@@ -27,6 +29,7 @@ use jstream_protocol::OutputId;
 use jstream_render::{Compositor, OpenOptions};
 
 use super::{GPU_OPEN_TIMEOUT, block_on, connected, one_gpu_test_at_a_time, output_call};
+use crate::audio_sources::Wanted;
 use crate::runtime::{DrawFn, OpenDraw, RenderHub, gpu_draw, open_capture, parts_from};
 use crate::{Engine, RecordingPublish};
 
@@ -259,6 +262,7 @@ fn backends(clock: &FakeClock, gpu: Arc<dyn GpuInterop>, mode: GpuMode) -> Backe
         codecs: Arc::new(FakeCodecs),
         gpu,
         vcam: None,
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
     }
 }
 
@@ -288,6 +292,7 @@ fn path(backends: &Backends) -> (bool, bool) {
         gpu_draw(),
         GPU_OPEN_TIMEOUT,
         Arc::new(RenderHub::default()),
+        Arc::new(Wanted::default()),
     );
     let mut opened = open_capture(&parts).expect("a capture starts on some path");
     let frame = opened
