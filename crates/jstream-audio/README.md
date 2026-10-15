@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:3378b29ca2db7521", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is main's live add/remove inputs; dependency ARCH#threading changed only by F2b's recording sentence, which doesn't touch audio" }
+verified = { hash = "b3:c2ed57d5512a1427", by = "agent:claude", note = "Re-read against #175's test-only change in rt/ring.rs; crate purpose, time line and API prose unaffected and still hold" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -110,7 +110,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:b1573031317aa755", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is main's command queue and collector; ARCH#threading's collector sentence still matches" }
+verified = { hash = "b3:504babe7a15f2965", by = "agent:claude", note = "Re-read against #175's test-only change in rt/ring.rs; ring design, seqlock claim check and RT rules unchanged and still match the code" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

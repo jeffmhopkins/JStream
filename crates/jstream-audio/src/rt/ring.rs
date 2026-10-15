@@ -426,20 +426,39 @@ mod tests {
         assert_eq!(w.position(), Some(1_000_000_000));
     }
 
-    /// A producer thread writes frames whose value is their position, as fast as it
+    /// A producer thread writes frames whose value encodes their position, as fast as it
     /// can, through a ring far too small for the consumer to keep up; every frame the
     /// consumer accepts as valid must hold its own position. Without the claim check,
     /// torn copies would show up as mismatches.
+    ///
+    /// The writer keeps writing until the reader has checked `MIN_CHECKED` frames, so
+    /// every check races a live writer and the test can neither pass vacuously nor fail
+    /// because the writer finished before the reader was scheduled (#175). A wall-clock
+    /// bound on both sides keeps a broken ring from hanging the test.
     #[test]
     fn concurrent_reads_never_return_torn_frames() {
+        use std::sync::atomic::AtomicBool;
+        use std::time::{Duration, Instant};
+
+        const MIN_CHECKED: u64 = 100_000;
+        const DEADLINE: Duration = Duration::from_secs(60);
+        // Frame values wrap so they stay exact in an `f32` however long the writer runs.
+        // A torn frame comes from an earlier lap of the 64-frame ring, which never lands
+        // on the same value; the `+ 1` keeps every written frame distinct from silence.
+        const WRAP: i64 = 1 << 23;
+        let value = |pos: i64| (pos.rem_euclid(WRAP) + 1) as f32;
+
         let (r, mut w) = ring(64);
         w.seek(0);
+        let done = Arc::new(AtomicBool::new(false));
+        let writer_done = Arc::clone(&done);
+        let start = Instant::now();
         let writer = std::thread::spawn(move || {
             let mut buf = [[0.0f32; 2]; 7];
             let mut pos = 0i64;
-            while pos < 2_000_000 {
+            while !writer_done.load(Ordering::Relaxed) && start.elapsed() < DEADLINE {
                 for (i, f) in buf.iter_mut().enumerate() {
-                    let v = (pos + i as i64) as f32;
+                    let v = value(pos + i as i64);
                     *f = [v, v];
                 }
                 w.write(&buf);
@@ -448,9 +467,10 @@ mod tests {
         });
         let mut out = [[0.0f32; 2]; 48];
         let mut checked = 0u64;
-        while !writer.is_finished() {
+        while checked < MIN_CHECKED && start.elapsed() < DEADLINE {
             let written = r.written.load(Ordering::Acquire);
             if written == UNSET {
+                std::thread::yield_now();
                 continue;
             }
             let pos = written - 40;
@@ -460,7 +480,7 @@ mod tests {
             let mut nonzero = 0;
             for (i, f) in out.iter().enumerate() {
                 if *f != [0.0; 2] {
-                    let want = (pos + i as i64) as f32;
+                    let want = value(pos + i as i64);
                     assert_eq!(*f, [want, want], "torn frame at {}", pos + i as i64);
                     nonzero += 1;
                 }
@@ -468,7 +488,11 @@ mod tests {
             assert!(nonzero <= rep.valid);
             checked += nonzero as u64;
         }
+        done.store(true, Ordering::Relaxed);
         writer.join().expect("writer thread");
-        assert!(checked > 0);
+        assert!(
+            checked >= MIN_CHECKED,
+            "only {checked} frames checked within {DEADLINE:?}"
+        );
     }
 }
