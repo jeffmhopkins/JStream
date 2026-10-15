@@ -25,8 +25,9 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(test)]
 mod tests;
 
-/// The collection file's current `schema_version`. Bumping it ships a migration in
-/// [`MIGRATIONS`] and a fixture of the previous version that a test loads (R-API-003).
+/// The collection file's current `schema_version`. Bumping it ships a migration in the
+/// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
+/// loads (R-API-003).
 pub const SCHEMA_VERSION: u32 = 1;
 
 /// A migration upgrades a file's JSON from one schema version to the next, in place.

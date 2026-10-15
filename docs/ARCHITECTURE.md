@@ -804,7 +804,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:d04415a3dbef1a24", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 after B3: persist/ now also saves the canvas and geometry placements; Collections bullet (versioned JSON, migrations, checked like edits, core saves atomically) still holds" }
+verified = { hash = "b3:4053eddc31ae4769", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 doc-build fix in persist/mod.rs (rustdoc wording only); Collections bullet still holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

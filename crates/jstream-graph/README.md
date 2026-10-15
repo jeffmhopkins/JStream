@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:e358952cac01ddeb", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 after merging B3: collection file paragraph now covers the canvas and the two placement forms (exactly one of transform/geometry), rebuild order starts with canvas.set_size, tests list adds placement and canvas refusals; B3's model and apply prose untouched" }
+verified = { hash = "b3:cf5b0fc2d88e7bc5", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 doc-build fix: SCHEMA_VERSION's rustdoc no longer links the private MIGRATIONS table; the collection file paragraph is unchanged" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
