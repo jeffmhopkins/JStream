@@ -51,6 +51,11 @@ Contents:
   the ring's size read as empty and full, since the other process wrote them.
 - `LIVENESS_MS`: how long a heartbeat may stand still before the host counts as hung.
 
+**One filter per block.** The mixer's side numbers blocks from 0 and fixes its
+latency from the host's ready latency when it is built, so a block serves exactly one
+filter, freshly initialised. A restarted host gets a re-initialised block and the
+filter is built again, since its plugin latency may differ.
+
 **Trust.** Each side treats what the other wrote as untrusted: a slot's frame count
 must match the reader's buffer exactly, a corrupt parameter ring is empty, the
 configuration is range-checked and the plugin's latency is capped. The mixer side also

@@ -6,7 +6,8 @@
 //! - R-ARCH-002: a member depends only on members in strictly lower layers.
 //! - R-ARCH-003: the clients never reach `jstream-core`, directly or through other members.
 //! - R-UNSAFE-001: only the declared crates set `unsafe_allowed = true`; every other crate
-//!   root carries `#![forbid(unsafe_code)]`.
+//!   root carries `#![forbid(unsafe_code)]`; and only the plugin host reaches the CLAP
+//!   wrapper, directly or through other members (ADR-0035).
 //! - R-DEP-002: every resolved package with a `links =` key or a C-compiling build
 //!   dependency (directly, or through a build helper one level down) is on
 //!   [`NATIVE_ALLOWLIST`].
@@ -27,7 +28,14 @@ const UNSAFE_CRATES: &[&str] = &[
     "jstream-platform-macos",
     "jstream-platform-linux",
     "jstream-vcam-windows",
+    "jstream-plugin-clap",
 ];
+
+/// The CLAP wrapper, which loads third-party native code (R-UNSAFE-001, ADR-0035).
+const PLUGIN_CLAP: &str = "jstream-plugin-clap";
+
+/// The only member that may reach [`PLUGIN_CLAP`]: the out-of-process plugin host.
+const PLUGIN_HOST: &str = "jstream-plugin-host";
 
 /// Clients that never depend on the engine (R-ARCH-003).
 const CLIENTS: &[&str] = &["jstream-ui", "jstream-mcp", "jstream-server", "jstream-cli"];
@@ -211,6 +219,7 @@ pub(crate) fn check(meta: &Value) -> Result<Vec<Finding>> {
         workspace_deps(m, &mut findings)?;
     }
     clients(&members, &mut findings);
+    plugin_clap_users(&members, &mut findings);
     native(meta, packages, &mut findings);
 
     findings.sort();
@@ -293,37 +302,69 @@ fn layering(m: &Member<'_>, members: &BTreeMap<&str, Member<'_>>, findings: &mut
     }
 }
 
+/// The chain of member dependencies from `m` to `target` (`m -> … -> target`), if `m`
+/// reaches it directly or through other members.
+fn path_to<'a>(
+    m: &Member<'a>,
+    target: &'a str,
+    members: &BTreeMap<&'a str, Member<'a>>,
+) -> Option<Vec<&'a str>> {
+    // Walk member dependencies, remembering how each was first reached.
+    let mut via: BTreeMap<&str, &str> = BTreeMap::new();
+    let mut queue = vec![m.name];
+    while let Some(cur) = queue.pop() {
+        let Some(cm) = members.get(cur) else { continue };
+        for dep in member_deps(cm, members) {
+            if dep != m.name && !via.contains_key(dep) {
+                via.insert(dep, cur);
+                queue.push(dep);
+            }
+        }
+    }
+    via.contains_key(target).then(|| {
+        let mut path = vec![target];
+        let mut cur = target;
+        while let Some(prev) = via.get(cur) {
+            path.push(prev);
+            cur = prev;
+        }
+        path.reverse();
+        path
+    })
+}
+
 /// R-ARCH-003: no client reaches the engine, directly or through other members.
-fn clients(members: &BTreeMap<&str, Member<'_>>, findings: &mut Vec<Finding>) {
+fn clients<'a>(members: &BTreeMap<&'a str, Member<'a>>, findings: &mut Vec<Finding>) {
     for client in CLIENTS {
         let Some(m) = members.get(client) else {
             continue;
         };
-        // Walk member dependencies, remembering how each was first reached.
-        let mut via: BTreeMap<&str, &str> = BTreeMap::new();
-        let mut queue = vec![m.name];
-        while let Some(cur) = queue.pop() {
-            let Some(cm) = members.get(cur) else { continue };
-            for dep in member_deps(cm, members) {
-                if dep != m.name && !via.contains_key(dep) {
-                    via.insert(dep, cur);
-                    queue.push(dep);
-                }
-            }
-        }
-        if via.contains_key(ENGINE) {
-            let mut path = vec![ENGINE];
-            let mut cur = ENGINE;
-            while let Some(prev) = via.get(cur) {
-                path.push(prev);
-                cur = prev;
-            }
-            path.reverse();
+        if let Some(path) = path_to(m, ENGINE, members) {
             findings.push(Finding {
                 at: m.manifest.clone(),
                 rule: "R-ARCH-003",
                 msg: format!(
                     "client `{client}` depends on the engine: {}",
+                    path.join(" -> ")
+                ),
+            });
+        }
+    }
+}
+
+/// R-UNSAFE-001 (ADR-0035): only the plugin host reaches the CLAP wrapper, so no other
+/// process ever loads a CLAP plugin.
+fn plugin_clap_users<'a>(members: &BTreeMap<&'a str, Member<'a>>, findings: &mut Vec<Finding>) {
+    for m in members.values() {
+        if m.name == PLUGIN_HOST || m.name == PLUGIN_CLAP {
+            continue;
+        }
+        if let Some(path) = path_to(m, PLUGIN_CLAP, members) {
+            findings.push(Finding {
+                at: m.manifest.clone(),
+                rule: "R-UNSAFE-001",
+                msg: format!(
+                    "only `{PLUGIN_HOST}` may depend on `{PLUGIN_CLAP}`: {}",
                     path.join(" -> ")
                 ),
             });
@@ -344,7 +385,8 @@ fn unsafe_decl(ws_root: &str, m: &Member<'_>, findings: &mut Vec<Finding>) -> Re
             at: m.manifest.clone(),
             rule: "R-UNSAFE-001",
             msg: format!(
-                "`{}` declares `unsafe_allowed = true` but is not a platform, vcam or `*-sys` crate",
+                "`{}` declares `unsafe_allowed = true` but is not a platform, vcam, CLAP or \
+                 `*-sys` crate",
                 m.name
             ),
         }),
@@ -359,7 +401,8 @@ fn unsafe_decl(ws_root: &str, m: &Member<'_>, findings: &mut Vec<Finding>) -> Re
                 let Some(src) = target["src_path"].as_str().filter(|_| is_root) else {
                     continue;
                 };
-                let text = std::fs::read_to_string(src).with_context(|| format!("reading {src}"))?;
+                let text =
+                    std::fs::read_to_string(src).with_context(|| format!("reading {src}"))?;
                 if !forbids_unsafe(&text) {
                     findings.push(Finding {
                         at: rel(ws_root, src),
@@ -614,7 +657,8 @@ mod tests {
                  [workspace.dependencies]\n\
                  a = { path = \"crates/a\" }\nb = { path = \"crates/b\" }\n\
                  c = { path = \"crates/c\" }\njstream-core = { path = \"crates/jstream-core\" }\n\
-                 native = { path = \"crates/native\" }\n",
+                 native = { path = \"crates/native\" }\n\
+                 jstream-plugin-clap = { path = \"crates/jstream-plugin-clap\" }\n",
             );
             for (path, text) in files {
                 f.write(path, text);
@@ -747,6 +791,41 @@ mod tests {
             [
                 "crates/jstream-mcp/Cargo.toml: R-ARCH-003: client `jstream-mcp` depends on \
                  the engine: jstream-mcp -> a -> jstream-core"
+            ]
+        );
+    }
+
+    #[test]
+    fn only_the_plugin_host_reaches_the_clap_wrapper() {
+        // `a` -> `b` -> `jstream-plugin-clap`, and the host directly: only `a` and `b`
+        // are reported.
+        let f = fixture(
+            "plugin-clap",
+            &[
+                krate("jstream-plugin-clap", &meta(0, true), "", ""),
+                krate(
+                    "b",
+                    &meta(1, false),
+                    "jstream-plugin-clap.workspace = true\n",
+                    SAFE,
+                ),
+                krate("a", &meta(2, false), "b.workspace = true\n", SAFE),
+                krate(
+                    "jstream-plugin-host",
+                    &meta(1, false),
+                    "jstream-plugin-clap.workspace = true\n",
+                    SAFE,
+                ),
+            ],
+        );
+        let got = f.findings();
+        assert_eq!(
+            got,
+            [
+                "crates/a/Cargo.toml: R-UNSAFE-001: only `jstream-plugin-host` may depend on \
+                 `jstream-plugin-clap`: a -> b -> jstream-plugin-clap",
+                "crates/b/Cargo.toml: R-UNSAFE-001: only `jstream-plugin-host` may depend on \
+                 `jstream-plugin-clap`: b -> jstream-plugin-clap",
             ]
         );
     }

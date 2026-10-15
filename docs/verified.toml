@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
+stamp = { hash = "b3:cd31f7547d7b81f1", by = "agent:claude", note = "Re-read after merging #359/#370: keeps main's jstream-effects and jstream-anim rows and this PR's jstream-plugin-clap row; lint-deps passes" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -67,6 +67,9 @@ stamp = { hash = "b3:70046124f5cf9949" }
 
 ["ARCH#crate-map"."file:crates/jstream-platform/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:0879d91d9a46f83c" }
+
+["ARCH#crate-map"."file:crates/jstream-plugin-clap/Cargo.toml#jstream-meta"]
+stamp = { hash = "b3:f1f50ef6d886b714", by = "agent:claude", note = "Re-read: keeps main's jstream-anim row and this PR's jstream-plugin-clap row; summary matches the crate's metadata; lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-plugin-proto/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:1ff7a5731ca92f93" }
@@ -594,7 +597,7 @@ stamp = { hash = "b3:a1c0f0586e004c59" }
 stamp = { hash = "b3:418e944950d88c36" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/handle.rs"]
-stamp = { hash = "b3:a7c82544adbbbe92" }
+stamp = { hash = "b3:86f760e8e1d200d7", by = "agent:claude", note = "Re-read after the ADR-0053 merge: handle.rs only adds the one-filter-per-block doc on add_plugin_filter; purpose (activity gain, buses, chains) still holds" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/lib.rs"]
 stamp = { hash = "b3:f37d5c5d3c4b273c" }
@@ -1686,13 +1689,13 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge cascade from ARCH#crate-map: re-read; the crate-map body is unchanged apart from the stamp move, nothing in it bears on GPU frames; holds" }
+stamp = { hash = "b3:cd31f7547d7b81f1", by = "agent:claude", note = "Re-read: the crate map adds jstream-effects (L3, safe) and the CLAP wrapper; jstream-render still cannot hold unsafe, so the import stays in platform crates" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
-stamp = { hash = "b3:9074e32b08b81d5b" }
+stamp = { hash = "b3:6bae18b37405b2cc", by = "agent:claude", note = "Re-read: crate map adds the CLAP wrapper row and R-UNSAFE-001 adds jstream-plugin-clap; jstream-render still cannot hold unsafe, so the import stays in platform crates" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -1785,7 +1788,7 @@ stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c60cba487fc0a5e5" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/RULES.md#unsafe"]
-stamp = { hash = "b3:9074e32b08b81d5b" }
+stamp = { hash = "b3:6bae18b37405b2cc", by = "agent:claude", note = "Re-read: R-UNSAFE-001 now also lists jstream-plugin-clap; this crate is still on the allowlist and the purpose's claims hold" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/adr/0014-media-clock.md"]
 stamp = { hash = "b3:68451099d1cf8c6d" }
@@ -1904,8 +1907,44 @@ stamp = { hash = "b3:25518dc134afe9b2" }
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/video_device/stream.rs"]
 stamp = { hash = "b3:ae38f30acfef5995" }
 
+["CRATE-jstream-plugin-clap#purpose"."body"]
+stamp = { hash = "b3:152181200b2946bd", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "Round-1 B1/B2/N3: re-read every paragraph against plugin.rs (port_channels, MAX_PORTS/MAX_PORT_CHANNELS, Plugin !Send and its Drop leak), process.rs (Ports, every port passed, sidechains zeroed and constant, aux dropped), host.rs (HostBox freed after destroy), strings.rs, and testplugin.rs tests (sidechain, wide, destroy-thread)" }
+
+["CRATE-jstream-plugin-clap#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-plugin-clap"]
+stamp = { hash = "b3:7eba4b3549316e86" }
+
+["CRATE-jstream-plugin-clap#purpose"."dep:docs/RULES.md#unsafe"]
+stamp = { hash = "b3:6bae18b37405b2cc" }
+
+["CRATE-jstream-plugin-clap#purpose"."dep:docs/adr/0035-clap-plugins-out-of-process.md#decision"]
+stamp = { hash = "b3:97ad7e8e9e7724bf" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/error.rs"]
+stamp = { hash = "b3:48dcc2d5387f6b81" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/host.rs"]
+stamp = { hash = "b3:b33cd5cb312eb4a8" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/lib.rs"]
+stamp = { hash = "b3:4056601568e05b89" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/library.rs"]
+stamp = { hash = "b3:f69c1323e623c4c0" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/plugin.rs"]
+stamp = { hash = "b3:6452d7a92dbab528" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/process.rs"]
+stamp = { hash = "b3:121d390b11e45a47" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/strings.rs"]
+stamp = { hash = "b3:9d287f1810f2f80d" }
+
+["CRATE-jstream-plugin-clap#purpose"."file:crates/jstream-plugin-clap/src/testplugin.rs"]
+stamp = { hash = "b3:439c9b06018f39a8" }
+
 ["CRATE-jstream-plugin-proto#purpose"."body"]
-stamp = { hash = "b3:db731ccc24b25277", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: new crate; re-read every bullet against lib.rs, status.rs, ring.rs, params.rs and shared.rs: field list and writers, init/config/publish_ready/ready_latency, slot seqlock, SLOTS 8, MAX_BLOCK_FRAMES 2048, MAX_DEPTH 6, DEFAULT_DEPTH 2, first_useful, 256-event param rings with corrupt counts, trust checks, tests list" }
+stamp = { hash = "b3:f8dff263e2bfa0e7", by = "agent:claude", note = "Re-read the new one-filter-per-block paragraph against handle.rs add_plugin_filter and the host restart path; matches" }
 
 ["CRATE-jstream-plugin-proto#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-plugin-proto"]
 stamp = { hash = "b3:abb01bfde77a5db4" }
@@ -2559,7 +2598,7 @@ stamp = { hash = "b3:ecfd9b5f74db77b1" }
 stamp = { hash = "b3:1c343ec4bf85722c" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/RULES.md#unsafe"]
-stamp = { hash = "b3:9074e32b08b81d5b" }
+stamp = { hash = "b3:6bae18b37405b2cc", by = "agent:claude", note = "Re-read: R-UNSAFE-001 adds jstream-plugin-clap; vcam-windows stays allowed unsafe, its purpose holds" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
@@ -2742,7 +2781,7 @@ stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:0047ff70349b6728", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#dependency-lint"."body"]
-stamp = { hash = "b3:c5e5edb854632c87", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: lint_deps.rs gains native-code allowlist entries for Tauri's tree (tauri links guard, vswhom-sys build-time C++, Linux gtk-rs and WebKitGTK sys crates, objc2-exception-helper, iana-time-zone-haiku, defmt), all covered by the native-code bullet; no rule logic changed" }
+stamp = { hash = "b3:804a3333c5e61eb9", by = "agent:claude", note = "Re-read against lint_deps.rs: the unsafe allowlist names the CLAP wrapper and the plugin-host-only reachability check is described as implemented" }
 
 ["DOCS#dependency-lint"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -2760,10 +2799,10 @@ stamp = { hash = "b3:5a4289040223e5dc" }
 stamp = { hash = "b3:c6836c98530b7bf5" }
 
 ["DOCS#dependency-lint"."dep:docs/RULES.md#R-UNSAFE-001"]
-stamp = { hash = "b3:379ee0e3d8c9e499" }
+stamp = { hash = "b3:b92bafea37722e63", by = "agent:claude", note = "Re-read against lint_deps.rs: the unsafe allowlist names the CLAP wrapper and the plugin-host-only reachability check is described as implemented" }
 
 ["DOCS#dependency-lint"."file:xtask/src/lint_deps.rs"]
-stamp = { hash = "b3:bd44ff4e86f247fa" }
+stamp = { hash = "b3:8fa6a0ff91d9ac70", by = "agent:claude", note = "Re-read against lint_deps.rs: the unsafe allowlist names the CLAP wrapper and the plugin-host-only reachability check is described as implemented" }
 
 ["DOCS#governance"."body"]
 stamp = { hash = "b3:45d7638cdee2c505", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for ADR-0038 renumbered from 0036: governance.rs strips only one-'> '-line adr-status blocks from accepted ADRs before comparing; accepted-ADR and Status banner bullets match, protected list unchanged" }
