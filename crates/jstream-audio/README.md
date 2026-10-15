@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:977191839c2f49ee", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading edit: the core mixer thread still calls Mixer::poll on the media clock and pushes blocks; catching its panic is in core. Mixer API, counters and tests unchanged." }
+verified = { hash = "b3:11e4f87a35f39754", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading handover addition (stopped RT threads count as caught up): this section describes the built mixer API, which has no generations or live-value release yet; nothing here contradicts it" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -92,7 +92,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:23faab52b0086dd9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading edit: the Not yet bullet still holds, since catching a panic at the thread boundary is the engine job and core now does it for the mixer thread. Rings, poll and allocation notes unchanged." }
+verified = { hash = "b3:382d0247108a7386", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading handover addition: State snapshots bullet (gains are atomics, arc-swap snapshot comes with live input changes) still fits; the generation counter and stopped marker are unbuilt and not claimed here" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
