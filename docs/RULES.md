@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:26af8383eff79304", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; text identical to main's (diffed); stale only because covered code took B7's changes, none of which this section describes; holds" }
+verified = { hash = "b3:1e9063dfef900c93", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; text as B7×D5 resolved it; D8 changes nothing this section describes (only master/output chains in protocol, graph and mock); holds" }
 -->
 
 <a id="R-API-001"></a>

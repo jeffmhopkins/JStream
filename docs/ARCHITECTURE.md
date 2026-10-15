@@ -167,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:78a4ad3fad2a0cd6", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; audio sources run their filters and are routed; no built-in filter takes a key, so no audio cycle; persistence Not-yet now video filter kinds, blend, keys, bus monitors; holds" }
+verified = { hash = "b3:1027a774e47158b3", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; Master and Output filters rows beside buses/sends; audio sources run filters, routed; holds" }
 -->
 
 ```
@@ -554,7 +554,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:d1ba5bcbd659195d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; Edits bullet names filter.* and the audio edits; holds" }
+verified = { hash = "b3:fb2631ecb0d15e3a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; Edits bullet: filter.* on source/master/output plus D5's audio edits; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -694,7 +694,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:2f6aa343d5fc858d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; tools.snap is 209442 bytes, text says about 209 KB; noun list union; holds" }
+verified = { hash = "b3:340b793384ec7812", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; tools.snap is 212268 bytes, text says about 212 KB; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -896,7 +896,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:0c7d788729e0991d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; file holds filters, opacity/blend and buses/sends/audio; holds against persist/mod.rs" }
+verified = { hash = "b3:eb1060eddee727da", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; master/output filters in the file beside buses, sends and audio; holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

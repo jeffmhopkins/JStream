@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:f4d7534b71a0c103", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge-only round (main e1e2a94: #295, #309): re-read; text is main's (Q3 e2e tests); B7 changes only a canvas test's ItemAdd fields; holds" }
+verified = { hash = "b3:d615ba5651ce5d44", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; text as B7×D5 resolved it; D8 changes nothing this section describes (only master/output chains in protocol, graph and mock); holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:cd7a4c1c7812c8d0", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; text identical to main's (diffed); stale only because covered code took B7's changes, none of which this section describes; holds" }
+verified = { hash = "b3:4d1e97033072c967", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; text as B7×D5 resolved it; D8 changes nothing this section describes (only master/output chains in protocol, graph and mock); holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

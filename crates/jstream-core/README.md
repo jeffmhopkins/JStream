@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:662a091ec0163526", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; audio input bullet combines on/off, filters and routing; touched list has filter and audio props; holds" }
+verified = { hash = "b3:5535449a44b41d84", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; text as B7×D5 resolved it; D8 changes nothing this section describes (only master/output chains in protocol, graph and mock); holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -188,7 +188,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:65605e9ebc58c42f", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; audio sources paragraph: inputs open muted for routing and run the filter chain (Chain::apply on the same InputControl the routing sets); Not-yet drops 'filter chains in the protocol'; holds against audio_sources.rs" }
+verified = { hash = "b3:c37b1e36107767b4", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; text as B7×D5 resolved it; D8 changes nothing this section describes (only master/output chains in protocol, graph and mock); holds" }
 -->
 
 ### Engine and sessions

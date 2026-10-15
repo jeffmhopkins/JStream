@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:53c97e7b59e1b44b", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; edit list has both filter.* and audio edits; parity paragraph names desk with gain filters and D5's audio, kinds mic/desktop_audio/webcam/gain; holds against parity.rs" }
+verified = { hash = "b3:7056117974605438", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; Filters bullet names source/master/output owners and MasterInfo beside D5's audio types; parity paragraph names master/output gain filters and D5's audio; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -146,7 +146,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:dfc9e7f61db5c028", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; re-read; source.delete inverse order create, audio, filters (as graph and mock); state reads list filters and audio; version stays 0.19 until B7's queue slot; holds" }
+verified = { hash = "b3:7ff80234e8fe30fb", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge of B7×D5 (8271096, B7 #252 with main 94fb25d); re-read; state.get lists buses, sends and master; master/output paragraph holds beside D5's audio sections; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
