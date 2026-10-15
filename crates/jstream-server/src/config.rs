@@ -1,9 +1,20 @@
-//! The server's configuration: where it listens, the control token, and which `Host` and
-//! `Origin` values it accepts beyond its own.
+//! The server's configuration: where it listens, the control token, which `Host` and
+//! `Origin` values it accepts beyond its own, and the connection limits.
 
 use crate::error::ServerError;
 use std::fmt;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::time::Duration;
+
+/// The default [`ServerConfig::max_connections`]: a handful of UIs, CLIs and MCP
+/// proxies, with room to spare.
+const MAX_CONNECTIONS: usize = 32;
+
+/// The default [`ServerConfig::handshake_timeout`].
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The default [`ServerConfig::header_read_timeout`].
+const HEADER_READ_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// The control token every connection must present (ADR-0006).
 ///
@@ -69,17 +80,32 @@ pub struct ServerConfig {
     /// `Origin` values (`scheme://host[:port]`) accepted besides the server's own
     /// (`http://` plus an accepted `Host`). Compared without regard to ASCII case.
     pub extra_origins: Vec<String>,
+    /// The most WebSocket connections open at once. An upgrade beyond it is refused with
+    /// HTTP 503 before a session is opened. [`ServerConfig::new`] sets 32.
+    pub max_connections: usize,
+    /// How long a connection has, from being accepted, to complete the protocol
+    /// handshake (`hello` answered by `welcome`). One that hasn't is closed (close code
+    /// 1008). [`ServerConfig::new`] sets 10 s.
+    pub handshake_timeout: Duration,
+    /// How long a connection has, from being accepted, to send a complete upgrade
+    /// request that is accepted. One that hasn't (it sent its headers too slowly, sent
+    /// none, or was refused and kept the connection open) is dropped.
+    /// [`ServerConfig::new`] sets 10 s.
+    pub header_read_timeout: Duration,
 }
 
 impl ServerConfig {
     /// Listens on `127.0.0.1` with an ephemeral port, accepting only its own hosts and
-    /// origins.
+    /// origins, with the default connection limits.
     pub fn new(token: Token) -> Self {
         ServerConfig {
             bind: SocketAddr::from((Ipv4Addr::LOCALHOST, 0)),
             token,
             extra_hosts: Vec::new(),
             extra_origins: Vec::new(),
+            max_connections: MAX_CONNECTIONS,
+            handshake_timeout: HANDSHAKE_TIMEOUT,
+            header_read_timeout: HEADER_READ_TIMEOUT,
         }
     }
 }

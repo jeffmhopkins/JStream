@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:f84b11c2556f7f43", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merge of main (#130) into #131: re-read Design with both; #130's open-questions anchor and Windows prune note stand, and the daemon still builds one Engine with with_output only and never publishes, so core's reconnect wiring needs no mention here" }
+verified = { hash = "b3:755164534be85664", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via jstream-server Design (open question 8 only): daemon still uses ServerConfig::new with only the port changed; Listening bullet holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
