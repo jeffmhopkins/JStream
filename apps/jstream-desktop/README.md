@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:fbef189c8b722e21", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: new crate README; Contents bullets match app.rs, main.rs, host.rs, ui.rs, bootstrap.rs, shell.rs, data.rs, logs.rs and their tests; crate-map apps row (layer 6, links core and server) holds; not-yet list matches what the code lacks" }
+verified = { hash = "b3:c4336b36ce2db03b", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: re-read after data.rs's tests stopped importing Path (a test-only import fix for Windows clippy); the section's claims are unchanged and still match the code" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -51,7 +51,7 @@ folder.
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:e55ad00f87497a73", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: new section; --ui-dir is the only option (app.rs parse), bin name jstream (Cargo.toml [[bin]]), data folder and portable marker (data.rs), collection.json, capped replaced log file (logs.rs), failure page and non-Windows exit 1 (main.rs) all match the code" }
+verified = { hash = "b3:b47ee538a8d81c6c", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: re-read after data.rs's tests stopped importing Path (a test-only import fix for Windows clippy); the section's claims are unchanged and still match the code" }
 -->
 
 On Windows, with the UI built first:
@@ -89,7 +89,7 @@ to its engine; there is no connect form. Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:f8393ac625dd0eea", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: new section; in-memory token, 127.0.0.1 ephemeral port, extra origin, MCP off (host.rs); scheme, path checks and CSP with connect-src self plus engine (ui.rs); frozen origin-gated global (bootstrap.rs); navigation and new-window refusal, no capabilities (shell.rs, tauri.conf.json); MF delay-load (build.rs); Windows-only Tauri and the deny/lint-deps entries" }
+verified = { hash = "b3:b2029f9f6a7e2173", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: re-read after data.rs's tests stopped importing Path (a test-only import fix for Windows clippy); the section's claims are unchanged and still match the code" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
