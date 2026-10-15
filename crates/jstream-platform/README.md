@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:5d5148d1cf21bd10", by = "agent:claude@session_01CinhSCRTBiaJNaiD4w6CUq", note = "Y2: re-read the purpose section; new OAuth tokens bullet (OAuthTokenStore set/get/clear/is_set per account, Secret only, separate from StreamKeyStore, refresh tokens only, no token in errors) and MemoryTokenStore in Fakes match keys.rs and fake.rs; the rest is unchanged" }
+verified = { hash = "b3:09d7b482bf1e535b", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main into D1: section text is main's; stale only via ARCH#threading/crate-map, where D1 changes only the audio mixer's collector sentences and audio's crossbeam dependency; re-read its threading and crate-map references, none concerns either" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -128,7 +128,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:6d45418b89299049", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Stale through ARCH#crate-map only (main's #141 platform-windows row plus G1's vcam-proto row); the jstream-platform row it relies on (GpuInterop with wgpu types) is unchanged, so the section holds" }
+verified = { hash = "b3:7856c3f80a2d5b2d", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Stale only through ARCH#crate-map (G2's vcam-windows row gained a logging clause); re-read: the GpuInterop/GpuFrame design and the crate-map reference are unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

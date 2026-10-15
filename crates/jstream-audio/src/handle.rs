@@ -6,32 +6,57 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use crate::MeterReading;
+use crate::rt::cmd::ControlPlane;
 use crate::rt::input::InputShared;
 use crate::rt::mixer::BusShared;
 use crate::rt::ring::FrameRing;
 use crate::rt::shared::db_to_gain;
 
+/// One mixer's input. Opaque: only [`InputControl::id`] produces one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct InputId(pub(crate) u64);
+
 /// Controls and observes one mixer input. Cheap to clone; every clone controls the
 /// same input.
 ///
 /// It also holds a reference to everything the input's audio thread and the mixer
-/// thread share (its ring and its counters), so neither real-time thread frees them
-/// (docs/RULES.md#R-RT-003). Keep one handle until the input's stream is closed and the
-/// [`Mixer`](crate::Mixer) is dropped: the last reference is then released here, on the
-/// control plane.
+/// thread share (its ring and its counters). The mixer and the producer hand their own
+/// references to the collector thread, so whichever handle goes last, neither real-time
+/// thread frees them (docs/RULES.md#R-RT-003).
 #[derive(Clone, Debug)]
 pub struct InputControl {
+    id: InputId,
     shared: Arc<InputShared>,
+    plane: Arc<ControlPlane>,
     /// Never read: it only keeps the ring's last reference off the real-time threads.
     _ring: Arc<FrameRing>,
 }
 
 impl InputControl {
-    pub(crate) fn new(shared: Arc<InputShared>, ring: Arc<FrameRing>) -> Self {
+    pub(crate) fn new(
+        id: InputId,
+        shared: Arc<InputShared>,
+        ring: Arc<FrameRing>,
+        plane: Arc<ControlPlane>,
+    ) -> Self {
         Self {
+            id,
             shared,
+            plane,
             _ring: ring,
         }
+    }
+
+    /// This input's id.
+    pub fn id(&self) -> InputId {
+        self.id
+    }
+
+    /// Removes this input. The mixer drops it on its next block and the ring is freed
+    /// on the collector thread. False when the input was already removed, or the
+    /// command queue could not take the removal (the input stays).
+    pub fn remove(&self) -> bool {
+        self.plane.remove(self.id.0)
     }
 
     /// Sets the input's gain into the bus (its send), linear. Clamped to 0..=+24 dB; NaN

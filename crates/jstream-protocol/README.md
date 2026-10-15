@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:253cefb55a352ce7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: History bullet (history.rs) and PROTOCOL_VERSION 0.9 for history calls" }
+verified = { hash = "b3:41e5837c511505fa", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: parity bullet now has both A5's outputs/output.list/URL rejections and B4's kinds(); checked against the merged parity.rs; rest of the contents list is main's" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -81,8 +81,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
-  support, not wire types. One batch that builds a small collection, the exact answer
-  to every collection read of it, and the exact error for batches rejected against it.
+  support, not wire types. One batch that builds a small collection with two RTMP
+  outputs, the exact answer to every collection read of it (`output.list` included),
+  and the exact error for batches rejected against it (RTMP URL checks included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -95,7 +96,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:a75ea01182152f09", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: four Call kinds, Tagging, Undo requests (wire example, checks, results, undo_conflict/history_empty), state.changed cause, error table, 0.9 handshake example and open question 4 checked against history.rs/envelope.rs/error.rs/event.rs" }
+verified = { hash = "b3:8d4105cece766a56", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: prose is main's (0.8); A5 changes only parity.rs, a test fixture, so no wire type, schema or snapshot in this section changed" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

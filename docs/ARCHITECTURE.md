@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:834d53b2cb1989fd", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: apps changes are the CLI's event line (cause) and a daemon test pattern; diagram and host table hold" }
+verified = { hash = "b3:7f8049945ccc2f18", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (I1 #153 /mcp) into A5: only the verified line conflicted; re-read I1's daemon row (WebSocket API and /mcp) and A5's CLI change (output commands, still only through jstream-control); diagram and host table hold" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:834d53b2cb1989fd", by = "agent:claude@session_01WG1uLVaz
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API only ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI yet ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:ae45fe9d9e867a96", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against .github/: the line now also names the workflow tests and the issue template next to the four workflows, Dependabot config and PR template; xtask and docs lines unchanged" }
+verified = { hash = "b3:7f90b5a4097428aa", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Re-read against main.rs, which only adds docs merge-main to the usage list: the xtask line still names docs among its commands, so the layout holds" }
 -->
 
 ```
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ab2169e2c211fe79", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: re-read the map; the jstream-outputs row names recording as its Cargo description now does (#156); vcam-proto row holds; B4 adds no layer edge" }
+verified = { hash = "b3:1a30b706dc6e3620", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (#181, #166, #149) into G2 #174: re-read the whole map; main changed no rows since da4d83a, only the stamp; G2's jstream-vcam-windows row (own log sink, L0 + windows) still matches its Cargo.toml" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -146,11 +146,11 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
-| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
+| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
-| 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` (not built) | no |
+| 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
-| 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks (not built) | no |
+| 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0034](adr/0034-youtube-interaction-scope-v2.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
@@ -165,8 +165,8 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:469cd47b05c605ba", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Built so far merged: settings checked and stored complete, settings-reference edges and delete rejection (B4), and outputs with Rtmp Generic url (#142); Not yet drops settings and keeps kind versions; checked against graph model/mod.rs" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
+verified = { hash = "b3:81cb37560b19b12c", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "ADR-0040 accepted: hotkey sentence now says deleting a binding's target removes the binding in the same undoable edit, delete.plan lists them, never a blocker (ADR-0040 §3); depends_on gains ADR-0040; the orphaned-override and shared-group bullets already match its §1-2; Built so far still lists hotkeys as not built" }
 -->
 
 ```
@@ -256,9 +256,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   display order, and a variant sits under its parent, never in a folder. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
-  decision. Deleting the scene, source or output a binding's action names succeeds: the
-  binding stays, is reported as broken, does nothing when pressed, and can be re-pointed
-  (a batch of `hotkey.clear` and `hotkey.set`, as ADR-0024 §5 rebinds); undoing the delete makes it work again. `Scene.background` (absent
+  decision. Deleting the scene, source or output a binding's action names also removes
+  that binding, in the same undoable edit, and undo restores both; `delete.plan` lists
+  the bindings it will remove, and a binding is never a delete blocker
+  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). `Scene.background` (absent
   means transparent) is scene model, not metadata, because the compositor draws it
   wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
@@ -362,7 +363,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:ba6900fcfb9b0d02", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#136, #146) into #133: prose is main's; re-read the section: the Collector row and 'collector thread ... not this cut' hold with #133's InputControl keep-alive (rings freed on the control plane); #136's bounded drain and #146's keyframe requests don't touch audio teardown" }
+verified = { hash = "b3:8be44cb5d6358bec", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main (#133, #136, #146) into D1: prose is main's except D1's two collector sentences (mixer's own collector for input rings; queue add/remove with rings freed on the collector), which still hold beside #133's InputControl reference; Collector row unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -404,8 +405,9 @@ one, and a render panic repeats the last frame until teardown. A fatal error on 
 render, mixer or output thread (a publish failure, an encoder stream that ends
 before stop, a render or mixer panic) is a channel message to a watcher the control
 thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
-encoder session queues. Arc-swap snapshots, the collector thread and a GPU encode
-target are still the rows above, not this cut.
+encoder session queues. Arc-swap snapshots and a GPU encode target are still the
+rows above, not this cut. The collector so far is the mixer's own, and frees only
+input rings and their counters.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
@@ -438,7 +440,9 @@ in 20 minutes, haven't been measured.
 **In the engine:** `jstream-audio` runs S3's drift fit and PI loop with S3's tuning on
 each input's audio thread, resampling into a per-input ring indexed by engine frame
 that the mixer reads on the engine clock
-([its real-time design](../crates/jstream-audio/README.md#realtime)). It differs from
+([its real-time design](../crates/jstream-audio/README.md#realtime)). Inputs are added
+and removed through a lock-free command queue while the mixer runs, and a ring released
+by the mixer or the audio thread is freed on the collector thread. It differs from
 what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, and the
 timing error is absolute, so inputs line up with each other. That combination has been
 simulated (within 0.05 ms after settling), not yet measured on hardware.
@@ -496,7 +500,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:8aa004a7794af0d6", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: History bullet now says undo_conflict and protocol 0.9; edits and actions bullets unchanged" }
+verified = { hash = "b3:e2cd81f519d286e1", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (I1 #153 /mcp) into A5: only the verified line conflicted; re-read I1's /mcp transport sentence; A5 changed only the mock and parity fixture, so no message, edit, query or transport rule here changed" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -582,8 +586,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
   list. The same server
-  serves MCP's streamable-HTTP transport on the control port, behind the same checks
-  ([MCP](#mcp)).
+  serves MCP's streamable-HTTP transport at `/mcp` on the control port, behind the same
+  checks, when the host turns it on ([MCP](#mcp)).
 - **Slow clients:** each connection gets a bounded event buffer, and the server keeps
   draining the engine's events while a client is slow to read. When the buffer
   overflows, the server drops the queued events and sends one `events.dropped {count}`
@@ -597,7 +601,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:222e42dfb2824a4d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: grouped tools list includes history; tools.snap is about 82 KB, so about 80 KB holds" }
+verified = { hash = "b3:90489d48b902b02d", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; tool groups gain kind and about 80 KB (main), Access bullet settles no-Origin at /mcp (I1)" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -625,13 +629,14 @@ verified = { hash = "b3:222e42dfb2824a4d", by = "agent:claude@session_01WG1uLVaz
   short placeholder in `png`, so the image doesn't flood the agent's context.
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
-  streamable-HTTP transport (not built) is served by `jstream-server` on the control port,
-  behind the same token and `Origin` checks as the WebSocket API, so it validates
+  streamable-HTTP transport is served by `jstream-server` at `/mcp` on the control port,
+  behind the same token, `Host` and `Origin` checks as the WebSocket API, so it validates
   `Origin`, as the
   [MCP transport spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
-  requires. Whether that transport also lets a request without `Origin` through, as the
-  WebSocket API does, is settled when it is built: browsers send `Origin` on a
-  cross-origin `fetch`, and the bearer token forces a preflight.
+  requires. Like the WebSocket API it lets a request without `Origin` through to the
+  token check: browsers send `Origin` on a cross-origin `fetch`, and the bearer token
+  forces a preflight, so only native clients send none
+  ([jstream-server › Design](../crates/jstream-server/README.md#design)).
 - Every agent action goes to the audit log with the client's name. Undo is per client,
   so an agent can never undo the user's work.
 
@@ -640,7 +645,7 @@ verified = { hash = "b3:222e42dfb2824a4d", by = "agent:claude@session_01WG1uLVaz
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:40d6041b79574568", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the one-scene paragraph against the premultiply-on-upload change: the composite still writes premultiplied linear into Rgba16Float and resolves to Rgba8UnormSrgb, blend still premultiplied src-over; source alpha handling is detailed in the crate README, not here. Steps 1-6 unchanged." }
+verified = { hash = "b3:d9ef248382cce5c7", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): added the sentence that a nested scene goes through render_image as an on-GPU Rgba16Float image placed in its parent, with the caller bounding depth; plus review N5 rename; steps 1-6, S1 table and output path unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -675,7 +680,9 @@ src-over. The composite pass writes premultiplied linear light into `Rgba16Float
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a software adapter
-first. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
+first. A nested scene is composited with `render_image` into an `Rgba16Float` image
+that stays on the GPU and is placed in its parent; the caller walks the nesting,
+bounded in depth. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
 fit modes, 3D, effect packs, and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a

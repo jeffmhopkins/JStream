@@ -1394,7 +1394,7 @@ const GPU_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120
 
 /// One software-adapter test at a time. Parallel compositors starve the pipeline
 /// test's media wait and crash WARP. The lock schedules tests; it is not engine state.
-fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
+pub(crate) fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
     static SLOT: Mutex<()> = Mutex::new(());
     SLOT.lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)

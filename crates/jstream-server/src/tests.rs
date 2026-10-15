@@ -1050,3 +1050,486 @@ fn a_client_that_sends_headers_too_slowly_is_dropped() {
     let response = ok(harness.run(control.call(create_scene("main"))));
     assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
 }
+
+// MCP's streamable-HTTP transport (`mcp.rs`), driven with raw HTTP/1.1 requests.
+
+/// An HTTP answer: its status, headers (names lowercase) and body.
+struct HttpReply {
+    status: u16,
+    headers: Vec<(String, String)>,
+    body: String,
+}
+
+impl HttpReply {
+    fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, v)| v.as_str())
+    }
+
+    fn json(&self) -> serde_json::Value {
+        match serde_json::from_str(&self.body) {
+            Ok(value) => value,
+            Err(error) => panic!("not JSON ({error}): {}", self.body),
+        }
+    }
+}
+
+/// Writes one HTTP/1.1 request on `stream` and reads its answer (a `Content-Length`
+/// body, or none).
+async fn http_on(
+    stream: &mut tokio::net::TcpStream,
+    method: &str,
+    headers: &[(&str, &str)],
+    body: &str,
+) -> HttpReply {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut request = format!("{method} {} HTTP/1.1\r\n", crate::MCP_PATH);
+    for (name, value) in headers {
+        request.push_str(&format!("{name}: {value}\r\n"));
+    }
+    request.push_str(&format!("Content-Length: {}\r\n\r\n{body}", body.len()));
+    if let Err(error) = stream.write_all(request.as_bytes()).await {
+        panic!("write: {error}");
+    }
+    let mut buf = Vec::new();
+    let (head_len, length) = loop {
+        let mut chunk = [0u8; 4096];
+        match stream.read(&mut chunk).await {
+            Ok(0) => panic!(
+                "closed before the answer: {}",
+                String::from_utf8_lossy(&buf)
+            ),
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Err(error) => panic!("read: {error}"),
+        }
+        if let Some(end) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            let head = String::from_utf8_lossy(&buf[..end]).to_ascii_lowercase();
+            let length = head
+                .lines()
+                .find_map(|line| line.strip_prefix("content-length:"))
+                .and_then(|value| value.trim().parse::<usize>().ok())
+                .unwrap_or(0);
+            break (end + 4, length);
+        }
+    };
+    while buf.len() < head_len + length {
+        let mut chunk = [0u8; 4096];
+        match stream.read(&mut chunk).await {
+            Ok(0) => panic!("closed mid-body"),
+            Ok(n) => buf.extend_from_slice(&chunk[..n]),
+            Err(error) => panic!("read: {error}"),
+        }
+    }
+    let head = String::from_utf8_lossy(&buf[..head_len - 4]).into_owned();
+    let mut lines = head.lines();
+    let status = lines
+        .next()
+        .and_then(|line| line.split(' ').nth(1))
+        .and_then(|code| code.parse().ok())
+        .unwrap_or(0);
+    let headers = lines
+        .filter_map(|line| line.split_once(':'))
+        .map(|(n, v)| (n.trim().to_ascii_lowercase(), v.trim().to_owned()))
+        .collect();
+    let body = String::from_utf8_lossy(&buf[head_len..head_len + length]).into_owned();
+    HttpReply {
+        status,
+        headers,
+        body,
+    }
+}
+
+impl Harness {
+    /// Sends one request to the MCP endpoint on a new connection, with `headers` (`Host`
+    /// is added unless given).
+    fn http(&self, method: &str, headers: &[(&str, &str)], body: &str) -> HttpReply {
+        let addr = self.authority.clone();
+        let mut all: Vec<(&str, &str)> = Vec::new();
+        if !headers.iter().any(|(n, _)| n.eq_ignore_ascii_case("host")) {
+            all.push(("Host", &addr));
+        }
+        all.extend_from_slice(headers);
+        self.run(async {
+            let mut stream = match tokio::net::TcpStream::connect(&addr).await {
+                Ok(stream) => stream,
+                Err(error) => panic!("connect: {error}"),
+            };
+            http_on(&mut stream, method, &all, body).await
+        })
+    }
+
+    /// POSTs one JSON-RPC message with the token, and the session ID if given.
+    fn mcp(&self, session: Option<&str>, message: &serde_json::Value) -> HttpReply {
+        let bearer = format!("Bearer {TOKEN}");
+        let mut headers = vec![
+            ("Authorization", bearer.as_str()),
+            ("Content-Type", "application/json"),
+            ("Accept", "application/json, text/event-stream"),
+        ];
+        if let Some(id) = session {
+            headers.push(("Mcp-Session-Id", id));
+        }
+        self.http("POST", &headers, &message.to_string())
+    }
+
+    /// A handshake-based MCP session: `initialize` and `notifications/initialized`.
+    fn mcp_session(&self, client: &str) -> String {
+        let reply = self.mcp(None, &mcp_initialize(client));
+        assert_eq!(reply.status, 200, "{}", reply.body);
+        assert_eq!(reply.header("content-type"), Some("application/json"));
+        assert_eq!(reply.json()["result"]["protocolVersion"], "2025-11-25");
+        let Some(id) = reply.header("mcp-session-id").map(str::to_owned) else {
+            panic!("no Mcp-Session-Id");
+        };
+        let note = serde_json::json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
+        let reply = self.mcp(Some(&id), &note);
+        assert_eq!((reply.status, reply.body.as_str()), (202, ""));
+        id
+    }
+}
+
+fn mcp_on() -> impl FnOnce(&mut ServerConfig) {
+    |config| config.mcp = true
+}
+
+fn mcp_initialize(client: &str) -> serde_json::Value {
+    serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "initialize",
+        "params": {"protocolVersion": "2025-11-25", "capabilities": {},
+                   "clientInfo": {"name": client, "version": "1"}}
+    })
+}
+
+fn mcp_create_scene(id: &str, meta: Option<serde_json::Value>) -> serde_json::Value {
+    let mut params = serde_json::json!({
+        "name": "scene",
+        "arguments": {"op": {"type": "scene.create", "scene_id": id, "name": id}}
+    });
+    if let Some(meta) = meta {
+        params["_meta"] = meta;
+    }
+    serde_json::json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": params})
+}
+
+fn modern_meta() -> serde_json::Value {
+    serde_json::json!({
+        "io.modelcontextprotocol/protocolVersion": jstream_mcp::MODERN_VERSION,
+        "io.modelcontextprotocol/clientInfo": {"name": "stateless-agent", "version": "1"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+    })
+}
+
+pub(crate) fn check_mcp_rejects_missing_token() {
+    let harness = start_with(&MockEngine::new(), mcp_on());
+    let body = mcp_initialize("agent").to_string();
+    for authorization in [None, Some("Bearer wrong-token"), Some("Basic dGVzdA==")] {
+        let mut headers = vec![("Content-Type", "application/json")];
+        if let Some(value) = authorization {
+            headers.push(("Authorization", value));
+        }
+        let reply = harness.http("POST", &headers, &body);
+        assert_eq!(reply.status, 401, "{authorization:?}");
+        assert_eq!(reply.header("www-authenticate"), Some("Bearer"));
+    }
+    assert_eq!(
+        harness.sessions.load(Ordering::SeqCst),
+        0,
+        "no session opened"
+    );
+}
+
+pub(crate) fn check_mcp_rejects_foreign_origin() {
+    let harness = start_with(&MockEngine::new(), mcp_on());
+    let bearer = format!("Bearer {TOKEN}");
+    let body = mcp_initialize("agent").to_string();
+    let port = harness
+        .authority
+        .rsplit(':')
+        .next()
+        .unwrap_or_default()
+        .to_owned();
+    let rebound = format!("evil.example:{port}");
+    let rebound_origin = format!("http://{rebound}");
+    for (origin, host) in [
+        (Some("http://evil.example"), None),
+        (Some("null"), None),
+        (Some(rebound_origin.as_str()), Some(rebound.as_str())),
+        (None, Some(rebound.as_str())),
+    ] {
+        let mut headers = vec![
+            ("Authorization", bearer.as_str()),
+            ("Content-Type", "application/json"),
+        ];
+        headers.extend(origin.map(|o| ("Origin", o)));
+        headers.extend(host.map(|h| ("Host", h)));
+        let reply = harness.http("POST", &headers, &body);
+        assert_eq!(reply.status, 403, "{origin:?} {host:?}");
+    }
+    assert_eq!(
+        harness.sessions.load(Ordering::SeqCst),
+        0,
+        "no session opened"
+    );
+    // The server's own origin, and no `Origin` at all (a native client), get in.
+    let own = harness.own_origin();
+    let reply = harness.http(
+        "POST",
+        &[
+            ("Authorization", &bearer),
+            ("Content-Type", "application/json"),
+            ("Origin", &own),
+        ],
+        &body,
+    );
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let reply = harness.http(
+        "POST",
+        &[
+            ("Authorization", &bearer),
+            ("Content-Type", "application/json"),
+        ],
+        &body,
+    );
+    assert_eq!(reply.status, 200, "{}", reply.body);
+}
+
+/// The MCP endpoint is off unless the host turns it on.
+#[test]
+fn mcp_is_off_by_default() {
+    let harness = start(&MockEngine::new());
+    let reply = harness.mcp(None, &mcp_initialize("agent"));
+    assert_eq!(reply.status, 404);
+    assert_eq!(harness.sessions.load(Ordering::SeqCst), 0);
+}
+
+/// Each `initialize` opens its own session, with its own engine client; requests carrying
+/// its ID act as that client, and the engine sees the edits.
+#[test]
+fn mcp_sessions_are_separate_clients() {
+    let engine = MockEngine::new();
+    let harness = start_with(&engine, mcp_on());
+    let first = harness.mcp_session("agent-a");
+    let second = harness.mcp_session("agent-b");
+    assert_ne!(first, second);
+    assert_eq!(first.len(), 32, "{first}");
+    assert_eq!(
+        harness.sessions.load(Ordering::SeqCst),
+        2,
+        "one per initialize"
+    );
+
+    let list = serde_json::json!({"jsonrpc": "2.0", "id": 5, "method": "tools/list"});
+    let reply = harness.mcp(Some(&first), &list);
+    assert_eq!(reply.status, 200);
+    assert!(
+        reply.json()["result"]["tools"]
+            .as_array()
+            .is_some_and(|t| !t.is_empty())
+    );
+
+    let reply = harness.mcp(Some(&first), &mcp_create_scene("main", None));
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let result = &reply.json()["result"];
+    assert_eq!(result["isError"], false, "{result}");
+    assert_eq!(result["structuredContent"]["result"]["rev"], 1, "{result}");
+    // The second session sees the shared engine's state.
+    let reply = harness.mcp(Some(&second), &mcp_create_scene("main", None));
+    let result = &reply.json()["result"];
+    assert_eq!(result["isError"], true, "the scene exists: {result}");
+
+    // A WebSocket client sees the MCP client's edit.
+    let (control, _) = harness.session();
+    let response = ok(harness.run(control.call(Call::Query {
+        query: Query::SceneList,
+    })));
+    assert!(format!("{response:?}").contains("main"), "{response:?}");
+}
+
+/// Requests without `Mcp-Session-Id` (MCP 2026-07-28) share one stateless server.
+#[test]
+fn mcp_stateless_requests_share_one_server() {
+    let harness = start_with(&MockEngine::new(), mcp_on());
+    let discover = serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "server/discover",
+        "params": {"_meta": modern_meta()}
+    });
+    let reply = harness.mcp(None, &discover);
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    assert_eq!(reply.header("mcp-session-id"), None);
+    assert!(reply.json()["result"]["supportedVersions"].is_array());
+    for scene in ["one", "two"] {
+        let reply = harness.mcp(None, &mcp_create_scene(scene, Some(modern_meta())));
+        assert_eq!(reply.json()["result"]["isError"], false, "{}", reply.body);
+    }
+    assert_eq!(
+        harness.sessions.load(Ordering::SeqCst),
+        1,
+        "one shared session"
+    );
+    // A handshake-era request without a session isn't served statelessly.
+    let reply = harness.mcp(None, &mcp_create_scene("three", None));
+    assert_eq!(reply.json()["error"]["code"], -32602, "{}", reply.body);
+}
+
+/// `DELETE` ends a session, an unknown ID is 404, `GET` is 405, and a failed
+/// `initialize` keeps no session.
+#[test]
+fn mcp_sessions_end_and_unknown_ones_are_not_found() {
+    let harness = start_with(&MockEngine::new(), mcp_on());
+    let bearer = format!("Bearer {TOKEN}");
+    let id = harness.mcp_session("agent");
+    let reply = harness.http(
+        "DELETE",
+        &[("Authorization", &bearer), ("Mcp-Session-Id", &id)],
+        "",
+    );
+    assert_eq!(reply.status, 204);
+    let reply = harness.mcp(Some(&id), &mcp_create_scene("main", None));
+    assert_eq!(reply.status, 404, "{}", reply.body);
+    let reply = harness.http(
+        "DELETE",
+        &[("Authorization", &bearer), ("Mcp-Session-Id", &id)],
+        "",
+    );
+    assert_eq!(reply.status, 404);
+    let reply = harness.http("DELETE", &[("Authorization", &bearer)], "");
+    assert_eq!(reply.status, 400);
+    let reply = harness.http("GET", &[("Authorization", &bearer)], "");
+    assert_eq!(reply.status, 405);
+    assert_eq!(reply.header("allow"), Some("POST, DELETE"));
+
+    // An `initialize` on an open session replaces it.
+    let old = harness.mcp_session("agent");
+    let reply = harness.mcp(Some(&old), &mcp_initialize("agent"));
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    let new = reply.header("mcp-session-id").map(str::to_owned);
+    assert!(new.as_ref().is_some_and(|new| *new != old), "{new:?}");
+    let reply = harness.mcp(Some(&old), &mcp_create_scene("main", None));
+    assert_eq!(reply.status, 404, "the old session ended: {}", reply.body);
+
+    let bad = serde_json::json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}});
+    let reply = harness.mcp(None, &bad);
+    assert_eq!(reply.json()["error"]["code"], -32602, "{}", reply.body);
+    assert_eq!(reply.header("mcp-session-id"), None);
+}
+
+/// Malformed requests: a body that isn't declared JSON, an unsupported
+/// `MCP-Protocol-Version`, a body over 4 MiB, and a body that doesn't parse.
+#[test]
+fn mcp_refuses_malformed_requests() {
+    let harness = start_with(&MockEngine::new(), mcp_on());
+    let bearer = format!("Bearer {TOKEN}");
+    let body = mcp_initialize("agent").to_string();
+    let reply = harness.http(
+        "POST",
+        &[("Authorization", &bearer), ("Content-Type", "text/plain")],
+        &body,
+    );
+    assert_eq!(reply.status, 415);
+    let reply = harness.http(
+        "POST",
+        &[
+            ("Authorization", &bearer),
+            ("Content-Type", "application/json; charset=utf-8"),
+            ("MCP-Protocol-Version", "1900-01-01"),
+        ],
+        &body,
+    );
+    assert_eq!(reply.status, 400);
+    // A body declared over 4 MiB is refused from its `Content-Length`, before it is
+    // read. Only the headers are sent: the server may close the connection as soon as it
+    // has answered, so writing the whole body could fail on the client's side.
+    let addr = harness.authority.clone();
+    let reply = harness.run(async {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut stream = match tokio::net::TcpStream::connect(&addr).await {
+            Ok(stream) => stream,
+            Err(error) => panic!("connect: {error}"),
+        };
+        let head = format!(
+            "POST {} HTTP/1.1\r\nHost: {addr}\r\nAuthorization: {bearer}\r\n\
+             Content-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            crate::MCP_PATH,
+            5 << 20
+        );
+        if let Err(error) = stream.write_all(head.as_bytes()).await {
+            panic!("write: {error}");
+        }
+        // The status line is enough; the server may keep the connection open.
+        let mut answer = Vec::new();
+        let mut chunk = [0u8; 1024];
+        while !answer.windows(2).any(|w| w == b"\r\n") {
+            match stream.read(&mut chunk).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => answer.extend_from_slice(&chunk[..n]),
+            }
+        }
+        String::from_utf8_lossy(&answer).into_owned()
+    });
+    assert!(reply.starts_with("HTTP/1.1 413"), "{reply}");
+    assert_eq!(
+        harness.sessions.load(Ordering::SeqCst),
+        0,
+        "no session opened"
+    );
+    // A body that doesn't parse goes to the stateless server, which answers it.
+    let reply = harness.http(
+        "POST",
+        &[
+            ("Authorization", &bearer),
+            ("Content-Type", "application/json"),
+        ],
+        "{not json",
+    );
+    assert_eq!(reply.status, 200);
+    assert_eq!(reply.json()["error"]["code"], -32700, "{}", reply.body);
+}
+
+/// `initialize` beyond `max_mcp_sessions` is 503; an idle session expires, freeing its
+/// place.
+#[test]
+fn mcp_sessions_are_capped_and_expire() {
+    let harness = start_with(&MockEngine::new(), |config| {
+        config.mcp = true;
+        config.max_mcp_sessions = 1;
+        config.mcp_idle_timeout = Duration::from_millis(300);
+    });
+    let id = harness.mcp_session("agent");
+    let reply = harness.mcp(None, &mcp_initialize("other"));
+    assert_eq!(reply.status, 503, "{}", reply.body);
+    harness.run(async { tokio::time::sleep(Duration::from_millis(400)).await });
+    let reply = harness.mcp(Some(&id), &mcp_create_scene("main", None));
+    assert_eq!(reply.status, 404, "expired: {}", reply.body);
+    harness.mcp_session("other");
+}
+
+/// An authenticated MCP connection may carry more requests after the header-read
+/// timeout has passed (HTTP keep-alive).
+#[test]
+fn mcp_keep_alive_outlasts_the_header_read_timeout() {
+    let harness = start_with(&MockEngine::new(), |config| {
+        config.mcp = true;
+        config.header_read_timeout = Duration::from_millis(300);
+    });
+    let addr = harness.authority.clone();
+    let bearer = format!("Bearer {TOKEN}");
+    let headers = [
+        ("Host", addr.as_str()),
+        ("Authorization", bearer.as_str()),
+        ("Content-Type", "application/json"),
+    ];
+    let body = mcp_initialize("agent").to_string();
+    let (first, second) = harness.run(async {
+        let mut stream = match tokio::net::TcpStream::connect(&addr).await {
+            Ok(stream) => stream,
+            Err(error) => panic!("connect: {error}"),
+        };
+        let first = http_on(&mut stream, "POST", &headers, &body).await;
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        let second = http_on(&mut stream, "POST", &headers, &body).await;
+        (first, second)
+    });
+    assert_eq!((first.status, second.status), (200, 200));
+}

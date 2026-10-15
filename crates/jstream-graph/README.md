@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:165732eaab61a37c", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2: graph code unchanged; the inverse bullet still says core's per-client history chooses expected_rev, which history.rs does (None)" }
+verified = { hash = "b3:d0533dab37e9f66d", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Stale via ARCH#data-model (ADR-0040 hotkey sentence): the graph has no hotkeys, variants or delete.plan yet, so Purpose and its Not yet list hold" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
