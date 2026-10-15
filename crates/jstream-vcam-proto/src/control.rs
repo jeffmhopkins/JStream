@@ -3,7 +3,9 @@
 use std::mem::{align_of, offset_of, size_of};
 use std::sync::atomic::{AtomicI32, AtomicU32, AtomicU64, Ordering};
 
-use crate::{LIVENESS_MS, MAGIC, MAPPING_SIZE, VERSION};
+use crate::{
+    DXGI_FORMAT_B8G8R8A8_UNORM, HEIGHT, LIVENESS_MS, MAGIC, MAPPING_SIZE, RING, VERSION, WIDTH,
+};
 
 /// [`Control::state`]: no producer has published yet (a fresh, zeroed mapping).
 pub const STATE_EMPTY: u32 = 0;
@@ -27,9 +29,21 @@ pub const CONSUMER_KNOWN: u32 = 8;
 /// bit pattern (including the OS's zero fill) is a valid value. The producer writes the
 /// producer fields and the consumer the consumer fields.
 ///
-/// The producer writes its fields other than the counters and timestamps before storing
-/// `state = STATE_LIVE` (release), and the consumer reads them only after observing it
-/// (acquire). Timestamps are QPC values, which compare across processes.
+/// **Publishing.** The producer writes its fields other than the counters and timestamps
+/// before storing `state = STATE_LIVE` (release), and the consumer reads them only after
+/// observing it (acquire). Timestamps are QPC values, which compare across processes.
+///
+/// **Re-initialising.** The mapping outlives a producer while the consumer holds it open,
+/// so a restarted producer can find `state` still `STATE_LIVE`. Before it rewrites any
+/// identity field (`scope`, `producer_pid`, `session_id`, the format, `ring`,
+/// `adapter_luid`) it stores `state = STATE_EMPTY` (release), and it stores `STATE_LIVE`
+/// again only when they are all written. The consumer re-checks [`Control::is_live`] and
+/// re-reads `producer_pid` after opening the textures and fence, and drops them if either
+/// changed.
+///
+/// **Trust.** The block is written by another process. The consumer checks the format and
+/// ring against this crate's constants ([`Control::format_matches`]) instead of trusting
+/// them.
 ///
 /// The layout is fixed by `repr(C)` and pinned by compile-time assertions on every
 /// field's offset, so it is the same on every target.
@@ -137,6 +151,15 @@ impl Control {
             && self.state.load(Ordering::Acquire) == STATE_LIVE
     }
 
+    /// Whether the producer's format fields match the contract's constants: [`WIDTH`],
+    /// [`HEIGHT`], [`DXGI_FORMAT_B8G8R8A8_UNORM`] and [`RING`].
+    pub fn format_matches(&self) -> bool {
+        self.width.load(Ordering::Acquire) == WIDTH
+            && self.height.load(Ordering::Acquire) == HEIGHT
+            && self.dxgi_format.load(Ordering::Acquire) == DXGI_FORMAT_B8G8R8A8_UNORM
+            && self.ring.load(Ordering::Acquire) == RING
+    }
+
     /// Whether the producer's heartbeat is recent, given the current QPC value and the QPC
     /// frequency (ticks per second).
     pub fn heartbeat_fresh(&self, now_qpc: u64, qpc_freq: u64) -> bool {
@@ -160,6 +183,11 @@ pub fn slot_of(frame: u64, ring: u32) -> u32 {
 /// on a signal a dead producer can't deliver. Returns `None` if no complete frame is safe:
 /// frame `m` sits in slot `m % ring`, and the producer may already be rendering
 /// `latest + 1`, so `m` must be newer than `latest + 1 - ring`.
+///
+/// "Safe" holds only when `latest` was read. The ring has no back-pressure, so once the
+/// producer publishes `latest + 1` it may start rewriting the slot of `latest + 2 - ring`;
+/// with a ring of 3 and `m = latest - 1`, the consumer's copy must finish within about one
+/// frame period.
 pub fn choose_frame(latest: u64, completed: u64, ring: u32) -> Option<u64> {
     let m = latest.min(completed);
     (m > 0 && latest - m + 1 < u64::from(ring.max(1))).then_some(m)
@@ -168,7 +196,6 @@ pub fn choose_frame(latest: u64, completed: u64, ring: u32) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::RING;
 
     #[test]
     fn frame_choice() {
@@ -229,6 +256,23 @@ mod tests {
 
         c.state.store(STATE_STOPPED, Ordering::Release);
         assert!(!c.is_live());
+    }
+
+    #[test]
+    fn format_must_match_the_contract() {
+        let c = Control::default();
+        assert!(!c.format_matches());
+        c.width.store(WIDTH, Ordering::Release);
+        c.height.store(HEIGHT, Ordering::Release);
+        c.dxgi_format
+            .store(DXGI_FORMAT_B8G8R8A8_UNORM, Ordering::Release);
+        c.ring.store(RING, Ordering::Release);
+        assert!(c.format_matches());
+        c.ring.store(RING + 1, Ordering::Release);
+        assert!(!c.format_matches());
+        c.ring.store(RING, Ordering::Release);
+        c.width.store(WIDTH / 2, Ordering::Release);
+        assert!(!c.format_matches());
     }
 
     #[test]

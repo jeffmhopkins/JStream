@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-proto/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-proto"]
-verified = { hash = "b3:916d45496dda4344", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "New crate: Purpose re-read against lib.rs, control.rs and names.rs (Control layout, MAGIC/VERSION, format constants, slot_of/choose_frame, Scope and names, SDDL, CLSID) and against its crate-map row" }
+verified = { hash = "b3:e983ea67355b838a", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Review round 1: re-read against the code after B1/N2/N3: sddl_objects(user_sid) replaces the IU DACL, logging left out of the contract, choose_frame safety stated as a timing assumption, re-initialisation and format_matches listed" }
 -->
 
 Layer-0 contract between the engine, which produces the virtual camera's frames, and the
@@ -31,10 +31,18 @@ Contents:
   change to the layout, the names or a field's meaning bumps `VERSION`.
 - The frame format (1920x1080 at 30 fps, BGRA), the ring size and the liveness timeout.
 - The frame hand-off rule: `slot_of` and `choose_frame`, which picks the newest frame
-  whose fence already completed and whose slot the producer can't be rewriting.
+  whose fence already completed and whose slot the producer wasn't rewriting when
+  `latest_frame` was read. The ring has no back-pressure, so the DLL's copy must finish
+  within about one frame period.
+- How a restarted producer re-initialises the block (`STATE_EMPTY` first) and what the
+  DLL re-checks, including `format_matches` against the constants.
 - Object names and security: `Scope` (`Global\` or the engine's session, opened from
   session 0 as `Session\<id>\`), the texture, fence and control-block names, the order
-  the DLL probes them in, and the SDDL that lets Frame Server's LOCAL SERVICE account in.
+  the DLL probes them in, and `sddl_objects`, the DACL that admits only SYSTEM,
+  Administrators, LOCAL SERVICE (Frame Server) and the producing user's SID.
+- Not logging: spike S2's log folder, writable by every interactive user, is left out;
+  the DLL's logging (ETW or a location a user can't redirect) is decided in
+  `jstream-vcam-windows`.
 - The media source's CLSID and the camera's friendly name.
 
 Mapping the block, creating the objects and registering the DLL need Windows APIs and

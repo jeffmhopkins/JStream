@@ -11,7 +11,12 @@
 //! then stores [`Control::latest_frame`] `= n` with release ordering. The DLL loads
 //! `latest_frame` (acquire), picks a safe frame with [`choose_frame`], queues
 //! `Wait(fence, m)` on its own context and copies slot `m`. The fence value is the frame
-//! number.
+//! number. The ring has no back-pressure: the copy must finish within about one frame
+//! period, before the producer comes back round to that slot.
+//!
+//! **Logging** is not part of this contract. Spike S2 logged to a `%ProgramData%` folder
+//! every interactive user could write to; the DLL needs ETW or a location a user can't
+//! redirect instead, which `jstream-vcam-windows` decides.
 //!
 //! **Compatibility:** a consumer uses a block only when [`Control::is_live`] holds, which
 //! checks [`MAGIC`] and [`VERSION`]. Any change to the layout, the names or the meaning of
@@ -29,8 +34,8 @@ pub use control::{
     STATE_EMPTY, STATE_LIVE, STATE_STOPPED, choose_frame, slot_of,
 };
 pub use names::{
-    CONTROL_NAME, LOG_DIR_NAME, SDDL_LOG_DIR, SDDL_OBJECTS, SESSION_PROBE_MAX, Scope,
-    control_open_names, fence_base, texture_base,
+    CONTROL_NAME, SESSION_PROBE_MAX, Scope, control_open_names, fence_base, sddl_objects,
+    texture_base,
 };
 
 /// `JSVC` in little-endian byte order, so a zeroed or foreign mapping is never mistaken for

@@ -1,22 +1,34 @@
-//! Names and security of the shared kernel objects (control block, ring textures, fence)
-//! and of the consumer's log folder.
+//! Names and security of the shared kernel objects: the control block, the ring textures
+//! and the fence.
 
 /// Base name of the control block's file mapping.
 pub const CONTROL_NAME: &str = "JStream-VCam-Control";
 
-/// Name of the consumer's log folder under `%ProgramData%`. Frame Server runs the DLL as
-/// LOCAL SERVICE, whose `%TEMP%` the user can't read, so a folder both can reach is used.
-pub const LOG_DIR_NAME: &str = "JStreamVCam";
+/// The DACL (SDDL) for the textures, the fence and the control block: full access for
+/// SYSTEM, Administrators, LOCAL SERVICE (Frame Server's account) and the producing user,
+/// whose SID string (`S-1-5-21-…`) the producer looks up for its own token. Protected
+/// (`P`), so nothing is inherited, and no other user is let in: spike S2's grant to every
+/// interactive user (`IU`) would let another logged-on user rewrite the control block that
+/// steers the DLL inside Frame Server, or read the camera's frames.
+///
+/// Returns `None` unless `user_sid` is a well-formed SID string, so a malformed value can't
+/// add entries to the DACL.
+pub fn sddl_objects(user_sid: &str) -> Option<String> {
+    is_sid(user_sid).then(|| format!("D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;LS)(A;;GA;;;{user_sid})"))
+}
 
-/// DACL (SDDL) for the textures, the fence and the control block: full access for SYSTEM,
-/// Administrators, LOCAL SERVICE (Frame Server's account) and interactive users (the
-/// producer). Protected (`P`), so nothing is inherited.
-pub const SDDL_OBJECTS: &str = "D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;LS)(A;;GA;;;IU)";
-
-/// DACL (SDDL) for the log folder: the same principals, inherited by the files in it
-/// (`OICI`).
-pub const SDDL_LOG_DIR: &str =
-    "D:P(A;OICI;GA;;;SY)(A;OICI;GA;;;BA)(A;OICI;GA;;;LS)(A;OICI;GA;;;IU)";
+/// Whether `s` is a SID string: `S-1-`, an identifier authority, then one or more
+/// sub-authorities, each a decimal number.
+fn is_sid(s: &str) -> bool {
+    let Some(rest) = s.strip_prefix("S-1-") else {
+        return false;
+    };
+    let parts: Vec<&str> = rest.split('-').collect();
+    parts.len() >= 2
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.len() <= 10 && p.bytes().all(|b| b.is_ascii_digit()))
+}
 
 /// Highest session id the consumer probes after the console session when looking for a
 /// session-scoped control block ([`control_open_names`]).
@@ -163,12 +175,39 @@ mod tests {
     }
 
     #[test]
-    fn sddl_grants_the_same_principals() {
-        for sid in ["SY", "BA", "LS", "IU"] {
-            assert!(SDDL_OBJECTS.contains(&format!("(A;;GA;;;{sid})")));
-            assert!(SDDL_LOG_DIR.contains(&format!("(A;OICI;GA;;;{sid})")));
+    fn sddl_names_the_producing_user_and_no_one_else() {
+        let sid = "S-1-5-21-1004336348-1177238915-682003330-1001";
+        assert_eq!(
+            sddl_objects(sid).as_deref(),
+            Some(
+                "D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;LS)\
+                 (A;;GA;;;S-1-5-21-1004336348-1177238915-682003330-1001)"
+            )
+        );
+        let sddl = sddl_objects(sid).unwrap_or_default();
+        assert!(!sddl.contains(";IU)"));
+        assert!(!sddl.contains(";WD)"));
+        assert_eq!(sddl.matches("(A;").count(), 4);
+    }
+
+    #[test]
+    fn sddl_rejects_anything_but_a_sid() {
+        for bad in [
+            "",
+            "IU",
+            "WD",
+            "S-1-5",
+            "S-1-",
+            "S-1-5-",
+            "S-1-5--18",
+            "S-2-5-18",
+            "s-1-5-18",
+            "S-1-5-18)(A;;GA;;;WD",
+            "S-1-5-18 ",
+            "S-1-5-99999999999",
+        ] {
+            assert_eq!(sddl_objects(bad), None, "{bad:?}");
         }
-        assert!(SDDL_OBJECTS.starts_with("D:P"));
-        assert!(SDDL_LOG_DIR.starts_with("D:P"));
+        assert!(sddl_objects("S-1-5-18").is_some());
     }
 }
