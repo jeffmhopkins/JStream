@@ -107,6 +107,7 @@ fn populated() -> MockEngine {
                     kind: "webcam".into(),
                 },
                 settings: Default::default(),
+                duplicated_from: None,
             },
             Edit::ItemAdd {
                 scene_id: SceneId::new("main"),
@@ -197,9 +198,9 @@ fn scene_list_golden() {
     assert_eq!(
         run_on(&engine, &["--mock", "scene", "list"]),
         ok("rev 1\n\
-            ID    NAME           ITEMS\n\
-            main  Main           2\n\
-            brb   Be right back  0\n")
+            ID    NAME           ROLE   ITEMS\n\
+            main  Main           scene  2\n\
+            brb   Be right back  scene  0\n")
     );
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "scene", "list"]),
@@ -339,12 +340,105 @@ fn state_get_golden() {
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
-            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[]}}}"#,
+            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[]}}}"#,
         ))
     );
     assert_eq!(
         run_on(&MockEngine::new(), &["--mock", "state", "get"]),
         ok("rev 0\nsources:\n  no sources\nno scenes\noutputs:\n  no outputs\n")
+    );
+}
+
+/// Protocol 0.12's grouping (`scene.set_role`, `item.move`) and 0.11's geometry and
+/// canvas edits, as one batch, and how the tables show them.
+#[test]
+fn groups_geometry_and_canvas_golden() {
+    let engine = populated();
+    let line = [
+        "--mock",
+        "edit",
+        "scene.create",
+        "grp",
+        "Cameras",
+        "scene.set_role",
+        "grp",
+        "group",
+        "source.create",
+        "grp_src",
+        "Cameras",
+        "scene:grp",
+        "item.add",
+        "main",
+        "grp_1",
+        "grp_src",
+        "item.move",
+        "cam_1",
+        "grp",
+        "0",
+        "item.move",
+        "cam_2",
+        "grp",
+        "1",
+        "item.set_geometry",
+        "cam_2",
+        "320",
+        "180",
+        "640",
+        "360",
+        "0",
+        "fill",
+        "canvas.set_size",
+        "1280",
+        "720",
+    ];
+    assert_eq!(run_on(&engine, &line), ok("applied: rev 2 (req_1)\n"));
+    assert_eq!(
+        run_on(&engine, &["--mock", "scene", "list"]),
+        ok("rev 2\n\
+            ID    NAME           ROLE   ITEMS\n\
+            main  Main           scene  1\n\
+            brb   Be right back  scene  0\n\
+            grp   Cameras        group  2\n")
+    );
+    let state = run_on(&engine, &["--mock", "state", "get"]);
+    assert_eq!(state.code, exit::OK, "{state:?}");
+    assert!(
+        state.out.contains("\ngroup grp (Cameras):\n"),
+        "{}",
+        state.out
+    );
+    let json = run_on(&engine, &["--json", "--mock", "state", "get"]);
+    let value: Value = serde_json::from_str(json.out.trim()).expect("json");
+    let result = &value["result"]["result"];
+    assert_eq!(result["canvas"], json!({"width": 1280, "height": 720}));
+    let group = &result["scenes"][2];
+    assert_eq!(group["role"], "group");
+    assert_eq!(group["items"][0]["item_id"], "cam_1");
+    assert_eq!(
+        group["items"][1]["geometry"],
+        json!({
+            "center": {"x": 320.0, "y": 180.0},
+            "size": {"width": 640.0, "height": 360.0},
+            "fit_mode": "fill",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+        })
+    );
+
+    // The group's own placement can't move into the group: it would contain itself.
+    let cycle = run_on(
+        &engine,
+        &["--mock", "edit", "item.move", "grp_1", "grp", "0"],
+    );
+    assert_eq!(
+        cycle,
+        failed(
+            17,
+            "error: invalid `edits.0.scene_id`: moving item `grp_1` (source `grp_src`) into \
+             scene `grp` would create a cycle (invalid_argument)\n"
+        )
     );
 }
 
@@ -395,7 +489,7 @@ fn edits_go_as_one_batch_golden() {
     );
     assert_eq!(
         run_on(&engine, &["--mock", "scene", "list"]),
-        ok("rev 3\nID    NAME  ITEMS\nmain  Main  1\n")
+        ok("rev 3\nID    NAME  ROLE   ITEMS\nmain  Main  scene  1\n")
     );
 }
 
@@ -482,7 +576,7 @@ fn outputs_golden() {
         run_on(&engine, &["--json", "--mock", "output", "status", "out_1"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":"#,
-            r#"{"type":"output.status","output_id":"out_1","state":"active","key_set":false}}}"#,
+            r#"{"type":"output.status","output_id":"out_1","state":"active","key_set":false,"encoder_sessions":0,"hardware_sessions":0}}}"#,
             "\n"
         ))
     );
@@ -681,9 +775,43 @@ fn stream_keys_golden() {
         run_on(&engine, &["--json", "--mock", "output", "status", "yt"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":"#,
-            r#"{"type":"output.status","output_id":"yt","state":"stopped","key_set":false}}}"#,
+            r#"{"type":"output.status","output_id":"yt","state":"stopped","key_set":false,"encoder_sessions":0,"hardware_sessions":0}}}"#,
             "\n"
         ))
+    );
+}
+
+#[test]
+fn program_scene_golden() {
+    let engine = populated();
+    assert_eq!(
+        run_on(&engine, &["--mock", "studio", "get"]),
+        ok("program: main\n")
+    );
+    let control = session(&engine);
+    let events = control.events();
+    assert_eq!(
+        run_on(&engine, &["--mock", "scene", "switch", "brb"]),
+        ok("scene.switch accepted for brb (req_1)\n")
+    );
+    assert_eq!(
+        run_on(&engine, &["--json", "--mock", "studio", "get"]),
+        ok(concat!(
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"studio.get","#,
+            r#""program_scene":"brb"}}}"#,
+            "\n"
+        ))
+    );
+    assert_eq!(engine.rev(), Rev(1), "a switch is not an edit");
+    let mut out = Vec::new();
+    stream_events(events, Some(1), false, &mut out).expect("one event");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "studio.changed program brb by mock_4 (req_1)\n"
+    );
+    assert_eq!(
+        run_on(&MockEngine::new(), &["--mock", "studio", "get"]),
+        ok("program: none (no scenes)\n")
     );
 }
 
@@ -1029,6 +1157,49 @@ fn mcp_serves_initialize_list_and_call_over_one_session() {
     // One session for the whole run, and the edit reached the engine.
     assert_eq!(sessions.load(Ordering::SeqCst), 1);
     assert_eq!(engine.rev(), Rev(1));
+}
+
+/// The proxy is one client for the whole run, so an agent can undo and redo its own
+/// edits through the `history` tool. A one-shot command can't: each run is a new
+/// client with an empty history.
+#[test]
+fn mcp_undoes_and_redoes_within_its_session() {
+    let engine = MockEngine::new();
+    let connector =
+        |_: &Connection| -> Result<Box<dyn Control>, CliError> { Ok(Box::new(engine.connect())) };
+    let input = mcp_input(&[
+        mcp_initialize(1),
+        mcp_call(
+            2,
+            "scene",
+            json!({"op": {"type": "scene.create", "scene_id": "main", "name": "Main"}}),
+        ),
+        mcp_call(3, "history", json!({"op": {"type": "history.undo"}})),
+        mcp_call(4, "scene", json!({"op": {"type": "scene.list"}})),
+        mcp_call(
+            5,
+            "history",
+            json!({"op": {"type": "history.redo"}, "expected_rev": 2}),
+        ),
+        mcp_call(6, "history", json!({"op": {"type": "history.redo"}})),
+    ]);
+    let outcome = run_with_input(&connector, &["mcp"], &input);
+    assert_eq!((outcome.code, outcome.err.as_str()), (exit::OK, ""));
+    let replies = mcp_replies(&outcome.out);
+    let result = |n: usize| &replies[n]["result"]["structuredContent"]["result"];
+    assert_eq!(
+        result(2),
+        &json!({"kind": "history", "rev": 2, "step_rev": 1, "undo_depth": 0, "redo_depth": 1})
+    );
+    assert_eq!(result(3)["result"]["scenes"], json!([]));
+    assert_eq!(
+        result(4),
+        &json!({"kind": "history", "rev": 3, "step_rev": 1, "undo_depth": 1, "redo_depth": 0})
+    );
+    let empty = &replies[5]["result"];
+    assert_eq!(empty["isError"], true, "{empty}");
+    assert!(empty.to_string().contains("history_empty"), "{empty}");
+    assert_eq!(engine.rev(), Rev(3));
 }
 
 #[test]

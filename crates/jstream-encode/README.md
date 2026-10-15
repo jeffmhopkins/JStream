@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:a9c0253cba9a63fe", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (#205 #179 #167 #172 #182): re-read against both sides; only test constructors gained role: None here, section claims unaffected" }
+verified = { hash = "b3:f80ab9663f6069c5", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -70,7 +70,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:5e502916af159578", by = "agent:claude@session_01Q6eRwxiAzJidNbXNzEDHVJ", note = "F4: Late subscribers explains the join-time keyframe request (flag, applied before the next input, coalescing, refusal fallback, no request on resync); drop policy and Stats (keyframes_requested) updated; R-RT-002 holds: one atomic load per input, never blocks" }
+verified = { hash = "b3:0bb3ee6c69f3bd6a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: Sharing paragraph now says jstream-core keys its registry by the protocol encoder profile (id and settings) and maps it to platform configs; Not yet drops encoder profiles in the protocol" }
 -->
 
 ### Threads and pacing
@@ -179,7 +179,9 @@ SPS and PPS of the first keyframe, which carries them in-band (Annex B). See
 `SessionRegistry<K, S>` maps a key to a weakly held session: `get_or_open` returns the
 live session for the key or opens and registers one. `SessionKey<M>` is the key ARCH
 describes, `(mix, settings)`, with `M` the engine's mix or bus ID and
-`EncoderSettings` standing in for the encoder profile the protocol doesn't have yet.
+`EncoderSettings` the platform configs. `jstream-core` keys its registry by the
+protocol's encoder profile instead (its ID and settings), because there is only the
+program mix until video mixes exist, and maps the profile to platform configs itself.
 The registry isn't synchronised; the engine keeps it on the control plane. A session
 lives while an output holds its `Arc`; the output that lets go last should `finish` it
 (it can tell with `Arc::into_inner`).
@@ -199,9 +201,6 @@ The pipeline registers the session; this crate does not emit the event.
 
 - **Rate control** beyond what the platform encoder does with the configured
   `RateControl`: no bitrate adaptation or reconfiguration of a running session.
-- **Encoder profiles** in the protocol ([R-ARCH-001](../../docs/RULES.md#R-ARCH-001)):
-  sessions are configured with platform configs directly until the protocol defines
-  them.
 - **GPU frames**: sessions pass `VideoSurface`s through untouched, so they work once the
   encoders take GPU input; nothing here depends on the CPU path.
 - `tracing` spans ([R-RS-005](../../docs/RULES.md#R-RS-005)): `tracing` is a workspace

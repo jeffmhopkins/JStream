@@ -5,8 +5,9 @@
 //! step to the redo stack, holding the inverse of *that* application (the step again);
 //! a redo moves it back. Another client's batches never touch a client's stacks.
 //!
-//! Conflicts: every applied batch, undo and redo is logged with what it touched (the
-//! objects it created, deleted or used, and the properties it set). Before an undo or
+//! Conflicts: every applied batch, undo and redo is logged with the [`Touched`] set the
+//! graph returned for it (the objects it created, deleted or used, and the properties it
+//! set). Before an undo or
 //! redo applies, the log entries by other clients since the step was last applied or
 //! undone are checked against the step's own touched set. A match, or edits that no
 //! longer apply, fails with `undo_conflict` and drops the step, so another client's work
@@ -14,191 +15,12 @@
 //!
 //! History is kept in memory for a client's session and dropped when the session ends.
 
-use jstream_protocol::{
-    ClientId, Edit, HistoryDirection, ItemId, OutputId, Rev, SceneId, SourceId,
-};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use jstream_graph::Touched;
+use jstream_protocol::{ClientId, Edit, HistoryDirection, Rev};
+use std::collections::{BTreeMap, VecDeque};
 
 /// The default number of steps kept per client; older steps are dropped first.
 pub(crate) const DEFAULT_HISTORY_LIMIT: usize = 100;
-
-/// An object of the collection, named by its ID.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum Object {
-    Scene(SceneId),
-    Item(ItemId),
-    Source(SourceId),
-    Output(OutputId),
-}
-
-/// A property an edit sets, on its object.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum Prop {
-    Name,
-    /// A scene's role.
-    Role,
-    /// An item's placement: its legacy transform or its geometry (ADR-0022), which
-    /// replace each other.
-    Placement,
-    Crop,
-    Visible,
-    /// An item's stacking position.
-    Index,
-    /// One parameter of a source's settings.
-    Setting(String),
-    /// An output's publish target.
-    Target,
-}
-
-/// What a batch touched: computed from its edits and its inverse's, so a delete also
-/// names what it removed (the inverse re-creates it).
-#[derive(Clone, Debug, Default, PartialEq)]
-pub(crate) struct Touched {
-    /// Objects created or deleted.
-    exists: BTreeSet<Object>,
-    /// Objects referred to without being changed (the scene and source of an item).
-    uses: BTreeSet<Object>,
-    /// Properties set.
-    props: BTreeSet<(Object, Prop)>,
-    /// Whether the scenes' display order was set.
-    scene_order: bool,
-    /// Whether the canvas size was set.
-    canvas: bool,
-    /// An edit this module doesn't know: it conflicts with everything.
-    unknown: bool,
-}
-
-impl Touched {
-    /// What `forward` and `inverse` (the edits that undo it) touch together.
-    pub(crate) fn of(forward: &[Edit], inverse: &[Edit]) -> Self {
-        let mut touched = Touched::default();
-        for edit in forward.iter().chain(inverse) {
-            touched.add(edit);
-        }
-        touched
-    }
-
-    fn add(&mut self, edit: &Edit) {
-        match edit {
-            Edit::SceneCreate { scene_id, .. } | Edit::SceneDelete { scene_id } => {
-                self.exists.insert(Object::Scene(scene_id.clone()));
-            }
-            Edit::SceneRename { scene_id, .. } => {
-                self.prop(Object::Scene(scene_id.clone()), Prop::Name);
-            }
-            Edit::SceneSetRole { scene_id, .. } => {
-                self.prop(Object::Scene(scene_id.clone()), Prop::Role);
-            }
-            Edit::SceneReorder { .. } => self.scene_order = true,
-            Edit::CanvasSetSize { .. } => self.canvas = true,
-            Edit::ItemAdd {
-                scene_id,
-                item_id,
-                source_id,
-                ..
-            } => {
-                self.exists.insert(Object::Item(item_id.clone()));
-                self.uses.insert(Object::Scene(scene_id.clone()));
-                self.uses.insert(Object::Source(source_id.clone()));
-            }
-            Edit::ItemRemove { item_id } => {
-                self.exists.insert(Object::Item(item_id.clone()));
-            }
-            Edit::ItemSetTransform { item_id, .. } | Edit::ItemSetGeometry { item_id, .. } => {
-                self.prop(Object::Item(item_id.clone()), Prop::Placement);
-            }
-            Edit::ItemSetCrop { item_id, .. } => {
-                self.prop(Object::Item(item_id.clone()), Prop::Crop);
-            }
-            Edit::ItemSetVisible { item_id, .. } => {
-                self.prop(Object::Item(item_id.clone()), Prop::Visible);
-            }
-            Edit::ItemReorder { item_id, .. } => {
-                self.prop(Object::Item(item_id.clone()), Prop::Index);
-            }
-            // A move sets the item's position, in the scene it names; its inverse names
-            // the scene it left.
-            Edit::ItemMove {
-                item_id, scene_id, ..
-            } => {
-                self.prop(Object::Item(item_id.clone()), Prop::Index);
-                self.uses.insert(Object::Scene(scene_id.clone()));
-            }
-            Edit::SourceCreate {
-                source_id, kind, ..
-            } => {
-                self.exists.insert(Object::Source(source_id.clone()));
-                if let jstream_protocol::SourceKind::Scene { scene_id } = kind {
-                    self.uses.insert(Object::Scene(scene_id.clone()));
-                }
-            }
-            Edit::SourceRename { source_id, .. } => {
-                self.prop(Object::Source(source_id.clone()), Prop::Name);
-            }
-            Edit::SourceSetSettings { source_id, patch } => {
-                for param in patch.0.keys() {
-                    self.prop(
-                        Object::Source(source_id.clone()),
-                        Prop::Setting(param.clone()),
-                    );
-                }
-            }
-            Edit::SourceDuplicate {
-                source_id,
-                new_source_id,
-                ..
-            } => {
-                self.uses.insert(Object::Source(source_id.clone()));
-                self.exists.insert(Object::Source(new_source_id.clone()));
-            }
-            Edit::SourceDelete { source_id } => {
-                self.exists.insert(Object::Source(source_id.clone()));
-            }
-            Edit::OutputCreate { output_id, .. } | Edit::OutputDelete { output_id } => {
-                self.exists.insert(Object::Output(output_id.clone()));
-            }
-            Edit::OutputSetTarget { output_id, .. } => {
-                self.prop(Object::Output(output_id.clone()), Prop::Target);
-            }
-            _ => self.unknown = true,
-        }
-    }
-
-    /// Adds everything `other` touches.
-    pub(crate) fn extend(&mut self, other: &Touched) {
-        self.exists.extend(other.exists.iter().cloned());
-        self.uses.extend(other.uses.iter().cloned());
-        self.props.extend(other.props.iter().cloned());
-        self.scene_order |= other.scene_order;
-        self.canvas |= other.canvas;
-        self.unknown |= other.unknown;
-    }
-
-    fn prop(&mut self, object: Object, prop: Prop) {
-        self.props.insert((object, prop));
-    }
-
-    /// Every object this touches in any way.
-    fn objects(&self) -> impl Iterator<Item = &Object> {
-        self.exists
-            .iter()
-            .chain(&self.uses)
-            .chain(self.props.iter().map(|(object, _)| object))
-    }
-
-    /// Whether undoing or redoing one of these would overwrite the other: one creates or
-    /// deletes an object the other touches at all, both set the same property, or both
-    /// set the scenes' order, or both set the canvas size.
-    pub(crate) fn conflicts_with(&self, other: &Touched) -> bool {
-        self.unknown
-            || other.unknown
-            || (self.scene_order && other.scene_order)
-            || (self.canvas && other.canvas)
-            || other.objects().any(|o| self.exists.contains(o))
-            || self.objects().any(|o| other.exists.contains(o))
-            || !self.props.is_disjoint(&other.props)
-    }
-}
 
 /// One undoable step of a client's history.
 #[derive(Clone, Debug)]
@@ -266,15 +88,15 @@ impl History {
     }
 
     /// Records a batch `client_id` applied: a new step on its undo stack, holding
-    /// `inverse`, and its redo stack cleared.
+    /// `inverse`, and its redo stack cleared. `touched` is what the graph says it
+    /// touched.
     pub(crate) fn record_batch(
         &mut self,
         client_id: &ClientId,
         rev: Rev,
-        forward: &[Edit],
+        touched: Touched,
         inverse: Vec<Edit>,
     ) {
-        let touched = Touched::of(forward, &inverse);
         self.log(client_id, rev, touched.clone());
         if self.limit > 0 {
             let stacks = self.clients.entry(client_id.clone()).or_default();
@@ -320,8 +142,9 @@ impl History {
         }
     }
 
-    /// Records that `step`, taken in `direction`, was applied at `rev`, and that applying
-    /// it again (the other way) means applying `next`. It moves to the other stack.
+    /// Records that `step`, taken in `direction`, was applied at `rev`, touching
+    /// `touched`, and that applying it again (the other way) means applying `next`. It
+    /// moves to the other stack.
     pub(crate) fn moved(
         &mut self,
         client_id: &ClientId,
@@ -329,8 +152,8 @@ impl History {
         step: Step,
         rev: Rev,
         next: Vec<Edit>,
+        touched: Touched,
     ) {
-        let touched = Touched::of(&step.edits, &next);
         self.log(client_id, rev, touched.clone());
         let moved = Step {
             step_rev: step.step_rev,
@@ -435,151 +258,5 @@ impl History {
             }
             None => self.log.clear(),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::Touched;
-    use jstream_protocol::{Edit, ItemGeometry, ItemId, ItemTransform, SceneId, SourceId};
-
-    fn add(scene: &str, item: &str, source: &str) -> Edit {
-        Edit::ItemAdd {
-            scene_id: SceneId::new(scene),
-            item_id: ItemId::new(item),
-            source_id: SourceId::new(source),
-            transform: None,
-            geometry: None,
-        }
-    }
-
-    fn remove(item: &str) -> Edit {
-        Edit::ItemRemove {
-            item_id: ItemId::new(item),
-        }
-    }
-
-    fn transform(item: &str) -> Edit {
-        Edit::ItemSetTransform {
-            item_id: ItemId::new(item),
-            scene_id: None,
-            transform: ItemTransform::IDENTITY,
-        }
-    }
-
-    fn geometry(item: &str) -> Edit {
-        Edit::ItemSetGeometry {
-            item_id: ItemId::new(item),
-            scene_id: None,
-            geometry: ItemGeometry::covering_canvas(1920, 1080).expect("invariant: a valid canvas"),
-        }
-    }
-
-    fn canvas() -> Edit {
-        Edit::CanvasSetSize {
-            width: 1280,
-            height: 720,
-        }
-    }
-
-    fn visible(item: &str) -> Edit {
-        Edit::ItemSetVisible {
-            item_id: ItemId::new(item),
-            scene_id: None,
-            visible: false,
-        }
-    }
-
-    fn item_move(item: &str, scene: &str) -> Edit {
-        Edit::ItemMove {
-            item_id: ItemId::new(item),
-            scene_id: SceneId::new(scene),
-            index: 0,
-        }
-    }
-
-    #[test]
-    fn moves_and_roles_are_known_edits() {
-        let moved = Touched::of(&[item_move("a", "g")], &[item_move("a", "s")]);
-        assert!(!moved.unknown);
-        // Another item's transform, elsewhere, doesn't conflict with the move.
-        let other = Touched::of(&[transform("b")], &[transform("b")]);
-        assert!(!moved.conflicts_with(&other));
-        // Reordering the same item does, and so does deleting either scene.
-        let reorder = Touched::of(
-            &[Edit::ItemReorder {
-                item_id: ItemId::new("a"),
-                index: 1,
-            }],
-            &[],
-        );
-        assert!(moved.conflicts_with(&reorder));
-        let delete = Touched::of(
-            &[Edit::SceneDelete {
-                scene_id: SceneId::new("g"),
-            }],
-            &[],
-        );
-        assert!(moved.conflicts_with(&delete));
-        let role = |r| Edit::SceneSetRole {
-            scene_id: SceneId::new("g"),
-            role: r,
-        };
-        let grouped = Touched::of(
-            &[role(jstream_protocol::SceneRole::Group)],
-            &[role(jstream_protocol::SceneRole::Scene)],
-        );
-        assert!(!grouped.unknown);
-        assert!(!grouped.conflicts_with(&other));
-        assert!(grouped.conflicts_with(&grouped.clone()));
-    }
-
-    #[test]
-    fn adding_items_to_one_scene_does_not_conflict() {
-        let a = Touched::of(&[add("s", "a", "cam")], &[remove("a")]);
-        let b = Touched::of(&[add("s", "b", "cam")], &[remove("b")]);
-        assert!(!a.conflicts_with(&b));
-    }
-
-    #[test]
-    fn the_same_property_conflicts_and_another_does_not() {
-        let a = Touched::of(&[transform("i")], &[transform("i")]);
-        assert!(a.conflicts_with(&Touched::of(&[transform("i")], &[transform("i")])));
-        assert!(!a.conflicts_with(&Touched::of(&[visible("i")], &[visible("i")])));
-        assert!(!a.conflicts_with(&Touched::of(&[transform("j")], &[transform("j")])));
-    }
-
-    #[test]
-    fn deleting_an_object_conflicts_with_anything_on_it() {
-        let moved = Touched::of(&[transform("i")], &[transform("i")]);
-        let removed = Touched::of(&[remove("i")], &[add("s", "i", "cam")]);
-        assert!(moved.conflicts_with(&removed));
-        assert!(removed.conflicts_with(&moved));
-        // Placing an item in a scene the step created.
-        let created = Touched::of(
-            &[Edit::SceneCreate {
-                scene_id: SceneId::new("s"),
-                name: "S".into(),
-                role: None,
-            }],
-            &[Edit::SceneDelete {
-                scene_id: SceneId::new("s"),
-            }],
-        );
-        let placed = Touched::of(&[add("s", "j", "cam")], &[remove("j")]);
-        assert!(created.conflicts_with(&placed));
-    }
-
-    /// `item.set_geometry` and `item.set_transform` replace the same placement, and two
-    /// canvas sizes conflict; neither is an unknown edit that conflicts with everything.
-    #[test]
-    fn placements_and_canvas_sizes_conflict_only_with_their_own_kind() {
-        let boxed = Touched::of(&[geometry("i")], &[transform("i")]);
-        assert!(boxed.conflicts_with(&Touched::of(&[transform("i")], &[transform("i")])));
-        assert!(!boxed.conflicts_with(&Touched::of(&[visible("i")], &[visible("i")])));
-        assert!(!boxed.conflicts_with(&Touched::of(&[geometry("j")], &[geometry("j")])));
-        let sized = Touched::of(&[canvas()], &[canvas()]);
-        assert!(sized.conflicts_with(&Touched::of(&[canvas()], &[canvas()])));
-        assert!(!sized.conflicts_with(&boxed));
     }
 }

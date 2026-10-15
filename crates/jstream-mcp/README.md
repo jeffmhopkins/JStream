@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:2f4361f41107ce12", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: only test constructors gained role: None; section text doesn't describe scene.create's fields and still holds" }
+verified = { hash = "b3:8b5981f1d5487f45", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:4f228afc139e8c34", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: scene.create's optional role reaches the generated scene tool schema (tools.snap); grouped-tool design text unchanged and holds" }
+verified = { hash = "b3:3c7e84c947240bc2", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r at 0.17 after merging main: tools.snap regenerated, scene tool schema gains scene.create's optional role; grouped-tool text holds" }
 -->
 
 ### Tools
@@ -60,7 +60,7 @@ below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`canvas`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |

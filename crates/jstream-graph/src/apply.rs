@@ -8,10 +8,12 @@
 use crate::deps::{self, Node};
 use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
 use crate::target::{record_path_problem, rtmp_url_problem};
+use crate::touched::Touched;
 use jstream_protocol::{
-    Batch, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId, ItemTransform,
-    KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
-    RecordContainer, Reference, Rev, RtmpTarget, SceneId, Settings, SourceId, SourceKind,
+    Batch, Blocker, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId,
+    ItemTransform, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
+    ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, Settings, SourceId,
+    SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -29,6 +31,9 @@ pub struct Applied {
     /// batch exactly. The caller (the engine's undo history) decides which `expected_rev`
     /// to send it with.
     pub inverse: Batch,
+    /// What the batch touched, from its edits and the inverse's: what the engine's undo
+    /// history checks other clients' later batches against (ADR-0032).
+    pub touched: Touched,
 }
 
 impl Graph {
@@ -84,10 +89,12 @@ impl Graph {
         }
         self.state = work;
         self.rev = rev;
+        let inverse: Vec<Edit> = undo.into_iter().rev().flatten().collect();
         Ok(Applied {
             rev,
+            touched: Touched::of(edits, &inverse),
             inverse: Batch {
-                edits: undo.into_iter().rev().flatten().collect(),
+                edits: inverse,
                 expected_rev: None,
                 idempotency_key: None,
             },
@@ -106,35 +113,49 @@ fn field(at: usize, name: &str) -> String {
     format!("edits.{at}.{name}")
 }
 
-fn invalid(at: usize, name: &str, reason: impl Into<String>) -> ProtocolError {
+pub(crate) fn invalid(at: usize, name: &str, reason: impl Into<String>) -> ProtocolError {
+    ProtocolError::invalid_argument(field(at, name), reason)
+}
+
+/// The `invalid_argument` that refuses deleting `target` while `blockers` refer to it.
+fn blocked(at: usize, name: &str, target: &Node, blockers: Vec<Blocker>) -> ProtocolError {
+    let list: Vec<String> = blockers
+        .iter()
+        .map(|b| format!("{} `{}` ({})", b.entity, b.id, b.field))
+        .collect();
     ProtocolError::InvalidArgument {
         field: field(at, name),
-        reason: reason.into(),
+        reason: format!(
+            "{target} is still referred to by {}; remove those references first, or send \
+             the batch `delete.plan` returns",
+            list.join(", ")
+        ),
+        blockers,
     }
 }
 
-fn not_found(entity: EntityKind, id: &str) -> ProtocolError {
+pub(crate) fn not_found(entity: EntityKind, id: &str) -> ProtocolError {
     ProtocolError::NotFound {
         entity,
         id: id.to_owned(),
     }
 }
 
-fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
+pub(crate) fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
     ProtocolError::AlreadyExists {
         entity,
         id: id.to_owned(),
     }
 }
 
-fn check_id(id: &str, at: usize, name: &str) -> Result<(), ProtocolError> {
+pub(crate) fn check_id(id: &str, at: usize, name: &str) -> Result<(), ProtocolError> {
     if id.is_empty() {
         return Err(invalid(at, name, "must not be empty"));
     }
     Ok(())
 }
 
-fn check_name(value: &str, at: usize) -> Result<(), ProtocolError> {
+pub(crate) fn check_name(value: &str, at: usize) -> Result<(), ProtocolError> {
     if value.trim().is_empty() {
         return Err(invalid(at, "name", "must not be empty"));
     }
@@ -259,6 +280,9 @@ fn apply_edit(
     at: usize,
     running: &BTreeSet<OutputId>,
 ) -> Result<Vec<Edit>, ProtocolError> {
+    if let Some(applied) = crate::encoder::apply(state, edit, at) {
+        return applied;
+    }
     match edit {
         Edit::SceneCreate {
             scene_id,
@@ -302,31 +326,10 @@ fn apply_edit(
         }
         Edit::SceneDelete { scene_id } => {
             let si = find_scene(state, scene_id)?;
-            let shown_by: Vec<&str> = state
-                .sources()
-                .filter(|s| matches!(&s.kind, SourceKind::Scene { scene_id: t } if t == scene_id))
-                .map(|s| s.id.as_str())
-                .collect();
-            if !shown_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "scene_id",
-                    format!(
-                        "scene `{scene_id}` is shown by scene sources {}; delete them first",
-                        shown_by.join(", ")
-                    ),
-                ));
-            }
-            let referred_by = deps::referrers(state, &Node::Scene(scene_id.clone()));
-            if !referred_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "scene_id",
-                    format!(
-                        "scene `{scene_id}` is referred to by {}; clear those settings first",
-                        referred_by.join(", ")
-                    ),
-                ));
+            let target = Node::Scene(scene_id.clone());
+            let blockers = deps::blockers(state, &target);
+            if !blockers.is_empty() {
+                return Err(blocked(at, "scene_id", &target, blockers));
             }
             let scene = state.scenes.remove(si);
             let mut inverse = vec![Edit::SceneCreate {
@@ -372,19 +375,7 @@ fn apply_edit(
             if state.item_index(item_id).is_some() {
                 return Err(already_exists(EntityKind::Item, item_id.as_str()));
             }
-            let edge = (
-                Node::Scene(scene_id.clone()),
-                Node::Source(source_id.clone()),
-            );
-            if let Some(cycle) = deps::cycle(state, &edge.0, &edge.1) {
-                return Err(invalid(
-                    at,
-                    "source_id",
-                    format!(
-                        "placing source `{source_id}` in scene `{scene_id}` would create a cycle: {cycle}"
-                    ),
-                ));
-            }
+            check_placement_cycle(state, scene_id, source_id, at)?;
             let placement = match (transform, geometry) {
                 (Some(_), Some(_)) => {
                     return Err(invalid(
@@ -469,6 +460,22 @@ fn apply_edit(
                 height: old.height,
             }])
         }
+        Edit::ItemSetSource { item_id, source_id } => {
+            let (si, ii) = find_item(state, item_id)?;
+            if state.source(source_id).is_none() {
+                return Err(not_found(EntityKind::Source, source_id.as_str()));
+            }
+            // The item's current edge, scene -> old source, points away from the scene, so
+            // it can't be part of a path from the new source back to it.
+            let scene_id = state.scenes[si].id.clone();
+            check_placement_cycle(state, &scene_id, source_id, at)?;
+            let item = item_mut(state, (si, ii))?;
+            let old = std::mem::replace(&mut item.source_id, source_id.clone());
+            Ok(vec![Edit::ItemSetSource {
+                item_id: item_id.clone(),
+                source_id: old,
+            }])
+        }
         Edit::ItemSetCrop {
             item_id,
             scene_id,
@@ -500,9 +507,19 @@ fn apply_edit(
             name,
             kind,
             settings,
+            duplicated_from,
         } => {
             check_id(source_id.as_str(), at, "source_id")?;
             check_name(name, at)?;
+            // A plain link, so the source it names need not exist: `source.delete`'s
+            // inverse restores it after its original may have gone too.
+            if duplicated_from.as_ref() == Some(source_id) {
+                return Err(invalid(
+                    at,
+                    "duplicated_from",
+                    "must not name the source itself",
+                ));
+            }
             let settings = match kind {
                 SourceKind::Scene { scene_id } => {
                     find_scene(state, scene_id)?;
@@ -528,7 +545,14 @@ fn apply_edit(
                     return Err(unsupported(at, "kind", "this source kind"));
                 }
             };
-            let inverse = create_source(state, source_id, name, kind, settings)?;
+            let inverse = create_source(
+                state,
+                source_id,
+                name,
+                kind,
+                settings,
+                duplicated_from.clone(),
+            )?;
             check_reference_cycles(state, source_id, at, "settings")?;
             Ok(inverse)
         }
@@ -545,7 +569,14 @@ fn apply_edit(
             check_name(name, at)?;
             // The copy has the original's outgoing edges and none coming in, so it can't
             // close a cycle.
-            create_source(state, new_source_id, name, &kind, settings)
+            create_source(
+                state,
+                new_source_id,
+                name,
+                &kind,
+                settings,
+                Some(source_id.clone()),
+            )
         }
         Edit::SourceRename { source_id, name } => {
             check_name(name, at)?;
@@ -566,27 +597,10 @@ fn apply_edit(
             if state.source(source_id).is_none() {
                 return Err(not_found(EntityKind::Source, source_id.as_str()));
             }
-            let used_by: Vec<&str> = state.placements(source_id).map(|i| i.id.as_str()).collect();
-            if !used_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "source_id",
-                    format!(
-                        "source `{source_id}` is placed by items {}; remove them first",
-                        used_by.join(", ")
-                    ),
-                ));
-            }
-            let referred_by = deps::referrers(state, &Node::Source(source_id.clone()));
-            if !referred_by.is_empty() {
-                return Err(invalid(
-                    at,
-                    "source_id",
-                    format!(
-                        "source `{source_id}` is referred to by {}; clear those settings first",
-                        referred_by.join(", ")
-                    ),
-                ));
+            let target = Node::Source(source_id.clone());
+            let blockers = deps::blockers(state, &target);
+            if !blockers.is_empty() {
+                return Err(blocked(at, "source_id", &target, blockers));
             }
             let source = state
                 .sources
@@ -597,6 +611,7 @@ fn apply_edit(
                 name: source.name,
                 kind: source.kind,
                 settings: source.settings,
+                duplicated_from: source.duplicated_from,
             }])
         }
         Edit::OutputCreate { output_id, kind } => {
@@ -623,6 +638,7 @@ fn apply_edit(
                 Output {
                     id: output_id.clone(),
                     kind: kind.clone(),
+                    encoder_profile: None,
                 },
             );
             Ok(vec![Edit::OutputDelete {
@@ -656,10 +672,17 @@ fn apply_edit(
                 .outputs
                 .remove(output_id)
                 .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
-            Ok(vec![Edit::OutputCreate {
-                output_id: output.id,
+            let mut inverse = vec![Edit::OutputCreate {
+                output_id: output.id.clone(),
                 kind: output.kind,
-            }])
+            }];
+            if let Some(profile_id) = output.encoder_profile {
+                inverse.push(Edit::OutputSetEncoder {
+                    output_id: output.id,
+                    profile_id: Some(profile_id),
+                });
+            }
+            Ok(inverse)
         }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
     }
@@ -776,6 +799,7 @@ fn create_source(
     name: &str,
     kind: &SourceKind,
     settings: Settings,
+    duplicated_from: Option<SourceId>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     if state.sources.contains_key(id) {
         return Err(already_exists(EntityKind::Source, id.as_str()));
@@ -787,11 +811,33 @@ fn create_source(
             name: name.to_owned(),
             kind: kind.clone(),
             settings,
+            duplicated_from,
         },
     );
     Ok(vec![Edit::SourceDelete {
         source_id: id.clone(),
     }])
+}
+
+/// Rejects placing `source_id` in scene `scene_id` (`item.add`, `item.set_source`) if
+/// the scene would then contain itself, naming the cycle on `source_id`.
+fn check_placement_cycle(
+    state: &State,
+    scene_id: &SceneId,
+    source_id: &SourceId,
+    at: usize,
+) -> Result<(), ProtocolError> {
+    let from = Node::Scene(scene_id.clone());
+    match deps::cycle(state, &from, &Node::Source(source_id.clone())) {
+        Some(cycle) => Err(invalid(
+            at,
+            "source_id",
+            format!(
+                "placing source `{source_id}` in scene `{scene_id}` would create a cycle: {cycle}"
+            ),
+        )),
+        None => Ok(()),
+    }
 }
 
 /// The edits that put a removed `item` back in scene `scene_id` at stacking position

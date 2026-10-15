@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:cb0dea251be768c6", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: only test constructors gained role: None; section text doesn't describe scene.create's fields and still holds" }
+verified = { hash = "b3:6bdedaa199856d3a", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:463348be0930fbd9", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (#214 ADR-0041 re-stamp, text unchanged here): re-read; this PR's scene.create role / rebuild claims and main's text both hold" }
+verified = { hash = "b3:939fb991a8c2685a", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
 -->
 
 ### Listening and admission
@@ -136,13 +136,13 @@ task speaks the envelope
   readable. Binary frames get `malformed` too, until binary streams are designed.
   Messages over 4 MiB close the connection.
 - **Request IDs.** A `Control` session assigns its own IDs, which appear in the
-  `state.changed` events its calls cause. The task maps them back to the client's wire
+  `state.changed` and `studio.changed` events its calls cause. The task maps them back to the client's wire
   IDs, so a client matches its event to its response by the ID it chose, as in the
   protocol README's example. An event can arrive before the answer that reveals the
   mapping, so while calls are in flight it is held back, with every event after it to
   keep the order, until the answer arrives or nothing is left in flight (or 1024 events
-  are held). The last 1024 pairs are remembered. Other clients' `state.changed` events
-  pass unchanged: their IDs mean nothing to this client.
+  are held). The last 1024 pairs are remembered. Other clients' events pass unchanged:
+  their IDs mean nothing to this client.
 - **Slow clients.** The connection task never waits on the socket: what it sends goes
   into an outbox, and a writer that owns the socket's sending half sends it, one message
   at a time, while the task keeps reading the client and draining the session's events.
@@ -265,8 +265,11 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    `jstream-outputs`' RTMPS, so that needs no further governance change.
 2. **Browser token.** Browsers can't set `Authorization` on a WebSocket. The client
    design sends the token in `Sec-WebSocket-Protocol` instead
-   ([jstream-control › Design](../jstream-control/README.md#design)); the subprotocol
-   naming is not decided, so the server accepts only `Authorization` today.
+   ([jstream-control › Design](../jstream-control/README.md#design)): the subprotocols
+   `jstream` and `jstream.token.<token>`, of which the server selects `jstream`
+   ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). The browser client sends them
+   when it has the token, and otherwise offers no subprotocol and relies on the
+   credentials the browser already sends. The server accepts only `Authorization` today.
 3. **UI assets.** Serving the web UI is deferred. MCP over streamable HTTP is settled
    and built (see *MCP over streamable HTTP*); whether it should also offer SSE, once
    the MCP server has notifications to push, is open.

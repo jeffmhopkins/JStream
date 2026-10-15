@@ -24,7 +24,7 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use jstream_graph::{Graph, Placement as GraphPlacement, State};
-use jstream_media::FrameSize;
+use jstream_media::{FrameSize, MediaTime, PixelFormat, VideoFrame};
 use jstream_protocol::{
     Canvas, Crop as ProtocolCrop, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind,
 };
@@ -80,15 +80,26 @@ pub enum SourceFrameError {
     },
 }
 
-/// The latest straight-alpha sRGB RGBA8 frame of one source.
+/// The latest straight-alpha sRGB RGBA8 frame of one source: one `set_source_frame`
+/// stored, or one its live source produced.
 #[derive(Clone, Debug)]
 pub(crate) struct Frame {
     width: u32,
     height: u32,
-    rgba: Arc<[u8]>,
-    /// Which `set_source_frame` stored it, counted per engine. Two frames with the same
-    /// version are the same bytes, so a shot compares and a cache re-uploads by it.
+    pixels: Pixels,
+    /// Which `set_source_frame` stored it or which new frame a live source produced,
+    /// counted per engine. Two frames with the same version are the same bytes, so a
+    /// shot compares and a cache re-uploads by it.
     version: u64,
+}
+
+/// A frame's tightly packed bytes, shared with whoever made them.
+#[derive(Clone, Debug)]
+enum Pixels {
+    /// Copied from `set_source_frame`.
+    Copied(Arc<[u8]>),
+    /// A live source's frame, packed `Rgba8` in its first plane.
+    Video(Arc<VideoFrame>),
 }
 
 impl PartialEq for Frame {
@@ -104,13 +115,7 @@ impl Frame {
         rgba: &[u8],
         version: u64,
     ) -> Result<Self, SourceFrameError> {
-        if width == 0 || height == 0 {
-            return Err(SourceFrameError::Empty);
-        }
-        let expected = (width as usize)
-            .checked_mul(height as usize)
-            .and_then(|n| n.checked_mul(4))
-            .ok_or(SourceFrameError::TooLarge { width, height })?;
+        let expected = rgba_len(width, height)?;
         if rgba.len() != expected {
             return Err(SourceFrameError::Length {
                 width,
@@ -122,7 +127,36 @@ impl Frame {
         Ok(Self {
             width,
             height,
-            rgba: Arc::from(rgba),
+            pixels: Pixels::Copied(Arc::from(rgba)),
+            version,
+        })
+    }
+
+    /// A live source's frame, shared rather than copied when it is packed `Rgba8` (as
+    /// every built-in kind's is). Another layout is repacked; a frame that isn't RGBA8
+    /// or is empty gives `None`, and the source draws nothing.
+    pub(crate) fn from_video(video: Arc<VideoFrame>, version: u64) -> Option<Self> {
+        let info = *video.info();
+        if info.format != PixelFormat::Rgba8 {
+            return None;
+        }
+        let (width, height) = (info.size.width(), info.size.height());
+        let expected = rgba_len(width, height).ok()?;
+        let plane = video.plane(0)?;
+        let row = width as usize * 4;
+        let pixels = if plane.stride() == row && plane.data().len() >= expected {
+            Pixels::Video(video)
+        } else {
+            let mut packed = Vec::with_capacity(expected);
+            for y in 0..height {
+                packed.extend_from_slice(video.row(0, y)?.get(..row)?);
+            }
+            Pixels::Copied(Arc::from(packed))
+        };
+        Some(Self {
+            width,
+            height,
+            pixels,
             version,
         })
     }
@@ -131,6 +165,35 @@ impl Frame {
     pub(crate) fn with_version(self, version: u64) -> Self {
         Self { version, ..self }
     }
+
+    /// The tightly packed RGBA8 bytes, `width * height * 4` of them.
+    fn rgba(&self) -> &[u8] {
+        let len = self.width as usize * self.height as usize * 4;
+        match &self.pixels {
+            Pixels::Copied(bytes) => bytes,
+            Pixels::Video(video) => video
+                .plane(0)
+                .and_then(|plane| plane.data().get(..len))
+                .unwrap_or_default(),
+        }
+    }
+
+    /// The first pixel, for tests that check what a source shows.
+    #[cfg(test)]
+    pub(crate) fn first_pixel(&self) -> Option<[u8; 4]> {
+        self.rgba().get(..4)?.try_into().ok()
+    }
+}
+
+/// `width * height * 4`, for a frame with no zero side.
+fn rgba_len(width: u32, height: u32) -> Result<usize, SourceFrameError> {
+    if width == 0 || height == 0 {
+        return Err(SourceFrameError::Empty);
+    }
+    (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|n| n.checked_mul(4))
+        .ok_or(SourceFrameError::TooLarge { width, height })
 }
 
 /// What one visible item shows.
@@ -160,7 +223,7 @@ struct Placed {
 pub(crate) struct Shot {
     /// The collection's canvas: the size every scene, nested ones included, is drawn at.
     canvas: Canvas,
-    /// The first scene in display order. `None` when the collection has no scene.
+    /// The scene on program (ADR-0030). `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
     /// The frames the copied scenes place, by source.
@@ -182,6 +245,12 @@ impl Shot {
         self.program.as_ref()
     }
 
+    /// The frame the shot shows for `source_id`, for tests.
+    #[cfg(test)]
+    pub(crate) fn frame(&self, source_id: &SourceId) -> Option<&Frame> {
+        self.frames.get(source_id)
+    }
+
     /// Whether a pass shows the pipeline's capture, for tests.
     #[cfg(test)]
     pub(crate) fn uses_capture(&self) -> bool {
@@ -200,18 +269,45 @@ impl PartialEq for Shot {
     }
 }
 
-/// Copies the program scene and the scenes it nests out of `graph`, and schedules them.
+/// Copies `graph`'s first scene, as the program scene, and the scenes it nests, and
+/// schedules them. Items show the frames in `frames`.
+#[cfg(test)]
 pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
+    let first = graph
+        .state()
+        .scenes()
+        .first()
+        .map(|scene| scene.id().clone());
+    plan_with(graph, first.as_ref(), &mut |id| {
+        frames.get(id).map(|f| (f.clone(), None))
+    })
+    .0
+}
+
+/// Copies the program scene `program` (ADR-0030) and the scenes it nests out of
+/// `graph`, and schedules them, asking `frame` for the frame of each source an item it
+/// reaches places and when that frame is next replaced. Returns the shot and the
+/// earliest such time, when it should be planned again.
+pub(crate) fn plan_with(
+    graph: &Graph,
+    program: Option<&SceneId>,
+    frame: &mut FrameOf<'_>,
+) -> (Shot, Option<MediaTime>) {
     let state = graph.state();
-    let program = state.scenes().first().map(|scene| scene.id().clone());
+    let program = program.cloned();
     let mut shot = Shot {
         canvas: state.canvas(),
         program: program.clone(),
         ..Shot::default()
     };
+    let mut planner = Planner {
+        state,
+        frame,
+        wake: None,
+    };
     if let Some(id) = &program {
         let mut path = BTreeSet::new();
-        collect(state, frames, id, &mut shot, &mut path);
+        planner.collect(id, &mut shot, &mut path);
         shot.passes = schedule(&shot, id);
     }
     shot.uploads = shot
@@ -224,51 +320,71 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
         .iter()
         .flat_map(|pass| &pass.layers)
         .any(|layer| layer.image == GpuKey::Capture);
-    shot
+    (shot, planner.wake)
 }
 
-fn collect(
-    state: &State,
-    frames: &BTreeMap<SourceId, Frame>,
-    id: &SceneId,
-    out: &mut Shot,
-    path: &mut BTreeSet<SceneId>,
-) {
-    if out.scenes.contains_key(id) || !path.insert(id.clone()) {
-        return;
-    }
-    let mut placed = Vec::new();
-    if let Some(scene) = state.scene(id) {
-        for item in scene.items() {
-            if !item.visible() {
-                continue;
-            }
-            let Some(source) = state.source(item.source_id()) else {
-                continue;
-            };
-            let source = match (source.kind(), frames.get(item.source_id())) {
-                (SourceKind::Scene { scene_id }, _) => {
-                    collect(state, frames, scene_id, out, path);
-                    SourceRef::Scene(scene_id.clone())
-                }
-                (_, Some(frame)) => {
-                    out.frames
-                        .entry(item.source_id().clone())
-                        .or_insert_with(|| frame.clone());
-                    SourceRef::Frame(item.source_id().clone())
-                }
-                (SourceKind::Builtin { kind }, None) if kind == DISPLAY => SourceRef::Capture,
-                (_, None) => continue,
-            };
-            placed.push(Placed {
-                source,
-                placement: placement(item.placement()),
-                crop: crop(item.crop()),
-            });
+/// What [`plan_with`] asks for each source it reaches: its frame now, and when that
+/// frame is next replaced.
+pub(crate) type FrameOf<'a> = dyn FnMut(&SourceId) -> Option<(Frame, Option<MediaTime>)> + 'a;
+
+struct Planner<'a, 'f> {
+    state: &'a State,
+    frame: &'f mut FrameOf<'f>,
+    /// The earliest time a frame in the shot is replaced.
+    wake: Option<MediaTime>,
+}
+
+impl Planner<'_, '_> {
+    fn collect(&mut self, id: &SceneId, out: &mut Shot, path: &mut BTreeSet<SceneId>) {
+        if out.scenes.contains_key(id) || !path.insert(id.clone()) {
+            return;
         }
+        let state = self.state;
+        let mut placed = Vec::new();
+        if let Some(scene) = state.scene(id) {
+            for item in scene.items() {
+                if !item.visible() {
+                    continue;
+                }
+                let Some(source) = state.source(item.source_id()) else {
+                    continue;
+                };
+                let source = match source.kind() {
+                    SourceKind::Scene { scene_id } => {
+                        self.collect(scene_id, out, path);
+                        SourceRef::Scene(scene_id.clone())
+                    }
+                    kind => match self.frame_of(item.source_id(), out) {
+                        Some(()) => SourceRef::Frame(item.source_id().clone()),
+                        None if matches!(kind, SourceKind::Builtin { kind } if kind == DISPLAY) => {
+                            SourceRef::Capture
+                        }
+                        None => continue,
+                    },
+                };
+                placed.push(Placed {
+                    source,
+                    placement: placement(item.placement()),
+                    crop: crop(item.crop()),
+                });
+            }
+        }
+        out.scenes.insert(id.clone(), placed);
+        path.remove(id);
     }
-    out.scenes.insert(id.clone(), placed);
-    path.remove(id);
+
+    /// Puts the frame of `source_id` in `out`, asking for it once per shot.
+    fn frame_of(&mut self, source_id: &SourceId, out: &mut Shot) -> Option<()> {
+        if out.frames.contains_key(source_id) {
+            return Some(());
+        }
+        let (frame, next) = (self.frame)(source_id)?;
+        if let Some(next) = next {
+            self.wake = Some(self.wake.map_or(next, |wake| wake.min(next)));
+        }
+        out.frames.insert(source_id.clone(), frame);
+        Some(())
+    }
 }
 
 /// What a drawing compositor keeps between frames in its [`ResourceCache`].
@@ -722,7 +838,7 @@ pub(crate) fn compose(
                 frame.version,
                 frame.width,
                 frame.height,
-                &frame.rgba,
+                frame.rgba(),
             )?;
         }
     }
@@ -916,7 +1032,10 @@ fn base64(data: &[u8]) -> String {
 pub(crate) fn decode_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
     let decoder = png::Decoder::new(std::io::Cursor::new(bytes));
     let mut reader = decoder.read_info().map_err(|err| err.to_string())?;
-    let mut buf = vec![0u8; reader.output_buffer_size()];
+    let len = reader
+        .output_buffer_size()
+        .ok_or("frame size overflows usize")?;
+    let mut buf = vec![0u8; len];
     let info = reader.next_frame(&mut buf).map_err(|err| err.to_string())?;
     if info.color_type != png::ColorType::Rgba || info.bit_depth != png::BitDepth::Eight {
         return Err(format!(
@@ -1466,6 +1585,6 @@ pub(crate) mod tests {
             }
         );
         let frame = Frame::new(1, 1, &[9, 8, 7, 6], 3).expect("one pixel");
-        assert_eq!(frame.rgba.as_ref(), &[9, 8, 7, 6]);
+        assert_eq!(frame.rgba(), &[9, 8, 7, 6]);
     }
 }

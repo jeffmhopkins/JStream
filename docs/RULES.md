@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:892f22ab2f9a07aa", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: R-RT rules unchanged; render and mixer collectors still satisfy R-RT-003" }
+verified = { hash = "b3:2fe1e753ac46d93d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b cascade from ARCH#threading (Collector row: the mixer's own collector also frees removed buses' state, filter chains and filters): re-read; rule text unchanged; chains and filters retired via the collector are within R-RT-003" }
 -->
 
 <a id="R-RT-001"></a>
@@ -320,7 +320,7 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:cee5defb3a32a048", by = "agent:claude@session_01H77oW1hhSxiNfijCpkEKPw", note = "Re-read R-DEP-001..006 against H2: R-DEP-005 now says multiple-versions is deny (M1d) and duplicates need a skip entry with a reason, which deny.toml now has for all eight; other rules unchanged" }
+verified = { hash = "b3:d555bf7414bec253", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -377,9 +377,9 @@ status = "active"
 enforced_by = ["deny:bans"]
 applies_to = ["Cargo.lock"]
 -->
-Duplicates need a `deny.toml` skip entry with a reason. Known duplicates (several `windows`
-crate versions via Tauri, wgpu and windows-rs) are expected. `multiple-versions` is `deny`
-(M1d, [ROADMAP](../ROADMAP.md#m1)).
+Duplicates need a `deny.toml` skip entry with a reason. The `skip` list in `deny.toml` is
+the record of today's known duplicates and the crate that pins each one. `multiple-versions`
+is `deny` (M1d, [ROADMAP](../ROADMAP.md#m1)).
 
 <a id="R-DEP-006"></a>
 ### R-DEP-006: TLS through rustls with the ring provider
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:01a27335085a2311", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (#214 ADR-0041 re-stamp, text unchanged here): re-read; this PR's scene.create role / rebuild claims and main's text both hold" }
+verified = { hash = "b3:2f5a74c89202d296", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r at 0.17: scene.create's optional role is additive, one minor past main's 0.16 (R-API-001)" }
 -->
 
 <a id="R-API-001"></a>

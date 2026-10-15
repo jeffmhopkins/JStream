@@ -3,12 +3,13 @@
 //!
 //! The edges are: a scene depends on each source its items place; a `scene` source
 //! depends on the scene it shows; and a source depends on every scene and source its
-//! settings refer to. One function, [`edges`], lists them all, so the cycle check and the
-//! delete check can't disagree about what counts. Asset references name files, which are
+//! settings refer to. [`edges`] lists what a node depends on, for the cycle check, and
+//! [`blockers`] lists what depends on a node, for the delete check and `delete.plan`;
+//! both read the same three kinds of edge. Asset references name files, which are
 //! outside the state, so they are not edges.
 
 use crate::model::State;
-use jstream_protocol::{Reference, SceneId, SourceId, SourceKind};
+use jstream_protocol::{Blocker, EntityKind, Reference, SceneId, SourceId, SourceKind};
 use std::collections::BTreeSet;
 use std::fmt;
 
@@ -86,6 +87,20 @@ pub(crate) fn cycle(state: &State, from: &Node, to: &Node) -> Option<String> {
     Some(text)
 }
 
+/// A cycle anywhere in `state`, as [`cycle`] names it, or `None`. Every edit that adds an
+/// edge checks it before it applies, so `None` is an invariant of every graph; the
+/// property test asserts it after each batch.
+#[cfg(test)]
+pub(crate) fn any_cycle(state: &State) -> Option<String> {
+    let scenes = state.scenes().iter().map(|s| Node::Scene(s.id.clone()));
+    let sources = state.sources().map(|s| Node::Source(s.id.clone()));
+    scenes.chain(sources).find_map(|node| {
+        edges(state, &node)
+            .iter()
+            .find_map(|next| cycle(state, &node, next))
+    })
+}
+
 /// Pushes the chain from `at` to `target` onto `path` if there is one.
 fn dfs(
     state: &State,
@@ -109,18 +124,47 @@ fn dfs(
     false
 }
 
-/// Every settings value that refers to `target`, as `` `source`.settings.`param` ``, in
-/// source ID order.
-pub(crate) fn referrers(state: &State, target: &Node) -> Vec<String> {
-    state
-        .sources()
-        .flat_map(|source| {
+/// Everything that stops `target`'s delete, in a stable order: the items that place a
+/// source (scene display order, then stacking order), the `scene` sources that show a
+/// scene (ID order), then every settings value that refers to the target (source ID
+/// order, then parameter order). `delete.plan` removes exactly these.
+pub(crate) fn blockers(state: &State, target: &Node) -> Vec<Blocker> {
+    let mut out = Vec::new();
+    match target {
+        Node::Source(source_id) => {
+            out.extend(state.placements(source_id).map(|item| Blocker {
+                entity: EntityKind::Item,
+                id: item.id.as_str().to_owned(),
+                field: "source_id".into(),
+            }));
+        }
+        Node::Scene(scene_id) => {
+            out.extend(
+                state
+                    .sources()
+                    .filter(
+                        |s| matches!(&s.kind, SourceKind::Scene { scene_id: t } if t == scene_id),
+                    )
+                    .map(|s| Blocker {
+                        entity: EntityKind::Source,
+                        id: s.id.as_str().to_owned(),
+                        field: "kind.scene_id".into(),
+                    }),
+            );
+        }
+    }
+    for source in state.sources() {
+        out.extend(
             source
                 .settings
                 .references()
                 .filter(|(_, r)| reference_node(r).as_ref() == Some(target))
-                .map(|(param, _)| format!("{}.settings.{param}", source.id))
-                .collect::<Vec<_>>()
-        })
-        .collect()
+                .map(|(param, _)| Blocker {
+                    entity: EntityKind::Source,
+                    id: source.id.as_str().to_owned(),
+                    field: format!("settings.{param}"),
+                }),
+        );
+    }
+    out
 }

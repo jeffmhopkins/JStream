@@ -3,8 +3,9 @@
 //! [`Limiter`] (look-ahead) and [`Delay`]. ADR-0028 runs filter chains on the mixer
 //! thread, so each kernel allocates its fixed-size state in its constructor and nothing
 //! after that allocates, locks or blocks (R-RT-001). Each reports its latency in frames
-//! through [`AudioFilter::latency_frames`], which the mixer will compensate. Wiring them
-//! into the mixer graph, buses and settings comes with the send matrix.
+//! through [`AudioFilter::latency_frames`], which the mixer compensates. The mixer runs
+//! them in each input's and bus's filter chain (`FilterSpec`); sidechain keys in the
+//! mixer and settings in the protocol come later.
 //!
 //! Docs: crates/jstream-audio/README.md#filters, docs/adr/0028-audio-model-v2.md
 

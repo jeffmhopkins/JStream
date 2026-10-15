@@ -26,7 +26,9 @@ use jstream_core::{
     video_encode_drops,
 };
 use jstream_encode::{SessionOptions, VideoSession};
-use jstream_platform::fake::{FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop};
+use jstream_platform::fake::{
+    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+};
 use jstream_platform::media::{
     AudioFormat, ChannelLayout, Codec, ColorInfo, FrameSize, MediaTime, PixelFormat, SampleFormat,
     Timebase, VideoFrame, VideoFrameInfo,
@@ -159,6 +161,7 @@ fn overload_drops_and_counts() {
     let capture = capture_drops(CaptureStats {
         frames_captured: 30,
         frames_skipped: 4,
+        frames_undecodable: 0,
     });
     let render = render_tick_drops(2);
     let output = output_packet_drops(3);
@@ -222,7 +225,10 @@ fn overload_drops_and_counts() {
     assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
     assert!(matches!(
         drain(&mut user_events).as_slice(),
-        [Event::StateChanged { rev: Rev(1), .. }]
+        [
+            Event::StateChanged { rev: Rev(1), .. },
+            Event::StudioChanged { .. }
+        ]
     ));
 
     drop(slow);
@@ -343,6 +349,7 @@ fn rt_panic_is_reported() {
             inner: clock.clone(),
             armed: Arc::clone(&mixer_armed),
         }),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
         capture: Arc::new(PanickingCapture {
             inner: FakeCapture::new(clock.clone(), FrameSize::new(64, 36).expect("size")),
             armed: Arc::clone(&render_armed),
