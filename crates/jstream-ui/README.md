@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ecab67f3287f072a", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of main (U3b, U4) into U5 plus round 1 B1: Connecting bullet now says the desktop connect needs jstream-server's subprotocol token (#246) and fails like any refused connect until then; main's canvas and outputs text unchanged; holds" }
+verified = { hash = "b3:17d870f02e6c5a94", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: Connecting bullet no longer says the desktop connect fails until #246; it links server Design, which accepts the subprotocol; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -65,8 +65,8 @@ verified = { hash = "b3:ecab67f3287f072a", by = "agent:claude@session_01D6iWjpMk
   browser (pairing) is not decided yet. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). That connection carries the
-  token in the subprotocol, so it succeeds only once `jstream-server` accepts it
-  (#246); until then it fails like any refused connect. After a disconnect the form
+  token in the subprotocol, which `jstream-server` accepts
+  ([jstream-server › Design](../jstream-server/README.md#design)). After a disconnect the form
   shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
   a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin
   and an unreachable engine read the same.
@@ -157,7 +157,7 @@ scene and sends the edits. These three are pure and tested natively against
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:1ea0cbddc4084706", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: new section; trunk commands, wasm-bindgen CLI matching Cargo.lock, create_nonce placeholder and the CI wasm job (pinned, checksummed trunk and wasm-bindgen, clippy wasm32) match Trunk.toml, index.html and ci.yml" }
+verified = { hash = "b3:755c311fa103cf2c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: dropped 'until jstream-server accepts the token subprotocol'; trunk-served page still needs an extra origin; holds" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
@@ -183,6 +183,4 @@ CLI downloaded at pinned versions and checked against pinned SHA-256 sums, and r
 clippy for `wasm32` over `jstream-control` (with `ws`) and `jstream-ui`.
 
 A page served by trunk is on a different port from the engine, so the engine refuses
-its `Origin` unless it is configured as an extra origin; and until `jstream-server`
-accepts the token subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)), the
-UI connects only to an engine that does.
+its `Origin` unless it is configured as an extra origin.

@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:f9a909316c780dc5", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took B6-f's 'every protocol edit'; mock scene.delete inverse now carries the role on scene.create (no set_role), 'deleted scene at its position with its role' holds" }
+verified = { hash = "b3:ea9e34acfc706302", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: took main's browser-client text (ws_web, ADR-0045) and replaced 'jstream-server doesn't accept the subprotocol yet' with a link saying it accepts both; open question 3 is main's; holds" }
 -->
 
 ### The trait
@@ -242,8 +242,8 @@ pulls `web-sys`.
   credentials, whose password is the control token, carry it instead (when the engine
   served the page behind Basic). A token that isn't an
   HTTP token (RFC 7230 `tchar`s) can't be a subprotocol and fails `connect`; the
-  daemon's tokens are hex. `jstream-server` doesn't accept the subprotocol yet, so a
-  browser connects only to an engine that does. The caller supplies the token (the CLI
+  daemon's tokens are hex. `jstream-server` accepts both
+  ([jstream-server › Design](../jstream-server/README.md#design)). The caller supplies the token (the CLI
   reads it from a token file). The server validates `Host`, and `Origin` when present;
   browsers set `Origin` themselves (`WsConfig::origin` is ignored there), and the
   native client sends the server's own origin (`http://<host>:<port>` of the URL)

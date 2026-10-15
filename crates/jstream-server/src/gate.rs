@@ -12,7 +12,12 @@
 //!   Browsers always send it on WebSocket upgrades, so a foreign web page can't connect.
 //!   A request without one is a native client (the CLI, a script, an MCP proxy) and is
 //!   let through to the token check, which is the gate (#44, R-SEC-002).
-//! - **`Authorization: Bearer <token>`** must carry the control token. The server keeps
+//! - **`Authorization`** must carry the control token: `Bearer <token>`, or `Basic`
+//!   credentials whose password is the token (the user name is ignored), which is how a
+//!   browser presents it to the UI's paths and then to the UI's upgrade. Without
+//!   `Authorization`, an upgrade may instead offer the subprotocol `jstream.token.<token>`
+//!   beside `jstream`, which is how `jstream-control`'s browser client sends it; the
+//!   server selects `jstream`, never the token's subprotocol. The server keeps
 //!   only the token's BLAKE3 digest; the presented value is hashed too and the two
 //!   digests are compared in constant time, so the compare reveals nothing about the
 //!   token (see `Token::matches`).
@@ -180,10 +185,13 @@ impl Gate {
                 return Err(Refusal::Origin);
             }
         }
-        let token = single(headers, &header::AUTHORIZATION)
-            .and_then(bearer)
-            .ok_or(Refusal::Token)?;
-        if self.token.matches(token.as_bytes()) {
+        let token = if headers.contains_key(header::AUTHORIZATION) {
+            single(headers, &header::AUTHORIZATION).and_then(credentials)
+        } else {
+            subprotocol_token(headers)
+        }
+        .ok_or(Refusal::Token)?;
+        if self.token.matches(&token) {
             Ok(())
         } else {
             Err(Refusal::Token)
@@ -273,12 +281,78 @@ fn has_port(authority: &str) -> bool {
     }
 }
 
-/// The credentials of a `Bearer` authorization (the scheme is case-insensitive).
-fn bearer(authorization: &str) -> Option<&str> {
+/// The subprotocol a browser's WebSocket client offers, and the server selects, when it
+/// carries the token in `Sec-WebSocket-Protocol` (`jstream_control`'s `WS_PROTOCOL`).
+pub(crate) const WS_PROTOCOL: &str = "jstream";
+
+/// The prefix of the offered subprotocol that carries the token, `jstream.token.<token>`
+/// (`jstream_control`'s `WS_TOKEN_PROTOCOL_PREFIX`). It is never selected, so never echoed.
+const TOKEN_PROTOCOL_PREFIX: &str = "jstream.token.";
+
+/// The token a browser offers as the subprotocol `jstream.token.<token>`, used only when
+/// the request has no `Authorization`. Every `Sec-WebSocket-Protocol` line counts, and
+/// exactly one offered subprotocol may carry a token.
+fn subprotocol_token(headers: &HeaderMap) -> Option<Vec<u8>> {
+    let mut tokens = headers
+        .get_all(header::SEC_WEBSOCKET_PROTOCOL)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .filter_map(|offered| offered.trim().strip_prefix(TOKEN_PROTOCOL_PREFIX));
+    let token = tokens.next()?;
+    tokens.next().is_none().then(|| token.as_bytes().to_vec())
+}
+
+/// The token an `Authorization` value presents: a `Bearer` token, or the password of
+/// `Basic` credentials, which is how a browser presents it (the user name is ignored).
+/// Schemes are case-insensitive.
+fn credentials(authorization: &str) -> Option<Vec<u8>> {
     let (scheme, credentials) = authorization.split_once(' ')?;
-    scheme
-        .eq_ignore_ascii_case("bearer")
-        .then(|| credentials.trim())
+    let credentials = credentials.trim();
+    if scheme.eq_ignore_ascii_case("bearer") {
+        Some(credentials.as_bytes().to_vec())
+    } else if scheme.eq_ignore_ascii_case("basic") {
+        let decoded = base64_decode(credentials)?;
+        let colon = decoded.iter().position(|&b| b == b':')?;
+        Some(decoded[colon + 1..].to_vec())
+    } else {
+        None
+    }
+}
+
+/// Decodes standard base64 (RFC 4648 §4, with `=` padding), as `Basic` credentials are
+/// written (RFC 7617). `None` for anything else.
+fn base64_decode(text: &str) -> Option<Vec<u8>> {
+    fn sextet(b: u8) -> Option<u32> {
+        Some(u32::from(match b {
+            b'A'..=b'Z' => b - b'A',
+            b'a'..=b'z' => b - b'a' + 26,
+            b'0'..=b'9' => b - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => return None,
+        }))
+    }
+    let bytes = text.as_bytes();
+    if bytes.is_empty() || !bytes.len().is_multiple_of(4) {
+        return None;
+    }
+    let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
+    let quads = bytes.len() / 4;
+    for (i, quad) in bytes.chunks_exact(4).enumerate() {
+        let padding = quad.iter().rev().take_while(|&&b| b == b'=').count();
+        if padding > 2 || (padding > 0 && i + 1 != quads) {
+            return None;
+        }
+        let mut n = 0u32;
+        for &b in &quad[..4 - padding] {
+            n = (n << 6) | sextet(b)?;
+        }
+        n <<= 6 * padding;
+        let [_, a, b, c] = n.to_be_bytes();
+        out.extend_from_slice(&[a, b, c][..3 - padding]);
+    }
+    Some(out)
 }
 
 #[cfg(test)]
@@ -665,6 +739,106 @@ mod tests {
         assert_eq!(gate.check(&map), Ok(()));
         assert_eq!(
             gate.check(&with(header::ORIGIN, Some("https://UI.example"))),
+            Ok(())
+        );
+    }
+
+    /// A browser presents the token as the password of `Basic` credentials; the user
+    /// name is ignored, and anything that isn't `user:token` in base64 is refused.
+    #[test]
+    fn basic_credentials_carry_the_token_as_the_password() {
+        let gate = gate(&[], &[]);
+        let basic = |value: &str| {
+            headers(&[
+                (header::HOST, "127.0.0.1:4455"),
+                (header::ORIGIN, "http://127.0.0.1:4455"),
+                (header::AUTHORIZATION, value),
+            ])
+        };
+        // "jstream:t0ken", ":t0ken", "any one:t0ken".
+        for accepted in [
+            "Basic anN0cmVhbTp0MGtlbg==",
+            "basic OnQwa2Vu",
+            "BASIC YW55IG9uZTp0MGtlbg==",
+        ] {
+            assert_eq!(gate.check(&basic(accepted)), Ok(()), "{accepted}");
+        }
+        // "t0ken" (no colon), "t0ken:x" (the token as the user name), "jstream:t0ke",
+        // malformed base64, padding in the middle, empty.
+        for refused in [
+            "Basic dDBrZW4=",
+            "Basic dDBrZW46eA==",
+            "Basic anN0cmVhbTp0MGtl",
+            "Basic anN0cmVhbTp0MGtlbg",
+            "Basic anN0=mVhbTp0MGtlbg==",
+            "Basic !!!!",
+            "Basic ",
+        ] {
+            assert_eq!(
+                gate.check(&basic(refused)),
+                Err(Refusal::Token),
+                "{refused}"
+            );
+        }
+    }
+
+    #[test]
+    fn base64_decodes_rfc_4648_vectors() {
+        use super::base64_decode;
+        for (text, plain) in [
+            ("Zg==", "f"),
+            ("Zm8=", "fo"),
+            ("Zm9v", "foo"),
+            ("Zm9vYg==", "foob"),
+            ("Zm9vYmE=", "fooba"),
+            ("Zm9vYmFy", "foobar"),
+        ] {
+            assert_eq!(
+                base64_decode(text).as_deref(),
+                Some(plain.as_bytes()),
+                "{text}"
+            );
+        }
+        for bad in ["", "Zg", "Zg=", "Z===", "Zg==Zg==", "Zm9v-A==", "Zm 9"] {
+            assert_eq!(base64_decode(bad), None, "{bad}");
+        }
+    }
+
+    /// Without `Authorization`, the token may come as the offered subprotocol
+    /// `jstream.token.<token>`, on any `Sec-WebSocket-Protocol` line, once.
+    #[test]
+    fn the_token_may_ride_in_the_offered_subprotocols() {
+        let gate = gate(&[], &[]);
+        let offer = |lines: &[&str], authorization: Option<&str>| {
+            let mut pairs = vec![
+                (header::HOST, "127.0.0.1:4455"),
+                (header::ORIGIN, "http://127.0.0.1:4455"),
+            ];
+            pairs.extend(lines.iter().map(|l| (header::SEC_WEBSOCKET_PROTOCOL, *l)));
+            if let Some(value) = authorization {
+                pairs.push((header::AUTHORIZATION, value));
+            }
+            gate.check(&headers(&pairs))
+        };
+        assert_eq!(offer(&["jstream, jstream.token.t0ken"], None), Ok(()));
+        assert_eq!(offer(&["jstream", "jstream.token.t0ken"], None), Ok(()));
+        assert_eq!(
+            offer(&["jstream.token.wr0ng, jstream"], None),
+            Err(Refusal::Token)
+        );
+        assert_eq!(offer(&["jstream"], None), Err(Refusal::Token));
+        assert_eq!(
+            offer(&["jstream.token.t0ken, jstream.token.t0ken"], None),
+            Err(Refusal::Token),
+            "only one token"
+        );
+        // `Authorization`, when present, is the one that counts.
+        assert_eq!(
+            offer(&["jstream, jstream.token.t0ken"], Some("Bearer wrong")),
+            Err(Refusal::Token)
+        );
+        assert_eq!(
+            offer(&["jstream, jstream.token.wr0ng"], Some("Bearer t0ken")),
             Ok(())
         );
     }

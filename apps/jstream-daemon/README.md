@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:afb8ad1387e0d420", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
+verified = { hash = "b3:483779712b0c3581", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: round 1 B1 wording kept (server serves ui_dir, daemon has no flag yet); holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -57,8 +57,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   headers to check that the backends' Media Foundation DLLs are delay-loaded and none
   is a load-time import).
 
-Not here yet: serving the web UI (it waits on `jstream-server`,
-[jstream-server › Design](../../crates/jstream-server/README.md#design)),
+Not here yet: serving the web UI (`jstream-server` serves one from
+`ServerConfig::ui_dir`, [jstream-server › Design](../../crates/jstream-server/README.md#design),
+but the daemon has no flag for it yet),
 YouTube sign-in (it waits on `Engine::with_youtube`), a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
@@ -184,7 +185,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:681a64b5aa94e116", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
+verified = { hash = "b3:3a96a34d64883427", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server design; MCP, Listening and token bullets unchanged; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

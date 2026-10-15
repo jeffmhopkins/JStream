@@ -523,7 +523,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:c6b0ec0be9c4d0fb", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r at 0.17: Edits bullet says scene.create's optional role is from protocol 0.17" }
+verified = { hash = "b3:302bdc39f648cce4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: dropped main's 'jstream-server doesn't accept that yet' since this PR accepts the subprotocol; main's studio/scene.switch text kept; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -623,8 +623,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   (`InProcessControl`, [jstream-core › Design](../crates/jstream-core/README.md#design))
   and over WebSocket by `jstream-control` (`WsControl`, feature `ws`), natively and in
   the browser, where the token travels as a subprotocol because a page can't set
-  `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)); `jstream-server` doesn't accept
-  that yet. `jstream-server`
+  `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)). `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
   default, with the token required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
@@ -632,7 +631,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   because the token is the gate, while an `Origin` that is present must be on the allow
   list. The same server
   serves MCP's streamable-HTTP transport at `/mcp` on the control port, behind the same
-  checks, when the host turns it on ([MCP](#mcp)).
+  checks, when the host turns it on ([MCP](#mcp)), and the web UI's files at every other
+  path, behind the same checks too, when the host names a UI directory. A browser
+  presents the token as the password of HTTP `Basic` credentials, which it then sends
+  on the UI's WebSocket upgrade as well; a browser client can instead offer it as the
+  subprotocol `jstream.token.<token>`.
 - **Slow clients:** each connection gets a bounded event buffer, and the server keeps
   draining the engine's events while a client is slow to read. When the buffer
   overflows, the server drops the queued events and sends one `events.dropped {count}`
@@ -646,7 +649,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:f7e74f3d761a34da", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r at 0.17 after merging main: tools.snap gains scene.create's optional role; studio/delete/encoder tool list from main holds" }
+verified = { hash = "b3:b7e9fc969c2bf475", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: re-read; Origin/preflight reasoning from round 1 intact, main unchanged here; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -679,8 +682,8 @@ verified = { hash = "b3:f7e74f3d761a34da", by = "agent:claude@session_01TiAAtPXb
   `Origin`, as the
   [MCP transport spec](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)
   requires. Like the WebSocket API it lets a request without `Origin` through to the
-  token check: browsers send `Origin` on a cross-origin `fetch`, and the bearer token
-  forces a preflight, so only native clients send none
+  token check: browsers send `Origin` on a cross-origin `fetch`, and the required
+  `Content-Type: application/json` forces a preflight, so only native clients send none
   ([jstream-server › Design](../crates/jstream-server/README.md#design)).
 - Every agent action goes to the audit log with the client's name. Undo is per client,
   so an agent can never undo the user's work.

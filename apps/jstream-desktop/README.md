@@ -51,7 +51,7 @@ folder.
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:9350838a23a53c88", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
+verified = { hash = "b3:1806a584c2b4f0f0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
 -->
 
 On Windows, with the UI built first:
@@ -62,11 +62,10 @@ cargo run -p jstream-desktop -- --ui-dir crates/jstream-ui/dist
 ```
 
 The binary is `jstream` (`jstream.exe`). It opens a window on the UI and connects it to
-its engine at once, with no connect form. That needs `jstream-server` to take the token
-from the WebSocket subprotocol the UI offers
-([ADR-0045](../../docs/adr/0045-leptos-web-ui.md), #246); until it does, the server
-refuses the connection and the window shows the connect form with that error. Closing
-the window stops the engine.
+its engine at once, with no connect form: `jstream-server` takes the token from the
+WebSocket subprotocol the UI offers ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
+If the connection is refused, the window shows the connect form with that error.
+Closing the window stops the engine.
 
 | Option | Meaning |
 |---|---|
