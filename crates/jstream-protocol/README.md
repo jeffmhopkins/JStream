@@ -128,7 +128,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:68a496a47ee98d78", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: preview cites ADR-0045 (its own small H.264 encoder session, binary frames, WebCodecs) instead of superseded ADR-0002; only the citation changed; re-read, holds" }
+verified = { hash = "b3:7e35392cbf674e30", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: stale via the regenerated protocol.snap/tools.snap, whose only change is preview.subscribe's doc citing ADR-0045 for ADR-0002; tools.snap still 154,829 bytes; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

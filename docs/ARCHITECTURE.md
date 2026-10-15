@@ -528,7 +528,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:3b9c16cf50950540", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: preview cites ADR-0045 (its own small H.264 encoder session, binary frames, WebCodecs) instead of superseded ADR-0002; only the citation changed; re-read, holds" }
+verified = { hash = "b3:23d27def2d1fa574", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: stale via the regenerated protocol.snap/tools.snap, whose only change is preview.subscribe's doc citing ADR-0045 for ADR-0002; tools.snap still 154,829 bytes; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -662,7 +662,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:6dae7e79f26e6a75", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): main's tool list with studio plus preview; preview bullet holds; tools.snap 154,829 bytes, text says about 155 KB" }
+verified = { hash = "b3:215970d79b85c65d", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: stale via the regenerated protocol.snap/tools.snap, whose only change is preview.subscribe's doc citing ADR-0045 for ADR-0002; tools.snap still 154,829 bytes; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
