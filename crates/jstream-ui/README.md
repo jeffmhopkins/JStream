@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:f77129a46f3e8525", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
+verified = { hash = "b3:3c8e639e04259f6a", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: Contents gains Host detection (host.rs, desktop() reading __JSTREAM_DESKTOP__); App still the root, now calling host::desktop() before the view; rest unchanged" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -28,6 +28,8 @@ Contents (the skeleton; [Design](#design) explains the choices):
 - **App** (`app.rs`): `App`, the root component. It shows the connect form until a
   session is open, then the shell with its regions, and follows the engine's revision
   from `state.changed` events. `SessionContext` gives components the open session.
+- **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
+  app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there.
 - **Session** (`session.rs`): `Session` (the connection and the engine's `welcome`),
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
   and `engine_url_for_page`, the engine URL the connect form offers.
@@ -43,7 +45,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5d91e7e926945a0d", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:39b1e207e667de52", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: Connecting bullet says the desktop app's global skips the form and App connects at once (app.rs, host.rs), and that a disconnect shows the form without the token; session, events, shell and native builds unchanged" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -54,7 +56,10 @@ verified = { hash = "b3:5d91e7e926945a0d", by = "agent:claude@session_01SHnfsdCu
   served the page behind HTTP Basic with the token as the password: the browser's
   cached Basic credentials then carry the token on the upgrade, and no token
   subprotocol is sent. How the daemon hands the token to a
-  browser (pairing) is not decided yet. A failed connect shows the transport's reason;
+  browser (pairing) is not decided yet. In the desktop app the form is skipped: the
+  app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
+  and `App` connects to that engine at once (`host.rs`). After a disconnect the form
+  shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
   a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin
   and an unreachable engine read the same.
 - **The session.** `Session::connect` opens `jstream-control`'s `WsControl` and says

@@ -114,6 +114,11 @@ pub fn App() -> impl IntoView {
         });
     };
 
+    // In the desktop app, connect to its engine at once (`host.rs`).
+    if let Some(engine) = crate::host::desktop() {
+        connect(engine.url, engine.token);
+    }
+
     view! {
         <Show
             when=move || status.get() == Status::Connected
