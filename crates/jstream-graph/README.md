@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:0526f2587e0d02ab", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#205 collection file) into C1a: re-read; resolved Kind versions bullet: kinds come from jstream-sources (C1a), and #205's collection file kind-version refusal kept; persist/ text taken as is" }
+verified = { hash = "b3:af0daa7f4537dc33", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: B1's collection JSON text is main's; E1 doesn't touch the graph" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

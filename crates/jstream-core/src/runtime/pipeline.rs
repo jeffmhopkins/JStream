@@ -1,9 +1,11 @@
 //! Starts and stops one output's threads.
 //!
 //! Capture is the platform's mailbox, read by the render thread. The render thread
-//! composites one scene and, because the fake GPU interop has no encode target,
-//! reads the frame back and pushes CPU RGBA. The mixer thread polls the engine
-//! clock. Encode threads live inside the encoder sessions. The output thread muxes
+//! composites the program mix from the render snapshot the control side published
+//! ([`RenderHub`]) and, because the fake GPU interop has no encode target, reads the
+//! frame back and pushes CPU RGBA. What it lets go of (a replaced snapshot, GPU images
+//! past their frame fence) goes to the `jstream-collector` thread (R-RT-003). The
+//! mixer thread polls the engine clock. Encode threads live inside the encoder sessions. The output thread muxes
 //! FLV and publishes it, or muxes fragmented MP4 and writes it to a recording file
 //! ([`Sink`]). None of those threads lock the engine's collection.
 //!
@@ -39,7 +41,7 @@ use jstream_platform::{
     Codecs, HardwarePreference, MediaClock, RateControl, VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::OutputId;
-use jstream_render::{Color, Compositor, Crop, Item, OpenOptions, Placement, RenderError, Scene};
+use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
 
 use crate::drops::{
     AudioBusDrops, AudioEncodeDrops, AudioInputDrops, DropGuard, DropSnapshot, FnDropSource,
@@ -48,7 +50,8 @@ use crate::drops::{
 use crate::engine::Engine;
 use crate::lock;
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
-use crate::runtime::{LinkState, LivePublish, OpenPublish};
+use crate::runtime::{Collector, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader};
+use crate::snapshot::{self, CaptureFrame, GpuKey, Shot};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
 const FRAME_NUM: u32 = 1;
@@ -71,11 +74,20 @@ const MAX_DRAW_ERRORS: u32 = 30;
 /// peer cannot hold `output.stop` much longer than this.
 pub(crate) const STOP_DRAIN: Duration = Duration::from_secs(2);
 
-/// Composites one frame on the render thread: the captured RGBA8 frame, or black when
-/// there is none yet, at `size`, read back as RGBA8 into `out` (replacing its contents).
-/// Created on the render thread and kept there, so it need not be `Send`.
-pub(crate) type DrawFn =
-    Box<dyn FnMut(FrameSize, Option<&[u8]>, &mut Vec<u8>) -> Result<(), String>>;
+/// Composites one frame on the render thread: the program mix of the render snapshot's
+/// [`Shot`] at `size`, with `display` sources showing the capture (or, with no program
+/// scene, the capture filling the frame, or black when there is none yet), read back as
+/// RGBA8 into `out` (replacing its contents). Returns the GPU images its cache let go
+/// of, for the collector. Created on the render thread and kept there, so it need not
+/// be `Send`.
+pub(crate) type DrawFn = Box<
+    dyn FnMut(
+        &Shot,
+        FrameSize,
+        Option<&CaptureFrame<'_>>,
+        &mut Vec<u8>,
+    ) -> Result<Option<Reclaimed>, String>,
+>;
 
 /// Opens the render thread's [`DrawFn`], on that thread. The engine's opens the wgpu
 /// compositor on the software adapter ([`gpu_draw`]). Tests inject [`cpu_draw`] (or a
@@ -83,19 +95,21 @@ pub(crate) type DrawFn =
 pub(crate) type OpenDraw = Arc<dyn Fn() -> Result<DrawFn, String> + Send + Sync>;
 
 /// A CPU stand-in for [`gpu_draw`]: it copies the captured RGBA8 frame, or fills black
-/// when there is none, which is what this cut's one-item composite produces. Tests use
-/// it to run the pipeline without a wgpu adapter
+/// when there is none, which is what the GPU path draws for a collection with no scene.
+/// It ignores the scenes. Tests use it to run the pipeline without a wgpu adapter
 /// ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|| {
-        let draw: DrawFn = Box::new(|size: FrameSize, rgba: Option<&[u8]>, out: &mut Vec<u8>| {
-            out.clear();
-            match rgba {
-                Some(rgba) => out.extend_from_slice(rgba),
-                None => out.resize(size.width() as usize * size.height() as usize * 4, 0),
-            }
-            Ok(())
-        });
+        let draw: DrawFn = Box::new(
+            |_: &Shot, size: FrameSize, capture: Option<&CaptureFrame<'_>>, out: &mut Vec<u8>| {
+                out.clear();
+                match capture {
+                    Some(capture) => out.extend_from_slice(capture.rgba),
+                    None => out.resize(size.width() as usize * size.height() as usize * 4, 0),
+                }
+                Ok(None)
+            },
+        );
         Ok(draw)
     })
 }
@@ -217,6 +231,8 @@ pub(crate) struct Running {
     generation: u64,
     stop: Arc<AtomicBool>,
     render: Option<JoinHandle<()>>,
+    /// Frees what the render thread lets go of. It ends once the render thread has.
+    collector: Option<JoinHandle<()>>,
     mixer: Option<JoinHandle<()>>,
     output: Option<JoinHandle<()>>,
     video: Arc<VideoSession>,
@@ -294,6 +310,7 @@ impl Drop for Running {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Release);
         join("render", self.render.take());
+        join("collector", self.collector.take());
         join("mixer", self.mixer.take());
         // Finish after the producers have stopped pushing, so the output thread
         // can drain the remaining packets and then see the streams end.
@@ -335,9 +352,15 @@ pub(crate) struct Parts {
     codecs: Arc<dyn Codecs>,
     draw: OpenDraw,
     open_timeout: Duration,
+    render: Arc<RenderHub>,
 }
 
-pub(crate) fn parts_from(backends: &Backends, draw: OpenDraw, open_timeout: Duration) -> Parts {
+pub(crate) fn parts_from(
+    backends: &Backends,
+    draw: OpenDraw,
+    open_timeout: Duration,
+    render: Arc<RenderHub>,
+) -> Parts {
     Parts {
         clock: Arc::clone(&backends.clock),
         capture: Arc::clone(&backends.capture),
@@ -345,20 +368,25 @@ pub(crate) fn parts_from(backends: &Backends, draw: OpenDraw, open_timeout: Dura
         codecs: Arc::clone(&backends.codecs),
         draw,
         open_timeout,
+        render,
     }
 }
 
 /// The wgpu compositor on the software adapter, reading every frame back to the CPU.
+/// Its [`ResourceCache`] keeps the uploads and nested-scene layers from tick to tick.
 pub(crate) fn gpu_draw() -> OpenDraw {
     Arc::new(|| {
         let mut compositor =
             Compositor::open(OpenOptions::headless()).map_err(|err| render_open_error(&err))?;
-        let draw: DrawFn = Box::new(move |size, rgba, out| {
-            let drawn = match rgba {
-                Some(rgba) => draw_image(&mut compositor, size, rgba, out),
-                None => readback(&mut compositor, size, &[], out),
-            };
-            drawn.map_err(|err| err.to_string())
+        let mut cache = ResourceCache::<GpuKey>::new();
+        let draw: DrawFn = Box::new(move |shot, size, capture, out| {
+            cache.begin_frame();
+            snapshot::compose(&mut compositor, &mut cache, shot, capture, size, true)
+                .and_then(|output| copy_pixels(&output, out))
+                .map_err(|err| err.to_string())?;
+            // A failed frame skips this: what it retired waits for the next frame's
+            // fence, which also covers it, so nothing is freed on this thread.
+            Ok(cache.end_frame(&compositor))
         });
         Ok(draw)
     })
@@ -438,9 +466,11 @@ pub(crate) fn launch(
     // keyframe among them) are not encoded before the output thread is listening.
     let video_sub = video.subscribe();
     let audio_sub = audio.subscribe();
+    let (collector, collector_thread) = Collector::spawn()?;
     let render = spawn("jstream-render", {
         let job = RenderJob {
             capture,
+            reader: RenderReader::new(Arc::clone(&parts.render), collector),
             open: Arc::clone(&parts.draw),
             clock: Arc::clone(&parts.clock),
             input: video.input(),
@@ -453,7 +483,16 @@ pub(crate) fn launch(
             fail: fail_tx.clone(),
         };
         move || render_thread(job)
-    })?;
+    });
+    // The render job owns the only sender, so the collector ends with the render thread
+    // (or here, if that thread never started).
+    let render = match render {
+        Ok(handle) => handle,
+        Err(err) => {
+            join("collector", Some(collector_thread));
+            return Err(err);
+        }
+    };
     let mixer_thread = match spawn("jstream-mixer", {
         let input = audio.input();
         let clock = Arc::clone(&parts.clock);
@@ -463,7 +502,7 @@ pub(crate) fn launch(
     }) {
         Ok(handle) => handle,
         Err(err) => {
-            stop_and_join(&stop, vec![render]);
+            stop_and_join(&stop, vec![render, collector_thread]);
             return Err(err);
         }
     };
@@ -487,7 +526,7 @@ pub(crate) fn launch(
     }) {
         Ok(handle) => handle,
         Err(err) => {
-            stop_and_join(&stop, vec![render, mixer_thread]);
+            stop_and_join(&stop, vec![render, collector_thread, mixer_thread]);
             return Err(err);
         }
     };
@@ -497,6 +536,7 @@ pub(crate) fn launch(
         generation,
         stop,
         render: Some(render),
+        collector: Some(collector_thread),
         mixer: Some(mixer_thread),
         output: Some(output),
         video,
@@ -677,6 +717,7 @@ fn stream_info(size: FrameSize, origin: MediaTime) -> StreamInfo {
 
 struct RenderJob {
     capture: Box<dyn CaptureStream>,
+    reader: RenderReader,
     open: OpenDraw,
     clock: Arc<dyn MediaClock>,
     input: VideoInput,
@@ -706,6 +747,9 @@ fn render_thread(job: RenderJob) {
 struct Frames {
     /// The latest capture, converted to RGBA8. Empty until the first usable frame.
     source: Vec<u8>,
+    /// Counts the captures copied into `source`, so the compositor uploads a capture
+    /// only when it is new.
+    source_version: u64,
     /// The last frame composited in full. Repeated when a tick cannot draw.
     shown: Vec<u8>,
     /// Where a tick composites; swapped into `shown` when the draw succeeds.
@@ -721,7 +765,9 @@ impl Frames {
         match capture.latest() {
             Ok(Some(surface)) => {
                 self.capture_failing = false;
-                if !rgba_from_surface(&surface, size, &mut self.source) && !self.warned_format {
+                if rgba_from_surface(&surface, size, &mut self.source) {
+                    self.source_version += 1;
+                } else if !self.warned_format {
                     self.warned_format = true;
                     tracing::warn!("capture frame is not CPU RGBA or BGRA at the encoder size");
                 }
@@ -737,16 +783,32 @@ impl Frames {
         self.capture = capture.stats();
     }
 
-    /// Composites into `scratch` and, on success, makes that the shown frame.
-    fn draw(&mut self, draw: &mut DrawFn, size: FrameSize) -> Result<(), String> {
-        let source = (!self.source.is_empty()).then_some(self.source.as_slice());
-        draw(size, source, &mut self.scratch)?;
+    /// Composites `shot` into `scratch` and, on success, makes that the shown frame.
+    /// Returns the GPU images the compositor let go of.
+    fn draw(
+        &mut self,
+        draw: &mut DrawFn,
+        shot: &Shot,
+        size: FrameSize,
+    ) -> Result<Option<Reclaimed>, String> {
+        let capture = (!self.source.is_empty()).then_some(CaptureFrame {
+            version: self.source_version,
+            size,
+            rgba: &self.source,
+        });
+        let freed = draw(shot, size, capture.as_ref(), &mut self.scratch)?;
         std::mem::swap(&mut self.scratch, &mut self.shown);
-        Ok(())
+        Ok(freed)
     }
 }
 
 /// Composites on every base-rate tick of the media clock.
+///
+/// Each tick first adopts the render snapshot the control side published last, which
+/// costs a pointer compare unless a new one arrived ([`RenderReader::adopt`]); the
+/// thread never takes the collection lock. Its generation is stamped as the thread
+/// starts and whenever it changes. The stopped marker is published when the loop ends,
+/// and when a fatal error stops the drawing.
 ///
 /// Recoverable: the capture mailbox failing or having no new frame repeats the last
 /// capture, and a composite error repeats the last composited frame, up to
@@ -760,6 +822,7 @@ impl Frames {
 fn render_loop(job: RenderJob) {
     let RenderJob {
         mut capture,
+        mut reader,
         open,
         clock,
         input,
@@ -781,8 +844,10 @@ fn render_loop(job: RenderJob) {
     if ready.send(Ok(())).is_err() {
         return;
     }
+    reader.start();
     let mut frames = Frames {
         source: Vec::new(),
+        source_version: 0,
         shown: Vec::new(),
         scratch: Vec::new(),
         capture: jstream_platform::CaptureStats::default(),
@@ -812,12 +877,16 @@ fn render_loop(job: RenderJob) {
         if !broken {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
                 frames.read_capture(capture.as_mut(), size);
-                frames.draw(&mut draw, size)
+                let snapshot = reader.adopt();
+                frames.draw(&mut draw, snapshot.shot(), size)
             }));
             match tick {
-                Ok(Ok(())) => {
+                Ok(Ok(freed)) => {
                     draw_errors = 0;
                     stats.readbacks.fetch_add(1, Ordering::Relaxed);
+                    if let Some(freed) = freed {
+                        reader.free(freed);
+                    }
                 }
                 Ok(Err(err)) => {
                     draw_errors += 1;
@@ -826,6 +895,8 @@ fn render_loop(job: RenderJob) {
                     }
                     if draw_errors > MAX_DRAW_ERRORS {
                         broken = true;
+                        // No longer adopting snapshots, so it holds no gesture up.
+                        reader.stop();
                         report(
                             &fail,
                             format!("compositing failed {draw_errors} times in a row: {err}"),
@@ -834,6 +905,7 @@ fn render_loop(job: RenderJob) {
                 }
                 Err(panic) => {
                     broken = true;
+                    reader.stop();
                     report(
                         &fail,
                         format!("the render thread panicked: {}", panic_message(&*panic)),
@@ -922,36 +994,8 @@ fn rgba_from_surface(surface: &VideoSurface, expected: FrameSize, out: &mut Vec<
     true
 }
 
-fn draw_image(
-    comp: &mut Compositor,
-    size: FrameSize,
-    rgba: &[u8],
-    out: &mut Vec<u8>,
-) -> Result<(), RenderError> {
-    let image = comp.upload_rgba8(size.width(), size.height(), rgba)?;
-    let items = [Item {
-        image: &image,
-        placement: Placement::IDENTITY,
-        crop: Crop::NONE,
-        opacity: 1.0,
-        visible: true,
-    }];
-    readback(comp, size, &items, out)
-}
-
-/// Renders `items` and copies the readback into `out`, reusing its allocation.
-fn readback(
-    comp: &mut Compositor,
-    size: FrameSize,
-    items: &[Item<'_>],
-    out: &mut Vec<u8>,
-) -> Result<(), RenderError> {
-    let scene = Scene {
-        canvas: size,
-        background: Color::BLACK,
-        items,
-    };
-    let output = comp.render(&scene, true)?;
+/// Copies the readback of `output` into `out`, reusing its allocation.
+fn copy_pixels(output: &jstream_render::Output, out: &mut Vec<u8>) -> Result<(), RenderError> {
     match output.pixels() {
         Some(snapshot) => {
             out.clear();
