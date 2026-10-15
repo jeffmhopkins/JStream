@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:81b5fa2b0e767808", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 amended for /pair and the cookie, neither built yet; the gate described here is the current code and remains true until the implementation PR, which will update it; holds" }
+verified = { hash = "b3:635af45d76ee0965", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#263, #272) into #264: main changed only mock.rs's cycle-reason text and stamps here; this PR's constant move kept; re-read, section describes neither cycle-reason wording nor anything the merge changed; holds" }
 -->
 
 ### Listening and admission
