@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:548e864cb0868064", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: B1's Tests and Collection file bullets are main's beside E1's bullets; the Not-yet line drops persistence and keeps the audio/outputs snapshots" }
+verified = { hash = "b3:352d3fadeec08b51", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#205 collection file, E1, Y1) into B5: re-read; main's Collection file and E1 bullets beside B5's unchanged History bullet; core.rs/tests only gain duplicated_from: None" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -132,7 +132,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:bf611e7fa88cc5aa", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: the render-snapshot paragraph now names undo/redo and a collection file's load among the re-plans (with_collection_file publishes after replacing the graph; tests/collection.rs checks the loaded program scene); B1's Collection file subsection is main's; Not-yet line keeps both sides (persistence built, audio/outputs snapshots not)" }
+verified = { hash = "b3:e94746a743aaa572", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#205 collection file, E1, Y1) into B5: re-read; history touched paragraph keeps item.set_source and item.move; main's Collection file subsection names no source field, so duplicated_from needs no text there" }
 -->
 
 ### Engine and sessions

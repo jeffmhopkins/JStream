@@ -61,6 +61,7 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
             kind: "color".into(),
         },
         settings: [("follow", follow)].into_iter().collect(),
+        duplicated_from: None,
     }
 }
 
@@ -125,6 +126,39 @@ fn an_empty_collection_round_trips() {
         }))
     );
     assert_eq!(load(&json), Ok(graph));
+}
+
+/// A copy's `duplicated_from` survives a save and load, also once its original is gone,
+/// and a source saved without one loads with none.
+#[test]
+fn clone_links_round_trip() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let duplicate = Edit::SourceDuplicate {
+        source_id: SourceId::new("orig"),
+        new_source_id: SourceId::new("copy"),
+        name: "copy".into(),
+    };
+    let delete = Edit::SourceDelete {
+        source_id: SourceId::new("orig"),
+    };
+    let applied = graph.apply(
+        &[color("orig", None), color("plain", None), duplicate],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let applied = graph.apply(&[delete], None);
+    assert!(applied.is_ok(), "{applied:?}");
+    let loaded = load(&graph.to_collection_json());
+    assert_eq!(loaded.as_ref(), Ok(&graph));
+    let link = |id: &str| {
+        loaded
+            .as_ref()
+            .ok()
+            .and_then(|g| g.state().source(&SourceId::new(id)))
+            .map(|s| s.duplicated_from().cloned())
+    };
+    assert_eq!(link("copy"), Some(Some(SourceId::new("orig"))));
+    assert_eq!(link("plain"), Some(None));
 }
 
 #[test]

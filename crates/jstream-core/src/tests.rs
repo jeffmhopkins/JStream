@@ -1407,6 +1407,7 @@ fn the_render_snapshot_follows_the_program_mix() {
             kind: "display".into(),
         },
         settings: Default::default(),
+        duplicated_from: None,
     };
     let edits = Batch {
         edits: vec![create("main"), display, add("main", "shown", "screen")],

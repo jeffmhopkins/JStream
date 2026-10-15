@@ -67,7 +67,7 @@
         },
         {
           "id": "i1",
-          "source_id": "cam",
+          "source_id": "cam_copy",
           "transform": {
             "position": {
               "x": 0.0,
@@ -130,6 +130,16 @@
       }
     },
     {
+      "id": "aux",
+      "name": "Aux",
+      "kind": {
+        "type": "builtin",
+        "kind": "webcam"
+      },
+      "kind_version": 1,
+      "duplicated_from": "gone"
+    },
+    {
       "id": "b_src",
       "name": "Scene B",
       "kind": {
@@ -145,6 +155,16 @@
         "kind": "webcam"
       },
       "kind_version": 1
+    },
+    {
+      "id": "cam_copy",
+      "name": "Camera copy",
+      "kind": {
+        "type": "builtin",
+        "kind": "webcam"
+      },
+      "kind_version": 1,
+      "duplicated_from": "cam"
     },
     {
       "id": "z_base",

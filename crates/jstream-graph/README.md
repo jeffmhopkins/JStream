@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:af0daa7f4537dc33", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (#205 B1 collection file) into E1: B1's collection JSON text is main's; E1 doesn't touch the graph" }
+verified = { hash = "b3:608d2a90706bcfd0", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#205 collection file, E1, Y1) into B5: collection file paragraph now says sources save duplicated_from as stored (persist/mod.rs FileSource); tests paragraph names the clone in the fixture and the new clone_links_round_trip test; rest re-read against apply.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -140,7 +140,8 @@ stored transform and no geometry. `Source::to_info` (given the `State`, to omit 
 `role: "group"`, ADR-0024) with their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
 and `visible`), sources ordered by ID (with `kind_version`, the descriptor version a
-`builtin` source's settings follow, ADR-0025), and outputs ordered by ID. Kinds, undo history and runtime state are not in it, and
+`builtin` source's settings follow, ADR-0025, and `duplicated_from` as stored, even
+when it names a deleted source), and outputs ordered by ID. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -181,11 +182,13 @@ batches of every edit, including moves, role changes, source switches and addres
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
-1280×720 canvas, legacy and geometry items, scene `b` made a group) plus a source whose
+1280×720 canvas, legacy and geometry items, scene `b` made a group, a clone and a
+`duplicated_from` naming a missing source) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
-moves on, and a migration has to load it); the migration runner over stand-in
+moves on, and a migration has to load it); a clone's link surviving a round trip after
+its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references, cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that

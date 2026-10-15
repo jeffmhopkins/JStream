@@ -145,6 +145,10 @@ struct FileSource {
     kind_version: Option<u32>,
     #[serde(default, skip_serializing_if = "Settings::is_empty")]
     settings: Settings,
+    /// The source this one was copied from (ADR-0023), saved as stored: a plain link
+    /// that may name a source since deleted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    duplicated_from: Option<SourceId>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -204,6 +208,7 @@ impl Graph {
                         _ => None,
                     },
                     settings: source.settings.clone(),
+                    duplicated_from: source.duplicated_from.clone(),
                 })
                 .collect(),
             outputs: state
@@ -432,6 +437,7 @@ fn order_source<'a>(
             name: source.name.clone(),
             kind: source.kind.clone(),
             settings: source.settings.clone(),
+            duplicated_from: source.duplicated_from.clone(),
         },
     ));
     Ok(())

@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:7d612e98e2d7ee00", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B6 groups/item.move, G3a WindowsVcam, #199, ADR-0043) into E1: B6's role/item.move/scene_id text beside E1's 8-level program-mix limit; a group nests like a scene source, under the same limit; both hold" }
+verified = { hash = "b3:7d85d5650335326e", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#205 collection file, E1, Y1) into B5: re-read; B5 text kept beside main's; replaced main's stale 'Nothing is persisted yet' (untrue since #205) with the collection file, duplicated_from included" }
 -->
 
 ```
@@ -368,7 +368,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
-  and `outputs`. Nothing is persisted yet.
+  and `outputs`. `jstream-graph` saves and loads all of the built model as the
+  collection file ([Persistence](#persistence)), `duplicated_from` included.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -814,7 +815,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:333fc86c8cb74fff", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6): persist/ now also stores scene roles; Collections and Asset files bullets hold" }
+verified = { hash = "b3:2b207716ad863c75", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#205 collection file, E1, Y1) into B5: re-read; Collections bullet holds with FileSource's new optional duplicated_from (schema stays 1, older files load with none)" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
