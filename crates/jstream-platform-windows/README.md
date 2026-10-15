@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:18a629f95029532a", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (F2b #170, G2 #174, #187) into E3a: section text is E3a's (main changed only the verified line); stale via ARCH#threading (recording sink) and crate-map (vcam-windows logging), neither concerns the Windows backends; E3a's capture, GPU, Times, Threads, Teardown and Tests bullets re-read against wgc.rs and gpu/capture.rs" }
+verified = { hash = "b3:4bf01ca8e060db13", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (E3a #173, B2 #176) into C4b: combined E3a's GPU capture and Tests text with C4b's video-device helpers and hw tests; re-read MfVideoDevices bullet (mailbox still the CPU one in capture/mailbox.rs) and Not yet; both backends' bullets hold" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
