@@ -300,7 +300,8 @@ delete a running output (`invalid_argument`), so the batch passes it the running
 A host can also declare an output with `Engine::with_output(id)`, outside the
 collection: it starts `stopped`, has no target and stays known whatever the collection
 holds. A live host reads a collection output's target with `output_kind` when its
-publish opener runs; wiring that into the daemon is not done yet.
+publish opener runs, as `jstream-daemon` does on Windows
+([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 
 **Stream keys.** `with_key_store` injects the OS credential store
 (`jstream_platform::StreamKeyStore`). `output.set_key` checks that the output is in the
@@ -335,6 +336,7 @@ stop or a failure, and no session sits idle before the start. The opener runs af
 `starting`, outside the collection lock and the pipeline gate, before any device
 opens; its error fails the start like a launch failure (`failed`, then
 `action_failed` with `opening the publish target: <reason>`), and the opener is kept.
+An opener builds its own errors with `PublishError::new`.
 Its error text must not carry a stream key
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)); `connect_rtmp`'s does not. The call checks the output is idle and that no other pipeline is running,
 takes the publish target, records an in-flight generation, emits `starting`, and

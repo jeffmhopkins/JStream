@@ -4,7 +4,9 @@
 //! `jstream-cli mcp` can drive it (ADR-0001: the app only wires the engine to its
 //! interfaces). It creates or reuses the user-only control token file (ADR-0006), logs
 //! to stderr and to rotating files, writes local crash reports on a panic (R-SEC-004),
-//! and stops gracefully on Ctrl-C. Not yet: the web UI, MCP over HTTP and `--collection`.
+//! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
+//! pipeline on the Windows backends and publishes over RTMP(S), after checking that
+//! Media Foundation is installed. Not yet: the web UI, MCP over HTTP and `--collection`.
 //!
 //! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-daemon/README.md#purpose, apps/jstream-daemon/README.md#usage, apps/jstream-daemon/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0006-mcp-full-access.md
 
@@ -33,6 +35,9 @@ const OK: u8 = 0;
 const FAILED: u8 = 1;
 /// The command line could not be parsed, or names no token file.
 const USAGE: u8 = 2;
+/// Windows lacks a component the engine needs: Media Foundation, on an N edition
+/// without the Media Feature Pack or a Windows Server without its feature.
+const MISSING_COMPONENT: u8 = 3;
 
 /// The environment variable naming the token file when `--token-file` is not given,
 /// the same one `jstream-cli` reads.
@@ -45,6 +50,12 @@ const LOG_ENV: &str = "RUST_LOG";
 enum Failure {
     Usage(String),
     Failed(anyhow::Error),
+    /// The message says what is missing and how to install it.
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "only Windows checks a component")
+    )]
+    MissingComponent(String),
 }
 
 impl From<anyhow::Error> for Failure {
@@ -90,6 +101,10 @@ fn main() -> ExitCode {
             // `{:#}` prints the whole chain of causes on one line.
             let _ = writeln!(stderr().lock(), "error: {error:#}");
             FAILED
+        }
+        Err(Failure::MissingComponent(message)) => {
+            let _ = writeln!(stderr().lock(), "error: {message}");
+            MISSING_COMPONENT
         }
     };
     ExitCode::from(code)
@@ -158,6 +173,17 @@ fn init_logging(dir: &Path, filter: Targets) -> Result<(), Failure> {
     Ok(())
 }
 
+/// Checks that Windows has Media Foundation, before anything could call into it. The
+/// binary delay-loads `mfplat.dll` (`build.rs`), so on an N edition without it the
+/// daemon still starts and gets here, and exits with advice instead of a loader error.
+#[cfg(windows)]
+fn check_media_foundation() -> Result<(), Failure> {
+    jstream_platform_windows::check_media_foundation().map_err(|error| {
+        tracing::error!(%error, "a Windows component is missing");
+        Failure::MissingComponent(error.to_string())
+    })
+}
+
 /// Loads or creates the token, then serves until a signal arrives.
 fn run(options: Options) -> Result<(), Failure> {
     let path = match options.token_file.clone() {
@@ -173,6 +199,8 @@ fn run(options: Options) -> Result<(), Failure> {
     };
     let filter = log_filter(&options)?;
     init_logging(&log_dir(&options)?, filter)?;
+    #[cfg(windows)]
+    check_media_foundation()?;
     let (token, provenance) = token::load_or_create(&path)?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -180,7 +208,7 @@ fn run(options: Options) -> Result<(), Failure> {
         .context("could not start the async runtime")?;
     runtime.block_on(async {
         let stop = serve::shutdown_signal().context("could not install the Ctrl-C handler")?;
-        let engine = serve::engine(&options);
+        let engine = serve::engine(&options)?;
         let server = serve::bind(engine, options.port, token)
             .await
             .map_err(anyhow::Error::from)?;

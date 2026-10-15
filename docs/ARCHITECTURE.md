@@ -55,7 +55,7 @@ verified = { hash = "b3:8c01e3ac115def0d", by = "agent:claude@session_01PiP5mMM8
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API only ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API only, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S) ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -154,7 +154,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR

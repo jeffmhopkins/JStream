@@ -22,7 +22,10 @@ pub struct PublishError {
 }
 
 impl PublishError {
-    pub(crate) fn new(reason: impl Into<String>) -> Self {
+    /// An error with `reason` as its text. A host's [`OpenPublish`] uses it to fail a
+    /// start for its own reasons, such as an output with no stream key. `reason` must
+    /// not contain a stream key (R-SEC-001).
+    pub fn new(reason: impl Into<String>) -> Self {
         Self {
             reason: reason.into(),
         }

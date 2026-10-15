@@ -28,7 +28,8 @@ Options:
 It prints `listening on ws://127.0.0.1:<port>/api/v1/ws` once it serves, and runs
 until Ctrl-C (or SIGTERM). Clients: jstream-cli --url <that URL> --token-file <path>.
 
-Exit codes: 0 stopped by a signal, 1 failed to start or serve, 2 usage.
+Exit codes: 0 stopped by a signal, 1 failed to start or serve, 2 usage,
+3 Media Foundation is missing (Windows N editions).
 ";
 
 /// What the daemon serves.
