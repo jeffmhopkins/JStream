@@ -186,8 +186,11 @@ impl Engine {
     ) -> Result<Self, CollectionFileError> {
         {
             let mut file = lock(&self.shared.collection_file);
+            // The file is read (or created) with only the file's lock held, from a copy
+            // of the graph taken under the collection lock.
+            let current = lock(&self.shared.state).graph.clone();
+            let (opened, graph) = CollectionFile::open(path.into(), &current)?;
             let mut state = lock(&self.shared.state);
-            let (opened, graph) = CollectionFile::open(path.into(), &state.graph)?;
             let state = &mut *state;
             state.graph = graph;
             state.outputs.sync(state.graph.state());

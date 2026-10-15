@@ -42,7 +42,10 @@ const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [];
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum LoadError {
-    /// The text is not JSON, or not the shape of its schema version.
+    /// The text is not JSON, or not the shape of its schema version. The reason names
+    /// at most a field the file is missing and where the JSON breaks, never a value
+    /// from the file: `serde_json`'s own messages quote the offending value, which could
+    /// be anything a hand-edited file holds.
     #[error("the collection file does not parse: {0}")]
     Parse(String),
     /// `schema_version` is missing or not a version this build has a migration from.
@@ -208,9 +211,10 @@ impl Graph {
                 })
                 .collect(),
         };
-        // Every field is a string, number, bool or a map with string keys, so this
-        // can't fail.
-        let mut json = serde_json::to_string_pretty(&file).unwrap_or_default();
+        let mut json = serde_json::to_string_pretty(&file).expect(
+            "invariant: the file holds only strings, finite numbers, bools, and maps with \
+             string keys, which always serialize",
+        );
         json.push('\n');
         json
     }
@@ -224,11 +228,9 @@ impl Graph {
     /// migration, or holds a collection that an edit would refuse. Nothing is partly
     /// loaded.
     pub fn with_collection_json(self, json: &str) -> Result<Graph, LoadError> {
-        let mut value: Value =
-            serde_json::from_str(json).map_err(|e| LoadError::Parse(e.to_string()))?;
+        let mut value: Value = serde_json::from_str(json).map_err(|e| parse_error(&e))?;
         migrate(&mut value)?;
-        let file: File =
-            serde_json::from_value(value).map_err(|e| LoadError::Parse(e.to_string()))?;
+        let file: File = serde_json::from_value(value).map_err(|e| parse_error(&e))?;
         let mut graph = Graph {
             rev: Rev(0),
             state: Default::default(),
@@ -242,6 +244,32 @@ impl Graph {
         graph.rev = file.rev;
         Ok(graph)
     }
+}
+
+/// `error` as a [`LoadError::Parse`] that quotes nothing from the file. A missing field
+/// is named (the name is this crate's, not the file's); every other data error, whose
+/// `serde_json` message would quote the offending value or key, becomes a fixed reason.
+/// A syntax error gives its line and column.
+fn parse_error(error: &serde_json::Error) -> LoadError {
+    use serde_json::error::Category;
+    let reason = match error.classify() {
+        Category::Data => {
+            let message = error.to_string();
+            match message
+                .strip_prefix("missing field `")
+                .and_then(|rest| rest.split_once('`'))
+            {
+                Some((field, _)) => format!("missing field `{field}`"),
+                None => "a field is unknown, or a value has the wrong type or is out of range"
+                    .to_owned(),
+            }
+        }
+        Category::Syntax | Category::Eof | Category::Io => "not valid JSON".to_owned(),
+    };
+    LoadError::Parse(match error.line() {
+        0 => reason,
+        line => format!("{reason} at line {line}, column {}", error.column()),
+    })
 }
 
 /// Upgrades `value` to [`SCHEMA_VERSION`].

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:6b00b92fe44d07dc", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
+verified = { hash = "b3:63ff09347a7af014", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (#202) plus N2/N5: re-read; Collection file bullet and tests list still match; #202's reconnect test text kept" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -121,7 +121,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:35252def9891785f", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
+verified = { hash = "b3:a50b57c47be9d17f", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 N2/N5: with_collection_file now reads the file with only the file lock held (graph copied under the collection lock), a failed Unix directory flush after the rename only warns; Collection file subsection still holds (atomic write, save never under the collection lock); #202 prose kept" }
 -->
 
 ### Engine and sessions

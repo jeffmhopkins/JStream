@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:cf5b0fc2d88e7bc5", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 doc-build fix: SCHEMA_VERSION's rustdoc no longer links the private MIGRATIONS table; the collection file paragraph is unchanged" }
+verified = { hash = "b3:3442088157d72938", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 B2: parse errors keep only a missing field's name, a fixed reason and syntax line/column, never a file value; Errors bullet and tests list updated to say so; to_collection_json uses expect with its invariant" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -139,7 +139,9 @@ the engine's; this crate does no I/O.
   to the file's, so revisions keep increasing across restarts. A source whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
-- **Errors** never quote a value beyond IDs, so they are safe to log.
+- **Errors** never quote a value beyond IDs, so they are safe to log. `serde_json`'s
+  own messages quote the offending value, so a parse error keeps only a missing field's
+  name, a fixed reason, and the line and column of a syntax error.
 
 **Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
 edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds, and through
@@ -161,7 +163,8 @@ canvas, legacy and geometry items) plus a source whose settings refer to a later
 moves on, and a migration has to load it); the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references, cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
-item with both or neither placement form, an invalid geometry or canvas).
+item with both or neither placement form, an invalid geometry or canvas), and that
+no error quotes a credential-like value placed where a number, key or tag belongs.
 
 <a id="follow-ups"></a>
 ## Not yet

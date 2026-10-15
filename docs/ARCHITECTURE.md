@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d46a278a46d73d8a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; crate shape unchanged" }
+verified = { hash = "b3:aa863292ec05f932", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205: apps change is only the daemon's --collection refusal wording and a test message; system shape unchanged" }
 -->
 
 ```
@@ -804,7 +804,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:4053eddc31ae4769", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 doc-build fix in persist/mod.rs (rustdoc wording only); Collections bullet still holds" }
+verified = { hash = "b3:27d91a0349ed88d1", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 N1: Asset files bullet now says a kind-version mismatch is refused until kinds ship settings migrations; Collections bullet still holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
@@ -813,7 +813,8 @@ verified = { hash = "b3:4053eddc31ae4769", by = "agent:claude@session_01CTdkkkir
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source and filter records its kind's descriptor version, migrated on load
-  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
+  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until
+  kinds ship settings migrations, a source saved at another version is refused on load.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
 - **Control token:** a random token in a user-only file in the config directory

@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:5ed93ec324ea59af", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 merge of main: stale via ARCH Persistence; R-API-001..003 text unchanged and the collection file still follows R-API-003" }
+verified = { hash = "b3:91ef5550f201dc8c", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205: stale via ARCH Persistence's N1 wording; R-API-001..003 text unchanged" }
 -->
 
 <a id="R-API-001"></a>

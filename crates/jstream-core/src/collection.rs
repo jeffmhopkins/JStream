@@ -108,8 +108,15 @@ impl CollectionFile {
 /// Replaces `path` with `bytes` atomically: writes a temporary file in the same
 /// directory, flushes it to disk, renames it over `path` (`std`'s rename replaces an
 /// existing file on Windows too), and on Unix flushes the directory so the rename
-/// itself survives a power cut. A failure removes the temporary file and leaves `path`
-/// as it was. On Unix a new file is `0600`, like the daemon's other files.
+/// itself survives a power cut. A failure up to the rename removes the temporary file,
+/// leaves `path` as it was and is returned. Once the rename is done the file holds the
+/// new collection, so a failed directory flush is only logged at `warn`. On Unix a new
+/// file is `0600`, like the daemon's other files.
+///
+/// The temporary name carries the process ID, so two processes saving one path don't
+/// share it. Within a process, the engine's saves to one file are serialized by its
+/// lock; two engines saving the same path would overwrite each other's collections
+/// anyway, so that is not a supported setup.
 fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let name = path
         .file_name()
@@ -129,7 +136,13 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
             Some(dir) if !dir.as_os_str().is_empty() => dir,
             _ => Path::new("."),
         };
-        fs::File::open(dir)?.sync_all()?;
+        if let Err(err) = fs::File::open(dir).and_then(|dir| dir.sync_all()) {
+            tracing::warn!(
+                path = %path.display(),
+                error = %err,
+                "collection saved, but its directory was not flushed to disk"
+            );
+        }
     }
     Ok(())
 }

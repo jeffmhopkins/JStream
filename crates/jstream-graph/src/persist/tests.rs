@@ -310,3 +310,35 @@ fn placements_and_the_canvas_are_checked() {
         load(&canvas)
     );
 }
+
+/// R-SEC-001: a malformed file's error never quotes a value from it, so it is safe to
+/// log even when a credential sits where a number or a known field should be.
+#[test]
+fn parse_errors_quote_nothing_from_the_file() {
+    let secret = "rtmp://user:passSECRET@host/live";
+    let wrong_type = edit_file(|v| v["canvas"]["width"] = json!(secret));
+    let unknown_key = edit_file(|v| v["scenes"][0][secret] = json!(1));
+    // An unknown container parses (as `Unknown`) and is refused by the edit check.
+    let unknown_variant = edit_file(|v| v["outputs"][0]["kind"]["container"] = json!(secret));
+    let unknown_tag = edit_file(|v| v["sources"][1]["kind"]["type"] = json!(secret));
+    let syntax = format!("{{\"schema_version\": 1, \"rev\": {secret}}}");
+    for file in [
+        wrong_type,
+        unknown_key,
+        unknown_variant,
+        unknown_tag,
+        syntax,
+    ] {
+        let error = load(&file);
+        assert!(error.is_err(), "{file}");
+        let message = error.err().map(|e| e.to_string()).unwrap_or_default();
+        assert!(!message.contains("SECRET"), "{message}");
+    }
+    let missing = edit_file(|v| {
+        v.as_object_mut().map(|o| o.remove("canvas"));
+    });
+    assert_eq!(
+        load(&missing),
+        Err(LoadError::Parse("missing field `canvas`".into()))
+    );
+}
