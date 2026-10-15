@@ -90,7 +90,7 @@ impl Host {
     }
 
     /// Stops the server, closing every connection, and waits for it (at most
-    /// [`STOP_TIMEOUT`]). The engine stops when its last session goes.
+    /// 5 s). The engine stops when its last session goes.
     pub fn stop(mut self) {
         if let Some(stop) = self.stop.take() {
             let _ = stop.send(());

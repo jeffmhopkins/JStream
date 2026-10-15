@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:924f6d1e0d087325", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Round 1: app.rs now stops the host and serves the problem page when the bundle is missing, data.rs takes only absolute APPDATA/HOME/XDG_DATA_HOME, ui.rs refuses non-hex escapes; module list and not-yet list still hold" }
+verified = { hash = "b3:11cde682ea827a38", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI doc fix: Host::stop's rustdoc says 5 s instead of linking the private STOP_TIMEOUT; behaviour unchanged, section holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -93,7 +93,7 @@ the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:de8d46ec7efd96e9", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Round 1 B2: a missing bundle now stops the engine and gets no bootstrap script (app.rs), as the Failures bullet says; N4 strict escapes keep the path-check claims; rest holds" }
+verified = { hash = "b3:247e2e47f53aace6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI doc fix: Host::stop's rustdoc says 5 s instead of linking the private STOP_TIMEOUT; behaviour unchanged, section holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
