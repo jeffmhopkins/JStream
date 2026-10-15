@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:1d15bdb918aca891", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b: only the 0.7->0.8 version goldens in run/tests.rs changed; the CLI still lacks the output edits (now including record), output.list and key actions as the Edits bullet says" }
+verified = { hash = "b3:15e8ec2e9262bce9", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; contents list holds for both (run.rs ignores key_set/outputs and settings alike)" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:c1e9e63cbfc45185", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Edits bullet says the 0.7 output edits, output.list and the key actions are not in the CLI yet (args.rs arity); Reads bullet says state get omits outputs and output status omits key_set (run.rs write_query)" }
+verified = { hash = "b3:46f8a234ede5d0ab", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Edits bullet merged to say settings and outputs are both unsupported (args.rs has source.rename, no settings or output edits); Reads bullet keeps #142's outputs/key_set note; version line reads PROTOCOL_VERSION" }
 -->
 
 ```sh
@@ -94,9 +94,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except protocol 0.7's output edits (`output.create`,
-  `output.set_target`, `output.delete`); they, `output.list` and the stream-key actions
-  are not in the CLI yet. Several edits on one line go as **one atomic batch**: one new
+  protocol is supported except settings and outputs. `source.set_settings`, and
+  `source.create` with settings, need a JSON argument form the CLI doesn't have yet, so
+  a source it creates gets its kind's defaults. Protocol 0.7's output edits
+  (`output.create`, `output.set_target`, `output.delete`), `output.list` and the
+  stream-key actions are not in the CLI yet. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
@@ -181,7 +183,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:37c5c322b5acd057", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b: tests.rs version goldens only; parsing, block_on, connector, mock and writer bullets hold" }
+verified = { hash = "b3:1c04bb14bd2bf578", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; parsing, block_on, connector, mock, writers and MCP proxy bullets unaffected by either change" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

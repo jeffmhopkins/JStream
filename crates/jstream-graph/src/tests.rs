@@ -2,10 +2,100 @@
 
 use crate::Graph;
 use jstream_protocol::{
-    Crop, Edit, EntityKind, ItemId, ItemTransform, OutputId, OutputInfo, OutputKind, ProtocolError,
-    QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SourceId, SourceKind, Vec2,
+    Crop, Edit, EntityKind, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId,
+    OutputInfo, OutputKind, ParamDescriptor, ParamType, ProtocolError, QueryResult,
+    RecordContainer, Rev, RtmpTarget, SceneId, Settings, SourceId, SourceKind, Vec2,
 };
+use serde_json::{Value, json};
 use std::collections::BTreeSet;
+
+fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
+    ParamDescriptor {
+        id: id.into(),
+        ty,
+        default,
+        label: id.into(),
+        description: None,
+        group: None,
+        advanced: false,
+        visible_if: None,
+        live: true,
+    }
+}
+
+/// The kinds the tests create: `color`, a video kind with a scalar, a reference of each
+/// sort, and an asset; and `tone`, an audio kind with no parameters.
+fn kinds() -> Vec<KindDescriptor> {
+    vec![
+        KindDescriptor {
+            kind_id: "color".into(),
+            category: KindCategory::Source,
+            name: "Colour".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params: vec![
+                param(
+                    "color",
+                    ParamType::Color { alpha: true },
+                    json!("#000000ff"),
+                ),
+                param(
+                    "size",
+                    ParamType::Int {
+                        min: Some(1),
+                        max: Some(100),
+                        step: None,
+                        unit: None,
+                    },
+                    json!(10),
+                ),
+                param("mask", ParamType::Scene, Value::Null),
+                param("follow", ParamType::Source { media: None }, Value::Null),
+                param(
+                    "duck",
+                    ParamType::Source {
+                        media: Some(Media::Audio),
+                    },
+                    Value::Null,
+                ),
+                param("file", ParamType::Asset { accept: vec![] }, Value::Null),
+            ],
+        },
+        KindDescriptor {
+            kind_id: "tone".into(),
+            category: KindCategory::Source,
+            name: "Tone".into(),
+            version: 1,
+            video: false,
+            audio: true,
+            params: vec![],
+        },
+    ]
+}
+
+fn graph() -> Graph {
+    Graph::new().with_kinds(kinds())
+}
+
+fn settings(entries: &[(&str, Value)]) -> Settings {
+    entries.iter().map(|(k, v)| (*k, v.clone())).collect()
+}
+
+fn scene_ref(id: &str) -> Value {
+    json!({"type": "scene", "scene_id": id})
+}
+
+fn source_ref(id: &str) -> Value {
+    json!({"type": "source", "source_id": id})
+}
+
+fn set_settings(source: &str, patch: &[(&str, Value)]) -> Edit {
+    Edit::SourceSetSettings {
+        source_id: SourceId::new(source),
+        patch: settings(patch),
+    }
+}
 
 fn scene_create(id: &str) -> Edit {
     Edit::SceneCreate {
@@ -21,6 +111,7 @@ fn builtin(id: &str) -> Edit {
         kind: SourceKind::Builtin {
             kind: "color".into(),
         },
+        settings: Settings::new(),
     }
 }
 
@@ -31,6 +122,7 @@ fn scene_source(id: &str, scene: &str) -> Edit {
         kind: SourceKind::Scene {
             scene_id: SceneId::new(scene),
         },
+        settings: Settings::new(),
     }
 }
 
@@ -53,15 +145,6 @@ fn output_create(id: &str, url: &str) -> Edit {
         kind: OutputKind::Rtmp {
             target: target(url),
         },
-    }
-}
-
-/// An absolute path on this platform: `C:\` on Windows, `/` elsewhere.
-fn abs_path(rest: &str) -> String {
-    if cfg!(windows) {
-        format!("C:\\{}", rest.replace('/', "\\"))
-    } else {
-        format!("/{rest}")
     }
 }
 
@@ -115,7 +198,7 @@ fn invalid_reason(error: ProtocolError) -> (String, String) {
 
 /// Scenes a, b, c; builtin sources cam and mic; scene sources for each scene.
 fn fixture() -> Graph {
-    let mut graph = Graph::new();
+    let mut graph = graph();
     apply_ok(
         &mut graph,
         vec![
@@ -194,7 +277,7 @@ fn a_failing_edit_rolls_back_the_whole_batch() {
 
 #[test]
 fn later_edits_see_earlier_ones() {
-    let mut graph = Graph::new();
+    let mut graph = graph();
     apply_ok(
         &mut graph,
         vec![scene_create("s"), builtin("cam"), add("s", "i", "cam")],
@@ -390,7 +473,10 @@ fn a_scene_cannot_contain_itself() {
     let mut graph = fixture();
     let (field, reason) = invalid_reason(apply_err(&mut graph, vec![add("a", "i", "sa")]));
     assert_eq!(field, "edits.0.source_id");
-    assert!(reason.ends_with("a -> a"), "{reason}");
+    assert!(
+        reason.ends_with("scene `a` -> source `sa` -> scene `a`"),
+        "{reason}"
+    );
 }
 
 #[test]
@@ -398,7 +484,10 @@ fn two_cycles_are_rejected() {
     let mut graph = fixture();
     apply_ok(&mut graph, vec![add("a", "ab", "sb")]);
     let (_, reason) = invalid_reason(apply_err(&mut graph, vec![add("b", "ba", "sa")]));
-    assert!(reason.ends_with("b -> a -> b"), "{reason}");
+    assert!(
+        reason.ends_with("scene `b` -> source `sa` -> scene `a` -> source `sb` -> scene `b`"),
+        "{reason}"
+    );
 }
 
 #[test]
@@ -413,7 +502,12 @@ fn three_cycles_are_rejected_even_within_one_batch() {
         ],
     ));
     assert_eq!(field, "edits.2.source_id");
-    assert!(reason.ends_with("c -> a -> b -> c"), "{reason}");
+    assert!(
+        reason.ends_with(
+            "scene `c` -> source `sa` -> scene `a` -> source `sb` -> scene `b` -> source `sc` -> scene `c`"
+        ),
+        "{reason}"
+    );
 }
 
 #[test]
@@ -528,7 +622,7 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
 #[test]
 fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
     let mut graph = Graph::new();
-    let path = abs_path("Videos/show.mp4");
+    let path = "/home/me/Videos/show.mp4".to_owned();
     let created = apply_ok(&mut graph, vec![record_create("rec", &path)]);
     assert_eq!(
         created.inverse.edits,
@@ -573,9 +667,9 @@ fn recording_paths_are_validated() {
     for path in [
         String::new(),
         "show.mp4".into(),
-        abs_path("Videos/"),
-        abs_path("Videos/.."),
-        abs_path("Videos/show\n.mp4"),
+        "/Videos/".into(),
+        "/Videos/..".into(),
+        "/Videos/show\n.mp4".into(),
     ] {
         let (field, reason) =
             invalid_reason(apply_err(&mut graph, vec![record_create("rec", &path)]));
@@ -852,12 +946,14 @@ mod property {
     //! A hand-rolled, seeded generator keeps the test deterministic and dependency-free.
 
     use super::{
-        abs_path, add, builtin, output_create, record_create, scene_create, scene_source, target,
+        add, builtin, graph, output_create, record_create, scene_create, scene_ref, scene_source,
+        set_settings, source_ref, target,
     };
     use crate::Graph;
     use jstream_protocol::{
         Crop, Edit, ItemId, ItemTransform, OutputId, Rev, SceneId, SourceId, Vec2,
     };
+    use serde_json::{Value, json};
     use std::collections::BTreeSet;
 
     /// xorshift64*: small, fast, and good enough to pick edits.
@@ -906,7 +1002,7 @@ mod property {
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let index = |rng: &mut Rng| u32::try_from(rng.below(6)).expect("fits");
         let f = |rng: &mut Rng| f32::from(u16::try_from(rng.below(2000)).expect("fits")) - 1000.0;
-        match rng.below(17) {
+        match rng.below(20) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -958,17 +1054,36 @@ mod property {
                 new_source_id: SourceId::new(pool(rng, "src")),
                 name: "copy".into(),
             },
-            13 => Edit::SourceDelete {
+            13 => Edit::SourceRename {
+                source_id: SourceId::new(source(rng)),
+                name: pool(rng, "name "),
+            },
+            14 | 15 => {
+                let value = |rng: &mut Rng| match rng.below(4) {
+                    0 => Value::Null,
+                    1 => scene_ref(&scene(rng)),
+                    _ => source_ref(&source(rng)),
+                };
+                let size = json!(u64::try_from(rng.below(120)).expect("fits"));
+                let patch: Vec<(&str, Value)> = match rng.below(4) {
+                    0 => vec![("mask", value(rng))],
+                    1 => vec![("follow", value(rng)), ("size", size)],
+                    2 => vec![("color", json!("#ff00ff")), ("size", Value::Null)],
+                    _ => vec![("mask", value(rng)), ("follow", value(rng))],
+                };
+                set_settings(&source(rng), &patch)
+            }
+            16 => Edit::SourceDelete {
                 source_id: SourceId::new(source(rng)),
             },
-            14 => {
+            17 => {
                 if rng.below(4) == 0 {
-                    record_create(&pool(rng, "out"), &abs_path("Videos/show.mp4"))
+                    record_create(&pool(rng, "out"), "/Videos/show.mp4")
                 } else {
                     output_create(&pool(rng, "out"), url(rng))
                 }
             }
-            15 => Edit::OutputSetTarget {
+            18 => Edit::OutputSetTarget {
                 output_id: OutputId::new(output(rng)),
                 target: target(url(rng)),
             },
@@ -1000,7 +1115,7 @@ mod property {
         let mut failures = 0;
         for seed in 1..=40u64 {
             let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15));
-            let mut graph = Graph::new();
+            let mut graph = graph();
             for _ in 0..150 {
                 let edits = random_batch(&mut rng, &graph);
                 let before = graph.clone();
@@ -1044,6 +1159,8 @@ mod property {
             "source.create",
             "source.duplicate",
             "source.delete",
+            "source.rename",
+            "source.set_settings",
             "output.create",
             "output.set_target",
             "output.delete",
@@ -1055,4 +1172,370 @@ mod property {
             "{successes} ok, {failures} failed"
         );
     }
+}
+
+#[test]
+fn a_new_source_stores_every_parameter_with_its_defaults() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![Edit::SourceCreate {
+            source_id: SourceId::new("bg"),
+            name: "Background".into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: settings(&[("size", json!(5)), ("color", Value::Null)]),
+        }],
+    );
+    let bg = graph.state().source(&SourceId::new("bg")).expect("created");
+    assert_eq!(
+        bg.settings(),
+        &settings(&[
+            ("color", json!("#000000ff")),
+            ("size", json!(5)),
+            ("mask", Value::Null),
+            ("follow", Value::Null),
+            ("duck", Value::Null),
+            ("file", Value::Null),
+        ])
+    );
+    // A kind without parameters stores an empty map, and reads omit it.
+    apply_ok(&mut graph, vec![tone("t")]);
+    assert!(
+        graph
+            .state()
+            .source(&SourceId::new("t"))
+            .is_some_and(|s| s.settings().is_empty())
+    );
+}
+
+fn tone(id: &str) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: "Tone".into(),
+        kind: SourceKind::Builtin {
+            kind: "tone".into(),
+        },
+        settings: Settings::new(),
+    }
+}
+
+fn create_color(id: &str, entries: &[(&str, Value)]) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: "Colour".into(),
+        kind: SourceKind::Builtin {
+            kind: "color".into(),
+        },
+        settings: settings(entries),
+    }
+}
+
+#[test]
+fn settings_are_checked_against_the_descriptor() {
+    let mut graph = fixture();
+    let cases = [
+        (
+            Edit::SourceCreate {
+                source_id: SourceId::new("x"),
+                name: "x".into(),
+                kind: SourceKind::Builtin {
+                    kind: "hologram".into(),
+                },
+                settings: Settings::new(),
+            },
+            "edits.0.kind.kind",
+        ),
+        (
+            create_color("x", &[("glow", json!(1))]),
+            "edits.0.settings.glow",
+        ),
+        (
+            create_color("x", &[("size", json!(0))]),
+            "edits.0.settings.size",
+        ),
+        (
+            create_color("x", &[("size", json!("big"))]),
+            "edits.0.settings.size",
+        ),
+        (
+            create_color("x", &[("color", json!("red"))]),
+            "edits.0.settings.color",
+        ),
+        (
+            create_color("x", &[("mask", source_ref("cam"))]),
+            "edits.0.settings.mask",
+        ),
+        (
+            create_color(
+                "x",
+                &[(
+                    "file",
+                    json!({"type": "asset", "root": "app", "path": "../x.png"}),
+                )],
+            ),
+            "edits.0.settings.file",
+        ),
+        (
+            Edit::SourceCreate {
+                source_id: SourceId::new("x"),
+                name: "x".into(),
+                kind: SourceKind::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+                settings: settings(&[("size", json!(3))]),
+            },
+            "edits.0.settings",
+        ),
+        (
+            set_settings("cam", &[("size", json!(101))]),
+            "edits.0.patch.size",
+        ),
+        (
+            set_settings("cam", &[("glow", json!(1))]),
+            "edits.0.patch.glow",
+        ),
+        (set_settings("sa", &[("size", json!(3))]), "edits.0.patch"),
+        // `duck` takes a source that produces audio; `cam` is video only.
+        (
+            set_settings("mic", &[("duck", source_ref("cam"))]),
+            "edits.0.patch.duck",
+        ),
+    ];
+    for (edit, field) in cases {
+        assert_eq!(
+            invalid_reason(apply_err(&mut graph, vec![edit.clone()])).0,
+            field,
+            "{edit:?}"
+        );
+    }
+    // Missing reference targets are `not_found`, like any missing object.
+    assert_eq!(
+        apply_err(
+            &mut graph,
+            vec![set_settings("cam", &[("mask", scene_ref("zz"))])]
+        ),
+        ProtocolError::NotFound {
+            entity: EntityKind::Scene,
+            id: "zz".into()
+        }
+    );
+    assert_eq!(
+        apply_err(
+            &mut graph,
+            vec![create_color("x", &[("follow", source_ref("zz"))])]
+        ),
+        ProtocolError::NotFound {
+            entity: EntityKind::Source,
+            id: "zz".into()
+        }
+    );
+    assert_eq!(
+        invalid_reason(apply_err(
+            &mut graph,
+            vec![set_settings("mic", &[("duck", source_ref("cam"))])]
+        ))
+        .1,
+        "source `cam` doesn't produce audio"
+    );
+    // An audio source satisfies `duck`.
+    apply_ok(
+        &mut graph,
+        vec![tone("t"), set_settings("cam", &[("duck", source_ref("t"))])],
+    );
+}
+
+#[test]
+fn set_settings_patches_and_undoes_to_the_old_values() {
+    let mut graph = fixture();
+    let applied = apply_ok(
+        &mut graph,
+        vec![set_settings(
+            "cam",
+            &[("size", json!(42)), ("mask", scene_ref("a"))],
+        )],
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        vec![set_settings(
+            "cam",
+            &[("mask", Value::Null), ("size", json!(10))]
+        )]
+    );
+    let cam = graph.state().source(&SourceId::new("cam")).expect("cam");
+    assert_eq!(cam.settings().get("size"), Some(&json!(42)));
+    assert_eq!(cam.settings().get("color"), Some(&json!("#000000ff")));
+    // `null` on a scalar resets it to its default; on a reference, clears it.
+    apply_ok(
+        &mut graph,
+        vec![set_settings(
+            "cam",
+            &[("size", Value::Null), ("mask", Value::Null)],
+        )],
+    );
+    let cam = graph.state().source(&SourceId::new("cam")).expect("cam");
+    assert_eq!(cam.settings().get("size"), Some(&json!(10)));
+    assert_eq!(cam.settings().get("mask"), Some(&Value::Null));
+}
+
+#[test]
+fn rename_changes_only_the_name() {
+    let mut graph = fixture();
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::SourceRename {
+            source_id: SourceId::new("cam"),
+            name: "Webcam".into(),
+        }],
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::SourceRename {
+            source_id: SourceId::new("cam"),
+            name: "Source cam".into(),
+        }]
+    );
+    let blank = Edit::SourceRename {
+        source_id: SourceId::new("cam"),
+        name: " ".into(),
+    };
+    assert_eq!(
+        invalid_reason(apply_err(&mut graph, vec![blank])).0,
+        "edits.0.name"
+    );
+}
+
+#[test]
+fn referenced_objects_cannot_be_deleted() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![set_settings(
+            "cam",
+            &[("mask", scene_ref("c")), ("follow", source_ref("mic"))],
+        )],
+    );
+    // `c` is also shown by `sc`, which is reported first; without it, the reference is.
+    apply_ok(
+        &mut graph,
+        vec![Edit::SourceDelete {
+            source_id: SourceId::new("sc"),
+        }],
+    );
+    let delete_scene = Edit::SceneDelete {
+        scene_id: SceneId::new("c"),
+    };
+    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![delete_scene.clone()]));
+    assert_eq!(field, "edits.0.scene_id");
+    assert!(reason.contains("cam.settings.mask"), "{reason}");
+    let delete_mic = Edit::SourceDelete {
+        source_id: SourceId::new("mic"),
+    };
+    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![delete_mic.clone()]));
+    assert_eq!(field, "edits.0.source_id");
+    assert!(reason.contains("cam.settings.follow"), "{reason}");
+    // Clearing the references first, in the same batch, works and undoes exactly; the
+    // deleted source comes back with its settings.
+    apply_ok(
+        &mut graph,
+        vec![
+            set_settings("cam", &[("mask", Value::Null), ("follow", Value::Null)]),
+            delete_scene,
+            delete_mic,
+        ],
+    );
+}
+
+#[test]
+fn a_deleted_source_comes_back_with_its_settings() {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![create_color(
+            "bg",
+            &[("size", json!(7)), ("mask", scene_ref("a"))],
+        )],
+    );
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::SourceDelete {
+            source_id: SourceId::new("bg"),
+        }],
+    );
+    let Some(Edit::SourceCreate { settings, .. }) = applied.inverse.edits.first() else {
+        panic!("inverse: {:?}", applied.inverse);
+    };
+    assert_eq!(settings.get("size"), Some(&json!(7)));
+}
+
+/// ADR-0025: every edit that can add a dependency edge runs the cycle check: `item.add`
+/// (scene to source), `source.create` and `source.set_settings` (source to the scenes
+/// and sources its settings refer to). `source.duplicate` copies outgoing edges onto a
+/// source nothing depends on yet, so it can't close a cycle.
+#[test]
+fn every_edge_adding_edit_is_cycle_checked() {
+    // item.add
+    let mut g = fixture();
+    let (field, reason) = invalid_reason(apply_err(&mut g, vec![add("a", "i", "sa")]));
+    assert_eq!(field, "edits.0.source_id");
+    assert!(reason.contains("cycle"), "{reason}");
+
+    // source.create naming itself
+    let (field, reason) = invalid_reason(apply_err(
+        &mut g,
+        vec![create_color("x", &[("follow", source_ref("x"))])],
+    ));
+    assert_eq!(field, "edits.0.settings.follow");
+    assert!(reason.ends_with("source `x` -> source `x`"), "{reason}");
+
+    // source.set_settings: `cam` is placed in `a`; masking it with `a` is a cycle.
+    apply_ok(&mut g, vec![add("a", "i1", "cam")]);
+    let (field, reason) = invalid_reason(apply_err(
+        &mut g,
+        vec![set_settings("cam", &[("mask", scene_ref("a"))])],
+    ));
+    assert_eq!(field, "edits.0.patch.mask");
+    assert!(
+        reason.ends_with("source `cam` -> scene `a` -> source `cam`"),
+        "{reason}"
+    );
+    // ... and through a nested scene: `b` is shown in `a`, so a source placed in `b`
+    // can't be masked with `a`.
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "ab", "sb")]);
+    let (field, reason) = invalid_reason(apply_err(
+        &mut g,
+        vec![
+            set_settings("mic", &[("mask", scene_ref("a"))]),
+            add("b", "im", "mic"),
+        ],
+    ));
+    assert_eq!(field, "edits.1.source_id");
+    assert!(
+        reason.ends_with("scene `b` -> source `mic` -> scene `a` -> source `sb` -> scene `b`"),
+        "{reason}"
+    );
+    // Source to source: cam follows mic, so mic can't follow cam.
+    apply_ok(
+        &mut g,
+        vec![set_settings("cam", &[("follow", source_ref("mic"))])],
+    );
+    let (field, _) = invalid_reason(apply_err(
+        &mut g,
+        vec![set_settings("mic", &[("follow", source_ref("cam"))])],
+    ));
+    assert_eq!(field, "edits.0.patch.follow");
+    // A settings edge then blocks placing: `mic` masks with `c`, so `c` can't place `mic`.
+    apply_ok(
+        &mut g,
+        vec![set_settings("mic", &[("mask", scene_ref("c"))])],
+    );
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![add("c", "ic", "mic")]));
+    assert_eq!(field, "edits.0.source_id");
+    // A legal reference: masking with an unrelated scene.
+    apply_ok(
+        &mut g,
+        vec![set_settings("cam", &[("mask", scene_ref("c"))])],
+    );
 }

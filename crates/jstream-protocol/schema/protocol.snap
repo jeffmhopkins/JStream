@@ -404,7 +404,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it: delete those sources first (in\nthe same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -577,11 +577,15 @@ source: crates/jstream-protocol/src/fixtures.rs
           "properties": {
             "kind": {
               "$ref": "#/$defs/SourceKind",
-              "description": "What the source shows. A `scene` source must name an existing scene."
+              "description": "What the source shows. A `scene` source must name an existing scene; a\n`builtin` one a kind that `kind.list` reports."
             },
             "name": {
               "description": "Display name.",
               "type": "string"
+            },
+            "settings": {
+              "$ref": "#/$defs/Settings",
+              "description": "Initial settings, checked against the kind's descriptor (`kind.describe`).\nParameters left out, or sent as `null`, take their defaults, and the engine\nstores the complete map. A `scene` source has no settings. Omitted means all\ndefaults."
             },
             "source_id": {
               "$ref": "#/$defs/SourceId",
@@ -597,6 +601,52 @@ source: crates/jstream-protocol/src/fixtures.rs
             "source_id",
             "name",
             "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Renames a source. Inverse: `source.rename` back to the previous name.",
+          "properties": {
+            "name": {
+              "description": "The new display name.",
+              "type": "string"
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source to rename."
+            },
+            "type": {
+              "const": "source.rename",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id",
+            "name"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Changes some of a source's settings. Each entry of `patch` is checked against the\nkind's descriptor like `source.create`'s settings, and replaces that parameter's\nvalue; `null` resets a parameter to its default (a reference parameter to no\nreference). Parameters not in the patch keep their values. A reference that would\nmake a cycle is rejected with `invalid_argument` naming it. Inverse:\n`source.set_settings` with the patched parameters' previous values.",
+          "properties": {
+            "patch": {
+              "$ref": "#/$defs/Settings",
+              "description": "Parameter ID to new value, or `null` for the default."
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source to change."
+            },
+            "type": {
+              "const": "source.set_settings",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id",
+            "patch"
           ],
           "type": "object"
         },
@@ -629,7 +679,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it:\nremove those items first (in the same batch if needed). Inverse: `source.create`\nwith its name and kind.",
+          "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Inverse: `source.create` with its\nname, kind and settings.",
           "properties": {
             "source_id": {
               "$ref": "#/$defs/SourceId",
@@ -761,6 +811,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "EnumOption": {
+      "description": "One option of an [`ParamType::Enum`].",
+      "properties": {
+        "label": {
+          "description": "Display label.",
+          "type": "string"
+        },
+        "value": {
+          "description": "The value stored in settings.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "label"
+      ],
+      "type": "object"
     },
     "ErrorResponse": {
       "description": "A failed request, a failed handshake, or a message that couldn't be parsed.",
@@ -993,6 +1061,119 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "KindCategory": {
+      "description": "What a kind is: a source kind, or a filter kind for video or audio.",
+      "oneOf": [
+        {
+          "const": "source",
+          "description": "A source kind (`source.create` with `builtin { kind }`).",
+          "type": "string"
+        },
+        {
+          "const": "video_filter",
+          "description": "A video filter kind.",
+          "type": "string"
+        },
+        {
+          "const": "audio_filter",
+          "description": "An audio filter kind.",
+          "type": "string"
+        }
+      ]
+    },
+    "KindDescriptor": {
+      "description": "Everything a client needs to show and edit one kind's settings.",
+      "properties": {
+        "audio": {
+          "description": "Whether the kind produces audio.",
+          "type": "boolean"
+        },
+        "category": {
+          "$ref": "#/$defs/KindCategory",
+          "description": "What the kind is."
+        },
+        "kind_id": {
+          "description": "The kind's ID, as in [`KindSummary::kind_id`].",
+          "type": "string"
+        },
+        "name": {
+          "description": "Display name.",
+          "type": "string"
+        },
+        "params": {
+          "description": "The parameters, in display order. Their IDs are unique within the kind.",
+          "items": {
+            "$ref": "#/$defs/ParamDescriptor"
+          },
+          "type": "array"
+        },
+        "version": {
+          "description": "The descriptor's version.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "video": {
+          "description": "Whether the kind produces video.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind_id",
+        "category",
+        "name",
+        "version",
+        "video",
+        "audio",
+        "params"
+      ],
+      "type": "object"
+    },
+    "KindSummary": {
+      "description": "One kind in a `kind.list` result.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/KindCategory",
+          "description": "What the kind is."
+        },
+        "kind_id": {
+          "description": "The kind's ID: a bare name for a built-in kind (`image`), `<pack>/<effect>` for a\npack kind.",
+          "type": "string"
+        },
+        "name": {
+          "description": "Display name.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The descriptor's version. Stored settings record the version they were written\nwith.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind_id",
+        "category",
+        "name",
+        "version"
+      ],
+      "type": "object"
+    },
+    "Media": {
+      "description": "What a source produces, for restricting a source reference.",
+      "oneOf": [
+        {
+          "const": "video",
+          "description": "Pictures.",
+          "type": "string"
+        },
+        {
+          "const": "audio",
+          "description": "Sound.",
+          "type": "string"
+        }
+      ]
+    },
     "OutputId": {
       "description": "An output (RTMP(S), recording, virtual camera).",
       "type": "string"
@@ -1044,7 +1225,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The file format."
             },
             "path": {
-              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path, one with control characters, and one that ends in a\nseparator or names no file.",
+              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one with control\ncharacters or a `..` segment, and one that ends in a separator or names no\nfile. `output.start` also fails when the path is not absolute on the\nengine's own machine.",
               "type": "string"
             },
             "type": {
@@ -1095,6 +1276,287 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "ParamDescriptor": {
+      "description": "One parameter of a kind.",
+      "oneOf": [
+        {
+          "description": "`true` or `false`.",
+          "properties": {
+            "type": {
+              "const": "bool",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A whole number.",
+          "properties": {
+            "max": {
+              "description": "Largest allowed value.",
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "min": {
+              "description": "Smallest allowed value.",
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "step": {
+              "description": "UI hint: the increment a control steps by.",
+              "format": "int64",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "int",
+              "type": "string"
+            },
+            "unit": {
+              "description": "Display unit (`px`, `ms`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A finite number.",
+          "properties": {
+            "max": {
+              "description": "Largest allowed value.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "min": {
+              "description": "Smallest allowed value.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "step": {
+              "description": "UI hint: the increment a control steps by.",
+              "format": "double",
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "float",
+              "type": "string"
+            },
+            "unit": {
+              "description": "Display unit (`dB`, `%`).",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One of a fixed set of strings.",
+          "properties": {
+            "options": {
+              "description": "The allowed values, in display order.",
+              "items": {
+                "$ref": "#/$defs/EnumOption"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "enum",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "options"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A colour: `#rrggbb`, or `#rrggbbaa` when `alpha` is true.",
+          "properties": {
+            "alpha": {
+              "description": "Whether the value may carry an alpha byte.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "color",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "alpha"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Text.",
+          "properties": {
+            "max_len": {
+              "description": "Longest allowed value, in characters.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "multiline": {
+              "default": false,
+              "description": "UI hint: shown as multi-line text.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "string",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "max_len"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A file reference (`{\"type\":\"asset\",\"root\":…,\"path\":…}`) or `null`.",
+          "properties": {
+            "accept": {
+              "default": [],
+              "description": "The accepted file extensions, lower case without the dot (`png`). Empty\naccepts any file.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "asset",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene reference (`{\"type\":\"scene\",\"scene_id\":…}`) or `null`.",
+          "properties": {
+            "type": {
+              "const": "scene",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A source reference (`{\"type\":\"source\",\"source_id\":…}`) or `null`.",
+          "properties": {
+            "media": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Media"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Accept only sources that produce this. Omitted accepts any source."
+            },
+            "type": {
+              "const": "source",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "advanced": {
+          "description": "UI hint: shown only among advanced settings.",
+          "type": "boolean"
+        },
+        "default": {
+          "description": "The value a new source gets when it doesn't set this parameter."
+        },
+        "description": {
+          "description": "A longer explanation for UIs and agents.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "group": {
+          "description": "UI hint: the group to show it in.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "Unique within the kind, and stable across versions.",
+          "type": "string"
+        },
+        "label": {
+          "description": "Display label.",
+          "type": "string"
+        },
+        "live": {
+          "default": false,
+          "description": "Whether a change applies without restarting the source or filter (a colour), or\nrestarts it (a capture device). `live.set` may override a live parameter during a\ngesture (ADR-0032).",
+          "type": "boolean"
+        },
+        "visible_if": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VisibleIf"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "UI hint: shown only while another parameter has a given value."
+        }
+      },
+      "required": [
+        "id",
+        "default",
+        "label"
+      ],
+      "type": "object"
     },
     "ProtocolVersion": {
       "description": "A protocol version: `major.minor`. Patch releases never change the wire format, so\nthey are not part of it.",
@@ -1206,6 +1668,37 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists every kind the engine can create, ordered by ID. Kinds are not collection\nstate, so the result carries no `rev`.",
+          "properties": {
+            "type": {
+              "const": "kind.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One kind's full descriptor, and a JSON Schema of its settings generated from it.\nFails with `invalid_argument` on `kind_id` if the engine has no such kind.",
+          "properties": {
+            "kind_id": {
+              "description": "The kind to describe, as `kind.list` reports it.",
+              "type": "string"
+            },
+            "type": {
+              "const": "kind.describe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind_id"
           ],
           "type": "object"
         },
@@ -1414,6 +1907,49 @@ source: crates/jstream-protocol/src/fixtures.rs
             "width",
             "height",
             "png"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `kind.list`.",
+          "properties": {
+            "kinds": {
+              "description": "Every kind, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/KindSummary"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "kind.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kinds"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `kind.describe`.",
+          "properties": {
+            "kind": {
+              "$ref": "#/$defs/KindDescriptor",
+              "description": "The kind's descriptor."
+            },
+            "settings_schema": {
+              "description": "A JSON Schema (draft 2020-12) of a complete settings map of this kind,\ngenerated from `kind`."
+            },
+            "type": {
+              "const": "kind.describe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "settings_schema"
           ],
           "type": "object"
         },
@@ -1644,6 +2180,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "Settings": {
+      "additionalProperties": true,
+      "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
+      "type": "object"
+    },
     "SourceId": {
       "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
       "type": "string"
@@ -1658,6 +2199,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         "name": {
           "description": "Its display name.",
           "type": "string"
+        },
+        "settings": {
+          "$ref": "#/$defs/Settings",
+          "description": "Its settings: every parameter of its kind. Empty (and omitted) for a `scene`\nsource and for a kind without parameters."
         },
         "source_id": {
           "$ref": "#/$defs/SourceId",
@@ -1693,10 +2238,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). Its settings come with `jstream-sources`;\nuntil then the kind is only a name.",
+          "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). `kind.list` reports the kinds, and\n`kind.describe` the settings each takes; the settings travel beside the kind, on\nthe source.",
           "properties": {
             "kind": {
-              "description": "The kind's name.",
+              "description": "The kind's ID, as `kind.list` reports it.",
               "type": "string"
             },
             "type": {
@@ -1727,6 +2272,23 @@ source: crates/jstream-protocol/src/fixtures.rs
       "required": [
         "x",
         "y"
+      ],
+      "type": "object"
+    },
+    "VisibleIf": {
+      "description": "A UI hint: show a parameter only while parameter `param` equals `equals`. Hints never\naffect validation.",
+      "properties": {
+        "equals": {
+          "description": "The value it must have."
+        },
+        "param": {
+          "description": "The parameter whose value decides.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "param",
+        "equals"
       ],
       "type": "object"
     },
@@ -1974,5 +2536,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.8"
+  "title": "JStream protocol 0.9"
 }

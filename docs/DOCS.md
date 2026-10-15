@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:dc8fac3dad6b7f2b", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against H3: new Weekly sweep bullet matches sweep.yml (cargo deny, docs due via docs log, cargo update --dry-run, override audit, one issue) and names link/fact checks as not built; Not yet now lists only docs index; other bullets unchanged" }
+verified = { hash = "b3:3014a97ef3a6df99", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read after the sweep bullet changed to point at the ttl not-built list instead of naming only link and fact checks; other bullets and Not yet (docs index) unchanged" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -56,7 +56,8 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
-  audit list in one issue. Its link and fact checks are not built yet.
+  audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
+  yet are still missing.
 - **Not yet:** `docs index`.
 - IDs, anchors and rule numbers became permanent at the first merge to `main` (#1).
 
@@ -349,13 +350,16 @@ holds**. The note says what was checked and why it still holds, e.g.:
   against the diff. A note that doesn't engage with what changed is a blocking finding.
   A stock-phrase list alone is too easy to game.
 - A false verification is a bug, and gets fixed and noted like one.
-- The sweep reports each section's verify-to-edit ratio from git. A section that gets
+- The sweep is to report each section's verify-to-edit ratio from git (not built yet,
+  see [Time-based review](#ttl)). A section that gets
   re-verified far more often than it is edited has `covers` that are too broad, so
   narrow them.
 
 <a id="ttl"></a>
 ## Time-based review
 <!-- @section
+covers = [".github/workflows/sweep.yml"]
+verified = { hash = "b3:c3082e7e20a1bae2", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against sweep.yml now that ttl covers it: deny (fetch, version line, tool-failure exit), docs due via docs log, cargo update --dry-run, 8-day override audit, one Weekly sweep issue, and the not-built list all match the workflow" }
 -->
 
 Docs also go stale when nothing in the repo changes. **Time-based checks never fail a PR.**
@@ -375,7 +379,8 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
   - `status = "unverified"` means nobody has checked it yet.
 - **Facts** ([`facts.toml`](facts.toml)), by source:
   - `file`: checked on every PR.
-  - `ext`: the sweep fetches the page and checks the value still appears.
+  - `ext`: the sweep is to fetch the page and check the value still appears (not built
+    yet, see the weekly sweep below).
   - `manual`: listed for re-check when due.
 - **Weekly sweep** (scheduled workflow `sweep`, also run by hand from the Actions tab):
   - runs `cargo deny check` against the latest RustSec advisory DB;

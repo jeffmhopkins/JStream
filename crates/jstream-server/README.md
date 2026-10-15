@@ -51,7 +51,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:596e536732bd8870", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Stale via ARCH#protocol (record kind 0.8): server forwards any protocol message, no version-specific text; auth, origin and limits hold" }
+verified = { hash = "b3:3be7d65340a108dc", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; the server forwards protocol messages opaquely, so neither the kind queries nor the output edits change admission, sessions, limits or logging" }
 -->
 
 ### Listening and admission

@@ -95,6 +95,15 @@ impl Sink {
                 Ok(Self::Flv { tagger, publish })
             }
             Destination::Record(path) => {
+                // The collection's check is the same on every platform, so `/show.mp4`
+                // passes it on Windows and `C:\show.mp4` on Linux, where it would be a
+                // relative name in the working directory.
+                if !path.is_absolute() {
+                    return Err(format!(
+                        "the recording path `{}` is not absolute on this machine",
+                        path.display()
+                    ));
+                }
                 let too_big = || {
                     format!(
                         "the frame size {}x{} is too large for MP4",

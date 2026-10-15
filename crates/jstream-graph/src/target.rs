@@ -15,14 +15,17 @@
 //! ending in a file name. Whether its directory exists, and whether a file is already
 //! there, is checked by `output.start`, when the recording is opened.
 
-use std::path::{Path, is_separator};
-
 /// The longest URL accepted, in bytes.
 pub(crate) const MAX_URL_LEN: usize = 2048;
 /// The longest recording path accepted, in bytes.
 pub(crate) const MAX_PATH_LEN: usize = 4096;
 
 /// Why `path` is not an acceptable recording path, or `None` when it is.
+///
+/// The check is the same on every platform, as `check_asset_path` is for an absolute
+/// asset: `/…`, `\…`, `C:/…` or `C:\…`, with `/` or `\` separators, no `..` segment,
+/// and a file name last. The engine checks again, when it opens the file, that the
+/// path is absolute on its own machine.
 pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
     if path.is_empty() {
         return Some("must not be empty");
@@ -33,11 +36,20 @@ pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
     if path.chars().any(char::is_control) {
         return Some("must not contain control characters");
     }
-    if !Path::new(path).is_absolute() {
-        return Some("must be an absolute path on the engine's machine");
+    let bytes = path.as_bytes();
+    let drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\');
+    if !(path.starts_with(['/', '\\']) || drive) {
+        return Some("must be absolute (`/…`, or `C:\\…` on Windows)");
     }
-    match path.rsplit(is_separator).next() {
-        Some("" | "." | "..") | None => Some("must end in a file name"),
+    let mut segments = path.split(['/', '\\']);
+    if segments.clone().any(|segment| segment == "..") {
+        return Some("must not contain a `..` segment");
+    }
+    match segments.next_back() {
+        Some("" | ".") | None => Some("must end in a file name"),
         Some(_) => None,
     }
 }
@@ -110,47 +122,41 @@ fn host_port_problem(authority: &str) -> Option<&'static str> {
 mod tests {
     use super::{MAX_PATH_LEN, MAX_URL_LEN, record_path_problem, rtmp_url_problem};
 
-    /// An absolute path on this platform: `C:\` on Windows, `/` elsewhere.
-    fn abs(rest: &str) -> String {
-        if cfg!(windows) {
-            format!("C:\\{}", rest.replace('/', "\\"))
-        } else {
-            format!("/{rest}")
-        }
-    }
-
     #[test]
     fn recording_paths_are_accepted() {
         for path in [
-            abs("show.mp4"),
-            abs("home/me/Videos/show.mp4"),
-            abs("home/me/Videos/show"),
-            abs("home/me/My Videos/show 2.mp4"),
-            abs("home/me/../me/show.mp4"),
+            "/show.mp4",
+            "/home/me/Videos/show.mp4",
+            "/home/me/Videos/show",
+            "/home/me/My Videos/show 2.mp4",
+            "C:\\Users\\me\\Videos\\show.mp4",
+            "C:/Users/me/Videos/show.mp4",
+            "\\\\server\\share\\show.mp4",
+            "/home/me/.hidden.mp4",
         ] {
-            assert_eq!(record_path_problem(&path), None, "{path}");
+            assert_eq!(record_path_problem(path), None, "{path}");
         }
     }
 
     #[test]
     fn bad_recording_paths_are_rejected() {
-        let long = abs(&"a".repeat(MAX_PATH_LEN));
+        let long = format!("/{}", "a".repeat(MAX_PATH_LEN));
         for path in [
-            String::new(),
-            long,
-            "show.mp4".into(),
-            "Videos/show.mp4".into(),
-            abs("Videos/show\n.mp4"),
-            abs("Videos/show\0.mp4"),
-            abs(""),
-            abs("Videos/"),
-            abs("Videos/."),
-            abs("Videos/.."),
+            "",
+            long.as_str(),
+            "show.mp4",
+            "Videos/show.mp4",
+            "C:show.mp4",
+            "/Videos/show\n.mp4",
+            "/Videos/show\0.mp4",
+            "/",
+            "/Videos/",
+            "C:\\Videos\\",
+            "/Videos/.",
+            "/Videos/..",
+            "/home/me/../other/show.mp4",
         ] {
-            assert!(
-                record_path_problem(&path).is_some(),
-                "{path:?} was accepted"
-            );
+            assert!(record_path_problem(path).is_some(), "{path:?} was accepted");
         }
     }
 

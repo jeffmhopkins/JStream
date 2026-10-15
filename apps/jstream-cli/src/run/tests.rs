@@ -104,6 +104,7 @@ fn populated() -> MockEngine {
                 kind: SourceKind::Builtin {
                     kind: "webcam".into(),
                 },
+                settings: Default::default(),
             },
             Edit::ItemAdd {
                 scene_id: SceneId::new("main"),
@@ -148,12 +149,15 @@ fn version_and_help_need_no_connection() {
     let version = env!("CARGO_PKG_VERSION");
     assert_eq!(
         run_with(&refuse, &["version"]),
-        ok(&format!("jstream-cli {version}, protocol 0.8\n"))
+        ok(&format!(
+            "jstream-cli {version}, protocol {PROTOCOL_VERSION}\n"
+        ))
     );
     assert_eq!(
         run_with(&refuse, &["--json", "version"]),
         ok(&format!(
-            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":0,\"minor\":8}}}}\n"
+            "{{\"cli\":\"{version}\",\"protocol\":{{\"major\":{},\"minor\":{}}}}}\n",
+            PROTOCOL_VERSION.major, PROTOCOL_VERSION.minor
         ))
     );
     let help = run_with(&refuse, &["help"]);
@@ -170,11 +174,16 @@ fn hello_prints_the_session() {
     let engine = populated();
     assert_eq!(
         run_on(&engine, &["--mock", "hello"]),
-        ok("connected: protocol 0.8, client mock_2, rev 1\n")
+        ok(&format!(
+            "connected: protocol {PROTOCOL_VERSION}, client mock_2, rev 1\n"
+        ))
     );
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "hello"]),
-        ok("{\"protocol\":{\"major\":0,\"minor\":8},\"client_id\":\"mock_3\",\"rev\":1}\n")
+        ok(&format!(
+            "{{\"protocol\":{{\"major\":{},\"minor\":{}}},\"client_id\":\"mock_3\",\"rev\":1}}\n",
+            PROTOCOL_VERSION.major, PROTOCOL_VERSION.minor
+        ))
     );
 }
 
