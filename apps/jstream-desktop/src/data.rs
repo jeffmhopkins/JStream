@@ -26,7 +26,13 @@ pub fn dir(exe_dir: Option<&Path>, var: impl Fn(&str) -> Option<OsString>) -> Op
     {
         return Some(exe_dir.join(PORTABLE_DIR));
     }
-    let set = |name: &str| var(name).filter(|v| !v.is_empty()).map(PathBuf::from);
+    // Only absolute ones: a relative one would resolve against the working folder,
+    // often the exe's, which ADR-0020 keeps unwritten without the portable marker.
+    let set = |name: &str| {
+        var(name)
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+    };
     if cfg!(windows) {
         set("APPDATA").map(|d| d.join("JStream"))
     } else if cfg!(target_os = "macos") {
@@ -78,6 +84,7 @@ mod tests {
             Some(PathBuf::from(r"C:\Users\me\AppData\Roaming\JStream"))
         );
         assert_eq!(dir(None, env(&[("APPDATA", "")])), None);
+        assert_eq!(dir(None, env(&[("APPDATA", r"relative\dir")])), None);
     }
 
     #[cfg(all(unix, not(target_os = "macos")))]
@@ -92,5 +99,11 @@ mod tests {
             Some(PathBuf::from("/h/.local/share/jstream"))
         );
         assert_eq!(dir(None, env(&[])), None);
+        assert_eq!(dir(None, env(&[("HOME", "relative")])), None);
+        assert_eq!(
+            dir(None, env(&[("XDG_DATA_HOME", "x"), ("HOME", "/h")])),
+            Some(PathBuf::from("/h/.local/share/jstream")),
+            "a relative XDG_DATA_HOME is ignored"
+        );
     }
 }

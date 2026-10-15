@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:c4336b36ce2db03b", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: re-read after data.rs's tests stopped importing Path (a test-only import fix for Windows clippy); the section's claims are unchanged and still match the code" }
+verified = { hash = "b3:924f6d1e0d087325", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Round 1: app.rs now stops the host and serves the problem page when the bundle is missing, data.rs takes only absolute APPDATA/HOME/XDG_DATA_HOME, ui.rs refuses non-hex escapes; module list and not-yet list still hold" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -51,7 +51,7 @@ folder.
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:b47ee538a8d81c6c", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: re-read after data.rs's tests stopped importing Path (a test-only import fix for Windows clippy); the section's claims are unchanged and still match the code" }
+verified = { hash = "b3:02a94e83d53dfed7", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Round 1 B1: the window connects at once only once jstream-server takes the subprotocol token (#246); until then it shows the connect form's error. N2: relative env values are ignored (data.rs), consistent with the data-folder bullet; rest holds" }
 -->
 
 On Windows, with the UI built first:
@@ -61,8 +61,12 @@ cd crates/jstream-ui && trunk build --release && cd ../..
 cargo run -p jstream-desktop -- --ui-dir crates/jstream-ui/dist
 ```
 
-The binary is `jstream` (`jstream.exe`). It opens a window on the UI, already connected
-to its engine; there is no connect form. Closing the window stops the engine.
+The binary is `jstream` (`jstream.exe`). It opens a window on the UI and connects it to
+its engine at once, with no connect form. That needs `jstream-server` to take the token
+from the WebSocket subprotocol the UI offers
+([ADR-0045](../../docs/adr/0045-leptos-web-ui.md), #246); until it does, the server
+refuses the connection and the window shows the connect form with that error. Closing
+the window stops the engine.
 
 | Option | Meaning |
 |---|---|
@@ -89,7 +93,7 @@ to its engine; there is no connect form. Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:b2029f9f6a7e2173", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: re-read after data.rs's tests stopped importing Path (a test-only import fix for Windows clippy); the section's claims are unchanged and still match the code" }
+verified = { hash = "b3:de8d46ec7efd96e9", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Round 1 B2: a missing bundle now stops the engine and gets no bootstrap script (app.rs), as the Failures bullet says; N4 strict escapes keep the path-check claims; rest holds" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
@@ -122,7 +126,8 @@ verified = { hash = "b3:b2029f9f6a7e2173", by = "agent:claude@session_01D6iWjpMk
 - **Failures are a page, not a crash.** Media Foundation missing (an N edition), no
   data folder, a broken collection file or a missing bundle: the scheme serves a page
   with the reason (HTML-escaped, with a policy that allows nothing) and no bootstrap
-  script. As in the daemon, the build script delay-loads the Media Foundation DLLs with
+  script. A missing bundle is found after the engine started, so the engine is stopped
+  first. As in the daemon, the build script delay-loads the Media Foundation DLLs with
   MSVC, so the app starts on a Windows without them and can say so.
 - **Windows only, for now.** Tauri is a Windows-only dependency, so Linux CI builds
   and tests everything but the window (`shell.rs`) without GTK or WebKitGTK. Tauri's

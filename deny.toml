@@ -68,8 +68,8 @@ skip = [
     { crate = "thiserror-impl@1.0.69", reason = "thiserror 1, for gloo-net 0.6 under Leptos 0.8" },
     # Tauri 2 (jstream-desktop, ADR-0045), which it depends on for Windows only. cargo-deny
     # checks every platform's graph, so most of these come from Tauri's dependencies for
-    # other platforms or from its build-time code generation; the notes say which. Only
-    # base64 0.23 reaches the Windows app binary itself.
+    # other platforms or from its build-time code generation; the notes say which.
+    # Among these pairs, only base64 0.22 and 0.23 both reach the Windows app binary.
     { crate = "base64@0.21.7", reason = "swift-rs 1 (macOS only, under Tauri) uses 0.21; never built for Windows" },
     { crate = "base64@0.22.1", reason = "axum 0.8 and wry 0.57 use 0.22; tauri-codegen and serde_with use 0.23" },
     { crate = "bit-set@0.8.0", reason = "dom_query 0.28 (tauri-codegen's HTML handling, build time) uses 0.8; wgpu uses 0.10" },

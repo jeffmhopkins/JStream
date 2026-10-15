@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:149c9b3ef5ab0696", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (U3b #254 outputs panel, B6-r #211) into U4: kept main's Panels bullet (outputs.rs) and U4's Canvas bullet; re-read both against the code, holds" }
+verified = { hash = "b3:af9b851c7b8b42db", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of main (U3b outputs panel, U4 canvas) into U5: kept main's Panels and Canvas bullets and U5's Host detection bullet; re-read against panels/, canvas/, host.rs; holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:d644f249970d9016", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (U3b outputs panel) into U4 plus review N1/N2 fixes: took main's text; canvas still opens its own events() subscription keeping only the stream; nothing else in the section changed; holds" }
+verified = { hash = "b3:ecab67f3287f072a", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of main (U3b, U4) into U5 plus round 1 B1: Connecting bullet now says the desktop connect needs jstream-server's subprotocol token (#246) and fails like any refused connect until then; main's canvas and outputs text unchanged; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -64,7 +64,9 @@ verified = { hash = "b3:d644f249970d9016", by = "agent:claude@session_01PE5Ejidr
   subprotocol is sent. How the daemon hands the token to a
   browser (pairing) is not decided yet. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
-  and `App` connects to that engine at once (`host.rs`). After a disconnect the form
+  and `App` connects to that engine at once (`host.rs`). That connection carries the
+  token in the subprotocol, so it succeeds only once `jstream-server` accepts it
+  (#246); until then it fails like any refused connect. After a disconnect the form
   shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
   a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin
   and an unreachable engine read the same.

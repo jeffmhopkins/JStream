@@ -231,6 +231,9 @@ fn percent_decode(text: &str) -> Option<String> {
     while i < bytes.len() {
         if bytes[i] == b'%' {
             let hex = text.get(i + 1..i + 3)?;
+            if !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return None;
+            }
             out.push(u8::from_str_radix(hex, 16).ok()?);
             i += 3;
         } else {
@@ -411,6 +414,7 @@ mod tests {
             "/C:%5cWindows%5cwin.ini",
             "//etc/passwd",
             "/%zz",
+            "/%+2",
             "relative",
         ] {
             let reply = get(&ui, path);

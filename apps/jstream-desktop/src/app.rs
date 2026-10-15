@@ -105,8 +105,12 @@ pub fn start(options: &Options, exe_dir: Option<&Path>, data: Option<&Path>) -> 
         (None, None) => PathBuf::from(UI_DIR),
     };
     let ui = Ui::files(&ui_dir, host.ws_origin());
-    if let Ui::Problem(message) = &ui {
+    if let Ui::Problem(message) = ui {
+        // Without a UI nothing can use the engine, so it stops, and the problem page
+        // gets no bootstrap script.
         tracing::error!(%message, "no web UI");
+        host.stop();
+        return Startup::problem(message);
     }
     let script = bootstrap::script(ui::ORIGIN, host.ws_url(), host.token());
     Startup {
