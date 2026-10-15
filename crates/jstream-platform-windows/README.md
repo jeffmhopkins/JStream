@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:287b2eacbd6339e1", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at e1e2a94: #295 clock swap, G3b daemon vcam) into C9b: C9b's Audio bullet beside main's text; re-read, holds" }
+verified = { hash = "b3:8a3ee7fb1c86800b", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "N3: select_audio now leaves a stream it can't select or decode unselected (only a failed unselect is an error); Audio bullet reworded to match; re-read" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -269,8 +269,8 @@ The code is ported from spikes S1 to S3. This first cut has:
     re-reads the shape. Colour is BT.709 full range, as RGB.
   - **Audio:** the reader decodes to float PCM at the stream's own rate
     (`MFAudioFormat_Float`), in the stream's channel count when that is mono, stereo or
-    6 (read as 5.1), else asking the decoder for stereo. A stream it can't decode either
-    way is left unselected and `info().audio` is `None`, so the video still plays.
+    6 (read as 5.1), else asking the decoder for stereo. A stream it can't select, or
+    decode either way, is left unselected and `info().audio` is `None`, so the video still plays.
     Each sample is copied out as whole frames of little-endian `f32`, its `pts` the
     sample's time. A format change mid-stream is `Unsupported`, since the engine's
     mixer input was made for the first.

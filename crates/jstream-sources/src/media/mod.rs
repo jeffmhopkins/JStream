@@ -385,6 +385,7 @@ impl Source for MediaSource {
             && state.queue.is_empty()
             && !state.ended
             && !state.seeking
+            && !state.video_over
             && position - self.current_at > CATCH_UP_US;
         drop(state);
         if taken {
@@ -402,8 +403,13 @@ impl Source for MediaSource {
         let state = player.state();
         let next = match state.queue.front() {
             Some(next) => self.timing.clock_at(next.at).max(at + 1),
-            None if state.ended => return None,
-            None => at + RETRY_US,
+            None if state.ended || (state.video_over && !self.play.looping) => return None,
+            // The picture is over but the audio plays on: a looping file's next frame
+            // comes once the queued audio has played out.
+            None => match state.audio.back().filter(|_| state.video_over) {
+                Some(last) => self.timing.clock_at(last.end()).max(at + RETRY_US),
+                None => at + RETRY_US,
+            },
         };
         Some(MediaTime::new(next, Timebase::MICROS))
     }

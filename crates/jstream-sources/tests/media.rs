@@ -562,3 +562,77 @@ fn a_file_with_only_audio_plays_it_and_loops_seamlessly() {
     let resumed = got.iter().find(|g| g.ms >= 60_500).expect("a packet");
     assert!(resumed.ms < 60_700, "{resumed:?}");
 }
+
+/// [`clip`] with sound that outlasts the picture: 3 s of 48 kHz stereo.
+fn with_long_sound() -> FakeClip {
+    let mut clip = with_sound();
+    if let Some(audio) = &mut clip.audio {
+        audio.blocks = 150;
+    }
+    clip
+}
+
+#[test]
+fn sound_that_outlasts_the_picture_plays_on_under_the_last_frame() {
+    let (dir, fake) = setup("audio-tail", with_long_sound());
+    let mut source = create(
+        &ctx(&dir, &fake),
+        &settings(Some("clip.mp4"), false, 1.0, true),
+    )
+    .expect("a source");
+    let (audio, _stream, recorder, clock) = open_audio(source.as_ref());
+    audio.set_audible(true);
+    let seeks = fake.stats().seeks;
+    for t in (20..=2900).step_by(20) {
+        at(&mut source, &clock, t);
+        recorder.wait("audio 100 ms ahead", |got| {
+            got.last().is_some_and(|g| g.ms >= (t + 90).min(2990))
+        });
+    }
+    // The last frame stays up, and nothing changes until something else does.
+    assert_eq!(shown(&mut source, 2900), 9);
+    assert_eq!(source.next_change(ms(2900)), None);
+    // No catch-up seek: the sound runs straight on to its end.
+    assert_eq!(fake.stats().seeks, seeks, "it never sought");
+    let got = recorder.got();
+    assert_eq!(got.len(), 300, "{:?}", got.last());
+    assert!(got.iter().all(|g| !g.discontinuity));
+    for pair in got.windows(2) {
+        assert_eq!(pair[1].ms - pair[0].ms, 10, "{pair:?}");
+    }
+}
+
+#[test]
+fn a_looping_file_shows_its_first_frame_again_once_the_sound_ends() {
+    let (dir, fake) = setup("audio-tail-loop", with_long_sound());
+    let mut source = create(
+        &ctx(&dir, &fake),
+        &settings(Some("clip.mp4"), true, 1.0, true),
+    )
+    .expect("a source");
+    let (audio, _stream, recorder, clock) = open_audio(source.as_ref());
+    audio.set_audible(true);
+    let seeks = fake.stats().seeks;
+    for t in (20..=1500).step_by(20) {
+        at(&mut source, &clock, t);
+        recorder.wait("audio 100 ms ahead", |got| {
+            got.last().is_some_and(|g| g.ms >= t + 90)
+        });
+    }
+    // Under the last frame, the next change is when the queued sound runs out, not
+    // every few milliseconds.
+    assert_eq!(shown(&mut source, 1500), 9);
+    let next = source
+        .next_change(ms(1500))
+        .expect("a looping file goes on");
+    assert!(next > ms(1600), "{next:?}");
+    for t in (1520..=3000).step_by(20) {
+        at(&mut source, &clock, t);
+        recorder.wait("audio 100 ms ahead", |got| {
+            got.last().is_some_and(|g| g.ms >= t + 90)
+        });
+    }
+    // The second play starts at 3 s, with its first frame.
+    assert_eq!(shown(&mut source, 3000), 0);
+    assert_eq!(fake.stats().seeks, seeks + 1, "only the loop's seek");
+}

@@ -101,6 +101,10 @@ pub(super) struct State {
     /// The decoder has nothing more to give until a seek: the file ended and isn't
     /// looping, or it failed.
     pub(super) ended: bool,
+    /// The video ended in this play while its audio plays on: the last frame stays
+    /// up, and the source isn't behind. Cleared by a seek and by the next play's first
+    /// frame.
+    pub(super) video_over: bool,
     /// Why the decoder stopped, when it failed.
     pub(super) failure: Option<String>,
     /// Set when the source goes away; the thread and the feeder stop at their next
@@ -153,6 +157,7 @@ impl Player {
                 generation: 0,
                 seek: None,
                 seeking: false,
+                video_over: false,
                 looping: start.looping,
                 ended: false,
                 failure: None,
@@ -234,6 +239,7 @@ pub(super) fn seek_locked(state: &mut State, to: i64) {
     state.seeking = true;
     state.queue.clear();
     state.audio.clear();
+    state.video_over = false;
     state.ended = state.failure.is_some();
 }
 
@@ -444,6 +450,9 @@ impl Decode {
     ) -> Result<(), PlatformError> {
         let Some(frame) = self.decoder.next_video()? else {
             self.video_done = true;
+            if self.audio_live() {
+                self.video_over(shared);
+            }
             return self.ended(shared, looping);
         };
         let size = frame.info().size;
@@ -612,6 +621,20 @@ impl Decode {
         let mut state = lock(&shared.0);
         if state.generation == self.generation && state.seek.is_none() {
             state.queue.push_back(decoded);
+            state.seeking = false;
+            state.video_over = false;
+        }
+    }
+
+    /// The video ended before the audio: shows the frame a seek held back, since no
+    /// later one comes, and tells the source its picture is over rather than behind.
+    fn video_over(&mut self, shared: &(Mutex<State>, Condvar)) {
+        if let Some(held) = self.held.take() {
+            self.queue(shared, held);
+        }
+        let mut state = lock(&shared.0);
+        if state.generation == self.generation && state.seek.is_none() {
+            state.video_over = true;
             state.seeking = false;
         }
     }

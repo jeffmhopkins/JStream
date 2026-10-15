@@ -388,14 +388,26 @@ fn a_media_files_sound_is_mixed_while_the_program_shows_it() {
         packets(&engine)
     );
 
+    // The count once two reads a reconcile pass apart agree.
+    let settled = |engine: &Engine| {
+        let mut last = packets(engine);
+        for _ in 0..20 {
+            thread::sleep(Duration::from_millis(700));
+            let now = packets(engine);
+            if now == last {
+                return now;
+            }
+            last = now;
+        }
+        panic!("the count never settled: {last}");
+    };
+
     // Hidden, it is silent: once what was handed on ahead is counted, no more comes.
     show_clip(&control, false);
     run_for(&engine, &clock, 200);
-    thread::sleep(Duration::from_millis(600));
-    let hidden = packets(&engine);
+    let hidden = settled(&engine);
     run_for(&engine, &clock, 400);
-    thread::sleep(Duration::from_millis(600));
-    assert_eq!(packets(&engine), hidden, "nothing while hidden");
+    assert_eq!(settled(&engine), hidden, "nothing while hidden");
 
     // Shown again, it is heard again.
     show_clip(&control, true);

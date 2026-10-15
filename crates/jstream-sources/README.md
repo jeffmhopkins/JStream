@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:02e4cea8808755ee", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at e1e2a94: #295 clock swap, G3b daemon vcam) into C9b: C9b's MediaAudio text beside the merged Assets text; re-read, holds" }
+verified = { hash = "b3:126f9c36b3910a90", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "B1 fix: added the audio-outlasts-video sentence (video_over: no catch-up seek, next_change None or the queued audio's end when looping) and the two new tests/media.rs cases; re-read the media audio paragraph against mod.rs/player.rs, holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -153,7 +153,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   there. It is heard only while the program shows the source and at `speed` 1: at any
   other speed it is silent, since the mixer steers an input's rate by 0.5 % at most.
   An audio-only file has no frames to catch the timeline up, so the audio thread
-  seeks when what it drops is more than a second behind. An audio block of another
+  seeks when what it drops is more than a second behind. Audio that outlasts the video
+  plays on under the last frame: the source isn't behind then, so it doesn't seek, and
+  `next_change` is `None`, or for a looping file the time the queued audio runs out,
+  when the next play's first frame is due. An audio block of another
   format stops the source, as a frame of another size does.
 - `display`, `webcam` and `window` are described only, with the settings B4
   gave them: sources of them can be created and configured, and `create` fails with
@@ -234,4 +237,6 @@ speed and a speed change, restarting when shown, turning `loop` on after the end
 file, and the errors and limits; and its audio (fake blocks told apart by level),
 handed to a recording handler: nothing until heard, stamps 100 ms ahead of the
 timeline with continuous positions, a restart as a discontinuity, silence at another
-speed, and an audio-only file looping without a seam and seeking after a long gap.
+speed, an audio-only file looping without a seam and seeking after a long gap, and
+audio that outlasts the video playing on without a seek, then looping to the first
+frame.

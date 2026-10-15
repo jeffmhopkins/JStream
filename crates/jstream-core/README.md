@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:f58148344464bcf8", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at e1e2a94: #295 clock swap, G3b daemon vcam) into C9b: C9b's Audio sources and Tests text beside main's; re-read, holds" }
+verified = { hash = "b3:d9a31b5d182cde86", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "N2: src/tests/audio.rs waits for the packet count to settle across reconcile passes instead of fixed sleeps; the Tests text (silent while hidden) still holds; re-read" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -167,7 +167,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:41c85b7ed0f3732e", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at e1e2a94: #295 clock swap, G3b daemon vcam) into C9b: set_clock keeps #295's re-plan on a swap and C9b's audio_changed, so a new clock still re-sends sources' time zero to the audio sources; Live sources text holds; re-read" }
+verified = { hash = "b3:0c4c3d18cc0f58cd", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Only src/tests/audio.rs changed (N2 settle wait); Audio sources and Live sources text untouched by it; re-read, holds" }
 -->
 
 ### Engine and sessions

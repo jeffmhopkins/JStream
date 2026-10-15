@@ -268,17 +268,18 @@ fn frame_period(reader: &IMFSourceReader) -> Option<jstream_platform::media::Tim
 
 /// Selects the first audio stream too, decoded to interleaved `f32`, and returns its
 /// format. `None`, with the stream left unselected, for a file with no audio stream or
-/// one the OS can't decode to a layout the engine mixes: the video still plays.
+/// one the OS can't select or decode to a layout the engine mixes: the video still
+/// plays. Only failing to unselect it again is an error, as the reader would then hold
+/// samples nobody reads.
 fn select_audio(reader: &IMFSourceReader) -> Result<Option<AudioFormat>, PlatformError> {
     // SAFETY: plain COM call on a live reader.
-    match unsafe { reader.SetStreamSelection(AUDIO, true) } {
-        Err(e) if e.code() == MF_E_INVALIDSTREAMNUMBER => return Ok(None),
-        result => result.os("IMFSourceReader::SetStreamSelection")?,
+    if unsafe { reader.SetStreamSelection(AUDIO, true) }.is_err() {
+        return Ok(None);
     }
     // As the decoder gives it, then mixed down to stereo when that has no layout here.
     for channels in [None, Some(2)] {
         if set_float(reader, channels).is_ok()
-            && let Some(format) = audio_format(reader)?
+            && let Ok(Some(format)) = audio_format(reader)
         {
             return Ok(Some(format));
         }
