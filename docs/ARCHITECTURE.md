@@ -517,7 +517,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:231c7b6d2e48fbe8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; history and undo_conflict wording hold; the mock change is internal to jstream-control" }
+verified = { hash = "b3:160cce3c32ad09ff", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; delete.plan and blockers at 0.15 beside main's 0.14 text; #203 changes no wire shape" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -582,7 +582,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
-  schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); later `audio.levels`).
+  schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
+  batch that deletes a scene or source with everything that refers to it, and the `rev`
+  it was planned at; later `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)); the fields are in
@@ -593,7 +595,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   sets or clears the featured message (runtime state, reported by an event) that the chat
   message source draws as plain text. Audience stats (concurrent viewers, likes, chat
   rate) come in a low-rate `youtube.stats` event and a query.
-- **Errors** carry a stable machine-readable `code`, detail fields and a message.
+- **Errors** carry a stable machine-readable `code`, detail fields and a message. A
+  `scene.delete` or `source.delete` refused because something still refers to its
+  target lists every such reference in `invalid_argument`'s `blockers` (protocol 0.15,
+  [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
 - **Binary streams** (WebSocket binary frames): preview video and meters. Not designed
   yet, except the meter frame's fields
   ([ADR-0028](adr/0028-audio-model-v2.md)): per channel, sample peak, RMS and true peak
@@ -627,11 +632,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:39a1787bc51a7934", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: tools.snap measured 143129 bytes after F3 and B5, so the text says about 145 KB" }
+verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; tool list includes delete and encoder; tools.snap 146 KB, text says about 145 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -828,7 +833,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:725834769c696156", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; Collections bullet holds with F3's optional encoder fields and B5's optional duplicated_from at schema 1" }
+verified = { hash = "b3:e8da9a7e3807bb8c", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9 CI fix: LoadError::Invalid now boxes its ProtocolError, a type-size change only; re-read, the Collections bullet (checks a loaded collection as it checks edits) holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
