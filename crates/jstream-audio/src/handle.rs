@@ -242,6 +242,21 @@ impl InputControl {
         self.shared.gain.muted()
     }
 
+    /// Sets the input's activity gain, linear, clamped to 0..=1; NaN is ignored. It is
+    /// applied after the fader and the input's meter, and scales every send: the
+    /// engine's audio that follows the program (ADR-0028's `when_shown`). The mixer
+    /// ramps to it over one block. A new input starts at 1.
+    pub fn set_activity_gain(&self, gain: f32) {
+        if !gain.is_nan() {
+            self.shared.activity.store(gain.clamp(0.0, 1.0));
+        }
+    }
+
+    /// The input's activity gain.
+    pub fn activity_gain(&self) -> f32 {
+        self.shared.activity.load()
+    }
+
     /// Sends the input into `bus` (post-fader) at `gain`, linear, or changes that
     /// send's gain. Clamped to 0..=+24 dB; NaN changes nothing. The mixer ramps to it
     /// over one block, from silence for a new send. A send to a bus that is later
