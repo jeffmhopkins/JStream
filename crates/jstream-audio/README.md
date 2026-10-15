@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:bea654bfbd06f3de", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8: re-read after tests/cost.rs writes its report through io::Write (clippy print_stdout); Purpose's mention of tests/cost.rs still holds" }
+verified = { hash = "b3:03c444bb6cb7b1b1", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1 (B1): re-read the whole section against handle.rs and mixer.rs: MasterControl/OutputTapControl API bullet (master(), add_output_tap, output_block pts minus tap latency, None until the tap has run, 16-tap limit), latency_frames and pts including the master chain, poll writing the post-master master bus and bus_block as the pre-master monitor tap, the error list (TooManyOutputTaps, removed output tap) against error.rs, and the new master-chain/output-tap tests bullet against mixer.rs tests" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -77,7 +77,7 @@ stamped on the clock, and no device is the master.
   `OutputTapControl`: that bus after the master chain, through the tap's own chain
   (`add_filter`, `insert_filter`), for an output with its own audio encode. At most 16
   taps. `Mixer::output_block(tap)` reads its last block with its `pts`, which is the
-  block's minus the tap chain's latency.
+  block's minus the tap chain's latency (`None` until the tap has run once).
   The `InputControl` also holds a reference to the input's ring and counters, so
   whichever handle is dropped last, the free never happens on a real-time thread (see
   [Real-time design](#realtime)).
@@ -165,7 +165,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:f65528ac78b4b55d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8: re-read against mixer.rs mix() (post buffer, feeds mask, master copy reset, tap blocks and pts), cmd.rs (add_master_filter one command, master_copy from specs with edits, add_tap/remove_tap), tap.rs, retire.rs QUEUE_CAP; no_alloc's new phases; cost numbers from tests/cost.rs runs on this container" }
+verified = { hash = "b3:699277ef64ec49a9", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1: re-read; only change is mixer.rs output_block returning None until a tap has run (Tap.pts is Option) and the MAX_BUSES <= 32 const assert on the feeds mask; section's master chain and output tap paragraphs still hold" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -422,7 +422,7 @@ true-peak cases from files) are not run; they would add binary fixtures.
 <!-- @section
 covers = ["crates/jstream-audio/src/filter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:5d39ad789c09f5b5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8: re-read; kernels unchanged; master chain and output taps run them; Not yet now points at the measured cost" }
+verified = { hash = "b3:a5b7e32b71b1656a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1 (N2): re-read; no_alloc sentence now separates the master bus's own chain from the master chain and output tap chain, and Not yet says the kernels' cost is what's measured" }
 -->
 
 `src/filter/` holds the audio filter kernels
@@ -462,13 +462,14 @@ changes; block-size independence and reset where state is kept; rejected setting
 The mixer runs them in each input's and bus's chain, with their latency compensated
 ([Real-time design](#realtime)). `tests/no_alloc.rs` runs all five under the
 allocation check: the gate and compressor on an input, gain, delay and limiter on the
-master and a limiter on another bus and input, and a keyed compressor on the mixed
-block.
+master bus's own chain, a limiter on another bus and input, gain, limiter and
+compressor in the master chain and an output tap's chain, and a keyed compressor on the
+mixed block.
 
 The master chain and output taps run the same kernels.
 
 **Not yet:** sidechain keys in the mixer's chains, and their settings in kind
-descriptors and the protocol. Their cost in the mixer is measured in
+descriptors and the protocol. The kernels' cost in the mixer is measured in
 [Real-time design](#realtime) ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 
 <a id="follow-ups"></a>

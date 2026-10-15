@@ -19,8 +19,9 @@ pub(crate) struct Tap {
     pub(crate) chain: Box<Chain>,
     /// The last block, after the tap's chain: `block_frames` frames.
     pub(crate) block: Box<[[f32; 2]]>,
-    /// The last block's presentation time, engine frames.
-    pub(crate) pts: i64,
+    /// The last block's presentation time, engine frames; `None` until the tap has
+    /// run once.
+    pub(crate) pts: Option<i64>,
 }
 
 impl Tap {
@@ -37,7 +38,7 @@ impl Tap {
             bus,
             chain,
             block: vec![[0.0; 2]; block_frames].into_boxed_slice(),
-            pts: 0,
+            pts: None,
         }
     }
 }

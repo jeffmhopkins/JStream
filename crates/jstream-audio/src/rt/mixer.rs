@@ -325,14 +325,14 @@ impl Mixer {
     }
 
     /// Output tap `tap`'s last block (interleaved stereo: its bus after the master chain
-    /// and the tap's own chain) with its presentation time, or silence before the first.
-    /// The time is the block's [`pts`](Block::pts) minus the tap chain's latency. `None`
-    /// when the mixer does not hold that tap: it was removed, or the mixer has not
-    /// applied its addition yet.
+    /// and the tap's own chain) with its presentation time: the block's
+    /// [`pts`](Block::pts) minus the tap chain's latency. `None` when the mixer does not
+    /// hold that tap (it was removed, or the mixer has not applied its addition yet), or
+    /// has not mixed a block since it was added.
     pub fn output_block(&self, tap: OutputTapId) -> Option<(MediaTime, &[f32])> {
         let tap = self.taps.iter().find(|t| t.id == tap.0)?;
         Some((
-            MediaTime::new(tap.pts, self.timebase),
+            MediaTime::new(tap.pts?, self.timebase),
             tap.block.as_flattened(),
         ))
     }
@@ -485,6 +485,8 @@ impl Mixer {
                 .and_then(Option::as_ref)
                 .is_some_and(|bus| bus.id == tap.bus)
         };
+        // One bit per bus slot.
+        const _: () = assert!(MAX_BUSES <= 32);
         let mut feeds = 1u32;
         for tap in taps.iter() {
             if reads(buses, tap) {
@@ -523,7 +525,7 @@ impl Mixer {
             }
             tap.chain.process(&mut tap.block, 0);
             zero_non_finite(&mut tap.block);
-            tap.pts = pts.saturating_sub(tap.chain.latency() as i64);
+            tap.pts = Some(pts.saturating_sub(tap.chain.latency() as i64));
         }
         self.position = Some(end);
         Ok(Block {
@@ -1463,6 +1465,8 @@ mod tests {
             params: LimiterParams::default(),
         };
         let tap = m.add_output_tap(BusId::MASTER).unwrap();
+        // Installed, but no block yet: nothing to read, and no stamp.
+        assert!(m.output_block(tap.id()).is_none());
         tap.add_filter(FilterSpec::Gain { gain_db: -6.0 }).unwrap();
         assert_eq!(tap.add_filter(limiter(5.0)).unwrap().latency_frames(), 240);
         assert_eq!(
