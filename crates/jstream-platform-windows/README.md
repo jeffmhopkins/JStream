@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:f3bac4bd838f397a", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (H7b ADR-0042 covers, #214, #217 and others) into H1: re-read the section; main's text and covers kept; H1's check_media_foundation bullet and its Tests entries (decision everywhere, probe and edition read on Windows) match n_edition.rs" }
+verified = { hash = "b3:60af5c2df0506b19", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (H1 #148 N-edition check, C1b, #218) into C4b: kept main's text (check_media_foundation bullet, its Tests entries) and added C4b's video-device helpers to the every-platform Tests list; MfVideoDevices bullet and hw-test text unchanged and matching video_device/**" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
