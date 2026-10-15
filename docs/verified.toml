@@ -465,10 +465,10 @@ stamp = { hash = "b3:56b6301e2e6a132b" }
 stamp = { hash = "b3:7444919d28801154", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 in this section and DOCS#verification; the ledger, migrate and merge-main bullets are otherwise unchanged and still hold" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#notes"]
-stamp = { hash = "b3:c10fb9d2a74b46dd", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Whole #376 change: DOCS#verification moves stamps to docs/verified.toml with header-anchored entries and qualifies which parallel changes still conflict; DOCS#notes adds that a second verify in a PR replaces the note; the never-edit-the-ledger, migrate and merge-main bullets here still match" }
+stamp = { hash = "b3:65b1231de3f1603c", by = "agent:claude", note = "DOCS#notes now says a later verify replaces notes only on inputs changed since the previous verify, and DOCS#verification adds the trailing blank line; docs-duty's verify, generate, migrate and merge-main duties are unchanged and still hold" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:223821c79252d994", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Whole #376 change: DOCS#verification moves stamps to docs/verified.toml with header-anchored entries and qualifies which parallel changes still conflict; DOCS#notes adds that a second verify in a PR replaces the note; the never-edit-the-ledger, migrate and merge-main bullets here still match" }
+stamp = { hash = "b3:1ac1c2c05d216a56", by = "agent:claude", note = "DOCS#verification now says every entry, the last included, ends with a blank line and that adding an input right next to one the other PR removes can conflict; DOCS#notes says a later verify replaces notes only on inputs changed since the previous verify. docs-duty's verify, generate, migrate and merge-main duties still hold" }
 
 ["CLAUDE#pr-loop"."body"]
 stamp = { hash = "b3:d756a751285910f0", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read the PR loop against ADR-0043: item 7 now lists the narrowed maintainer tier and says everything else is agent tier, proxy format cited from ADR-0043" }
@@ -2655,7 +2655,7 @@ stamp = { hash = "b3:954859db5a28872d", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:e9526047eb0b1865", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/ledger.rs"]
-stamp = { hash = "b3:c5a8640ef017de01", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Whole #376 change re-read (ADR-0053): new ledger.rs (per-input stamps, now [section.input] header + stamp line + blank layout, with a git-merge fixture test), inputs() in hash.rs, verify/migrate replacing rehash in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events; hash-bound and merge-main bullets describe exactly this" }
+stamp = { hash = "b3:86a6a90a5911294c", by = "agent:claude", note = "ledger.rs render now ends every entry, the last included, with a blank line (#376 B2); the bootstrap bullet's one-entry-per-input ledger and migrate description still hold" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/merge.rs"]
 stamp = { hash = "b3:2bf6bf429340ee0a", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
@@ -2878,3 +2878,4 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-004"]
 stamp = { hash = "b3:f3e3a293b719fe8d" }
+

@@ -54,8 +54,9 @@ does.
 2. **Stamps live in `docs/verified.toml`, not in `@section` blocks.** Every entry is a
    `["DOC-ID#anchor"."<input>"]` table header, one `stamp` line (`hash`, and `by` and
    `note` when `docs verify` wrote it) and a blank line, sorted by section and input. The
-   header doesn't change while the input exists, so it anchors git's diff: changing,
-   adding or removing different entries, even neighbouring ones, merges cleanly. Only
+   header doesn't change while the input exists, and the blank line follows every entry,
+   the last included, so they anchor git's diff: changing, adding or removing different
+   entries merges cleanly, apart from the adjacent cases in item 4. Only
    `cargo xtask docs verify` writes it, in that canonical form, which `docs check` enforces.
    An inline `verified` line fails `docs check`. No section can cover the ledger.
 3. **`docs verify` writes only what changed.** Entries whose input still has the recorded
@@ -64,7 +65,7 @@ does.
    so the re-read is still recorded.
 4. **Two PRs conflict on an input both changed.** Then neither re-read the combination,
    and its `stamp` line conflicts, as the whole stamp did before. Structural changes right
-   next to each other can conflict too (one PR adding an input just before one the other
+   next to each other can conflict too (one PR adding an input right next to one the other
    removes, or both removing neighbouring inputs). `docs merge-main` takes main's side of
    any ledger conflict and reports the section stale, as it did for inline stamps; a
    branch entry lost that way only ever makes a section stale, never falsely fresh.

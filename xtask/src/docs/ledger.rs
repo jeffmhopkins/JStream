@@ -110,14 +110,15 @@ impl Ledger {
     }
 
     /// The canonical text: sections and entries sorted; each entry a `[section.input]`
-    /// header, its `stamp` line and a blank line.
+    /// header, its `stamp` line and a blank line, the last one included, so an entry
+    /// appended at the end doesn't touch the line before it.
     pub(crate) fn render(&self) -> String {
-        let mut out = HEADER.to_owned();
+        let mut out = format!("{HEADER}\n");
         for (section, stamp) in &self.sections {
             for (key, e) in stamp {
                 let _ = write!(
                     out,
-                    "\n[{}.{}]\nstamp = {{ hash = {}",
+                    "[{}.{}]\nstamp = {{ hash = {}",
                     toml_str(section),
                     toml_str(key),
                     toml_str(&e.hash)
@@ -125,7 +126,7 @@ impl Ledger {
                 if let (Some(by), Some(note)) = (&e.by, &e.note) {
                     let _ = write!(out, ", by = {}, note = {}", toml_str(by), toml_str(note));
                 }
-                out.push_str(" }\n");
+                out.push_str(" }\n\n");
             }
         }
         out
@@ -238,15 +239,16 @@ mod tests {
         let text = l.render();
         assert_eq!(Ledger::parse(&text), Ok(l.clone()));
         let body: Vec<&str> = text.lines().skip_while(|x| x.starts_with('#')).collect();
-        for entry in body.chunks(3) {
-            assert!(entry[0].is_empty(), "{text}");
+        assert!(body[0].is_empty(), "{text}");
+        for entry in body[1..].chunks(3) {
             assert!(
-                entry[1].starts_with('[') && entry[1].ends_with(']'),
+                entry[0].starts_with('[') && entry[0].ends_with(']'),
                 "{text}"
             );
-            assert!(entry[2].starts_with("stamp = { hash = "), "{text}");
+            assert!(entry[1].starts_with("stamp = { hash = "), "{text}");
+            assert!(entry[2].is_empty(), "{text}");
         }
-        assert_eq!(body.len(), 3 * 3, "{text}");
+        assert_eq!(body.len(), 1 + 3 * 3, "{text}");
         assert!(
             text.find("[\"A#a\".\"body\"]") < text.find("[\"B#b\".\"body\"]"),
             "{text}"
@@ -405,6 +407,12 @@ mod tests {
             ("remove b, change a", remove("file:b"), change("file:a")),
             ("add aa, add bb", add("file:aa"), add("file:bb")),
             ("add aa, remove c", add("file:aa"), remove("file:c")),
+            (
+                "add zz after the last entry, change c",
+                add("file:zz"),
+                change("file:c"),
+            ),
+            ("remove c, change b", remove("file:c"), change("file:b")),
         ] {
             assert!(merges(&a, &b), "{what} must merge cleanly");
         }
