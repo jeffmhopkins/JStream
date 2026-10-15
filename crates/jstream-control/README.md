@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:35847e22a7298401", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; mock bullet still names mock/filter.rs, which now takes master and output owners; holds" }
+verified = { hash = "b3:06d7c2e782e61b2d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge-only round: merged main at e1e2a94 (#213/#297 virtual_cam output, #309 UI e2e harness, #295, #286, #237, #275, #292); re-read; main's virtual_cam text beside D8's master/output chains in the mock; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:08108d46c9e66ed9", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 fields: re-read; filter checks list adds master/output audio-only and no-reference checks, output.delete restores filters, parity collection wording; holds against mock/filter.rs and mock.rs" }
+verified = { hash = "b3:ed45764389e7cab5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 merge-only round: merged main at e1e2a94 (#213/#297 virtual_cam output, #309 UI e2e harness, #295, #286, #237, #275, #292); re-read; mock accepts virtual_cam and refuses an audio chain on it (no audio); D8 check list holds" }
 -->
 
 ### The trait
@@ -124,7 +124,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
-    reasons), `output.set_target` on a recording output, and an `unknown` output kind,
+    reasons), `output.set_target` on a recording or virtual-camera output (the mock
+    accepts a `virtual_cam` output, as the engine does), and an `unknown` output kind,
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
