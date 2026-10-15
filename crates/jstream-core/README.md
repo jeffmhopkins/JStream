@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:6b00b92fe44d07dc", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
+verified = { hash = "b3:87fd58c9dfb5367d", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#202, test-only: RTMP reconnect test and its send_until helper in runtime/publish.rs) into ADR-0042: no prose describes that test or its time budget; the section holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:35252def9891785f", by = "agent:claude", note = "Merge of main (undo/history, audit log) into #202: took main's text; re-read; #202 changes only the RTMP reconnect test and its helper in runtime/publish.rs, which this prose doesn't describe; holds" }
+verified = { hash = "b3:8cde812b42b9979f", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#202, test-only: RTMP reconnect test and its send_until helper in runtime/publish.rs) into ADR-0042: no prose describes that test or its time budget; the section holds" }
 -->
 
 ### Engine and sessions
@@ -646,7 +646,7 @@ item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:cc76b93a7e2edb37", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#170 F2b record output, #191 D4) into ADR-0042: the moved output-pipeline paragraph now carries main's recording-output sentences (fMP4 to file, write failures, collector is the mixer's own); re-read against runtime/ and both hold" }
+verified = { hash = "b3:394d044e4ddca917", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#202, test-only: RTMP reconnect test and its send_until helper in runtime/publish.rs) into ADR-0042: no prose describes that test or its time budget; the section holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
