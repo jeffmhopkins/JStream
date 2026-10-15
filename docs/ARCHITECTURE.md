@@ -694,7 +694,7 @@ verified = { hash = "b3:b7e9fc969c2bf475", by = "agent:claude@session_01WbL3WRbc
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:dc199b6560c865f5", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
+verified = { hash = "b3:3c0c199d5f6b7e54", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "E3d: added the built NV12 pass (plane views or R8+RG8 planes, BT.709 limited/full, left-sited); step 4 text and 'still outside' list (render-thread hookup, P010, step 5) match convert/mod.rs" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -737,9 +737,12 @@ a layer the caller keeps, so a frame allocates no texture for it. The caller wal
 nesting, bounded in depth. `ResourceCache` keeps a compositor's uploads and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see
-[Threads › State to RT threads](#threading)). Still outside this crate: the render
-thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
-the output path below.
+[Threads › State to RT threads](#threading)). Step 4's NV12 pass is built too: it reads
+the sRGB output and writes the Y and CbCr planes, either plane views of a native NV12
+texture or an `R8Unorm` and an `Rg8Unorm` texture where planar render targets are
+missing, in BT.709 limited or full range with left-sited chroma. Still outside this
+crate: the render thread (in `jstream-core`) and its step that runs the NV12 pass into
+the encode targets, P010, step 5, 3D, effect packs, and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
 texture blend: during it, the program mix is a synthetic item list whose transforms and

@@ -137,7 +137,7 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:c6e56f3ac4e834a3", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: stale only via ARCH crate-map (jstream-ui row now layer 3); GPU frame design untouched" }
+verified = { hash = "b3:14e4955c3eb69679", by = "agent:claude@session_01MfpDLNetp6H6xVXxRjZNWH", note = "E3d: render now has the NV12 pass but still does not write the encode target; rest of GPU frames unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
@@ -146,7 +146,9 @@ Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene on
 that device when the engine has one, and opens its own (software adapter first) when it
-does not; it does not write the NV12 encode target. The encoders' GPU input comes next.
+does not. It has the NV12 pass that can render into an encode target's plane views
+(`Nv12Converter`), but nothing writes the encode target with it yet. The encoders' GPU
+input comes next.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call

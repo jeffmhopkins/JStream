@@ -18,14 +18,14 @@ use crate::{
 /// Fields drop in declaration order, so the device is destroyed while the lock is held
 /// for as long as this value is kept whole. Splitting the fields apart drops them as
 /// separate locals and can release the lock first.
-struct Opened {
-    compositor: Compositor,
+pub(crate) struct Opened {
+    pub(crate) compositor: Compositor,
     _lock: std::sync::MutexGuard<'static, ()>,
 }
 
 /// WARP (Microsoft Basic Render Driver) access-violates, `0xc0000005`, when several
 /// tests create and drop Dx12 devices at once.
-fn open() -> Option<Opened> {
+pub(crate) fn open() -> Option<Opened> {
     let _lock = gpu_lock();
     match Compositor::open(OpenOptions::headless()) {
         Ok(compositor) => {
