@@ -2598,7 +2598,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "null"
             }
           ],
-          "description": "The video mix it shows (`output.set_video_mix`). Absent means none: the program\nat the engine's capture size and base rate, as from a server older than 0.19."
+          "description": "The video mix it shows (`output.set_video_mix`). Absent means none: the program\nat the engine's capture size and base rate, as from a server older than 0.20."
         }
       },
       "required": [

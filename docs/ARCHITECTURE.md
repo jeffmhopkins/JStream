@@ -545,7 +545,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:88c2f05b40f74781", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): edits list has mix edits (0.20) and audio edits (0.19); video_mix.list now 0.20" }
+verified = { hash = "b3:c652314f6750b20c", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 D5 merge follow-up: OutputInfo.video_mix doc now says older than 0.20; section text unchanged and still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

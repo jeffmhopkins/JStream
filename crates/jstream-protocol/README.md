@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:ee60254a8ec851b9", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): edits and queries lists have mix and audio entries; version line 0.20 video mixes, 0.19 audio, 0.18 virtual_cam" }
+verified = { hash = "b3:f759fa28f5000c3b", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 D5 merge follow-up: OutputInfo.video_mix doc now says older than 0.20; section text unchanged and still holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -142,7 +142,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:cbf9ddc1b5700933", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): video mixes and video_mix.list now 0.20, state.get video_mixes pre-0.20, envelope example at 0.20; audio sections stay 0.19" }
+verified = { hash = "b3:d93a63db78410c2c", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 D5 merge follow-up: OutputInfo.video_mix doc now says older than 0.20; section text unchanged and still holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

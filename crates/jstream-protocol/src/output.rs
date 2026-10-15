@@ -109,7 +109,7 @@ pub struct OutputInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encoder_profile: Option<EncoderProfileId>,
     /// The video mix it shows (`output.set_video_mix`). Absent means none: the program
-    /// at the engine's capture size and base rate, as from a server older than 0.19.
+    /// at the engine's capture size and base rate, as from a server older than 0.20.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_mix: Option<VideoMixId>,
 }
