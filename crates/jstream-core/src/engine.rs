@@ -1781,10 +1781,7 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
     } else {
         return Ok(());
     };
-    Err(ProtocolError::InvalidArgument {
-        field: "key".into(),
-        reason: reason.into(),
-    })
+    Err(ProtocolError::invalid_argument("key", reason))
 }
 
 fn no_key_store() -> ProtocolError {

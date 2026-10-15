@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:f99c96ca822db23b", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221 C2 text, G3c): re-read; main's live text-source test and C5's Audio sources bullet and src/tests/audio.rs list both present and don't overlap; holds" }
+verified = { hash = "b3:15b4c97bf3867340", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (C2 #221 text source, G3c #235) into B9 at 0.15: took main's stamp; section text unchanged by the merge, re-read; C2 adds a text-source test in src/tests/sources.rs; Live sources and Tests text hold; B9 only swaps error constructors" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -151,7 +151,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:850c7f6da44eb2c1", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221 C2 text, G3c): re-read; Live sources text (text now built) sits beside C5's audio-only note, Audio sources, Locking and Not yet text; audio.sync still beside both live.sync calls; holds" }
+verified = { hash = "b3:8d46495e477ef886", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (C2 #221 text source, G3c #235) into B9 at 0.15: took main's stamp; section text unchanged by the merge, re-read; C2 and G3c change no core behavior described here; B9 changes none" }
 -->
 
 ### Engine and sessions

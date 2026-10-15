@@ -14,6 +14,7 @@ mod deps;
 mod encoder;
 mod model;
 mod persist;
+mod plan;
 mod read;
 mod target;
 mod touched;
