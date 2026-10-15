@@ -44,7 +44,7 @@ button {
   color: var(--text);
   cursor: pointer;
 }
-button[type="submit"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+button[type="submit"], button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 button:disabled { opacity: 0.6; cursor: default; }
 
 input {
@@ -65,7 +65,7 @@ input {
   border: 1px solid var(--line);
   border-radius: 10px;
 }
-.connect form { display: grid; gap: 0.9rem; }
+.connect .fields { display: grid; gap: 0.9rem; }
 .connect label { display: grid; gap: 0.3rem; color: var(--muted); }
 .problem { color: var(--problem); margin: 1rem 0 0; }
 
@@ -146,8 +146,8 @@ input {
 .output .encoder, .new-output label { display: grid; gap: 0.25rem; color: var(--muted); font-size: 0.85rem; }
 .outputs form.inline { display: flex; gap: 0.4rem; }
 .outputs form.inline input { flex: 1; min-width: 0; }
-.outputs form.key { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.outputs form.key input { flex: 1 0 100%; }
+.outputs .key { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.outputs .key input { flex: 1 0 100%; }
 .outputs .key-status { flex: 1 0 100%; color: var(--muted); font-size: 0.85rem; }
 .outputs select {
   font: inherit;
