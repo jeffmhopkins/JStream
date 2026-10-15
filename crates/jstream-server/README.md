@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:65b0bd8f21846df5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; meters.tick buffer note holds alongside main's pairing changes; holds" }
+verified = { hash = "b3:ce1bc98360b92849", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade; meters.tick buffer note holds; holds" }
 -->
 
 ### Listening and admission

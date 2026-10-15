@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:8d913803f9c7a86c", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; audio (protocol 0.18) paragraph beside main's scene role text; holds" }
+verified = { hash = "b3:cafb607d97bfd5ec", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio paragraph says protocol 0.19; not-yet list drops VirtualCam as main did; holds" }
 -->
 
 ```
@@ -367,14 +367,15 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   and sends say.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
-  container: mp4 }`, the path checked to be absolute and to end in a file name. A stream
+  container: mp4 }`, the path checked to be absolute and to end in a file name, or
+  `VirtualCam`, which has no settings and ignores its profile. A stream
   key is never collection state: it lives in the OS credential store
   ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
   H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
   rate), checked against the ranges the protocol states. An output with no profile uses
   the engine's default; a profile an output uses can't be deleted. The mix is always
   `Program` until video mixes exist, so outputs share a session by profile alone.
-  Audio (protocol 0.18): an audio source's `audio` (`enabled`, `follow`, fader and
+  Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
   others with their faders, and the post-fader sends, a new channel source sending to
   the master at 0 dB. A send always runs from a source to a bus; with no filters there
@@ -387,7 +388,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   geometry, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, audio buses and chains, the
-  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
+  `YouTube` kind, and everything outside `sources`, `scenes`,
   `outputs`, `encoders` and `audio`. The collection file saves everything built so
   far, encoder profiles, each output's profile, `duplicated_from`, buses, sends and
   source audio included
@@ -536,7 +537,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:21ef0441f0902ef0", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; audio edits, bus.list and meters.tick say protocol 0.18; program scene stays 0.16; holds" }
+verified = { hash = "b3:0a6db70f9ed8b046", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio edits, bus.list and meters.tick say 0.19, virtual_cam 0.18; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -555,14 +556,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
+  `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
   `source.set_audio`, `bus.create`, `bus.rename`, `bus.set_fader`, `bus.delete`,
   `send.set` and `send.remove` edit sources' audio, the buses and the send matrix
-  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.18); filters join them once the
+  ([ADR-0028](adr/0028-audio-model-v2.md), protocol 0.19); filters join them once the
   mixer has filter chains.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
@@ -612,11 +614,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source with everything that refers to it, and the `rev`
-  it was planned at; `bus.list` (protocol 0.18) → the buses and sends; audio levels are
+  it was planned at; `bus.list` (protocol 0.19) → the buses and sends; audio levels are
   the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, `meters.tick`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
-  ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.18, about ten a second
+  ([R-RT-004](RULES.md#R-RT-004)), and `meters.tick` (protocol 0.19, about ten a second
   while the mixer runs) every source's and bus's levels and the master's loudness,
   which `audio.reset_loudness` restarts; the fields are in
   [jstream-protocol › Design](../crates/jstream-protocol/README.md#design).
@@ -669,7 +671,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:f35a66fb5d7cf941", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; tool list from tools.snap (audio, bus, send, studio...); tools.snap is 176,112 bytes, about 176 KB; holds" }
+verified = { hash = "b3:6ae5b6bb90cc519e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -684,7 +686,7 @@ verified = { hash = "b3:f35a66fb5d7cf941", by = "agent:claude@session_01D4rY84zM
   about ten a second while the mixer runs, is kept the same way, as `meters`.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 176 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 178 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -871,7 +873,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:bb937cfc8caa1e65", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; collections bullet holds with buses, sends and source audio saved; holds" }
+verified = { hash = "b3:036a2dc2f0fa6fa4", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; collections bullet holds; holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

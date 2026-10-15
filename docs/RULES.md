@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:67aab63c9e154615", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; R-API-001/002 unchanged; D5 additions are a minor bump to 0.18; holds" }
+verified = { hash = "b3:7dae89ee6a46a896", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; D5's additions are the 0.19 minor bump per R-API-001; holds" }
 -->
 
 <a id="R-API-001"></a>

@@ -213,11 +213,11 @@ pub enum QueryResult {
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
         /// Every audio bus, ordered by ID, the master among them. Missing (from a
-        /// server older than 0.18) parses as empty.
+        /// server older than 0.19) parses as empty.
         #[serde(default)]
         buses: Vec<BusInfo>,
         /// Every send, ordered by bus, then by source. Missing (from a server older
-        /// than 0.18) parses as empty.
+        /// than 0.19) parses as empty.
         #[serde(default)]
         sends: Vec<SendInfo>,
     },
@@ -350,7 +350,7 @@ pub struct SourceInfo {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duplicated_from: Option<SourceId>,
     /// Its audio settings, for an audio source: one whose kind produces audio, or a
-    /// `scene` source. Omitted for every other source, and by a server older than 0.18.
+    /// `scene` source. Omitted for every other source, and by a server older than 0.19.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audio: Option<SourceAudio>,
 }

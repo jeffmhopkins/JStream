@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2090771d02800d4c", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's (e2e test, ui_dir); D5's meters.tick is an extra event the e2e test ignores and the workspace tests pass; holds" }
+verified = { hash = "b3:f1e2410fd91c22a6", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; daemon text is main's and names no audio routing; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

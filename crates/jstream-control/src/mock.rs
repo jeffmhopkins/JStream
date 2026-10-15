@@ -1236,6 +1236,7 @@ impl Collection {
                 match &kind {
                     OutputKind::Rtmp { target } => check_target(target, at, "kind.target")?,
                     OutputKind::Record { path, container } => check_record(path, *container, at)?,
+                    OutputKind::VirtualCam => {}
                     OutputKind::Unknown => {
                         return Err(invalid(
                             at,
@@ -2511,6 +2512,9 @@ mod tests {
                 },
                 Edit::OutputDelete {
                     output_id: OutputId::new("rec"),
+                },
+                Edit::OutputDelete {
+                    output_id: OutputId::new("vcam"),
                 },
                 Edit::EncoderDelete {
                     profile_id: EncoderProfileId::new("low"),

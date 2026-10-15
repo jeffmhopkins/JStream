@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b89d7432d2da9679", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; UI is main's; it ignores events it does not know, such as meters.tick, and builds against StateGet's buses/sends; holds" }
+verified = { hash = "b3:5a19f0d155c2d42c", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; UI text is main's; it ignores meters.tick; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

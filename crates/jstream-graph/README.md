@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:f90838de04553bbf", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; buses, sends and audio edits beside main's scene role and Touched text; holds" }
+verified = { hash = "b3:baeac9102ab0dd76", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; persist fixture line unions D5's audio with main's vcam removal (persist/tests.rs deletes vcam, v1.json carries audio); holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -53,8 +53,10 @@ codes, so the engine passes them to clients unchanged.
   gain in dB from a source into a bus.
 - `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
   `State::encoding_of` gives the encoding an output starts with.
-- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, or a recording
-  to an MP4 file) and the encoder profile it uses, if not the default. Whether it
+- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, a recording
+  to an MP4 file, or the virtual camera, which has nothing to check) and the encoder
+  profile it uses, if not the default (a virtual camera encodes nothing, so it ignores
+  its profile). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -122,8 +124,8 @@ the batch **touched**.
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
   `\…`, `C:\…` or `C:/…`, the same on every platform, as for an absolute asset), or
   doesn't end in a file name; whether it is absolute on the engine's own machine, and
-  whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording fails with
-  `invalid_argument` (it has no RTMP target). `output.delete` is undone by `output.create` with its kind, and
+  whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
+  `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
   with `invalid_argument`, in edit order. The `OutputDelete` inverse also restores the
@@ -265,13 +267,14 @@ seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
 scene `b` made a group, a clone, a `duplicated_from` naming a missing source, and the
-fixture's buses, sends and source audio) plus a source whose
+fixture's buses, sends and source audio, less the virtual camera the parity collection
+gained later) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none; a profile's
-round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
+round trip; a virtual camera's round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that

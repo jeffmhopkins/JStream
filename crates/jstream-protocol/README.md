@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:7e5874b7ee556ae2", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; edits, actions, queries and events union both sides; version line 0.18 audio, 0.17 role, 0.16 scene.switch; holds" }
+verified = { hash = "b3:68e32a9d77022b3e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; version line 0.19 audio, 0.18 virtual_cam, 0.17 role; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -46,7 +46,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `scene.switch`, `audio.reset_loudness`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
@@ -93,10 +93,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
   audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
-  `audio.reset_loudness`); 0.17 added `scene.create`'s optional `role`, 0.16
-  `scene.switch`, `studio.get` and `studio.changed`, 0.15 `delete.plan` and the
+  `audio.reset_loudness`); 0.18 added the `virtual_cam` output kind, 0.17
+  `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
+  `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
@@ -110,7 +111,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a recording output and two
+  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output and two
   encoder profiles), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
   URL, recording path and encoder profile checks, and `item.set_source` and
@@ -133,7 +134,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:815b8b29ae54fc72", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; audio subsection and bus.list/meters.tick now say 0.18, envelope example minor 18; scene.switch stays 0.16; holds" }
+verified = { hash = "b3:f61c4f32f259b1d6", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio, bus.list, meters.tick and the envelope example say 0.19; virtual_cam stays 0.18; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -153,8 +154,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":18},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":18},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":19},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":19},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -264,7 +265,7 @@ any other existing scene is `invalid_argument` on `edits.N.scene_id`, and a miss
 ### Audio
 
 [ADR-0028](../../docs/adr/0028-audio-model-v2.md) makes audio part of the collection
-(0.18). An **audio source** is one whose kind has audio (`KindDescriptor.audio`), or a
+(0.19). An **audio source** is one whose kind has audio (`KindDescriptor.audio`), or a
 `scene` source, whose audio is what the scene shows. Its `SourceInfo.audio` holds
 `enabled`, `follow` (`always` or `when_shown`), its fader `gain_db` and `muted`; every
 other source omits `audio`. A new source takes its kind's defaults: on, at 0 dB,
@@ -374,7 +375,13 @@ no `..` segment and end in a file name, and
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
 so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
-record elsewhere. The
+record elsewhere. A `virtual_cam` output (0.18) has no fields: it offers the program
+video to other apps on the engine's machine as a webcam, with no audio, at the canvas
+size it has when it starts and 30 fps. `output.start` fails with `action_failed` when
+the engine has no virtual camera, the camera isn't registered on the machine, or it
+can't offer that size. It has no target either, so `output.set_target` refuses it too,
+and it encodes nothing, so its encoder profile is stored but unused. A 0.9 to 0.17
+client reads it as `Unknown`. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
@@ -427,14 +434,14 @@ Queries read and never change `rev`. Those that read the collection state carry 
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty), and the `buses` and `sends`
-  (as `bus.list`; missing from a pre-0.18 server, both parse as empty). A client reads
+  (as `bus.list`; missing from a pre-0.19 server, both parse as empty). A client reads
   it on connecting, and again after a `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
   its name, `SourceKind`, settings and, for an audio source, its `audio`.
 - `bus.list`: the buses, ordered by ID (the master among them), and every send,
-  ordered by bus and then by source, at a `rev` (0.18).
+  ordered by bus and then by source, at a `rev` (0.19).
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
 - `output.list`: the outputs, ordered by ID (outputs have no display order), each with
@@ -616,7 +623,7 @@ After `welcome`, the server pushes every event to every client.
   built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
   those meters exist, as later optional fields. Audience figures are `youtube.stats`
   ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)).
-- `meters.tick {sources, buses}` is one reading of the audio levels (0.18), about ten
+- `meters.tick {sources, buses}` is one reading of the audio levels (0.19), about ten
   a second while the mixer runs; an idle engine emits none. Each routed source and
   each bus has `peak` (the largest absolute sample since the previous tick) and `rms`
   (over the latest mixer block), linear full scale per channel, left then right. The
