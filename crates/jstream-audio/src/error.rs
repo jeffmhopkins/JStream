@@ -40,8 +40,14 @@ pub enum AudioError {
     /// buffers for.
     #[error("the mixer already has the maximum number of buses")]
     TooManyBuses,
-    /// Input or bus changes are waiting for the mixer to apply them, and the queue is
-    /// full.
+    /// The input's or bus's filter chain already holds as many filters as it reserved.
+    #[error("the filter chain already has the maximum number of filters")]
+    TooManyFilters,
+    /// The input, bus or filter was removed.
+    #[error("the input, bus or filter was removed")]
+    Removed,
+    /// Input, bus or filter changes are waiting for the mixer to apply them, and the
+    /// queue is full.
     #[error("the mixer command queue is full")]
     CommandQueueFull,
     /// The thread that frees the mixer's retired rings could not be started.
