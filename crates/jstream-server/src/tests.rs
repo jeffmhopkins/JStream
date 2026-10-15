@@ -1557,7 +1557,6 @@ impl Bundle {
         let base =
             std::env::temp_dir().join(format!("jstream-server-ui-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
-        let dist = base.join("dist");
         let files: [(&str, &[u8]); 4] = [
             (
                 "dist/index.html",
@@ -1579,7 +1578,9 @@ impl Bundle {
             }
         }
         #[cfg(unix)]
-        if let Err(error) = std::os::unix::fs::symlink(base.join("secret"), dist.join("link.txt")) {
+        if let Err(error) =
+            std::os::unix::fs::symlink(base.join("secret"), base.join("dist/link.txt"))
+        {
             panic!("symlink: {error}");
         }
         Bundle { base }

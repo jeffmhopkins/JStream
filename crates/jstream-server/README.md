@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:703e24847a9e8fc2", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; adds the Web UI (ui.rs) bullet, config lists the UI directory, gate covers every request; not-yet now TLS and pairing" }
+verified = { hash = "b3:bbd03a04f132dd7c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; adds the Web UI (ui.rs) bullet, config lists the UI directory, gate covers every request; not-yet now TLS and pairing" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:67095634caee2ace", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read against ui.rs and gate.rs: Basic credentials row and paragraph, new Web UI section (paths, table, headers, CSP and trunk nonce), logging lines, open questions 2 and 3 settled" }
+verified = { hash = "b3:95c518740af22ef4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read against ui.rs and gate.rs: Basic credentials row and paragraph, new Web UI section (paths, table, headers, CSP and trunk nonce), logging lines, open questions 2 and 3 settled" }
 -->
 
 ### Listening and admission

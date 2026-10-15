@@ -519,7 +519,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:229fe196cfb1f6b9", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; transport bullet now says the server serves the UI files behind the same checks with Basic credentials; rest unchanged" }
+verified = { hash = "b3:e3339de6471cb011", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "U2: re-read; transport bullet now says the server serves the UI files behind the same checks with Basic credentials; rest unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
