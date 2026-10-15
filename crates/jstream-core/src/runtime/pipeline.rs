@@ -33,7 +33,7 @@ use std::sync::{Arc, Condvar, Mutex, OnceLock, PoisonError, Weak};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use jstream_audio::{BusControl, InputControl, Mixer, MixerConfig};
+use jstream_audio::{BusControl, Mixer, MixerConfig};
 use jstream_encode::{
     AudioInput, AudioSession, PushError, SessionOptions, SessionRegistry, SessionStats, StreamEnd,
     SubscriberStats, Subscription, VideoInput, VideoSession,
@@ -43,8 +43,8 @@ use jstream_media::{
     MediaTime, PixelFormat, Plane, Rounding, SampleFormat, Timebase, VideoFrame, VideoFrameInfo,
 };
 use jstream_platform::{
-    AudioEncoderConfig, AudioInputTarget, AudioIo, AudioStream, Backends, Capture, CaptureStream,
-    Codecs, HardwarePreference, MediaClock, RateControl, VideoEncoderConfig, VideoSurface,
+    AudioEncoderConfig, AudioIo, Backends, Capture, CaptureStream, Codecs, HardwarePreference,
+    MediaClock, RateControl, VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
@@ -53,9 +53,10 @@ use jstream_protocol::{
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
 
 use crate::audio::{MasterMetering, MixerHandles};
+use crate::audio_sources::{AudioInputs, Wanted};
 use crate::drops::{
-    AudioBusDrops, AudioEncodeDrops, AudioInputDrops, DropGuard, DropSnapshot, FnDropSource,
-    VideoEncodeDrops, capture_drops, output_packet_drops, render_tick_drops,
+    AudioBusDrops, AudioEncodeDrops, DropGuard, DropSnapshot, FnDropSource, VideoEncodeDrops,
+    capture_drops, output_packet_drops, render_tick_drops,
 };
 use crate::engine::Engine;
 use crate::lock;
@@ -309,15 +310,11 @@ pub(crate) struct Program {
     /// Open encoder sessions by key, held weakly: each lives while an output holds it.
     sessions: Mutex<SessionRegistry<EncodeKey, Encoders>>,
     readbacks: Arc<AtomicU64>,
-    /// Kept alive so the platform keeps calling the mixer producers. Behind a lock
-    /// only so the program can be shared; nothing takes it.
-    _streams: Mutex<Vec<Box<dyn AudioStream>>>,
+    /// The mixer's inputs, one per audio source, and the thread that follows the
+    /// collection. Closed in `drop` once the mixer thread has stopped. Behind a lock
+    /// only so the program can be shared.
+    audio: Mutex<AudioInputs>,
     capture_drops: DropSnapshot,
-    /// Declared after `_streams` (fields drop in order), so the input rings outlive
-    /// both producers and the mixer and are freed here, not on a real-time thread
-    /// (docs/RULES.md#R-RT-003).
-    mic: InputControl,
-    desktop: InputControl,
     bus: BusControl,
     drop_guard: Option<DropGuard>,
     ticker: Option<JoinHandle<()>>,
@@ -378,8 +375,6 @@ impl Program {
     fn arm_stats(&mut self, engine: &Engine) {
         let ids = vec![
             engine.add_drop_source(self.capture_drops.clone()),
-            engine.add_drop_source(AudioInputDrops::new(self.mic.clone())),
-            engine.add_drop_source(AudioInputDrops::new(self.desktop.clone())),
             engine.add_drop_source(AudioBusDrops::new(self.bus.clone())),
         ];
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
@@ -401,6 +396,12 @@ impl Drop for Program {
         self.stop.store(true, Ordering::Release);
         join("render", self.render.take());
         join("mixer", self.mixer.take());
+        // Each input's stream stops before its ring's last handle goes, and its drops
+        // are latched before the last tick.
+        self.audio
+            .get_mut()
+            .unwrap_or_else(PoisonError::into_inner)
+            .close();
         // These end once the render and mixer threads have dropped their senders.
         join("collector", self.collector.take());
         join("program watch", self.forward.take());
@@ -694,6 +695,7 @@ pub(crate) struct Parts {
     draw: OpenDraw,
     open_timeout: Duration,
     render: Arc<RenderHub>,
+    audio_sources: Arc<Wanted>,
 }
 
 pub(crate) fn parts_from(
@@ -701,6 +703,7 @@ pub(crate) fn parts_from(
     draw: OpenDraw,
     open_timeout: Duration,
     render: Arc<RenderHub>,
+    audio_sources: Arc<Wanted>,
 ) -> Parts {
     Parts {
         clock: Arc::clone(&backends.clock),
@@ -710,6 +713,7 @@ pub(crate) fn parts_from(
         draw,
         open_timeout,
         render,
+        audio_sources,
     }
 }
 
@@ -799,15 +803,15 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
 pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Program>, String> {
     let (size, capture) = open_capture(&parts)?;
     let format = engine_format()?;
-    // Bindings drop in reverse pattern order, so on an early return the streams (and
-    // their producers) go before the input controls, and the rings are freed here
-    // rather than on a real-time thread (docs/RULES.md#R-RT-003).
-    let OpenedAudio {
-        mic,
-        desktop,
-        mixer,
-        streams,
-    } = open_audio(&parts, format)?;
+    let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
+    // On an early return this closes the inputs, each stream before its ring's last
+    // handle, so no ring is freed on a real-time thread (docs/RULES.md#R-RT-003).
+    let audio = AudioInputs::start(
+        mixer.control(),
+        Arc::clone(&parts.audio),
+        Arc::clone(&parts.audio_sources),
+        engine.drop_ledger(),
+    )?;
     let bus = mixer.bus();
     let period = frame_period(parts.clock.timebase())?;
     if period.ticks() <= 0 {
@@ -900,10 +904,8 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         failures,
         sessions: Mutex::new(SessionRegistry::new()),
         readbacks,
-        _streams: Mutex::new(streams),
+        audio: Mutex::new(audio),
         capture_drops,
-        mic,
-        desktop,
         bus,
         drop_guard: None,
         ticker: None,
@@ -1074,45 +1076,6 @@ fn open_capture(parts: &Parts) -> Result<(FrameSize, Box<dyn CaptureStream>), St
         .start(&info.target)
         .map_err(|err| format!("starting capture: {err}"))?;
     Ok((size, stream))
-}
-
-struct OpenedAudio {
-    mixer: Mixer,
-    streams: Vec<Box<dyn AudioStream>>,
-    mic: InputControl,
-    desktop: InputControl,
-}
-
-fn open_audio(parts: &Parts, format: AudioFormat) -> Result<OpenedAudio, String> {
-    let mut mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
-    let (mic, mic_control) = mixer
-        .add_input(format)
-        .map_err(|err| format!("microphone input: {err}"))?;
-    let (desktop, desktop_control) = mixer
-        .add_input(format)
-        .map_err(|err| format!("loopback input: {err}"))?;
-    let mic = parts
-        .audio
-        .open_input(&AudioInputTarget::DefaultInput, Box::new(mic))
-        .map_err(|err| format!("opening the microphone: {err}"))?;
-    let desktop = parts
-        .audio
-        .open_input(&AudioInputTarget::DefaultOutputLoopback, Box::new(desktop))
-        .map_err(|err| format!("opening desktop audio: {err}"))?;
-    if mic.format() != format || desktop.format() != format {
-        return Err(format!(
-            "audio device format does not match the mixer (microphone {:?}, desktop {:?}, mixer {:?})",
-            mic.format(),
-            desktop.format(),
-            format
-        ));
-    }
-    Ok(OpenedAudio {
-        mixer,
-        streams: vec![mic, desktop],
-        mic: mic_control,
-        desktop: desktop_control,
-    })
 }
 
 /// The video encoder settings for `profile` at `size` and the base frame rate.

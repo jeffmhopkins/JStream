@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:9dd68585179baac9", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (C2 #221 text source, G3c #235) into B9 at 0.15: took main's stamp; section text unchanged by the merge, re-read; the merge changes no graph code; B9's blockers and delete_plan text and #239's Touched text hold" }
+verified = { hash = "b3:d6dbf011986bad16", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#197 B9): re-read; B9's blockers and delete_plan text is main's, untouched by C5; only the stamp differs from main; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

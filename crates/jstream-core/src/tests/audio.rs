@@ -1,117 +1,316 @@
-//! The program mixer follows the collection's audio (ADR-0028), and `meters.tick` and
-//! `audio.reset_loudness` reach it, through `InProcessControl`. The mixer is attached
-//! by hand, as the program stage does when it opens.
+//! Audio sources (C5): while an output runs, each audio-only source in the collection is
+//! one mixer input, added when the source is created and removed when it is deleted. A
+//! source that can't be recorded is unavailable and doesn't fail the output; a failed
+//! stream is reopened, and an application is found again when it restarts.
 
-use super::{batch, block_on, connected, create, drain, edits};
-use crate::Engine;
-use crate::audio::{MasterMetering, MixerHandles};
-use jstream_audio::{Mixer, MixerConfig};
+use super::{batch, block_on, connected, drain, edits, output_call, output_state};
+use crate::audio_sources::AudioStatus;
+use crate::runtime::cpu_draw;
+use crate::{Engine, RecordingPublish};
 use jstream_control::Control;
-use jstream_media::{AudioFormat, ChannelLayout, SampleFormat};
-use jstream_protocol::{
-    Action, BusId, Call, CallResult, Edit, Event, Finite32, HistoryCall, HistoryOp, SceneId,
-    SourceId, SourceKind,
+use jstream_media::{ChannelLayout, FrameSize, Timebase};
+use jstream_platform::fake::{
+    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
 };
+use jstream_platform::{AudioInputTarget, AudioProcess, Backends};
+use jstream_protocol::{Batch, Edit, Event, OutputId, OutputState, Settings, SourceId, SourceKind};
+use serde_json::json;
+use std::sync::Arc;
+use std::thread;
+use std::time::{Duration, Instant};
 
-fn db(v: f32) -> Finite32 {
-    Finite32::new(v).expect("finite")
+fn engine(audio: &FakeAudioIo, clock: &FakeClock) -> Engine {
+    let backends = Backends {
+        clock: Arc::new(clock.clone()),
+        video_devices: Arc::new(FakeVideoDevices::new(clock.clone())),
+        capture: Arc::new(FakeCapture::new(
+            clock.clone(),
+            FrameSize::new(64, 36).expect("size"),
+        )),
+        audio: Arc::new(audio.clone()),
+        codecs: Arc::new(FakeCodecs),
+        gpu: Arc::new(FakeGpuInterop),
+        vcam: None,
+    };
+    Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_draw(cpu_draw())
+        .with_publish(Box::new(RecordingPublish::new()))
+}
+
+fn audio_source(id: &str, kind: &str, setting: Option<(&str, &str)>) -> Edit {
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: id.into(),
+        kind: SourceKind::Builtin { kind: kind.into() },
+        settings: Settings(
+            setting
+                .map(|(k, v)| (k.to_owned(), json!(v)))
+                .into_iter()
+                .collect(),
+        ),
+        duplicated_from: None,
+    }
+}
+
+fn delete(id: &str) -> Edit {
+    Edit::SourceDelete {
+        source_id: SourceId::new(id),
+    }
+}
+
+fn game(pid: u32) -> AudioProcess {
+    AudioProcess {
+        pid,
+        parent_pid: Some(4),
+        exe: "game.exe".into(),
+    }
+}
+
+/// Waits up to five seconds for `done`.
+fn eventually(mut done: impl FnMut() -> bool) -> bool {
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if done() {
+            return true;
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    done()
+}
+
+/// The fake's open inputs, in a stable order.
+fn inputs(audio: &FakeAudioIo) -> Vec<String> {
+    let mut targets: Vec<String> = audio
+        .input_targets()
+        .iter()
+        .map(|t| format!("{t:?}"))
+        .collect();
+    targets.sort();
+    targets
+}
+
+fn names(targets: &[AudioInputTarget]) -> Vec<String> {
+    let mut names: Vec<String> = targets.iter().map(|t| format!("{t:?}")).collect();
+    names.sort();
+    names
+}
+
+fn status(engine: &Engine, id: &str) -> Option<AudioStatus> {
+    engine.audio_status(&SourceId::new(id))
 }
 
 #[test]
-fn the_mixer_follows_edits_and_undo_and_meters_tick() {
-    let engine = Engine::new();
+fn audio_sources_follow_the_collection_into_the_mixer() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
     let control = connected(&engine);
-    let mut events = control.events();
-    let mut mixer = Mixer::new(MixerConfig::default()).expect("mixer");
-    let format = AudioFormat::new(48_000, ChannelLayout::Stereo, SampleFormat::F32Interleaved)
-        .expect("format");
-    let (_producer, input) = mixer.add_input(format).expect("input");
-    let (_metering, meters) = MasterMetering::new(48_000).expect("meters");
-    let detach = engine.attach_mixer(MixerHandles {
-        control: mixer.control(),
-        master: mixer.bus(),
-        meters,
-    });
 
-    // A nested scene is the only audio source the builtin kinds give for now; it has
-    // no fader, mute or sends of its own.
-    batch(
-        &control,
-        edits(vec![
-            create("inner"),
-            Edit::SourceCreate {
-                source_id: SourceId::new("nested"),
-                name: "Nested".into(),
-                kind: SourceKind::Scene {
-                    scene_id: SceneId::new("inner"),
-                },
-                settings: Default::default(),
-                duplicated_from: None,
-            },
-        ]),
-    )
-    .expect("created");
-    engine.set_audio_input(SourceId::new("nested"), input.clone());
+    // A collection without audio sources records the default microphone and desktop.
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
     assert_eq!(
-        input.send(jstream_audio::BusId::MASTER),
-        None,
-        "no sends of its own"
+        inputs(&audio),
+        names(&[
+            AudioInputTarget::DefaultInput,
+            AudioInputTarget::DefaultOutputLoopback
+        ])
     );
 
+    // The first audio source replaces them.
+    batch(
+        &control,
+        Batch::single(audio_source("mic", "audio_input", None)),
+    )
+    .expect("mic");
+    assert!(
+        eventually(|| inputs(&audio) == names(&[AudioInputTarget::DefaultInput])),
+        "{:?}",
+        inputs(&audio)
+    );
+    assert!(eventually(
+        || status(&engine, "mic") == Some(AudioStatus::Recording)
+    ));
+
+    // A device that isn't there, and an application that isn't running, are unavailable
+    // and leave the output running.
     batch(
         &control,
         edits(vec![
-            Edit::BusCreate {
-                bus_id: BusId::new("vod"),
-                name: "VOD".into(),
-            },
-            Edit::BusSetFader {
-                bus_id: BusId::master(),
-                gain_db: Some(db(-20.0)),
-                muted: Some(true),
-            },
-            Edit::SourceSetAudio {
-                source_id: SourceId::new("nested"),
-                enabled: Some(false),
-                follow: None,
-                gain_db: None,
-                muted: None,
-            },
+            audio_source("usb", "audio_input", Some(("device", "usb-mic"))),
+            audio_source("game", "app_audio", Some(("exe", "Game.exe"))),
+            audio_source("desk", "desktop_audio", None),
         ]),
     )
-    .expect("applied");
-    assert!((mixer.bus().gain() - 0.1).abs() < 1e-4);
-    assert!(input.muted(), "a disabled source is silent");
-    drain(&mut events);
-    engine.emit_meters_tick();
-    let Some(Event::MetersTick { sources, buses }) = drain(&mut events).pop() else {
-        panic!("a meters.tick");
-    };
-    assert!(sources.is_empty(), "a disabled source has no meter");
-    let ids: Vec<&str> = buses.iter().map(|b| b.bus_id.as_str()).collect();
-    assert_eq!(ids, ["master", "vod"]);
+    .expect("more sources");
+    assert!(eventually(|| matches!(
+        status(&engine, "game"),
+        Some(AudioStatus::Unavailable(reason)) if reason == "Game.exe is not running"
+    )));
+    assert!(matches!(
+        status(&engine, "usb"),
+        Some(AudioStatus::Unavailable(_))
+    ));
+    assert_eq!(status(&engine, "desk"), Some(AudioStatus::Recording));
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
 
-    // Undo puts the master fader back and removes the bus again.
-    block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo)))).expect("undo");
-    assert!((mixer.bus().gain() - 1.0).abs() < 1e-4);
-    assert!(!input.muted());
-    drain(&mut events);
-    engine.emit_meters_tick();
-    let Some(Event::MetersTick { buses, .. }) = drain(&mut events).pop() else {
-        panic!("a meters.tick");
-    };
-    assert_eq!(buses.len(), 1);
+    // The application starts: it is found on the next tick.
+    audio.set_processes(vec![game(40)]);
+    assert!(eventually(
+        || status(&engine, "game") == Some(AudioStatus::Recording)
+    ));
+    assert!(
+        audio
+            .input_targets()
+            .contains(&AudioInputTarget::ProcessLoopback { pid: 40 })
+    );
 
-    let reset = Call::Action {
-        action: Action::AudioResetLoudness {},
-    };
-    let done = block_on(control.call(reset.clone())).expect("reset");
-    assert_eq!(done.result, CallResult::Action {});
+    // It restarts under a new process ID: the input follows it.
+    audio.set_processes(vec![game(41)]);
+    assert!(
+        eventually(|| {
+            let targets = audio.input_targets();
+            targets.contains(&AudioInputTarget::ProcessLoopback { pid: 41 })
+                && !targets.contains(&AudioInputTarget::ProcessLoopback { pid: 40 })
+        }),
+        "{:?}",
+        inputs(&audio)
+    );
 
-    // Once the program stops, no meters go out and a reset is still no failure.
-    detach();
-    drain(&mut events);
-    engine.emit_meters_tick();
-    assert!(drain(&mut events).is_empty());
-    block_on(control.call(reset)).expect("reset with no mixer");
+    // Every device is unplugged: the streams fail and are reopened.
+    audio.unplug();
+    assert!(
+        eventually(|| inputs(&audio)
+            == names(&[
+                AudioInputTarget::DefaultInput,
+                AudioInputTarget::DefaultOutputLoopback,
+                AudioInputTarget::ProcessLoopback { pid: 41 },
+            ])),
+        "{:?}",
+        inputs(&audio)
+    );
+
+    // Deleting a source removes its input; deleting the last brings the defaults back.
+    batch(&control, Batch::single(delete("game"))).expect("delete game");
+    assert!(eventually(|| inputs(&audio)
+        == names(&[
+            AudioInputTarget::DefaultInput,
+            AudioInputTarget::DefaultOutputLoopback,
+        ])));
+    assert_eq!(status(&engine, "game"), None);
+    batch(
+        &control,
+        edits(vec![delete("mic"), delete("usb"), delete("desk")]),
+    )
+    .expect("delete the rest");
+    assert!(eventually(|| inputs(&audio)
+        == names(&[
+            AudioInputTarget::DefaultInput,
+            AudioInputTarget::DefaultOutputLoopback
+        ])));
+
+    // Stopping the output closes them all.
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(eventually(|| audio.open_streams() == 0));
+}
+
+#[test]
+fn a_settings_change_reopens_the_input_and_stopping_clears_the_status() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    batch(
+        &control,
+        Batch::single(audio_source("mic", "audio_input", Some(("device", "nope")))),
+    )
+    .expect("mic");
+    // Not recorded while no output runs.
+    assert_eq!(status(&engine, "mic"), None);
+
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(matches!(
+        status(&engine, "mic"),
+        Some(AudioStatus::Unavailable(_))
+    ));
+    assert_eq!(audio.input_targets(), vec![]);
+
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("mic"),
+            patch: Settings(
+                [("device".to_owned(), json!(jstream_platform::fake::FAKE_MIC))]
+                    .into_iter()
+                    .collect(),
+            ),
+        }),
+    )
+    .expect("pick the fake microphone");
+    assert!(eventually(
+        || status(&engine, "mic") == Some(AudioStatus::Recording)
+    ));
+    assert_eq!(
+        audio.input_targets(),
+        vec![AudioInputTarget::Input(jstream_platform::DeviceId::new(
+            jstream_platform::fake::FAKE_MIC
+        ))]
+    );
+
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(eventually(|| audio.open_streams() == 0));
+    assert_eq!(status(&engine, "mic"), None);
+}
+
+/// The routing (D5) finds the inputs the program stage opens: an audio source that
+/// records is metered in `meters.tick`, and turning its audio off drops its meter.
+#[test]
+fn recording_audio_sources_are_routed_and_metered() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let mut events = control.events();
+    batch(
+        &control,
+        Batch::single(audio_source("desk", "desktop_audio", None)),
+    )
+    .expect("desk");
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(eventually(
+        || status(&engine, "desk") == Some(AudioStatus::Recording)
+    ));
+    let metered = |events: &mut jstream_control::EventStream| {
+        engine.emit_meters_tick();
+        drain(events)
+            .into_iter()
+            .rev()
+            .find_map(|event| match event {
+                Event::MetersTick { sources, .. } => Some(
+                    sources
+                        .into_iter()
+                        .map(|s| s.source_id.as_str().to_owned())
+                        .collect::<Vec<_>>(),
+                ),
+                _ => None,
+            })
+            .expect("a meters.tick while the program runs")
+    };
+    assert_eq!(metered(&mut events), ["desk"]);
+
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetAudio {
+            source_id: SourceId::new("desk"),
+            enabled: Some(false),
+            follow: None,
+            gain_db: None,
+            muted: None,
+        }),
+    )
+    .expect("audio off");
+    assert!(metered(&mut events).is_empty());
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
