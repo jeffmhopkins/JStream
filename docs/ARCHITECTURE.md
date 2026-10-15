@@ -578,7 +578,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
 - **Program scene** (protocol 0.16, [ADR-0030](adr/0030-studio-state-and-scene-switching.md)):
-  the action `scene.switch { scene_id }` puts a scene on program with a cut, with no
+  the action `scene.switch { scene_id }` puts a scene on program, with no
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
@@ -697,7 +697,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   about ten a second while the mixer runs, is kept the same way, as `meters`.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 178 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 210 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

@@ -28,8 +28,8 @@ outputs with no video chain and the same mix and encoder profile share one sessi
 an output with a video chain gets its own) needs no new shape.
 
 Its only JStream dependency is `jstream-platform` (layer 1), whose `media` re-export
-supplies the frame, sample and packet types; besides that, `thiserror`. Dev-dependency:
-`jstream-platform`'s `fake` feature, for `FakeCodecs`.
+supplies the frame, sample and packet types; besides that, `thiserror`. Dev-dependencies:
+`jstream-platform`'s `fake` feature, for `FakeCodecs`, and `criterion`, for the benchmarks.
 
 Why a crate: the crate map puts encoder sessions in their own layer-3 crate, between
 the platform traits they drive and the layer-4 outputs that consume them, and it keeps

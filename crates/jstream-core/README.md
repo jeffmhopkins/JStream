@@ -117,7 +117,8 @@ state machine. Contents:
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/audio.rs`,
-  `src/tests/audio_routing.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
+  `src/tests/audio_routing.rs`, `src/tests/transitions.rs`, `tests/mcp.rs`,
+  `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
   end), the shared parity fixture, a differential run against
@@ -319,21 +320,22 @@ collection lock:
   removed): objects created or deleted, objects used (an item's scene and source, both
   sources of an `item.set_source`, a `scene` source's scene, a duplicate's original,
   the scenes an `item.move` and its inverse name, the profile an `output.set_encoder`
-  names), properties set (names, a scene's
+  names, the preset a scene override or `transition.set_default` names), properties
+  set (names, a scene's
   role, an item's placement, whether set as a transform or a geometry, crop,
   visibility, an item's index, which `item.move` also sets, which source an item
   places, each settings parameter, an output's target and encoder choice, a profile's
   encoding, each audio field a `source.set_audio` or `bus.set_fader` sets, a bus's
-  name, a send's gain), the scenes'
-  order, and the canvas size. A send is an object of its own, which uses its source
+  name, a send's gain, a preset's fields, a scene's transition overrides, an item's
+  transition settings), the scenes' order, the canvas size, and the default preset. A send is an object of its own, which uses its source
   and its bus, so changing two sources' sends into one bus doesn't conflict, and
   deleting a bus conflicts with every change to its sends. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
   `scene.create` also deletes the items the scene holds now, even ones whose own step
   was dropped. The step conflicts with another client's later entry, logged after
   the step was last applied or undone, when either creates or deletes an object the
-  other touches, when both set the same property, when both reorder scenes, or when
-  both set the canvas size. Two
+  other touches, when both set the same property, when both reorder scenes, when
+  both set the canvas size, or when both set the default preset. Two
   items added to one scene do not conflict. A conflict fails with `undo_conflict`
   naming the first such entry, nothing applied, and the step dropped. Edits that
   pass the check but no longer apply also fail with `undo_conflict`, naming the latest
@@ -402,7 +404,7 @@ yet (D29).
 `video.snapshot` returns the program mix as a PNG
 ([jstream-protocol › Design](../jstream-protocol/README.md#design)): the program
 scene, read under the collection lock when the shot is copied, so a snapshot after a
-`scene.switch` shows the new scene. An empty collection is an opaque black canvas.
+`scene.switch` shows the new scene, or the transition onto it at the snapshot's time. An empty collection is an opaque black canvas.
 
 The canvas is the collection's (`State::canvas`, default 1920×1080, changed by
 `canvas.set_size`), copied into the shot with the items, so every scene of a snapshot,
@@ -411,7 +413,7 @@ nested ones included, is composited at that size; the PNG is that canvas scaled 
 ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)): a geometry by the
 shared formula, a legacy transform evaluated against the frame's size.
 Hidden items are skipped. A source with no stored frame is skipped, not drawn as a
-placeholder. Opacity is 1 and the only blend is src-over: the graph does not store
+placeholder. Outside a transition opacity is 1, and the only blend is src-over: the graph does not store
 either yet, and the compositor's blend is src-over.
 
 **Nested scenes.** A `scene` source shows its scene composited at the canvas size,
@@ -439,7 +441,8 @@ transition's end, every `set_source_frame`, a collection file's load, a live sou
 and a live source's next frame (see *Live sources*), under the collection lock, and
 `RenderHub::publish` stores
 it through `arc-swap` as the next render generation only when it draws something new
-(the canvas, the scenes, their placements or the frames' versions differ). So a batch
+(the canvas, the scenes, their placements, the frames' versions or the transition
+differ). So a batch
 that changes nothing on program, or a frame for a source no program scene shows,
 publishes nothing. Each stored frame carries a version, so a cache re-uploads it only when it
 changed. `video.snapshot` reads `rev`, the published snapshot and the media clock's
@@ -978,7 +981,7 @@ Every agent action goes to the audit log
 the time, `client_id`, the client's name from its latest `hello` (`client_name`, cut
 to 128 bytes; `client_id`s restart at `client_1` with the engine, so the name is what
 says which agent acted across restarts), the session's `request_id`, the call (`batch`,
-`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id` or `scene_id` (`scene.switch`), the `rev` before and
+`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id` or `scene_id` (`scene.switch`, `studio.set_preview`), the `rev` before and
 after, the result (`ok` or the error code), and `replayed` for a batch, undo or redo whose
 idempotency key had already been applied. It holds no argument of any call: no names,
 settings, URLs or keys, so `output.set_key` records only that action on that output
@@ -1054,8 +1057,8 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
-- Activity gains that fade with a transition (T1: only cuts exist, so every weight
-  is 0 or 1), filter
+- Activity gains that fade with a transition (audio follows a switch at once, so
+  every weight is 0 or 1), filter
   chains in the protocol (the mixer has them since D7b; the routing sets none yet), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of

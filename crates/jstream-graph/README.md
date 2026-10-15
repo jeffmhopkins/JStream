@@ -77,8 +77,8 @@ the batch **touched**.
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
   Undo design requires: removing an item is undone by `item.add`, then `item.reorder`,
-  `item.set_crop` and `item.set_visible` only where the item differed from what
-  `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
+  `item.set_crop`, `item.set_visible` and `item.set_transition` only where the item
+  differed from what `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
   group), `scene.reorder`, `scene.set_transitions` when it had an override, and each
   item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
   history (in `jstream-core`) chooses it.
@@ -87,7 +87,8 @@ the batch **touched**.
   delete also names what it removed), the objects created or deleted, the objects used
   (an item's scene and source, both sources of an `item.set_source`, a `scene`
   source's scene, a duplicate's original, the scene an `item.move` names, the profile
-  an `output.set_encoder` names, a send's source and bus), the properties set (names,
+  an `output.set_encoder` names, a send's source and bus, the preset a scene override
+  or `transition.set_default` names), the properties set (names,
   a scene's role, an item's placement, crop, visibility, index and source, each
   settings parameter, an output's target and encoder choice, a profile's encoding, each
   audio field a `source.set_audio` or `bus.set_fader` sets, a send's gain, a preset's
@@ -100,7 +101,8 @@ the batch **touched**.
   set the same property, both set the scenes' order, both set the canvas size, or both
   set the default preset.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
-  `source.create` of a `builtin` source needs a kind the graph describes, checks each
+  `source.create` of a `builtin` source needs a source kind the graph describes (a
+  transition kind is `invalid_argument` on `kind.kind`), checks each
   given value with the protocol's `ParamDescriptor::check`, and stores the complete map
   with defaults filled in. `source.set_settings` checks and applies a patch (`null`
   resets a parameter to its default) and its inverse is the patch of the old values.

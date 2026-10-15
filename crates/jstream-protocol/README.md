@@ -735,14 +735,17 @@ after 1.0:
   clients skip. An unknown error code still has its `message`. From 0.9, an output's
   `OutputKind`, `RtmpTarget` and `RecordContainer` parse an unknown `type` or value as
   `Unknown` too, so later output kinds won't break a 0.9 client. Not yet covered: a new
-  value of a string enum (`OutputState`, `EntityKind`) inside a known message breaks an
+  value of a string enum (`OutputState`, `EntityKind`, `KindCategory`) inside a known message breaks an
   older client's parse, so adding one needs open question 8 settled first. The same
   break happened once, in 0.9 itself: `OutputKind` had no fallback in 0.7 and 0.8, so a
   0.7 or 0.8 client can't parse `output.list` or `state.get` once a `record` output
   exists (the whole response fails, and `WsControl` ends the session). Whether that
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
-  than 0.13, which sends none, never reads it. The encoder enums (`VideoCodec`,
+  than 0.13, which sends none, never reads it. 0.20 adds the `EntityKind` value
+  `transition` in the same way, but also the `KindCategory` value `transition`, which
+  `kind.list` reports for every transition kind, so a client older than 0.20 can't
+  parse `kind.list` from a 0.20 server. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
@@ -865,7 +868,7 @@ described above.
    `stats.tick` (0.6). High-rate events (`stats.tick`, meters) will need opt-in
    subscriptions. Until then every client receives a tick about once a second while
    the pipeline runs.
-8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
+8. **Unknown values in string enums.** `OutputState`, `EntityKind` and `KindCategory` have no `Unknown`
    fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
    a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
    fallbacks from 0.9, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading

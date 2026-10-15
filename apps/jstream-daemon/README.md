@@ -346,7 +346,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   deleted before each new one.
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
-  (`--token-file`, `--port`, `--output`, `--log-dir`, `--log-level`) don't pay for a
+  (`--token-file`, `--port`, `--output`, `--collection`, `--ui-dir`, `--log-dir`,
+  `--log-level`, `--register-vcam`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
   `jstream-platform` (`Backends`, the key store trait), `jstream-platform-windows` on

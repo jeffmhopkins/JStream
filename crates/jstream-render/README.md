@@ -48,7 +48,8 @@ and calls this crate.
   the placement on every `render`.
 - `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
 - Opacity is a straight-alpha multiplier in `[0, 1]`, default 1. The graph does not
-  store it; the snapshot carries it so `jstream-core` can pass it when it does
+  store it: `jstream-core` passes 1, or a transition's sampled opacity, and will pass
+  the stored value once there is one
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)). The only blend is
   premultiplied src-over. Other modes stay rejected by the engine until a later change
   draws them.

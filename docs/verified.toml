@@ -102,7 +102,7 @@ stamp = { hash = "b3:24cef673281620f5" }
 stamp = { hash = "b3:dba3adb97afc2dd5" }
 
 ["ARCH#data-model"."body"]
-stamp = { hash = "b3:d72def29f6861e6d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio paragraph says protocol 0.19; not-yet list drops VirtualCam as main did; holds" }
+stamp = { hash = "b3:c9ccf3869f41f515", by = "agent:t1-studio", note = "Transitions bullet matches graph/model: Preset fields, Transitions{presets,default} starting at cut, scene overrides, ItemTransition; preset resolution order matches scene.switch" }
 
 ["ARCH#data-model"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -132,10 +132,10 @@ stamp = { hash = "b3:b5397b5d6407b040" }
 stamp = { hash = "b3:d63ee0e9a7bb859a" }
 
 ["ARCH#data-model"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:112f148ae88f982d" }
+stamp = { hash = "b3:9ad7e138599152dc", by = "agent:t1-studio", note = "Transitions bullet matches graph/model: Preset fields, Transitions{presets,default} starting at cut, scene overrides, ItemTransition; preset resolution order matches scene.switch" }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:6412cfa1dc90c301", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
+stamp = { hash = "b3:c99edcc153c067c3", by = "agent:t1-studio", note = "Transitions paragraph matches render/transition.rs: pure sample of elapsed time, shortest-angle rotation, clamps after easing, MIN_PERSPECTIVE, easing golden tests" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -153,7 +153,7 @@ stamp = { hash = "b3:1f10a420e9f6a9bc" }
 stamp = { hash = "b3:fbd9840a8d3a0140", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:99bce65cb31e7d4f", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
+stamp = { hash = "b3:3e2eae346083049f", by = "agent:t1-studio", note = "Transitions paragraph matches render/transition.rs: pure sample of elapsed time, shortest-angle rotation, clamps after easing, MIN_PERSPECTIVE, easing golden tests" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:b006ac4855f4333a", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; pipeline and one-scene compositor text unaffected by the bench" }
@@ -180,7 +180,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:0edf4c378e3b8335" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:0ed7d39913b73022" }
+stamp = { hash = "b3:0971657771ab030d", by = "agent:t1-studio", note = "Transitions paragraph matches render/transition.rs: pure sample of elapsed time, shortest-angle rotation, clamps after easing, MIN_PERSPECTIVE, easing golden tests" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -194,8 +194,11 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
 stamp = { hash = "b3:eaa109533b8798d8" }
 
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/transition.rs"]
+stamp = { hash = "b3:dcf2271ab55bc206", by = "agent:t1-studio", note = "Transitions paragraph matches render/transition.rs: pure sample of elapsed time, shortest-angle rotation, clamps after easing, MIN_PERSPECTIVE, easing golden tests" }
+
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:9ca86438d4d9c457", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
+stamp = { hash = "b3:0cae78491f79628d", by = "agent:t1-studio", note = "Re-read after wave/m2 merge: noun list has studio and transition, 19 tools; schema size updated to ~210 KB from tools.snap" }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:8eea55b34b97d6a9" }
@@ -210,10 +213,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:8c0c258dab2abccb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:5ed182e182beb601", by = "agent:t1-studio", note = "Re-read after wave/m2 merge: noun list has studio and transition, 19 tools; schema size updated to ~210 KB from tools.snap" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:0bc178fa258b5061" }
+stamp = { hash = "b3:a109c81be374af97", by = "agent:t1-studio", note = "Re-read after wave/m2 merge: noun list has studio and transition, 19 tools; schema size updated to ~210 KB from tools.snap" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -234,7 +237,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:d69d4f6ba7c0272d", by = "agent:t1-studio", note = "Re-read after wave/m2 merge: noun list has studio and transition, 19 tools; schema size updated to ~210 KB from tools.snap" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -246,7 +249,7 @@ stamp = { hash = "b3:1c343ec4bf85722c", by = "agent:claude@session_01D6iWjpMkoHb
 stamp = { hash = "b3:febfe552adc09d5b" }
 
 ["ARCH#persistence"."body"]
-stamp = { hash = "b3:7ab4accbf98f6662", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): collections bullet (schema_version, forward migrations, checks as edits) holds; the sends fix needs no migration since schema 1 files load as before" }
+stamp = { hash = "b3:8c35f402ae19fd45", by = "agent:t1-studio", note = "persist/mod.rs saves presets with kind_version and refuses a mismatch; transitions omitted while they equal the initial cut, so no schema_version bump" }
 
 ["ARCH#persistence"."dep:docs/RULES.md#R-API-003"]
 stamp = { hash = "b3:f17cde9b0d3da07c" }
@@ -261,10 +264,10 @@ stamp = { hash = "b3:b655210653447199" }
 stamp = { hash = "b3:a6d28eab770c4e2f" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:0e74948f820c5cef" }
+stamp = { hash = "b3:e5358fc849dcd104", by = "agent:t1-studio", note = "persist/mod.rs saves presets with kind_version and refuses a mismatch; transitions omitted while they equal the initial cut, so no schema_version bump" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:a35871c2c608136a" }
+stamp = { hash = "b3:c1a3d77b794627e9", by = "agent:t1-studio", note = "persist/mod.rs saves presets with kind_version and refuses a mismatch; transitions omitted while they equal the initial cut, so no schema_version bump" }
 
 ["ARCH#principles"."body"]
 stamp = { hash = "b3:5af84c5cc7c0a12d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited principle 8: listeners require a token and check Host, and Origin when present, matching R-SEC-002's new wording; other principles unchanged" }
@@ -738,13 +741,13 @@ stamp = { hash = "b3:3e63f714aef88590" }
 stamp = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client ends on error event, CSP reason): CLI uses the native client; exit 3 Disconnected text still holds." }
+stamp = { hash = "b3:15a22f9ba2bf0c29", by = "agent:t1-studio", note = "Hand-rolled parser, connector seam, mock feature and MCP proxy unchanged" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:5ae0e8dd6e0d9eee" }
+stamp = { hash = "b3:cce756eb11016097", by = "agent:t1-studio", note = "Hand-rolled parser, connector seam, mock feature and MCP proxy unchanged" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -759,10 +762,10 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:c7379cddeb275056" }
+stamp = { hash = "b3:23406e0d15d53ecb", by = "agent:t1-studio", note = "Hand-rolled parser, connector seam, mock feature and MCP proxy unchanged" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:0fd49566ae310db7" }
+stamp = { hash = "b3:659f12b161af3059", by = "agent:t1-studio", note = "Hand-rolled parser, connector seam, mock feature and MCP proxy unchanged" }
 
 ["CRATE-jstream-cli#purpose"."body"]
 stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's, the CLI's commands are unchanged by D5; holds" }
@@ -771,7 +774,7 @@ stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:194117bebc81240c" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:5ae0e8dd6e0d9eee" }
+stamp = { hash = "b3:cce756eb11016097", by = "agent:t1-studio", note = "Contents list (args, run, exit, block, mcp) matches src/" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -786,16 +789,16 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:c7379cddeb275056" }
+stamp = { hash = "b3:23406e0d15d53ecb", by = "agent:t1-studio", note = "Contents list (args, run, exit, block, mcp) matches src/" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:0fd49566ae310db7" }
+stamp = { hash = "b3:659f12b161af3059", by = "agent:t1-studio", note = "Contents list (args, run, exit, block, mcp) matches src/" }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:6dc625770a5edc67", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; D5 note now says protocol 0.19 audio is not in the CLI; holds" }
+stamp = { hash = "b3:2669eb7cc78ef019", by = "agent:t1-studio", note = "Command table matches args.rs/run.rs (scene switch --preset, studio set-preview, studio get); state get text omits transition presets, now listed" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:5ae0e8dd6e0d9eee" }
+stamp = { hash = "b3:cce756eb11016097", by = "agent:t1-studio", note = "Command table matches args.rs/run.rs (scene switch --preset, studio set-preview, studio get); state get text omits transition presets, now listed" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
 stamp = { hash = "b3:16e79b530b6f8e0a" }
@@ -804,13 +807,13 @@ stamp = { hash = "b3:16e79b530b6f8e0a" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:c7379cddeb275056" }
+stamp = { hash = "b3:23406e0d15d53ecb", by = "agent:t1-studio", note = "Command table matches args.rs/run.rs (scene switch --preset, studio set-preview, studio get); state get text omits transition presets, now listed" }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Failures bullet matches ws_web.rs (onerror handler ends the session via end_reason, State::close keeps the first reason; connect reason mentions CSP); test paragraph matches connect.spec.js and ws_config.rs tests. Edited open question 3 so it no longer implies the browser client is untested (e2e via jstream-ui now covers it)." }
+stamp = { hash = "b3:15a22f9ba2bf0c29", by = "agent:t1-studio", note = "Matches mock.rs: switch/set_preview not_found, program and preview move on create/delete with one studio.changed, cut-only presets, transition edits unimplemented" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:3f1f2e11136fc78c", by = "agent:t1-studio", note = "Matches mock.rs: switch/set_preview not_found, program and preview move on create/delete with one studio.changed, cut-only presets, transition edits unimplemented" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -831,7 +834,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:b8a6712200da4241", by = "agent:t1-studio", note = "Matches mock.rs: switch/set_preview not_found, program and preview move on create/delete with one studio.changed, cut-only presets, transition edits unimplemented" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -861,7 +864,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:b8a6712200da4241", by = "agent:t1-studio", note = "Contents list unchanged; mock.rs adds preview and preset handling only" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -876,16 +879,16 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:f8d3caba075c6078", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
+stamp = { hash = "b3:429e3fdbde395b42", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
+stamp = { hash = "b3:15a22f9ba2bf0c29", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
+stamp = { hash = "b3:d89269fdd7ab3f0b", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:3f1f2e11136fc78c", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -906,7 +909,7 @@ stamp = { hash = "b3:9ae9770430e0f01d" }
 stamp = { hash = "b3:c6131e778a1cca80" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audit.rs"]
-stamp = { hash = "b3:63e27b443cbc6f6d" }
+stamp = { hash = "b3:2fd2caf2feae62de", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/collection.rs"]
 stamp = { hash = "b3:6ecb293741341e3b" }
@@ -915,7 +918,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:6b18d551fed7d8b0" }
+stamp = { hash = "b3:0cc93481cc6e11dd", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -927,7 +930,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:29301fe6ecd05436" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:06fe384b67b62cfe" }
+stamp = { hash = "b3:1b8ac29f41ceb3bb", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:9ceafdfcc04ac858" }
@@ -939,7 +942,7 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:976b8a234d4f9a45" }
+stamp = { hash = "b3:46ab2950e970253b", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -957,31 +960,37 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:918fe91ec11037de" }
+stamp = { hash = "b3:6fb3146e948471ea", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/studio.rs"]
-stamp = { hash = "b3:7388509dff80cbe4" }
+stamp = { hash = "b3:d569dc787f814dae", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:c7afb7b2bff7299a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only tests.rs's cpu_pipeline poll helpers changed: pump_until and wait_until wait up to a 30 s HANG_BOUND instead of 5 s (#392). Design describes engine behaviour (start's 10 s compositor-open bound, RenderHub::caught_up polled by tests) and states no test-helper deadline; no engine code changed, so it holds" }
+stamp = { hash = "b3:fa6fe59f082cc7df", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio_routing.rs"]
-stamp = { hash = "b3:732249ad50d11c2c" }
+stamp = { hash = "b3:2dcfb88ee478e4c5", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/collection.rs"]
-stamp = { hash = "b3:31eb7a26da4bb8c3" }
+stamp = { hash = "b3:35302980f941c7ee", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/history.rs"]
-stamp = { hash = "b3:c9688aabcb558c82" }
+stamp = { hash = "b3:1a93fdbcf279b200", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/sources.rs"]
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
+["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/transitions.rs"]
+stamp = { hash = "b3:5d02fd0c7d478709", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
+
+["CRATE-jstream-core#design"."file:crates/jstream-core/src/transition.rs"]
+stamp = { hash = "b3:d6da09b88ea0e086", by = "agent:t1-studio", note = "Merged switch() resolves preset, publishes, routes audio; undo touched set covers T1's preset/override/default edits; snapshot, dedupe and audit text updated" }
+
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:5609012e8331a22f", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
+stamp = { hash = "b3:2e82b2b9258e2b35", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -996,7 +1005,7 @@ stamp = { hash = "b3:9ae9770430e0f01d" }
 stamp = { hash = "b3:c6131e778a1cca80" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audit.rs"]
-stamp = { hash = "b3:63e27b443cbc6f6d" }
+stamp = { hash = "b3:2fd2caf2feae62de", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/collection.rs"]
 stamp = { hash = "b3:6ecb293741341e3b" }
@@ -1005,7 +1014,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:6b18d551fed7d8b0" }
+stamp = { hash = "b3:0cc93481cc6e11dd", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1017,7 +1026,7 @@ stamp = { hash = "b3:7378eab81da1ba15" }
 stamp = { hash = "b3:29301fe6ecd05436" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/lib.rs"]
-stamp = { hash = "b3:06fe384b67b62cfe" }
+stamp = { hash = "b3:1b8ac29f41ceb3bb", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:9ceafdfcc04ac858" }
@@ -1029,7 +1038,7 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:976b8a234d4f9a45" }
+stamp = { hash = "b3:46ab2950e970253b", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1047,37 +1056,43 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:809f3084121b94be" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:918fe91ec11037de" }
+stamp = { hash = "b3:6fb3146e948471ea", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/studio.rs"]
-stamp = { hash = "b3:7388509dff80cbe4" }
+stamp = { hash = "b3:d569dc787f814dae", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:c7afb7b2bff7299a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only tests.rs's cpu_pipeline poll helpers changed: pump_until and wait_until share a 30 s HANG_BOUND instead of 5 s (#392). The Tests list (render and mixer panics reported as failed on the CPU stand-in, the stage-failure, late-tick, teardown tests) names no deadline and still holds; no engine code changed" }
+stamp = { hash = "b3:fa6fe59f082cc7df", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio_routing.rs"]
-stamp = { hash = "b3:732249ad50d11c2c" }
+stamp = { hash = "b3:2dcfb88ee478e4c5", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/collection.rs"]
-stamp = { hash = "b3:31eb7a26da4bb8c3" }
+stamp = { hash = "b3:35302980f941c7ee", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/history.rs"]
-stamp = { hash = "b3:c9688aabcb558c82" }
+stamp = { hash = "b3:1a93fdbcf279b200", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/sources.rs"]
 stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: PR changes only src/tests/sources.rs, moving the animation-by-itself test onto FakeClock via set_source_clock (#293); the Tests list and engine description still hold." }
 
+["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/transitions.rs"]
+stamp = { hash = "b3:5d02fd0c7d478709", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
+
+["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/transition.rs"]
+stamp = { hash = "b3:d6da09b88ea0e086", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
+
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/tests/mcp.rs"]
-stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: tests/mcp.rs change is only block_on's doc comment (hello wait's timer never starts when hello is ready); crate purpose unaffected" }
+stamp = { hash = "b3:e16ea02608fdad15", by = "agent:t1-studio", note = "Studio, Transitions, Audio and Tests bullets match studio.rs, transition.rs, activity.rs; tests list names transitions.rs" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/tests/scenarios.rs"]
 stamp = { hash = "b3:993e780364d6f4d3" }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:50a6bc0982573317", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
+stamp = { hash = "b3:773dd0e8d03cc9b0", by = "agent:t1-studio", note = "pipeline.rs passes the tick's due MediaTime to DrawFn and compose, sampling a running transition" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
@@ -1089,7 +1104,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:976b8a234d4f9a45" }
+stamp = { hash = "b3:46ab2950e970253b", by = "agent:t1-studio", note = "pipeline.rs passes the tick's due MediaTime to DrawFn and compose, sampling a running transition" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1104,16 +1119,16 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
+stamp = { hash = "b3:a0571e296675087f", by = "agent:t1-studio", note = "Re-read main's --ui-dir and delay-load text against serve.rs; option list now matches args.rs" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:f8d3caba075c6078" }
+stamp = { hash = "b3:429e3fdbde395b42", by = "agent:t1-studio", note = "Re-read main's --ui-dir and delay-load text against serve.rs; option list now matches args.rs" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:7ab4accbf98f6662" }
+stamp = { hash = "b3:8c35f402ae19fd45", by = "agent:t1-studio", note = "Re-read main's --ui-dir and delay-load text against serve.rs; option list now matches args.rs" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
 stamp = { hash = "b3:9d6ffbf45d26a653" }
@@ -1371,13 +1386,13 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:21668f51b28f0233" }
 
 ["CRATE-jstream-encode#purpose"."body"]
-stamp = { hash = "b3:1ac237caa31707d0", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale via ARCH data-model; no encode text concerns audio routing; holds" }
+stamp = { hash = "b3:68c5b6647b1e43c8", by = "agent:t1-studio", note = "API list matches lib.rs re-exports; dev-dependencies now name criterion for main's benches" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-encode"]
 stamp = { hash = "b3:984f333744172f87" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#data-model"]
-stamp = { hash = "b3:d72def29f6861e6d" }
+stamp = { hash = "b3:c9ccf3869f41f515", by = "agent:t1-studio", note = "API list matches lib.rs re-exports; dev-dependencies now name criterion for main's benches" }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
@@ -1407,19 +1422,19 @@ stamp = { hash = "b3:df3b8e35c3661ab4" }
 stamp = { hash = "b3:21668f51b28f0233" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:3c55d6ad970afe87", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:d89269fdd7ab3f0b", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#data-model"]
-stamp = { hash = "b3:d72def29f6861e6d" }
+stamp = { hash = "b3:c9ccf3869f41f515", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/apply.rs"]
-stamp = { hash = "b3:c7daf39cfbbae267" }
+stamp = { hash = "b3:d9c8eddf759b95f6", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/audio.rs"]
 stamp = { hash = "b3:3a5dcf3b621fc077" }
@@ -1431,40 +1446,43 @@ stamp = { hash = "b3:b1dc233b2dfda255" }
 stamp = { hash = "b3:42485db0e5133b45" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/lib.rs"]
-stamp = { hash = "b3:f5330420377ac0bd" }
+stamp = { hash = "b3:f6836366cf272f3a", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:112f148ae88f982d" }
+stamp = { hash = "b3:9ad7e138599152dc", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/fixtures/v1.json"]
 stamp = { hash = "b3:a6d28eab770c4e2f" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:0e74948f820c5cef" }
+stamp = { hash = "b3:e5358fc849dcd104", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:a35871c2c608136a" }
+stamp = { hash = "b3:c1a3d77b794627e9", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/plan.rs"]
 stamp = { hash = "b3:c5dfc4f94c042e67" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/read.rs"]
-stamp = { hash = "b3:490d41a1b4731026" }
+stamp = { hash = "b3:0f201a57100fa715", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/target.rs"]
 stamp = { hash = "b3:675f46eea33b1c83", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
-stamp = { hash = "b3:534ac6c88886c8f2" }
+stamp = { hash = "b3:d1c819140a17bf2a", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/touched.rs"]
-stamp = { hash = "b3:943bb9518712a4b5" }
+stamp = { hash = "b3:ecb2c9fbd982bcd4", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
+
+["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/transition.rs"]
+stamp = { hash = "b3:e1e83efa798a9c00", by = "agent:t1-studio", note = "Graph::new, State, Preset and apply.rs inverses checked; item removal restores item.set_transition, source.create needs a source kind" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:c252221e9c760096", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:1ad8058a1063a1cb", by = "agent:t1-studio", note = "Tool table lists studio and transition, matching tools.snap; main's hello timeout text consistent" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:9ca86438d4d9c457" }
+stamp = { hash = "b3:0cae78491f79628d", by = "agent:t1-studio", note = "Tool table lists studio and transition, matching tools.snap; main's hello timeout text consistent" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1497,7 +1515,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:d69d4f6ba7c0272d", by = "agent:t1-studio", note = "Tool table lists studio and transition, matching tools.snap; main's hello timeout text consistent" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1527,7 +1545,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against server.rs (with_timeout/Timer bounding open_early's hello at 3 s) and tests.rs: contents list and 'needs no async runtime' still hold (timer is its own thread)" }
+stamp = { hash = "b3:d69d4f6ba7c0272d", by = "agent:t1-studio", note = "Module list unchanged; T1 touched only tests.rs (transition tool, preview_scene)" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1689,7 +1707,7 @@ stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU
 stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge cascade from ARCH#crate-map: re-read; the crate-map body is unchanged apart from the stamp move, nothing in it bears on GPU frames; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:6412cfa1dc90c301" }
+stamp = { hash = "b3:c99edcc153c067c3", by = "agent:t1-studio", note = "Stale only via ARCH#gpu-pipeline; nothing here depends on T1" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:9074e32b08b81d5b" }
@@ -2103,7 +2121,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:0edf4c378e3b8335" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:0ed7d39913b73022" }
+stamp = { hash = "b3:0971657771ab030d", by = "agent:t1-studio", note = "Passes, cache and placement math unchanged; transition.rs is pure and allocates nothing in render" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -2117,8 +2135,11 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
 stamp = { hash = "b3:eaa109533b8798d8" }
 
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/transition.rs"]
+stamp = { hash = "b3:dcf2271ab55bc206", by = "agent:t1-studio", note = "Passes, cache and placement math unchanged; transition.rs is pure and allocates nothing in render" }
+
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:79c89d3a788a641a", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: render's link to ARCH Threads for the cache hand-off still points at the model's State-to-RT-threads text; holds" }
+stamp = { hash = "b3:f362596d6e576bb4", by = "agent:t1-studio", note = "Transitions bullet matches transition.rs; opacity bullet now says core passes a transition's sampled opacity" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:3c3b2d799f3dc3f1" }
@@ -2127,7 +2148,7 @@ stamp = { hash = "b3:3c3b2d799f3dc3f1" }
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:6412cfa1dc90c301" }
+stamp = { hash = "b3:c99edcc153c067c3", by = "agent:t1-studio", note = "Transitions bullet matches transition.rs; opacity bullet now says core passes a transition's sampled opacity" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2160,7 +2181,7 @@ stamp = { hash = "b3:f1de9efc6510e1ea" }
 stamp = { hash = "b3:0edf4c378e3b8335" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:0ed7d39913b73022" }
+stamp = { hash = "b3:0971657771ab030d", by = "agent:t1-studio", note = "Transitions bullet matches transition.rs; opacity bullet now says core passes a transition's sampled opacity" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7b3daae7d1e65f73" }
@@ -2173,6 +2194,9 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
 stamp = { hash = "b3:eaa109533b8798d8" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/transition.rs"]
+stamp = { hash = "b3:dcf2271ab55bc206", by = "agent:t1-studio", note = "Transitions bullet matches transition.rs; opacity bullet now says core passes a transition's sampled opacity" }
 
 ["CRATE-jstream-render#testing"."body"]
 stamp = { hash = "b3:d6b297a7651495df", by = "agent:claude@session_01UNu1EgwTgkR9zQeW8UaTXV", note = "#361 merge of main after #376 (ADR-0053 ledger): only this PR's bench text and files differ from main; Benchmarks paragraph matches benches/composite.rs (every item rotated, CI panics without an adapter)" }
@@ -2193,10 +2217,10 @@ stamp = { hash = "b3:eaa109533b8798d8" }
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client error-event handling, CSP wording, open question 3 edit): server-side checks, subprotocol token and CSP description unaffected, holds." }
+stamp = { hash = "b3:15a22f9ba2bf0c29", by = "agent:t1-studio", note = "Re-read main's shutdown, close-drain and InvalidLimit text against config.rs/lib.rs/session.rs; studio.changed mapping intact" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:3f1f2e11136fc78c", by = "agent:t1-studio", note = "Re-read main's shutdown, close-drain and InvalidLimit text against config.rs/lib.rs/session.rs; studio.changed mapping intact" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:9bcfb0336f6adad9" }
@@ -2229,7 +2253,7 @@ stamp = { hash = "b3:05057d7979293830" }
 stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
+stamp = { hash = "b3:3f69ef15b4c6796d", by = "agent:t1-studio", note = "Re-read main's shutdown, close-drain and InvalidLimit text against config.rs/lib.rs/session.rs; studio.changed mapping intact" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2262,7 +2286,7 @@ stamp = { hash = "b3:05057d7979293830" }
 stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
+stamp = { hash = "b3:3f69ef15b4c6796d", by = "agent:t1-studio", note = "Module list matches src/; T1 touched only tests.rs" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
@@ -2376,7 +2400,7 @@ stamp = { hash = "b3:ff923b70ae781b73" }
 stamp = { hash = "b3:49945f646dfa549c" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:a216b2e0e45b54ef" }
+stamp = { hash = "b3:aff059a16f4fe1e6", by = "agent:t1-studio", note = "model::load reads program_scene from studio.get, ignores preview, falls back to first non-group scene" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2388,7 +2412,7 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:263637b2f03e8558", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
+stamp = { hash = "b3:15a22f9ba2bf0c29", by = "agent:t1-studio", note = "Main's blocked-URL wording consistent; nothing preview/transition-related claimed" }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -2400,7 +2424,7 @@ stamp = { hash = "b3:8c1bea968ba0a189" }
 stamp = { hash = "b3:49945f646dfa549c" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:a216b2e0e45b54ef" }
+stamp = { hash = "b3:aff059a16f4fe1e6", by = "agent:t1-studio", note = "Main's blocked-URL wording consistent; nothing preview/transition-related claimed" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2442,7 +2466,7 @@ stamp = { hash = "b3:8c1bea968ba0a189" }
 stamp = { hash = "b3:49945f646dfa549c" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
-stamp = { hash = "b3:a216b2e0e45b54ef" }
+stamp = { hash = "b3:aff059a16f4fe1e6", by = "agent:t1-studio", note = "Contents list matches src/; T1 only adapted canvas/model.rs to new studio.get fields" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2481,7 +2505,7 @@ stamp = { hash = "b3:cd1222001aad0cda" }
 stamp = { hash = "b3:e97684fe742d6756" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/mock-daemon/src/main.rs"]
-stamp = { hash = "b3:926ac43cee05f291" }
+stamp = { hash = "b3:0ccf4c7697546ecd", by = "agent:t1-studio", note = "Mock daemon seeds Intro and Main, switch to main now with preset_id None; serves ui_dir" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/package.json"]
 stamp = { hash = "b3:adf0e4e847f64861", by = "agent:deps-thread", note = "Re-read after @playwright/test 1.56.1 -> 1.64.0: still pinned exactly in package.json and package-lock.json; mock daemon, per-test daemons, console-error rule, global setup and JSTREAM_E2E_CHROMIUM do not depend on the Playwright version" }
@@ -2877,10 +2901,10 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): R-API-003 holds: schema stays 1 and a pre-D5 v1 file now loads with its audio sources' master sends, as it did on main" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:7ab4accbf98f6662" }
+stamp = { hash = "b3:8c35f402ae19fd45", by = "agent:t1-studio", note = "R-API-001..004 text unchanged by T1 and still accurate" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:3f1f2e11136fc78c", by = "agent:t1-studio", note = "R-API-001..004 text unchanged by T1 and still accurate" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
@@ -2916,7 +2940,7 @@ stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCt
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:6dc625770a5edc67" }
+stamp = { hash = "b3:2669eb7cc78ef019", by = "agent:t1-studio", note = "Stale only via CLI usage; smoke commands unchanged by T1 or the merge" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
@@ -2928,7 +2952,7 @@ stamp = { hash = "b3:a560da0e5768f43e" }
 stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:6dc625770a5edc67" }
+stamp = { hash = "b3:2669eb7cc78ef019", by = "agent:t1-studio", note = "Stale only via CLI usage; T1's scene switch --preset and studio set-preview touch no command the runbook uses" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
