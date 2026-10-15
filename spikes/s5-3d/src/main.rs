@@ -23,7 +23,10 @@ const WIDTH: u32 = 960;
 const HEIGHT: u32 = 540;
 const BACKGROUND: [f32; 3] = [0.02, 0.02, 0.02];
 
-#[allow(clippy::too_many_arguments, reason = "one test-scene builder taking every ADR-0022 field, in order")]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "one test-scene builder taking every ADR-0022 field, in order"
+)]
 fn geometry(
     center: (f32, f32),
     size: (f32, f32),
