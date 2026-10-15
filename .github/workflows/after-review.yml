@@ -1,0 +1,116 @@
+# after-review: the CI jobs a PR runs only once review passes (ADR-0054). review-gate.yml
+# dispatches this workflow on the PR's branch when it sets `review-gate` to success. Pushes
+# to main run it too. The job names match the required checks in docs/RULES.md#R-GIT-003,
+# and none of them is defined in ci.yml, so neither workflow reports a skipped run under
+# the other's names.
+# Editing this file is a governance change (R-GOV-001).
+
+# Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
+# Dependabot proposes updates (ADR-0018). Manual pins: resolve with `git ls-remote --tags`, dereferencing annotated tags (^{}).
+
+name: after-review
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  # A PR that changes this file runs it on every push: the change gets tested, and
+  # workflow_dispatch can't start a workflow that isn't on the default branch yet.
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: [.github/workflows/after-review.yml]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: after-review-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  clippy:
+    strategy:
+      matrix:
+        os: [windows-latest]   # keeps the required check name `clippy (windows-latest)`
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # Platform tests (`hw-tests`) only run on real hardware, but they must still compile:
+      # type-check them on the platform they target.
+      - run: cargo clippy -p jstream-platform-windows --all-targets --features hw-tests --locked -- -D warnings
+
+  test:
+    strategy:
+      matrix:
+        os: [windows-latest]   # keeps the required check name `test (windows-latest)`
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Test
+        run: cargo test --workspace --locked
+
+  # The web UI end to end (crates/jstream-ui/tests/e2e/README.md): Playwright drives the
+  # trunk build in the runner's Google Chrome against the mock daemon. trunk and the
+  # wasm-bindgen CLI are installed as in `wasm`; Playwright comes from the lockfile, with
+  # install scripts off, and downloads no browser. Not required (R-GIT-003).
+  ui-e2e:
+    runs-on: ubuntu-latest
+    env:
+      TRUNK_VERSION: 0.21.14
+      TRUNK_SHA256: f2b4680cd239693a646a2795e4633c625328d7b2a044fbe749fa3a2fe9e7036b
+      WASM_BINDGEN_VERSION: 0.2.129
+      WASM_BINDGEN_SHA256: 82d12bb940e2d4e72e0d5605387fc1b8ca179044e012b620f0ce4e7440e8320e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Install trunk and the wasm-bindgen CLI
+        run: |
+          set -euo pipefail
+          locked=$(cargo metadata --format-version 1 --locked | jq -r '.packages[] | select(.name == "wasm-bindgen") | .version')
+          if [ "$locked" != "$WASM_BINDGEN_VERSION" ]; then
+            echo "::error::Cargo.lock has wasm-bindgen $locked: set WASM_BINDGEN_VERSION and WASM_BINDGEN_SHA256 in ci.yml to match"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/bin"
+          cd "$RUNNER_TEMP"
+          curl -sSLf -o trunk.tar.gz "https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${TRUNK_SHA256}  trunk.tar.gz" | sha256sum -c -
+          tar xzf trunk.tar.gz -C bin trunk
+          wb="wasm-bindgen-${WASM_BINDGEN_VERSION}-x86_64-unknown-linux-musl"
+          curl -sSLf -o wasm-bindgen.tar.gz "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${WASM_BINDGEN_VERSION}/${wb}.tar.gz"
+          echo "${WASM_BINDGEN_SHA256}  wasm-bindgen.tar.gz" | sha256sum -c -
+          tar xzf wasm-bindgen.tar.gz --strip-components=1 -C bin "${wb}/wasm-bindgen"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Build the UI
+        working-directory: crates/jstream-ui
+        run: trunk build --locked --offline
+      - name: Install Playwright
+        working-directory: crates/jstream-ui/tests/e2e
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: End-to-end tests
+        working-directory: crates/jstream-ui/tests/e2e
+        run: |
+          set -euo pipefail
+          JSTREAM_E2E_CHROMIUM="$(command -v google-chrome)"
+          export JSTREAM_E2E_CHROMIUM
+          npx --no-install playwright test
+
+  # Not required until M3 (R-GIT-003).
+  macos:
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - run: cargo test --workspace --locked

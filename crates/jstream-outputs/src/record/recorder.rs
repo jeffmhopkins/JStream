@@ -1,4 +1,5 @@
-//! [`Recorder`]: fMP4 to a temporary file, synced per fragment, renamed on finish.
+//! [`Recorder`]: fMP4 to a temporary file, synced per fragment, moved into place on
+//! finish without replacing anything.
 
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
@@ -35,10 +36,12 @@ pub fn temp_path_for(path: &Path) -> Option<PathBuf> {
 /// completes (one per video keyframe, or per second of audio-only) is written and then
 /// synced with `sync_data`, so a crash or power loss keeps every completed fragment and
 /// loses at most the one being built. [`Recorder::finish`] writes the last fragment,
-/// syncs, closes, and renames the file to `path`.
+/// syncs, closes, and moves the file to `path`: it hard links it there, then unlinks the
+/// `.part` name.
 ///
 /// Nothing is ever overwritten: an existing file at `path` or at its `.part` name is
-/// [`RecordError::Exists`], checked on create and again just before the rename. A
+/// [`RecordError::Exists`], checked on create and enforced atomically by the final
+/// move, which never replaces a file that appeared meanwhile. A
 /// write or sync error (a full disk is [`RecordError::DiskFull`]) ends the recording:
 /// later calls return [`RecordError::Ended`], and the `.part` file is kept, readable
 /// up to its last complete fragment. Dropping a recorder without finishing it keeps
@@ -96,8 +99,8 @@ impl Recorder {
         self.sink.write_packet(packet)
     }
 
-    /// Writes the last fragment, syncs, closes the file and renames it to the
-    /// destination, which it returns.
+    /// Writes the last fragment, syncs, closes the file and moves it to the destination
+    /// (hard linked there, then the `.part` name unlinked), which it returns.
     ///
     /// # Errors
     /// [`RecordError::Ended`] after an earlier failure, [`RecordError::Finish`] when the
@@ -109,18 +112,13 @@ impl Recorder {
         let Self { path, mut sink } = self;
         sink.finish()?;
         let temp = sink.path.clone();
-        // Close before renaming: Windows can't rename a file that is open.
+        // Close before moving: the fallback renames, and Windows can't rename an open file.
         drop(sink);
-        check_absent(&path)?;
-        fs::rename(&temp, &path).map_err(|source| RecordError::Rename {
-            from: temp,
-            to: path.clone(),
-            source,
-        })?;
+        move_no_replace(&temp, &path)?;
         Ok(path)
     }
 
-    /// The destination the finished file is renamed to.
+    /// The destination the finished file is moved to.
     pub fn path(&self) -> &Path {
         &self.path
     }
@@ -153,6 +151,84 @@ fn check_absent(path: &Path) -> Result<(), RecordError> {
             source,
         }),
     }
+}
+
+/// Moves the finished file `from` to `to` without ever replacing a file at `to`.
+///
+/// `std::fs::rename` replaces an existing destination on every platform, so checking
+/// first and renaming after races a file created in between (#355). Instead this hard
+/// links `from` to `to`, which fails with `AlreadyExists` atomically when `to` exists
+/// (`link` on Unix, `CreateHardLinkW` on Windows), and then removes `from`. That keeps
+/// the crate free of `unsafe` and of a new platform dependency; the true no-replace
+/// renames (`renameat2(RENAME_NOREPLACE)`, `MoveFileExW` without
+/// `MOVEFILE_REPLACE_EXISTING`) need one.
+///
+/// A file system without hard links (FAT, exFAT) falls back to
+/// [`reserve_then_rename`]. If removing `from` fails after the link, the recording is
+/// already complete at `to`, so this only logs the stray `.part` name.
+///
+/// # Errors
+/// [`RecordError::Exists`] when a file is at `to`, and [`RecordError::Rename`] when
+/// neither way works. `from` is kept in both cases.
+fn move_no_replace(from: &Path, to: &Path) -> Result<(), RecordError> {
+    match fs::hard_link(from, to) {
+        Ok(()) => {
+            if let Err(err) = fs::remove_file(from) {
+                tracing::warn!(
+                    part = %from.display(),
+                    path = %to.display(),
+                    %err,
+                    "recording finished, but its .part name could not be removed"
+                );
+            }
+            Ok(())
+        }
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => Err(RecordError::Exists {
+            path: to.to_path_buf(),
+        }),
+        Err(link_err) => {
+            tracing::debug!(
+                path = %to.display(),
+                %link_err,
+                "hard link failed, reserving the destination instead"
+            );
+            reserve_then_rename(from, to)
+        }
+    }
+}
+
+/// The fallback of [`move_no_replace`] for file systems without hard links: creates
+/// `to` exclusively (`create_new`, atomic on every platform) as an empty placeholder,
+/// then renames `from` over that placeholder. The rename replaces only the placeholder,
+/// unless something else removes it and puts a file at `to` in the moment between the
+/// two steps; a file at `to` before the call is never overwritten. A crash
+/// between the two steps leaves an empty `to` beside the complete `.part` file. A
+/// failed rename removes the placeholder.
+///
+/// # Errors
+/// [`RecordError::Exists`] when a file is at `to`, and [`RecordError::Rename`] when
+/// the placeholder can't be created or the rename fails. `from` is kept in both cases.
+fn reserve_then_rename(from: &Path, to: &Path) -> Result<(), RecordError> {
+    let rename_error = |source| RecordError::Rename {
+        from: from.to_path_buf(),
+        to: to.to_path_buf(),
+        source,
+    };
+    match OpenOptions::new().write(true).create_new(true).open(to) {
+        // Close the placeholder before renaming over it: Windows can't replace an open
+        // file.
+        Ok(placeholder) => drop(placeholder),
+        Err(err) if err.kind() == io::ErrorKind::AlreadyExists => {
+            return Err(RecordError::Exists {
+                path: to.to_path_buf(),
+            });
+        }
+        Err(err) => return Err(rename_error(err)),
+    }
+    fs::rename(from, to).map_err(|err| {
+        let _ = fs::remove_file(to);
+        rename_error(err)
+    })
 }
 
 /// A destination that can be made durable. A file syncs its data; tests use a writer
