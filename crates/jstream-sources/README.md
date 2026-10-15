@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:75adfc559251accd", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review round 1 (N1-N3): re-read Context/Limits (decoded-memory cap now counts GIF canvas and restore copy, PNG/WebP buffers; WebP decoder capped at the same figure), color size cap wording (16384^2 RGBA is exactly 1 GiB), and the <=10 ms frame rule against decode.rs/color.rs" }
+verified = { hash = "b3:0dec987513c39899", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review round 2 B2: re-read the Limits paragraph against decode.rs and image-webp 0.2.4 (limit read only for ICCP/EXIF/XMP), gif 0.14.2 (MemoryLimit per frame) and zune-jpeg 0.5.15 (mcu_prog.rs whole-image i16 coefficients per component); counted buffers (1 canvas still, 2 animated WebP) and the listed uncounted ones match" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -43,9 +43,17 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   (`AssetRoots`), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
   sides and 1 GiB of decoded memory by default. The image's size is checked before
   anything is allocated for it, and the decoded-memory cap counts the frames kept plus
-  the working buffers held while decoding (a GIF's canvas and its "restore to
-  previous" copy, the PNG and WebP output buffers), so a small file can't decode into
-  a huge image. The WebP decoder's own allocations are capped at the same figure.
+  the working buffers held while decoding: a GIF's canvas and its "restore to
+  previous" copy, the PNG and WebP output buffers, and the pixel buffers `image-webp`
+  allocates itself (its own memory limit covers only metadata chunks), counted at
+  their size in 0.2: one RGBA canvas for a still, two for an animation. Each new
+  buffer is checked before it is allocated, so a small file can't decode into a huge
+  image. Not counted: the decoders' row buffers and tables; the GIF decoder's
+  per-frame buffer, which `gif`'s own limit caps at the same figure; and
+  `zune-jpeg`'s internal planes, which for a progressive JPEG hold the whole image's
+  coefficients (2 bytes per sample of each colour component, so 6 bytes a pixel for
+  full-resolution YCbCr) while it decodes, bounded only by the side
+  limit.
 
 **Kinds.**
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight

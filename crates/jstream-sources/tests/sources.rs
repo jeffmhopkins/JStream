@@ -541,3 +541,25 @@ fn a_gif_working_canvas_counts_against_the_cap() {
     assert!(matches!(open_with(63), Err(SourceError::TooLarge { .. })));
     assert!(open_with(64).is_ok());
 }
+
+/// The cap counts what `image-webp` allocates for pixels, which its own limit doesn't:
+/// `anim.webp` is a 4x4 canvas (64 bytes) with alpha, so decoding it holds the output
+/// buffer (64), the decoder's frame and canvas (128) and three kept frames (192).
+#[test]
+fn a_webp_animation_counts_the_decoders_buffers() {
+    let dir = folder("webp-cap");
+    std::fs::copy(data("anim.webp"), dir.join("anim.webp")).expect("a fixture");
+    let open_with = |max_decoded_bytes| {
+        let limits = Limits {
+            max_decoded_bytes,
+            ..Limits::default()
+        };
+        let ctx = Context {
+            limits,
+            ..ctx(&dir)
+        };
+        Registry::builtin().create("image", &image_settings("anim.webp"), &ctx)
+    };
+    assert!(matches!(open_with(383), Err(SourceError::TooLarge { .. })));
+    assert!(open_with(384).is_ok());
+}

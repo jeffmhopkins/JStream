@@ -83,7 +83,8 @@ struct Decoder<'a> {
     path: &'a str,
     format: Format,
     limits: &'a Limits,
-    /// Bytes of the frames kept so far, against `limits.max_decoded_bytes`.
+    /// Bytes held so far, frames kept plus working buffers, against
+    /// `limits.max_decoded_bytes`.
     decoded_bytes: u64,
 }
 
@@ -118,11 +119,11 @@ impl Decoder<'_> {
         usize::try_from(bytes).map_err(|_| self.too_large(format!("{width}x{height}")))
     }
 
-    /// Fails when `more` bytes of frames would pass the decoded-size limit.
+    /// Fails when holding `more` bytes would pass the decoded-size limit.
     fn room(&self, more: u64) -> Result<(), SourceError> {
         let max = self.limits.max_decoded_bytes;
         if self.decoded_bytes.saturating_add(more) > max {
-            return Err(self.too_large(format!("its frames decode to over {max} bytes")));
+            return Err(self.too_large(format!("decoding it needs over {max} bytes")));
         }
         Ok(())
     }
@@ -232,13 +233,20 @@ impl Decoder<'_> {
     }
 
     /// A still or animated WebP. The decoder composites animation frames itself.
+    ///
+    /// `image-webp`'s own memory limit covers only its metadata chunks (ICC, EXIF,
+    /// XMP), so the buffers it allocates for pixels are counted here instead, at their
+    /// size in 0.2: a still image's scratch frame, or an animation's frame and canvas,
+    /// each at most one RGBA canvas.
     fn webp(&mut self, bytes: &[u8]) -> Result<Decoded, SourceError> {
         let mut decoder =
             image_webp::WebPDecoder::new(Cursor::new(bytes)).map_err(|e| self.err(e))?;
         let (width, height) = decoder.dimensions();
-        self.canvas(width, height)?;
+        let frame_len = self.canvas(width, height)?;
         decoder
             .set_memory_limit(usize::try_from(self.limits.max_decoded_bytes).unwrap_or(usize::MAX));
+        let internal = if decoder.is_animated() { 2 } else { 1 };
+        self.working(frame_len.saturating_mul(internal))?;
         let alpha = decoder.has_alpha();
         let buf_len = decoder
             .output_buffer_size()
@@ -254,8 +262,10 @@ impl Decoder<'_> {
         };
         self.working(buf_len)?;
         let mut buf = vec![0; buf_len];
+        let frame_bytes = frame_len as u64;
         if !decoder.is_animated() {
             decoder.read_image(&mut buf).map_err(|e| self.err(e))?;
+            self.room(frame_bytes)?;
             return self.still(width, height, to_rgba(&buf));
         }
         let plays = match decoder.loop_count() {
@@ -265,6 +275,7 @@ impl Decoder<'_> {
         let mut frames = Vec::new();
         for _ in 0..decoder.num_frames() {
             let delay = decoder.read_frame(&mut buf).map_err(|e| self.err(e))?;
+            self.room(frame_bytes)?;
             self.keep(&mut frames, to_rgba(&buf), delay)?;
         }
         if frames.is_empty() {
