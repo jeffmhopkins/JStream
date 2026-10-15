@@ -43,14 +43,14 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | Milestone | Progress | Merged | In review | Planned |
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
-| [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `████████░░` 83% | 15 | 2 | 1 |
+| [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `█████████░` 89% | 16 | 1 | 1 |
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 83% | 29 | 3 | 3 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 32% | 6 | 7 | 6 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 30% | 6 | 8 | 6 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 13% | 1 | 1 | 6 |
 
-74 of 106 items are merged; 7 of those still wait on a run on Windows hardware.
+75 of 107 items are merged; 8 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -72,7 +72,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M1a</b> Thin slice to YouTube: 15 of 18 merged</summary>
+<summary><b>M1a</b> Thin slice to YouTube: 16 of 18 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -88,7 +88,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | A6 | Daemon --collection and audit log | ✅ merged | #232 |
 | A4 | Go-live runbook and smoke | 🧪 merged, Windows run pending: smoke script run | #234 |
 | E3a | GPU capture frames | ✅ merged | #173 |
-| E3b | Render takes GPU frames | 🔍 in review | #219 |
+| E3b | Render takes GPU frames | 🧪 merged, Windows run pending: windows_gpu hardware test (#334) | #219 |
 | Y1 | jstream-youtube crate | ✅ merged | #167 |
 | Y2 | OAuth token store | ✅ merged | #169 |
 | YA | ADR-0041 one sign-in | ✅ merged | #214 |
@@ -148,7 +148,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | G1 | vcam protocol crate | ✅ merged | #144 |
 | G2 | vcam media source DLL | 🧪 merged, Windows run pending: pacing rerun | #174, #195, #200, #229 |
 | G3a | vcam producer (engine side) | ✅ merged | #194 |
-| G3b | VirtualCam output kind | 🧪 merged, Windows run pending: WindowsVcam in the daemon's backends, then a camera run | #213 |
+| G3b | VirtualCam output kind | 🧪 merged, Windows run pending: camera run on Windows 11 | #213, #297 |
 | G3c | --register-vcam | 🧪 merged, Windows run pending: registration check with UAC | #235 |
 | P1 | Portable Windows zip | ⏳ planned |  |
 
@@ -172,7 +172,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M2</b> UI: 6 of 19 merged</summary>
+<summary><b>M2</b> UI: 6 of 20 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -187,6 +187,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | U4p | Live preview on canvas | ⏳ planned |  |
 | U1 | Preview stream | 🔍 in review | #251 |
 | U5 | Tauri desktop app | 🧪 merged, Windows run pending: desktop app check | #258 |
+| Q3 | UI end-to-end tests | 🔍 in review | #309 |
 | T1 | Studio mode and transitions | 🔍 in review | #260 |
 | T1u | Studio-mode UI | ⏳ planned |  |
 | E2 | Video mixes | 🔍 in review | #259 |

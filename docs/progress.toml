@@ -216,8 +216,9 @@ prs = [173]
 id = "E3b"
 milestone = "M1a"
 title = "Render takes GPU frames"
-status = "review"
+status = "hardware"
 prs = [219]
+note = "windows_gpu hardware test (#334)"
 
 [[item]]
 id = "Y1"
@@ -527,8 +528,8 @@ id = "G3b"
 milestone = "M1c"
 title = "VirtualCam output kind"
 status = "hardware"
-prs = [213]
-note = "WindowsVcam in the daemon's backends, then a camera run"
+prs = [213, 297]
+note = "camera run on Windows 11"
 
 [[item]]
 id = "G3c"
@@ -685,6 +686,13 @@ title = "Tauri desktop app"
 status = "hardware"
 prs = [258]
 note = "desktop app check"
+
+[[item]]
+id = "Q3"
+milestone = "M2"
+title = "UI end-to-end tests"
+status = "review"
+prs = [309]
 
 [[item]]
 id = "T1"

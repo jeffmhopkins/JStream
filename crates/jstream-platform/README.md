@@ -145,7 +145,7 @@ adapter LUID.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:f0f8eb989be584ea", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: stamp-only conflict; re-read the E3c encoder text (on_context, release fence, FrameSync::platform, LUID filter built, vendor-ID not); holds" }
+verified = { hash = "b3:2f1bea2cadd219f3", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (f85c8b2) into #325: stamp-only conflict; E3c encoder text (on_context, release fence, FrameSync::platform, LUID filter) unchanged by #219's main merge; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
