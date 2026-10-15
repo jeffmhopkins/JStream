@@ -398,8 +398,17 @@ with 8 stereo 48 kHz inputs. Measured on a cloud container (4 vCPUs of an Intel 
 Run it on the target machine with
 `cargo test --release -p jstream-audio --test cost -- --ignored --nocapture`.
 
+**Benchmarks** (`benches/mix.rs`, criterion). `mix_block` times the same three mixer
+scenarios per block, and `input_push` times one engine block's worth of device frames (1024 at 48 kHz, 940 or 941
+at 44.1 kHz) through `InputProducer::push_packet` (downmix and adaptive resampling).
+Measured on a cloud container (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux 6.18), release
+build, mean: `input_push` about 200 µs at either rate (0.9% of the block period). The
+`bench` workflow records them on every push to `main`
+([R-GIT-003](../../docs/RULES.md#R-GIT-003)). Run them with
+`cargo bench -p jstream-audio --bench mix`.
+
 **Not yet enforced or measured:**
-- The cost on Windows hardware, and of resampling, is not measured.
+- The cost on Windows hardware is not measured.
 - Catching a panic at the thread boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) is the engine's job, where the threads are.
 
