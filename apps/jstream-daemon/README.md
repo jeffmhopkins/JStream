@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:483779712b0c3581", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: round 1 B1 wording kept (server serves ui_dir, daemon has no flag yet); holds" }
+verified = { hash = "b3:1ec6408a919cd732", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: logs.rs now takes the data dir from jstream-platform paths; the Log files bullet still holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -72,7 +72,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:71f39c73730f3eae", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 B2: exit-code 0 row now includes a successful --register-vcam; N1: Virtual camera bullet says an already-current registration keeps the file's ACL as it is" }
+verified = { hash = "b3:cbaf3677673e1716", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: Log files bullet adds the portable data folder and that a marker avoids the no-HOME/APPDATA failure; rest unchanged" }
 -->
 
 ```sh
@@ -119,9 +119,10 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   are kept and older ones deleted, so the logs stay under about 100 MiB. The default
   directory is `logs` in the data directory: `%APPDATA%\JStream` on Windows,
   `~/Library/Application Support/JStream` on macOS, `$XDG_DATA_HOME/jstream` (else
-  `~/.local/share/jstream`) elsewhere. At `info` and above, the first line logged names the file. A log
-  directory that can't be created, or a data directory that can't be found (no `HOME`
-  or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
+  `~/.local/share/jstream`) elsewhere, or a `data` folder beside the exe when a file
+  named `portable` sits there (ADR-0020). At `info` and above, the first line logged
+  names the file. A log directory that can't be created, or a data directory that can't
+  be found (no portable marker, and no `HOME` or `APPDATA`) without `--log-dir`, is a startup failure (exit 1), before the token
   file is touched. On Unix the directories it creates are mode `0700` and the files
   `0600`.
 - **Crash reports.** A panic writes `crash-<UTC time>-<pid>-<n>.txt` into the log
@@ -185,7 +186,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2141744e29b981e6", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
+verified = { hash = "b3:753246564401c3c7", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data directory bullet now points at jstream-platform paths (portable marker handled); deps bullet adds it; open question 5 rewritten" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -305,10 +306,10 @@ verified = { hash = "b3:2141744e29b981e6", by = "agent:claude@session_01SZXaqcgU
   Pruning skips the file being written but may delete another running daemon's (on
   Unix it keeps writing to the unlinked file; on Windows `std` opens files with
   `FILE_SHARE_DELETE`, so the same is expected, untested).
-- **The data directory** is found from the environment (`APPDATA`, `HOME`,
-  `XDG_DATA_HOME`), not a crate: three cases don't pay for `dirs`, which adds
-  `dirs-sys` and, on Windows, `windows-sys`. ADR-0020's `portable` marker is not
-  handled yet ([Open questions](#open-questions)).
+- **The data directory** comes from `jstream-platform`'s `paths` module, the desktop
+  app's too: `%APPDATA%\JStream`, or a `data` folder beside the exe when a `portable`
+  marker file sits there ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md),
+  [jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **Crash reports** (`crash.rs`, [R-SEC-004](../../docs/RULES.md#R-SEC-004)). The panic
   hook, installed as soon as the log directory exists, writes the daemon and protocol
   versions, OS and architecture, the UTC time, the process ID, the thread name, the
@@ -326,8 +327,8 @@ verified = { hash = "b3:2141744e29b981e6", by = "agent:claude@session_01SZXaqcgU
   (`--token-file`, `--port`, `--output`, `--log-dir`, `--log-level`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
-  `jstream-platform` (`Backends`, the key store trait), `jstream-platform-windows` on
-  Windows only (the backends, the key store and the Media Foundation check),
+  `jstream-platform` (`Backends`, the key store trait, the data directory),
+  `jstream-platform-windows` on Windows only (the backends, the key store and the Media Foundation check),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
   check), `anyhow`, `tracing` (the startup line) and `blake3`
   (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,
@@ -366,10 +367,10 @@ verified = { hash = "b3:2141744e29b981e6", by = "agent:claude@session_01SZXaqcgU
    ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001); the daemon forbids `unsafe`), or
    an out-of-process monitor (`crash-handler` and `minidumper`), whose attach call is
    `unsafe` too and which adds a helper process. Either needs testing on Windows.
-5. **Data directory.** The log directory's default should come from the same settings
-   code as question 2, which will also handle ADR-0020's `portable` marker (state in a
-   folder beside the exe). Until then the daemon reads `APPDATA`, `HOME` and
-   `XDG_DATA_HOME` itself, and `--log-dir` overrides them.
+5. **Data directory.** The log directory's default is `logs` in the data directory
+   (`jstream-platform`'s `paths`, which handles ADR-0020's `portable` marker), and
+   `--log-dir` overrides it. The token file (question 2) and the collection
+   (question 6) don't default to it yet.
 6. **Default collection file.** Without `--collection` the collection is not saved.
    A default (in the data directory, as [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)
    places collections) would make every run persist, but needs the same settings code as

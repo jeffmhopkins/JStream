@@ -6440,6 +6440,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "blake3",
+ "flate2",
  "globset",
  "pulldown-cmark",
  "serde_json",

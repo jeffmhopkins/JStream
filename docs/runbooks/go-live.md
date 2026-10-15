@@ -17,7 +17,7 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
+verified = { hash = "b3:1d308f508d80a48c", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via daemon usage (log files bullet adds the portable data folder); runbook uses the default %APPDATA% layout and run-folder logs, holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:201134c5a2e01771", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through server design; steps unchanged; holds" }
+verified = { hash = "b3:5be5c3f3494cd7b2", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via daemon usage (log files bullet adds the portable data folder); runbook uses the default %APPDATA% layout and run-folder logs, holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:16b8dbc81732feb1", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
+verified = { hash = "b3:cb7e01f55674802d", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via daemon usage (log files bullet adds the portable data folder); runbook uses the default %APPDATA% layout and run-folder logs, holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:f3bb30b377a9616c", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (#231 D7b): stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
+verified = { hash = "b3:1317751946650021", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: new Data folder bullet for paths.rs; deps unchanged (std only), no unsafe" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -105,6 +105,15 @@ Contents:
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
   capture device, audio, codec and GPU-interop backends and its optional virtual-camera
   sink.
+- **Data folder** (`paths.rs`, [ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)):
+  `paths::data_dir`, the one folder every host keeps its state in. It is a folder named
+  `data` beside the exe when a file named `portable` sits there (so the app can run from
+  a USB stick), and otherwise the platform's per-user data folder: `%APPDATA%\JStream`
+  on Windows, `~/Library/Application Support/JStream` on macOS, and
+  `$XDG_DATA_HOME/jstream` (else `~/.local/share/jstream`) elsewhere. Only absolute
+  variables count, so nothing is written beside the exe without the marker. It reads the
+  environment itself: three cases don't pay for `dirs`. A plain function, not a trait:
+  no host needs to swap it.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
   (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
@@ -137,7 +146,7 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:c6e56f3ac4e834a3", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: stale only via ARCH crate-map (jstream-ui row now layer 3); GPU frame design untouched" }
+verified = { hash = "b3:22b26936933cb8c5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale only via the crate-map platform row gaining paths; GPU frame design untouched" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:22adc13bf8a5eb42", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only: the daemon registers until the desktop app has --register-vcam): the Registration bullet's jstream-daemon --register-vcam still holds; rest unchanged" }
+verified = { hash = "b3:46fdcaf0ea760c0c", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH packaging (State and Building the zip bullets); DLL name and registration text unchanged, holds" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -84,7 +84,7 @@ and the example on Windows.
 <!-- @section
 covers = ["crates/jstream-vcam-windows/examples/**"]
 depends_on = ["docs/ARCHITECTURE.md#packaging"]
-verified = { hash = "b3:9ffd14a404b267aa", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
+verified = { hash = "b3:da0eada4447c1c48", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH packaging (new dist bullet); regsvr32/vcam_smoke steps unchanged" }
 -->
 
 `examples/vcam_smoke` stands in for the engine side: it publishes the ring, the fence and

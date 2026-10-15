@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f0925d97c67e7dbc", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
+verified = { hash = "b3:30dcae94297a3b25", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs removed, contents list says logs.rs and the paths module; release build of the portable folder now cargo xtask dist" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -36,22 +36,22 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard and
   shutdown.
-- **Data folder and log file** (`data.rs`, `logs.rs`).
+- **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds.
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
-  script's escaping, the data folder and the capped log file).
+  script's escaping and the capped log file).
 
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
 virtual camera's registration mode (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, crash
-reports, MCP and the token for outside clients, and the release build of the portable
-folder.
+reports, and MCP and the token for outside clients. `cargo xtask dist` builds the
+portable folder ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 
 <a id="usage"></a>
 ## Usage
 <!-- @section
-covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:1806a584c2b4f0f0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
+covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
+verified = { hash = "b3:ea77775577946bf9", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data folder bullet unchanged in behaviour, now names jstream-platform paths; covers drops the deleted data.rs" }
 -->
 
 On Windows, with the UI built first:
@@ -73,7 +73,9 @@ Closing the window stops the engine.
 
 - **Data folder.** `%APPDATA%\JStream`, the daemon's too. When a file named `portable`
   sits beside the exe, a `data` folder beside the exe instead, so the app can run from
-  a USB stick ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)).
+  a USB stick ([ADR-0020](../../docs/adr/0020-portable-windows-distribution.md)). Both
+  hosts find it through `jstream-platform`'s `paths` module
+  ([jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **The collection** is `collection.json` in the data folder, created empty the first
   time and saved on every change, so the next start opens where the last one stopped.
 - **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start and
@@ -92,7 +94,7 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:8f9d5cf1567e1fcb", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through amended R-SEC-002; desktop serves loopback with an in-memory token and pairs nothing, so the amendment changes nothing here; holds" }
+verified = { hash = "b3:9bd6579854d0766e", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs moved to jstream-platform paths with the same behaviour; design bullets don't name it and still hold" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS

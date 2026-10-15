@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:bcf5d3053a8f0044", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: Hosts table desktop row adds the first cut (Windows, WebView2, fresh in-memory token handed to the page) with a README link; diagram and the new apps/jstream-desktop/src/main.rs (a thin entry point) fit the shape" }
+verified = { hash = "b3:e178ca2d3b2b677c", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: desktop main.rs calls jstream-platform paths instead of its data module; the desktop row still holds" }
 -->
 
 ```
@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:7f90b5a4097428aa", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Re-read against main.rs, which only adds docs merge-main to the usage list: the xtask line still names docs among its commands, so the layout holds" }
+verified = { hash = "b3:69bda926ebb1abde", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: xtask line now lists dist (the portable zip) instead of release" }
 -->
 
 ```
@@ -100,7 +100,7 @@ JStream/
 ├── tests/                  # cross-crate scenario + golden tests
 ├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
 ├── design/                 # UI design references (prototype source); not normative
-├── xtask/                  # docs, lint-deps, governance, gen-schema, golden, release
+├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), gen-schema, golden
 ├── docs/
 │   ├── ARCHITECTURE.md  RULES.md  DOCS.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:427df7ea39ba3f91", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: new apps/jstream-desktop manifest, layer 6, links core and server and platform-windows on Windows, as the apps/* row already says; lint-deps passes" }
+verified = { hash = "b3:446cad39ecaf5d94", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: jstream-platform row (and its Cargo summary) add paths, the data folder; desktop now depends on jstream-platform on every OS, already in the tree via core, apps row holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -135,7 +135,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-plugin-proto` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): the versioned `repr(C)` shared-memory contract (audio rings, parameter-event ring, status block) between the mixer and the CLAP plugin host | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
-| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`. The **single owner** of the encoder and decoder traits. | no |
+| 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, and `paths` (the data folder, ADR-0020). The **single owner** of the encoder and decoder traits. | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
@@ -872,8 +872,9 @@ verified = { hash = "b3:042c342d215b5bc4", by = "agent:claude@session_01TiAAtPXb
 <a id="packaging"></a>
 ## Packaging
 <!-- @section
+covers = ["xtask/src/dist.rs", ".cargo/config.toml"]
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:981e101ec9dc1d4b", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: the virtual camera bullet now says the daemon is the --register-vcam mode until the desktop app has it (the app exists but lacks that mode); rest unchanged" }
+verified = { hash = "b3:a8489e561b5212fe", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: State bullet names the data folder and the paths module; new Building the zip bullet matches dist.rs, .cargo/config.toml and the dist CI job" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -888,8 +889,20 @@ From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin 
 link the C runtime statically and need only OS components (WebView2, Media Foundation,
 Direct3D 12).
 
-- **State:** in `%APPDATA%\JStream`, or beside the exe when a `portable` marker file is
-  present.
+- **State:** in `%APPDATA%\JStream`, or in a `data` folder beside the exe when a
+  `portable` marker file is present. Every host finds it through `jstream-platform`'s
+  `paths` module.
+- **Building the zip:** `cargo xtask dist`, on Windows with MSVC. It builds the web UI
+  for release with trunk (or takes a built one with `--ui-dir`), builds `jstream.exe`,
+  `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for release, and
+  fails if any of them imports a C runtime DLL. It zips them in one folder,
+  `jstream-<git describe>-windows-x64`, with the UI in `ui` (where `jstream.exe` looks),
+  the licenses and a `README.txt`, into `target/dist`. `.cargo/config.toml` links the C
+  runtime statically for every MSVC build. A `RUSTFLAGS` variable replaces the config's
+  flags, so `dist` adds `crt-static` back to it. The zip is written by `dist` itself,
+  deflated, with fixed timestamps, so the same files make the same zip. The `dist` CI job
+  builds it with the `wasm` job's UI and uploads it as an artifact, as is, on every PR
+  and push to `main`. The CEF runtime and the browser helper join it when they exist.
 - **Virtual camera:** the app registers the COM media source from its own folder the first
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
   because Frame Server ignores per-user registration. The app can unregister the source and

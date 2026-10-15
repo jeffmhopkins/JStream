@@ -95,8 +95,9 @@ jobs:
           arguments: --all-features
 
   # The web UI for wasm32 (ADR-0045): clippy over the browser WebSocket client and the UI,
-  # then a trunk build. trunk and the wasm-bindgen CLI are downloaded at pinned versions
-  # and checked against pinned SHA-256 sums; the wasm-bindgen CLI must match Cargo.lock.
+  # then a release trunk build, uploaded for the `dist` job. trunk, the wasm-bindgen CLI and
+  # binaryen (the `wasm-opt` a release build runs) are downloaded at pinned versions and
+  # checked against pinned SHA-256 sums; the wasm-bindgen CLI must match Cargo.lock.
   wasm:
     runs-on: ubuntu-latest
     env:
@@ -104,13 +105,15 @@ jobs:
       TRUNK_SHA256: f2b4680cd239693a646a2795e4633c625328d7b2a044fbe749fa3a2fe9e7036b
       WASM_BINDGEN_VERSION: 0.2.129
       WASM_BINDGEN_SHA256: 82d12bb940e2d4e72e0d5605387fc1b8ca179044e012b620f0ce4e7440e8320e
+      BINARYEN_VERSION: 132
+      BINARYEN_SHA256: 195ddc94f9bc89f45abdabb0b9eea86023d727ba90eac8b35b80f2544fc30572
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install   # rust-toolchain.toml includes wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - name: Clippy (wasm32)
         run: cargo clippy -p jstream-control -p jstream-ui --target wasm32-unknown-unknown --features jstream-control/ws --locked -- -D warnings
-      - name: Install trunk and the wasm-bindgen CLI
+      - name: Install trunk, the wasm-bindgen CLI and wasm-opt
         run: |
           set -euo pipefail
           locked=$(cargo metadata --format-version 1 --locked | jq -r '.packages[] | select(.name == "wasm-bindgen") | .version')
@@ -127,10 +130,41 @@ jobs:
           curl -sSLf -o wasm-bindgen.tar.gz "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${WASM_BINDGEN_VERSION}/${wb}.tar.gz"
           echo "${WASM_BINDGEN_SHA256}  wasm-bindgen.tar.gz" | sha256sum -c -
           tar xzf wasm-bindgen.tar.gz --strip-components=1 -C bin "${wb}/wasm-bindgen"
+          by="binaryen-version_${BINARYEN_VERSION}"
+          curl -sSLf -o binaryen.tar.gz "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/${by}-x86_64-linux.tar.gz"
+          echo "${BINARYEN_SHA256}  binaryen.tar.gz" | sha256sum -c -
+          tar xzf binaryen.tar.gz --strip-components=2 -C bin "${by}/bin/wasm-opt"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Build the UI
         working-directory: crates/jstream-ui
-        run: trunk build --locked --offline
+        run: trunk build --release --locked --offline
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: jstream-ui
+          path: crates/jstream-ui/dist
+          if-no-files-found: error
+          retention-days: 1
+
+  # The portable Windows zip (ADR-0020): `cargo xtask dist` with the wasm job's UI. The zip
+  # is uploaded as is (`archive: false`), so the download is the zip a user unzips.
+  dist:
+    needs: wasm
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: jstream-ui
+          path: ui-dist
+      - run: cargo xtask dist --ui-dir ui-dist --out dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: dist/*.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
 
   pr-title:
     if: github.event_name == 'pull_request'
