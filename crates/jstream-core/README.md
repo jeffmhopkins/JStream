@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:5b7f921245fe4fde", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "#219 Windows clippy fix: windows_gpu.rs now fills main's Backends::video_devices with FakeVideoDevices; re-read, the section's text about the hardware test and the GPU capture path still holds" }
+verified = { hash = "b3:5b57ce33e6918e78", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "F6: threads bullet (outputs mux FLV or MP4) still holds with the codec choice in sink.rs" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -171,7 +171,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a644f46e353d0d76", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "#219 Windows clippy fix: windows_gpu.rs now fills main's Backends::video_devices with FakeVideoDevices; re-read, the section's text about the hardware test and the GPU capture path still holds" }
+verified = { hash = "b3:f2bd4536bb07ae7a", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "F6: added Video codecs paragraph (video_codec, enhanced RTMP for HEVC/AV1, MP4 H.264 only, protocol names only H.264); Recording paragraph holds" }
 -->
 
 ### Engine and sessions
@@ -665,6 +665,14 @@ dropped and counted in `output_packets`. Disk writes run on the output thread an
 may block; the encoder subscriber queues absorb that and drop when full, without
 holding up a stream on the same session.
 
+**Video codecs.** The encoder profile's video codec picks the encoder and the FLV
+track (`video_codec` in `runtime/pipeline.rs`, `runtime/sink.rs`). H.264 goes in legacy
+FLV tags with the decoder configuration the start gives the muxer. HEVC and AV1 go in
+enhanced RTMP tags, named by FourCC, with the decoder configuration taken from the
+first keyframe, which their encoders send in-band. The protocol's `VideoCodec` names
+only H.264 so far, so a profile can't select HEVC or AV1 yet. MP4 recording takes H.264
+only: another codec fails the start with `recording … is not supported yet`.
+
 **Virtual camera.** `with_backends` takes the backends' `VcamSink` out and keeps it for
 the engine's life. When the collection's output is `VirtualCam`, the start takes that
 sink and joins the program stage like any output (opening it when no other output
@@ -965,7 +973,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:7695ee1c6ce0a4ae", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: Capture path paragraph now says opening the program stage asks GpuInterop; launch_program binds OpenedCapture context first and gpu_captures is a program-stage counter beside readbacks, as pipeline.rs does; main's shared-stage text kept; holds" }
+verified = { hash = "b3:4e9b7c9fd75836ff", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "F6: encode sessions still H.264 and AAC since profiles select only H.264; FLV and MP4 output-thread text holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

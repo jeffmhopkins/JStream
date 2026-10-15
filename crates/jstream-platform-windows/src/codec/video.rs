@@ -1,5 +1,6 @@
-//! H.264 encoding through Media Foundation encoder MFTs, from CPU NV12 frames or from
-//! NV12 encode targets on the GPU.
+//! H.264, HEVC and AV1 encoding through Media Foundation encoder MFTs, from CPU NV12
+//! frames or from NV12 encode targets on the GPU. The codecs differ only in the MFT's
+//! output subtype and profile ([`Format`]); everything else is one session type.
 //!
 //! On the CPU path, frames are copied into a Media Foundation memory buffer. On the GPU
 //! path (ARCH › GPU pipeline, step 5), opened through `MfCodecs`' `Codecs::on_context`,
@@ -11,6 +12,8 @@
 //!
 //! Hardware encoders are tried first and the OS software encoder after them, as
 //! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0031).
+//! Windows ships a software encoder for H.264 only, so HEVC and AV1 need a GPU encoder
+//! (or an installed software MFT) and report `Unsupported` without one.
 //! Hardware MFTs are usually asynchronous: they ask for input and announce output
 //! through events, which `poll` pumps.
 
@@ -19,9 +22,56 @@ use std::collections::VecDeque;
 use jstream_platform::media::{Codec, MediaTime, PixelFormat, Rounding, Timebase, VideoFrame};
 use jstream_platform::{PlatformError, RateControl, VideoEncoderConfig};
 
+/// A video codec Media Foundation encodes, with the profile it is opened in: H.264
+/// High, HEVC Main and AV1 Main, all 8-bit 4:2:0 from NV12.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Format {
+    /// H.264 High; Annex B packets.
+    H264,
+    /// HEVC Main; Annex B packets.
+    Hevc,
+    /// AV1 Main; one temporal unit of low-overhead OBUs per packet.
+    Av1,
+}
+
+impl Format {
+    /// Every format, in the order `MfCodecs::list` reports them.
+    pub(crate) const ALL: [Format; 3] = [Format::H264, Format::Hevc, Format::Av1];
+
+    /// The format for a codec, or `None` for one Media Foundation doesn't encode here.
+    pub(crate) fn of(codec: Codec) -> Option<Self> {
+        match codec {
+            Codec::H264 => Some(Self::H264),
+            Codec::Hevc => Some(Self::Hevc),
+            Codec::Av1 => Some(Self::Av1),
+            _ => None,
+        }
+    }
+
+    /// The codec its packets carry.
+    pub(crate) fn codec(self) -> Codec {
+        match self {
+            Self::H264 => Codec::H264,
+            Self::Hevc => Codec::Hevc,
+            Self::Av1 => Codec::Av1,
+        }
+    }
+
+    /// Its name in messages.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::H264 => "H.264",
+            Self::Hevc => "HEVC",
+            Self::Av1 => "AV1",
+        }
+    }
+}
+
 /// What the MFT is configured with, derived from a [`VideoEncoderConfig`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Settings {
+    /// The output codec.
+    pub(crate) format: Format,
     /// `MF_MT_FRAME_RATE`: frames per second as numerator and denominator.
     pub(crate) fps: (u32, u32),
     /// The duration of one frame in 100 ns units, rounded to the nearest.
@@ -35,23 +85,24 @@ pub(crate) struct Settings {
 /// Checks a configuration and derives the MFT settings.
 ///
 /// # Errors
-/// [`PlatformError::Unsupported`] for another codec, an input other than NV12, odd
-/// dimensions (NV12 halves them for chroma), a zero keyframe interval, a zero bit rate or
-/// a VBR peak below its mean.
+/// [`PlatformError::Unsupported`] for a codec other than H.264, HEVC or AV1, an input
+/// other than NV12, odd dimensions (NV12 halves them for chroma), a zero keyframe
+/// interval, a zero bit rate or a VBR peak below its mean.
 pub(crate) fn check(config: &VideoEncoderConfig) -> Result<Settings, PlatformError> {
     let unsupported = |what: String| Err(PlatformError::Unsupported { what });
-    if config.codec != Codec::H264 {
-        return unsupported(format!("{:?} from the H.264 encoder", config.codec));
-    }
+    let Some(format) = Format::of(config.codec) else {
+        return unsupported(format!("{:?} from a video encoder", config.codec));
+    };
+    let name = format.name();
     if config.input_format != PixelFormat::Nv12 {
         return unsupported(format!(
-            "H.264 from {:?} (the encoder takes NV12)",
+            "{name} from {:?} (the encoder takes NV12)",
             config.input_format
         ));
     }
     let (w, h) = (config.size.width(), config.size.height());
     if w % 2 != 0 || h % 2 != 0 {
-        return unsupported(format!("H.264 at an odd size, {w}x{h}"));
+        return unsupported(format!("{name} at an odd size, {w}x{h}"));
     }
     if config.keyframe_interval == 0 {
         return unsupported("a keyframe interval of 0".into());
@@ -70,6 +121,7 @@ pub(crate) fn check(config: &VideoEncoderConfig) -> Result<Settings, PlatformErr
     let (num, den) = (u64::from(p.num()), u64::from(p.den()));
     let frame_hns = i64::try_from((num * 10_000_000 + den / 2) / den).unwrap_or(i64::MAX);
     Ok(Settings {
+        format,
         fps: (p.den(), p.num()),
         frame_hns,
         bitrate: bps(kbps),
@@ -161,13 +213,13 @@ impl InFlight {
 }
 
 #[cfg(windows)]
-pub(crate) use encoder::MfH264Encoder;
+pub(crate) use encoder::MfVideoEncoder;
 
 #[cfg(windows)]
 mod encoder {
     use std::time::{Duration, Instant};
 
-    use jstream_platform::media::{Codec, Packet, PixelFormat};
+    use jstream_platform::media::{Packet, PixelFormat};
     use jstream_platform::{
         CodecInfo, CodecRole, GpuFrame, HardwarePreference, PlatformError, VideoEncoder,
         VideoEncoderConfig, VideoSurface,
@@ -192,18 +244,40 @@ mod encoder {
         MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_LOCALMFT,
         MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT, MFT_MESSAGE_COMMAND_DRAIN,
         MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_END_OF_STREAM,
-        MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_MESSAGE_SET_D3D_MANAGER, MFVideoFormat_H264,
-        MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFVideoTransferMatrix_BT709,
-        eAVEncCommonRateControlMode_CBR, eAVEncCommonRateControlMode_PeakConstrainedVBR,
-        eAVEncH264VProfile_High,
+        MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_MESSAGE_SET_D3D_MANAGER, MFVideoFormat_AV1,
+        MFVideoFormat_H264, MFVideoFormat_HEVC, MFVideoFormat_NV12, MFVideoInterlace_Progressive,
+        MFVideoTransferMatrix_BT709, eAVEncAV1VProfile_Main_420_8, eAVEncCommonRateControlMode_CBR,
+        eAVEncCommonRateControlMode_PeakConstrainedVBR, eAVEncH264VProfile_High,
+        eAVEncH265VProfile_Main_420_8,
     };
     use windows::Win32::System::Variant::VARIANT;
     use windows::core::{GUID, Interface};
 
-    use super::{InFlight, Settings, check, pack_nv12};
+    use super::{Format, InFlight, Settings, check, pack_nv12};
     use crate::codec::mf::{self, Found, MfRuntime, Mft, Output, PullMode, RetypeArgs};
     use crate::com::{OsResult, os_error};
     use crate::gpu::EncodeGpu;
+
+    impl Format {
+        /// The MFT's output subtype.
+        pub(crate) fn subtype(self) -> GUID {
+            match self {
+                Self::H264 => MFVideoFormat_H264,
+                Self::Hevc => MFVideoFormat_HEVC,
+                Self::Av1 => MFVideoFormat_AV1,
+            }
+        }
+
+        /// The `MF_MT_MPEG2_PROFILE` (`MF_MT_VIDEO_PROFILE`) value it is opened in.
+        fn profile(self) -> u32 {
+            let profile = match self {
+                Self::H264 => eAVEncH264VProfile_High.0,
+                Self::Hevc => eAVEncH265VProfile_Main_420_8.0,
+                Self::Av1 => eAVEncAV1VProfile_Main_420_8.0,
+            };
+            profile as u32
+        }
+    }
 
     /// How long `finish` waits for an asynchronous encoder to drain.
     const DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
@@ -243,7 +317,7 @@ mod encoder {
                 Ok(sample) => sample,
                 Err(e) if e.code() == MF_E_SAMPLEALLOCATOR_EMPTY => {
                     return Err(PlatformError::Busy {
-                        what: "H.264 encoder input textures",
+                        what: "video encoder input textures",
                     });
                 }
                 Err(e) => return Err(os_error("IMFVideoSampleAllocator::AllocateSample", &e)),
@@ -340,8 +414,8 @@ mod encoder {
         }
     }
 
-    /// One H.264 encoder session on a Media Foundation encoder MFT.
-    pub(crate) struct MfH264Encoder {
+    /// One H.264, HEVC or AV1 encoder session on a Media Foundation encoder MFT.
+    pub(crate) struct MfVideoEncoder {
         // Fields drop in order: COM objects before the runtime that keeps MF started.
         mft: Mft,
         /// The event queue of an asynchronous MFT; `None` for a synchronous one.
@@ -366,19 +440,20 @@ mod encoder {
     // manager and sample allocator, and `MfRuntime` keeps the process MTA alive, so a
     // thread that never initialised COM may call them as an implicit MTA member. The
     // GPU path's `EncodeGpu` is `Send + Sync`; its D3D11 device is multithread-protected.
-    unsafe impl Send for MfH264Encoder {}
+    unsafe impl Send for MfVideoEncoder {}
 
-    impl MfH264Encoder {
-        /// Opens an H.264 encoder that takes CPU NV12 frames: a hardware MFT first
-        /// (unless the preference avoids hardware), then the software one (unless it
-        /// requires hardware). The first that accepts the configuration wins.
+    impl MfVideoEncoder {
+        /// Opens an encoder for the configured codec that takes CPU NV12 frames: a
+        /// hardware MFT first (unless the preference avoids hardware), then a software
+        /// one (unless it requires hardware). The first that accepts the configuration
+        /// wins.
         pub(crate) fn open(config: &VideoEncoderConfig) -> Result<Self, PlatformError> {
             Self::open_with(config, None)
         }
 
-        /// Opens an H.264 encoder that takes encode targets on `gpu`'s context: the
-        /// first D3D11-aware hardware MFT on its adapter that accepts the configuration
-        /// and the context's device.
+        /// Opens an encoder for the configured codec that takes encode targets on
+        /// `gpu`'s context: the first D3D11-aware hardware MFT on its adapter that
+        /// accepts the configuration and the context's device.
         ///
         /// # Errors
         /// [`PlatformError::Unsupported`] when the configuration avoids hardware or no
@@ -389,9 +464,11 @@ mod encoder {
         ) -> Result<Self, PlatformError> {
             if config.hardware == HardwarePreference::Avoid {
                 return Err(PlatformError::Unsupported {
-                    what: "H.264 from GPU frames with hardware avoided (only hardware \
-                           encoders read D3D11 textures)"
-                        .into(),
+                    what: format!(
+                        "{} from GPU frames with hardware avoided (only hardware encoders \
+                         read D3D11 textures)",
+                        check(config)?.format.name()
+                    ),
                 });
             }
             Self::open_with(config, Some(gpu))
@@ -406,7 +483,7 @@ mod encoder {
             let manager = gpu.map(device_manager).transpose()?;
             let io = (
                 (MFMediaType_Video, MFVideoFormat_NV12),
-                (MFMediaType_Video, MFVideoFormat_H264),
+                (MFMediaType_Video, settings.format.subtype()),
             );
             let mut candidates = Vec::new();
             if let Some(gpu) = gpu {
@@ -456,7 +533,7 @@ mod encoder {
                             output,
                             info: CodecInfo {
                                 name: found.name,
-                                codec: Codec::H264,
+                                codec: settings.format.codec(),
                                 role: CodecRole::VideoEncoder,
                                 hardware,
                             },
@@ -477,7 +554,8 @@ mod encoder {
             Err(PlatformError::Unsupported {
                 what: if refusals.is_empty() {
                     format!(
-                        "H.264 encoding with {:?}{}: no matching encoder MFT is installed",
+                        "{} encoding with {:?}{}: no matching encoder MFT is installed",
+                        settings.format.name(),
                         config.hardware,
                         if gpu.is_some() {
                             " from D3D11 textures on the context's adapter"
@@ -487,7 +565,8 @@ mod encoder {
                     )
                 } else {
                     format!(
-                        "H.264 encoding at {}x{}: every encoder refused ({})",
+                        "{} encoding at {}x{}: every encoder refused ({})",
+                        settings.format.name(),
                         config.size.width(),
                         config.size.height(),
                         refusals.join("; ")
@@ -552,15 +631,13 @@ mod encoder {
             // SAFETY: plain COM calls on live objects created here.
             unsafe {
                 let out = MFCreateMediaType().os("MFCreateMediaType")?;
-                video_type(&out, &MFVideoFormat_H264, w, h, s.fps)?;
+                video_type(&out, &s.format.subtype(), w, h, s.fps)?;
                 out.SetUINT32(&MF_MT_AVG_BITRATE, s.bitrate)
-                    .and_then(|()| {
-                        out.SetUINT32(&MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_High.0 as u32)
-                    })
-                    .os("IMFMediaType::Set* (H.264 output)")?;
+                    .and_then(|()| out.SetUINT32(&MF_MT_MPEG2_PROFILE, s.format.profile()))
+                    .os("IMFMediaType::Set* (encoded output)")?;
                 transform
                     .SetOutputType(0, &out, 0)
-                    .os("IMFTransform::SetOutputType (H.264)")?;
+                    .os("IMFTransform::SetOutputType (encoded)")?;
                 let input = nv12_input_type(transform)?;
                 video_type(&input, &MFVideoFormat_NV12, w, h, s.fps)?;
                 // BT.709 limited range, the colour ARCH's pipeline encodes in (S1).
@@ -582,7 +659,7 @@ mod encoder {
                     height: h,
                     fps: s.fps,
                     bitrate: s.bitrate,
-                    profile: eAVEncH264VProfile_High.0 as u32,
+                    profile: s.format.profile(),
                 },
             );
             let events = if is_async {
@@ -645,7 +722,7 @@ mod encoder {
             };
             let pts = self.in_flight.receive(sample.time);
             self.pending.push(Packet::new(
-                Codec::H264,
+                self.settings.format.codec(),
                 sample.keyframe,
                 pts,
                 pts,
@@ -655,7 +732,7 @@ mod encoder {
         }
     }
 
-    impl VideoEncoder for MfH264Encoder {
+    impl VideoEncoder for MfVideoEncoder {
         fn info(&self) -> &CodecInfo {
             &self.info
         }
@@ -669,7 +746,7 @@ mod encoder {
         fn encode(&mut self, frame: VideoSurface) -> Result<(), PlatformError> {
             if self.finished {
                 return Err(PlatformError::InvalidState {
-                    what: "H.264 encode",
+                    what: "video encode",
                     state: "the encoder is finished",
                 });
             }
@@ -678,7 +755,7 @@ mod encoder {
             }
             if !self.can_accept() {
                 return Err(PlatformError::Busy {
-                    what: "H.264 encoder",
+                    what: "video encoder",
                 });
             }
             let info = *frame.info();
@@ -717,12 +794,12 @@ mod encoder {
                 }
                 (Input::Cpu(_), _) => {
                     return Err(PlatformError::Unsupported {
-                        what: "a GPU frame on the CPU H.264 path".into(),
+                        what: "a GPU frame on the CPU video encoder path".into(),
                     });
                 }
                 (Input::Gpu(_), _) => {
                     return Err(PlatformError::Unsupported {
-                        what: "a CPU frame on the GPU H.264 path".into(),
+                        what: "a CPU frame on the GPU video encoder path".into(),
                     });
                 }
             };
@@ -734,9 +811,9 @@ mod encoder {
                     self.collect_all()?;
                     // SAFETY: as above.
                     unsafe { self.mft.transform.ProcessInput(0, &sample, 0) }
-                        .os("IMFTransform::ProcessInput (H.264)")?;
+                        .os("IMFTransform::ProcessInput (video)")?;
                 }
-                Err(e) => return Err(os_error("IMFTransform::ProcessInput (H.264)", &e)),
+                Err(e) => return Err(os_error("IMFTransform::ProcessInput (video)", &e)),
             }
             self.need_input = self.need_input.saturating_sub(1);
             self.pump()
@@ -756,7 +833,7 @@ mod encoder {
         fn request_keyframe(&mut self) -> Result<(), PlatformError> {
             if self.finished {
                 return Err(PlatformError::InvalidState {
-                    what: "H.264 keyframe request",
+                    what: "video keyframe request",
                     state: "the encoder is finished",
                 });
             }
@@ -892,7 +969,7 @@ mod tests {
     };
     use jstream_platform::{HardwarePreference, PlatformError, RateControl, VideoEncoderConfig};
 
-    use super::{InFlight, check, hns, pack_nv12};
+    use super::{Format, InFlight, check, hns, pack_nv12};
 
     fn config() -> VideoEncoderConfig {
         VideoEncoderConfig {
@@ -923,6 +1000,19 @@ mod tests {
         let s = check(&c).expect("valid");
         assert_eq!((s.fps, s.frame_hns), ((60, 1), 166_667));
         assert_eq!(s.max_bitrate, Some(8_000_000));
+    }
+
+    #[test]
+    fn opens_each_video_codec_in_its_own_format() {
+        for format in Format::ALL {
+            let mut c = config();
+            c.codec = format.codec();
+            assert_eq!(Format::of(c.codec), Some(format));
+            assert_eq!(check(&c).expect("valid").format, format);
+        }
+        assert_eq!(Format::of(Codec::Aac), None);
+        let names: Vec<_> = Format::ALL.iter().map(|f| f.name()).collect();
+        assert_eq!(names, ["H.264", "HEVC", "AV1"]);
     }
 
     #[test]

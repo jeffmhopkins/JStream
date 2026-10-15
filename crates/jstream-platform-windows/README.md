@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:c495ac7053ff3e1e", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: MfCodecs CPU/GPU bullets and WindowsGpu release fence unchanged; Not yet now drops encoders, beside main's check_media_foundation and register_vcam text; holds" }
+verified = { hash = "b3:746642030963cc35", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "F6: re-read the encoder bullets (new Video encoders bullet for H.264/HEVC/AV1 in codec/video.rs, CPU and GPU path headings), the platform-test paragraph (HEVC/AV1 GPU encode tests, framing and in-band config checks) and Not yet; holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -175,11 +175,20 @@ The code is ported from spikes S1 to S3. This first cut has:
     initialising COM. Sessions are opened from a thread that isn't an STA.
   - **Teardown:** dropping a session ends streaming and calls `ShutdownObject` on the
     activation object, as Microsoft asks. One output sample is reused for every pull.
-  - **H.264 encoder, CPU path:** `MfCodecs::new()`'s encoders take NV12
+  - **Video encoders:** H.264 (High), HEVC (Main) and AV1 (Main), all 8-bit 4:2:0 from
+    NV12, through one session type (`codec/video.rs`) that differs per codec only in
+    the MFT's output subtype and profile. H.264 and HEVC packets are Annex B, AV1 packets
+    one temporal unit of low-overhead OBUs, as `jstream-media` defines; the first
+    keyframe carries the parameter sets (or sequence header) in-band, which `jstream-mux`'s
+    enhanced RTMP track builds its decoder configuration from. Windows ships a software
+    encoder for H.264 only, so HEVC and AV1 open only where the GPU has a hardware
+    encoder (or a software MFT is installed); elsewhere they are `Unsupported`.
+    `list` reports every encoder MFT for each of the three.
+  - **Video encoders, CPU path:** `MfCodecs::new()`'s encoders take NV12
     `VideoSurface::Cpu` frames and copy them into Media Foundation memory buffers. It is
     ARCH's fallback path
     ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline), step 6).
-  - **H.264 encoder, GPU path** (step 5): `Codecs::on_context` on a context `WindowsGpu`
+  - **Video encoders, GPU path** (step 5): `Codecs::on_context` on a context `WindowsGpu`
     opened (another backend's is `InvalidState`) gives the same backend on that context.
     Its video encoders take that context's NV12 encode targets (`VideoSurface::Gpu`) and
     nothing else: a CPU frame, or a GPU frame that isn't one of its encode targets, is
@@ -412,10 +421,12 @@ display are platform tests: behind the `hw-tests` feature and `#[ignore]`d, beca
 machines may have no audio devices, no Media Foundation, no GPU and no display
 ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
 target, stages it and checks that the shared fence passes the staged value. The GPU
-encode test opens the H.264 encoder on the context, writes a ring of three 720p encode
+encode tests open the H.264, HEVC and AV1 encoders on the context, write a ring of three 720p encode
 targets with wgpu for 60 frames, checking that the encoder has let go of each target
-before it is written again, encodes them, refuses a CPU frame, and checks the packets
-as the CPU encode tests do. The capture
+before it is written again, encode them, refuse a CPU frame, and check the packets as
+the CPU encode tests do: each codec's framing, and the parameter sets (or AV1 sequence
+header) in the first keyframe. HEVC and AV1 run only on a GPU that encodes them (AV1
+needs an NVIDIA RTX 40, AMD RX 7000, Intel Arc or newer). The capture
 tests list the displays, capture the primary display for a second, checking the
 frames' format and `pts`, start a capture of a destroyed window, which must be
 `NotFound`, and capture three times in a row in one process. The audio tests list the
@@ -434,7 +445,8 @@ video-device tests list devices, formats and paired audio, capture an uncompress
 and the largest MJPEG format for two seconds each (checking size, format and `pts`), open
 a device twice (shared or `Busy`), and refuse an unknown device or format; an unplug test
 runs only when `JSTREAM_UNPLUG_TEST` is set. Run them on a Windows machine with a
-microphone, speakers, a display, a webcam and a DX12 GPU with a hardware H.264 encoder:
+microphone, speakers, a display, a webcam and a DX12 GPU with hardware H.264, HEVC and
+AV1 encoders:
 `cargo test -p jstream-platform-windows --features hw-tests -- --ignored`. The
 virtual-camera test also needs the `jstream-vcam-windows` DLL registered
 ([its Hardware check](../jstream-vcam-windows/README.md#hardware-check)).
