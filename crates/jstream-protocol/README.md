@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b86695f846c4b4c1", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 review round 2 fixes N1: PreviewSettings bullet says the engine applies the range checks (the mock answers preview actions with unimplemented_by_mock); rest holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -141,7 +140,6 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:e0b02e3e576e3e4f", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 review round 2 fixes: stale via purpose's wording and preview.rs's rustdoc (N1); Binary streams section unchanged; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

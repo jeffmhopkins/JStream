@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:1665fb8c02a48bc9", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: re-read; tools generated from the schema, now with audio, bus, send and preview" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +44,6 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:f4f47418f0847962", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: Tools table is main's with preview added and its MCP failure note; tests count 19 tools; tools.snap regenerated" }
 -->
 
 ### Tools
