@@ -10,9 +10,14 @@ use crate::{
     DropCounts, Edit, EntityKind, ErrorResponse, Event, EventMessage, Finite32, Hello,
     IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputState, PROTOCOL_VERSION,
     ProtocolError, Query, QueryResult, Request, RequestId, Response, Rev, SceneId, SceneInfo,
-    SceneSummary, ServerMessage, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    SceneSummary, ServerMessage, Settings, SourceId, SourceInfo, SourceKind, Vec2, Welcome,
+    json_schema,
 };
-use serde_json::Value;
+use crate::{
+    EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
+    VisibleIf,
+};
+use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
 pub(crate) fn edits() -> Vec<Edit> {
@@ -78,6 +83,15 @@ pub(crate) fn edits() -> Vec<Edit> {
             kind: SourceKind::Builtin {
                 kind: "webcam".into(),
             },
+            settings: Settings::new(),
+        },
+        Edit::SourceCreate {
+            source_id: SourceId::new("src_bg"),
+            name: "Background".into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: color_settings(),
         },
         Edit::SourceCreate {
             source_id: SourceId::new("src_intro"),
@@ -85,6 +99,24 @@ pub(crate) fn edits() -> Vec<Edit> {
             kind: SourceKind::Scene {
                 scene_id: SceneId::new("scn_1"),
             },
+            settings: Settings::new(),
+        },
+        Edit::SourceRename {
+            source_id: SourceId::new("src_bg"),
+            name: "Backdrop".into(),
+        },
+        Edit::SourceSetSettings {
+            source_id: SourceId::new("src_logo"),
+            patch: [
+                (
+                    "file",
+                    json!({"type": "asset", "root": "collection", "path": "img/logo.png"}),
+                ),
+                ("mask", json!({"type": "scene", "scene_id": "scn_mask"})),
+                ("tint", Value::Null),
+            ]
+            .into_iter()
+            .collect(),
         },
         Edit::SourceDuplicate {
             source_id: SourceId::new("src_cam"),
@@ -120,17 +152,150 @@ pub(crate) fn queries() -> Vec<Query> {
         },
         Query::StateGet,
         Query::VideoSnapshot,
+        Query::KindList,
+        Query::KindDescribe {
+            kind_id: "color".into(),
+        },
     ]
+}
+
+fn color_settings() -> Settings {
+    [("color", json!("#1e1e2eff")), ("width", json!(1920))]
+        .into_iter()
+        .collect()
+}
+
+/// A descriptor using every parameter type and hint.
+fn color_kind() -> KindDescriptor {
+    let param = |id: &str, ty: ParamType, default: Value| ParamDescriptor {
+        id: id.into(),
+        ty,
+        default,
+        label: id.into(),
+        description: None,
+        group: None,
+        advanced: false,
+        visible_if: None,
+        live: true,
+    };
+    KindDescriptor {
+        kind_id: "color".into(),
+        category: KindCategory::Source,
+        name: "Colour".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        params: vec![
+            ParamDescriptor {
+                description: Some("Fill colour.".into()),
+                group: Some("Look".into()),
+                ..param(
+                    "color",
+                    ParamType::Color { alpha: true },
+                    json!("#000000ff"),
+                )
+            },
+            ParamDescriptor {
+                live: false,
+                ..param(
+                    "width",
+                    ParamType::Int {
+                        min: Some(1),
+                        max: Some(16384),
+                        step: Some(1),
+                        unit: Some("px".into()),
+                    },
+                    json!(1920),
+                )
+            },
+            param(
+                "opacity",
+                ParamType::Float {
+                    min: Some(0.0),
+                    max: Some(1.0),
+                    step: Some(0.01),
+                    unit: None,
+                },
+                json!(1.0),
+            ),
+            param("dither", ParamType::Bool, json!(false)),
+            ParamDescriptor {
+                advanced: true,
+                ..param(
+                    "pattern",
+                    ParamType::Enum {
+                        options: vec![
+                            EnumOption {
+                                value: "solid".into(),
+                                label: "Solid".into(),
+                            },
+                            EnumOption {
+                                value: "checker".into(),
+                                label: "Checker".into(),
+                            },
+                        ],
+                    },
+                    json!("solid"),
+                )
+            },
+            ParamDescriptor {
+                visible_if: Some(VisibleIf {
+                    param: "pattern".into(),
+                    equals: json!("checker"),
+                }),
+                ..param(
+                    "caption",
+                    ParamType::String {
+                        multiline: false,
+                        max_len: 64,
+                    },
+                    json!(""),
+                )
+            },
+            param(
+                "texture",
+                ParamType::Asset {
+                    accept: vec!["png".into()],
+                },
+                Value::Null,
+            ),
+            param("mask", ParamType::Scene, Value::Null),
+            param(
+                "follow",
+                ParamType::Source {
+                    media: Some(Media::Audio),
+                },
+                Value::Null,
+            ),
+            param(
+                "key",
+                ParamType::Source {
+                    media: Some(Media::Video),
+                },
+                Value::Null,
+            ),
+            param("any", ParamType::Source { media: None }, Value::Null),
+        ],
+    }
 }
 
 fn source_infos() -> Vec<SourceInfo> {
     vec![
+        SourceInfo {
+            source_id: SourceId::new("src_bg"),
+            name: "Background".into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: color_settings(),
+        },
         SourceInfo {
             source_id: SourceId::new("src_cam"),
             name: "Camera".into(),
             kind: SourceKind::Builtin {
                 kind: "webcam".into(),
             },
+            settings: Settings::new(),
         },
         SourceInfo {
             source_id: SourceId::new("src_intro"),
@@ -138,6 +303,7 @@ fn source_infos() -> Vec<SourceInfo> {
             kind: SourceKind::Scene {
                 scene_id: SceneId::new("scn_intro"),
             },
+            settings: Settings::new(),
         },
     ]
 }
@@ -216,6 +382,27 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             width: 1,
             height: 1,
             png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=".into(),
+        },
+        QueryResult::KindList {
+            kinds: vec![
+                color_kind().summary(),
+                KindSummary {
+                    kind_id: "fx/blur".into(),
+                    category: KindCategory::VideoFilter,
+                    name: "Blur".into(),
+                    version: 2,
+                },
+                KindSummary {
+                    kind_id: "gain".into(),
+                    category: KindCategory::AudioFilter,
+                    name: "Gain".into(),
+                    version: 1,
+                },
+            ],
+        },
+        QueryResult::KindDescribe {
+            settings_schema: color_kind().settings_schema(),
+            kind: color_kind(),
         },
     ]
 }
@@ -551,13 +738,34 @@ mod tests {
     use crate::{ClientMessage, ServerMessage, json_schema};
     use serde::Serialize;
     use serde::de::DeserializeOwned;
+    use serde_json::Value;
     use std::collections::BTreeSet;
     use std::fmt::Debug;
+
+    /// Whether `value` holds a `null` outside a settings value: under `settings`, `patch`,
+    /// a parameter's `default` or `visible_if.equals`, or a generated `settings_schema`,
+    /// `null` is data (no reference, reset to default).
+    fn has_stray_null(value: &Value) -> bool {
+        match value {
+            Value::Null => true,
+            Value::Array(items) => items.iter().any(has_stray_null),
+            Value::Object(map) => map.iter().any(|(key, v)| {
+                !matches!(
+                    key.as_str(),
+                    "settings" | "patch" | "default" | "equals" | "settings_schema"
+                ) && has_stray_null(v)
+            }),
+            _ => false,
+        }
+    }
 
     fn round_trip<T: Serialize + DeserializeOwned + PartialEq + Debug>(value: &T) {
         let json = serde_json::to_string(value).expect("serializes");
         // No field is ever `null`: optional fields are omitted, and floats are finite.
-        assert!(!json.contains("null"), "serialized a null: {json}");
+        // Settings values are the exception: there `null` means no reference or the
+        // default.
+        let tree: Value = serde_json::from_str(&json).expect("parses as JSON");
+        assert!(!has_stray_null(&tree), "serialized a null: {json}");
         let back: T = serde_json::from_str(&json).expect("parses back");
         assert_eq!(&back, value, "round trip changed the value: {json}");
         let again = serde_json::to_string(&back).expect("serializes");

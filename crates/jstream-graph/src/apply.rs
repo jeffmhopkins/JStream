@@ -5,12 +5,17 @@
 //! inverse of a batch is the inverses of its edits in reverse order. Only when every
 //! edit succeeds does the working copy replace the state.
 
+use crate::deps::{self, Node};
 use crate::model::{Graph, Item, Scene, Source, State};
 use jstream_protocol::{
-    Batch, Crop, Edit, EntityKind, ItemId, ItemTransform, ProtocolError, Rev, SceneId, SourceId,
-    SourceKind,
+    Batch, Crop, Edit, EntityKind, ItemId, ItemTransform, KindDescriptor, Media, ParamDescriptor,
+    ParamType, ProtocolError, Reference, Rev, SceneId, Settings, SourceId, SourceKind,
 };
-use std::collections::BTreeSet;
+use serde_json::Value;
+use std::collections::BTreeMap;
+
+/// The kinds a graph can create, by ID.
+type Kinds = BTreeMap<String, KindDescriptor>;
 
 /// The result of a successful [`Graph::apply`].
 #[derive(Clone, Debug, PartialEq)]
@@ -60,7 +65,7 @@ impl Graph {
         let mut work = self.state.clone();
         let mut undo: Vec<Vec<Edit>> = Vec::with_capacity(edits.len());
         for (at, edit) in edits.iter().enumerate() {
-            undo.push(apply_edit(&mut work, edit, at)?);
+            undo.push(apply_edit(&mut work, &self.kinds, edit, at)?);
         }
         self.state = work;
         self.rev = rev;
@@ -163,7 +168,12 @@ fn item_mut(state: &mut State, (si, ii): (usize, usize)) -> Result<&mut Item, Pr
 }
 
 /// Applies one edit to `state` and returns the edits that undo it.
-fn apply_edit(state: &mut State, edit: &Edit, at: usize) -> Result<Vec<Edit>, ProtocolError> {
+fn apply_edit(
+    state: &mut State,
+    kinds: &Kinds,
+    edit: &Edit,
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
     match edit {
         Edit::SceneCreate { scene_id, name } => {
             check_id(scene_id.as_str(), at, "scene_id")?;
@@ -207,6 +217,17 @@ fn apply_edit(state: &mut State, edit: &Edit, at: usize) -> Result<Vec<Edit>, Pr
                     ),
                 ));
             }
+            let referred_by = deps::referrers(state, &Node::Scene(scene_id.clone()));
+            if !referred_by.is_empty() {
+                return Err(invalid(
+                    at,
+                    "scene_id",
+                    format!(
+                        "scene `{scene_id}` is referred to by {}; clear those settings first",
+                        referred_by.join(", ")
+                    ),
+                ));
+            }
             let scene = state.scenes.remove(si);
             let mut inverse = vec![Edit::SceneCreate {
                 scene_id: scene.id.clone(),
@@ -243,23 +264,22 @@ fn apply_edit(state: &mut State, edit: &Edit, at: usize) -> Result<Vec<Edit>, Pr
         } => {
             check_id(item_id.as_str(), at, "item_id")?;
             let si = find_scene(state, scene_id)?;
-            let source = state
-                .source(source_id)
-                .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+            if state.source(source_id).is_none() {
+                return Err(not_found(EntityKind::Source, source_id.as_str()));
+            }
             if state.item_index(item_id).is_some() {
                 return Err(already_exists(EntityKind::Item, item_id.as_str()));
             }
-            if let SourceKind::Scene { scene_id: nested } = &source.kind
-                && let Some(path) = scene_path(state, nested, scene_id)
-            {
-                let mut cycle = vec![scene_id.as_str()];
-                cycle.extend(path.iter().map(SceneId::as_str));
+            let edge = (
+                Node::Scene(scene_id.clone()),
+                Node::Source(source_id.clone()),
+            );
+            if let Some(cycle) = deps::cycle(state, &edge.0, &edge.1) {
                 return Err(invalid(
                     at,
                     "source_id",
                     format!(
-                        "placing scene `{nested}` in scene `{scene_id}` would create a cycle: {}",
-                        cycle.join(" -> ")
+                        "placing source `{source_id}` in scene `{scene_id}` would create a cycle: {cycle}"
                     ),
                 ));
             }
@@ -320,37 +340,68 @@ fn apply_edit(state: &mut State, edit: &Edit, at: usize) -> Result<Vec<Edit>, Pr
             source_id,
             name,
             kind,
+            settings,
         } => {
             check_id(source_id.as_str(), at, "source_id")?;
             check_name(name, at)?;
-            match kind {
+            let settings = match kind {
                 SourceKind::Scene { scene_id } => {
                     find_scene(state, scene_id)?;
+                    if !settings.is_empty() {
+                        return Err(invalid(at, "settings", "a `scene` source has no settings"));
+                    }
+                    Settings::new()
                 }
                 SourceKind::Builtin { kind } => {
                     if kind.is_empty() {
                         return Err(invalid(at, "kind.kind", "must not be empty"));
                     }
+                    let descriptor = kinds.get(kind).ok_or_else(|| {
+                        invalid(
+                            at,
+                            "kind.kind",
+                            format!("there is no kind `{kind}`; `kind.list` names them"),
+                        )
+                    })?;
+                    complete_settings(state, kinds, descriptor, source_id, settings, at)?
                 }
                 _ => {
                     return Err(unsupported(at, "kind", "this source kind"));
                 }
-            }
-            create_source(state, source_id, name, kind)
+            };
+            let inverse = create_source(state, source_id, name, kind, settings)?;
+            check_reference_cycles(state, source_id, at, "settings")?;
+            Ok(inverse)
         }
         Edit::SourceDuplicate {
             source_id,
             new_source_id,
             name,
         } => {
-            let kind = state
+            let original = state
                 .source(source_id)
-                .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?
-                .kind
-                .clone();
+                .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+            let (kind, settings) = (original.kind.clone(), original.settings.clone());
             check_id(new_source_id.as_str(), at, "new_source_id")?;
             check_name(name, at)?;
-            create_source(state, new_source_id, name, &kind)
+            // The copy has the original's outgoing edges and none coming in, so it can't
+            // close a cycle.
+            create_source(state, new_source_id, name, &kind, settings)
+        }
+        Edit::SourceRename { source_id, name } => {
+            check_name(name, at)?;
+            let source = state
+                .sources
+                .get_mut(source_id)
+                .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+            let old = std::mem::replace(&mut source.name, name.clone());
+            Ok(vec![Edit::SourceRename {
+                source_id: source_id.clone(),
+                name: old,
+            }])
+        }
+        Edit::SourceSetSettings { source_id, patch } => {
+            set_settings(state, kinds, source_id, patch, at)
         }
         Edit::SourceDelete { source_id } => {
             if state.source(source_id).is_none() {
@@ -367,6 +418,17 @@ fn apply_edit(state: &mut State, edit: &Edit, at: usize) -> Result<Vec<Edit>, Pr
                     ),
                 ));
             }
+            let referred_by = deps::referrers(state, &Node::Source(source_id.clone()));
+            if !referred_by.is_empty() {
+                return Err(invalid(
+                    at,
+                    "source_id",
+                    format!(
+                        "source `{source_id}` is referred to by {}; clear those settings first",
+                        referred_by.join(", ")
+                    ),
+                ));
+            }
             let source = state
                 .sources
                 .remove(source_id)
@@ -375,6 +437,7 @@ fn apply_edit(state: &mut State, edit: &Edit, at: usize) -> Result<Vec<Edit>, Pr
                 source_id: source.id,
                 name: source.name,
                 kind: source.kind,
+                settings: source.settings,
             }])
         }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
@@ -395,6 +458,7 @@ fn create_source(
     id: &SourceId,
     name: &str,
     kind: &SourceKind,
+    settings: Settings,
 ) -> Result<Vec<Edit>, ProtocolError> {
     if state.sources.contains_key(id) {
         return Err(already_exists(EntityKind::Source, id.as_str()));
@@ -405,6 +469,7 @@ fn create_source(
             id: id.clone(),
             name: name.to_owned(),
             kind: kind.clone(),
+            settings,
         },
     );
     Ok(vec![Edit::SourceDelete {
@@ -447,48 +512,179 @@ fn restore_item(
     Ok(edits)
 }
 
-/// The scenes nested in `scene`: those shown by the scene sources its items place.
-fn nested_scenes<'a>(state: &'a State, scene: &'a Scene) -> impl Iterator<Item = &'a SceneId> {
-    scene.items.iter().filter_map(
-        move |i| match state.sources.get(&i.source_id).map(|s| &s.kind) {
-            Some(SourceKind::Scene { scene_id }) => Some(scene_id),
-            _ => None,
-        },
-    )
-}
-
-/// A chain of nesting from `from` down to `to` (`[from, …, to]`), if `to` is `from` or is
-/// nested in it at any depth.
-fn scene_path(state: &State, from: &SceneId, to: &SceneId) -> Option<Vec<SceneId>> {
-    let mut visited = BTreeSet::new();
-    let mut path = Vec::new();
-    if dfs(state, from, to, &mut visited, &mut path) {
-        Some(path)
-    } else {
-        None
-    }
-}
-
-fn dfs(
+/// The complete settings of a new source of kind `descriptor`: `given`, checked, with
+/// every parameter it leaves out (or sends as `null`, outside reference parameters) at
+/// its default.
+fn complete_settings(
     state: &State,
-    at: &SceneId,
-    to: &SceneId,
-    visited: &mut BTreeSet<SceneId>,
-    path: &mut Vec<SceneId>,
-) -> bool {
-    path.push(at.clone());
-    if at == to {
-        return true;
-    }
-    if visited.insert(at.clone())
-        && let Some(scene) = state.scene(at)
-    {
-        for next in nested_scenes(state, scene) {
-            if dfs(state, next, to, visited, path) {
-                return true;
-            }
+    kinds: &Kinds,
+    descriptor: &KindDescriptor,
+    source_id: &SourceId,
+    given: &Settings,
+    at: usize,
+) -> Result<Settings, ProtocolError> {
+    for (id, value) in given.iter() {
+        let field = format!("settings.{id}");
+        let param = descriptor.param(id).ok_or_else(|| {
+            invalid(
+                at,
+                &field,
+                format!("is not a parameter of kind `{}`", descriptor.kind_id),
+            )
+        })?;
+        if !value.is_null() || param.is_reference() {
+            check_value(state, kinds, source_id, param, value, at, &field)?;
         }
     }
-    path.pop();
-    false
+    Ok(descriptor
+        .params
+        .iter()
+        .map(|p| {
+            let value = given
+                .get(&p.id)
+                .filter(|v| !v.is_null() || p.is_reference())
+                .unwrap_or(&p.default);
+            (p.id.clone(), value.clone())
+        })
+        .collect())
+}
+
+/// Applies `source.set_settings` and returns its inverse: the patched parameters'
+/// previous values.
+fn set_settings(
+    state: &mut State,
+    kinds: &Kinds,
+    source_id: &SourceId,
+    patch: &Settings,
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    let source = state
+        .source(source_id)
+        .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+    let descriptor = match &source.kind {
+        SourceKind::Builtin { kind } => kinds.get(kind).ok_or_else(|| {
+            invalid(
+                at,
+                "source_id",
+                format!("kind `{kind}` is not available, so its settings can't be checked"),
+            )
+        })?,
+        _ if patch.is_empty() => {
+            return Ok(vec![Edit::SourceSetSettings {
+                source_id: source_id.clone(),
+                patch: Settings::new(),
+            }]);
+        }
+        _ => return Err(invalid(at, "patch", "a `scene` source has no settings")),
+    };
+    let mut new = Vec::new();
+    for (id, value) in patch.iter() {
+        let field = format!("patch.{id}");
+        let param = descriptor.param(id).ok_or_else(|| {
+            invalid(
+                at,
+                &field,
+                format!("is not a parameter of kind `{}`", descriptor.kind_id),
+            )
+        })?;
+        let value = if value.is_null() && !param.is_reference() {
+            &param.default
+        } else {
+            check_value(state, kinds, source_id, param, value, at, &field)?;
+            value
+        };
+        new.push((id.to_owned(), value.clone()));
+    }
+    let source = state
+        .sources
+        .get_mut(source_id)
+        .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+    let old: Settings = new
+        .into_iter()
+        .map(|(id, value)| {
+            let old = source.settings.insert(id.clone(), value);
+            (id, old.unwrap_or(Value::Null))
+        })
+        .collect();
+    check_reference_cycles(state, source_id, at, "patch")?;
+    Ok(vec![Edit::SourceSetSettings {
+        source_id: source_id.clone(),
+        patch: old,
+    }])
+}
+
+/// Checks one settings value for `param` of source `source_id`: its type and
+/// constraints, that a referenced scene or source exists (`not_found` if not), and that a
+/// referenced source produces what the parameter needs. A source may name itself here;
+/// [`check_reference_cycles`] rejects that as a cycle.
+fn check_value(
+    state: &State,
+    kinds: &Kinds,
+    source_id: &SourceId,
+    param: &ParamDescriptor,
+    value: &Value,
+    at: usize,
+    field: &str,
+) -> Result<(), ProtocolError> {
+    param
+        .check(value)
+        .map_err(|reason| invalid(at, field, reason))?;
+    match Reference::from_value(value) {
+        Some(Reference::Scene { scene_id }) => {
+            find_scene(state, &scene_id)?;
+        }
+        Some(Reference::Source { source_id: target }) if &target != source_id => {
+            let referenced = state
+                .source(&target)
+                .ok_or_else(|| not_found(EntityKind::Source, target.as_str()))?;
+            if let ParamType::Source { media: Some(media) } = &param.ty {
+                let (video, audio) = match &referenced.kind {
+                    SourceKind::Builtin { kind } => kinds
+                        .get(kind)
+                        .map_or((false, false), |k| (k.video, k.audio)),
+                    _ => (true, false),
+                };
+                let (ok, what) = match media {
+                    Media::Video => (video, "video"),
+                    Media::Audio => (audio, "audio"),
+                    _ => (false, "that media"),
+                };
+                if !ok {
+                    return Err(invalid(
+                        at,
+                        field,
+                        format!("source `{target}` doesn't produce {what}"),
+                    ));
+                }
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Rejects a scene or source reference in `source_id`'s settings that closes a cycle,
+/// naming the parameter in `field_prefix.<id>`.
+fn check_reference_cycles(
+    state: &State,
+    source_id: &SourceId,
+    at: usize,
+    field_prefix: &str,
+) -> Result<(), ProtocolError> {
+    let Some(source) = state.source(source_id) else {
+        return Ok(());
+    };
+    let from = Node::Source(source_id.clone());
+    for (param, reference) in source.settings.references() {
+        if let Some(to) = deps::reference_node(&reference)
+            && let Some(cycle) = deps::cycle(state, &from, &to)
+        {
+            return Err(invalid(
+                at,
+                &format!("{field_prefix}.{param}"),
+                format!("the reference to {to} would create a cycle: {cycle}"),
+            ));
+        }
+    }
+    Ok(())
 }

@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod apply;
+mod deps;
 mod model;
 mod read;
 

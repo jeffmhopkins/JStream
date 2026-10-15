@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:94ef2aea8ba1da43", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via ARCH#threading's handover paragraph; encode threads read no snapshots or parameter channels, so the stopped-marker and fence rule doesn't apply" }
+verified = { hash = "b3:1d6e4fa3acc301b8", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Stale via ARCH#data-model's Built so far edit (source settings); encoder sessions and EncoderSettings are unrelated to source settings, so the section holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

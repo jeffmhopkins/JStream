@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:54ff54944ec657f3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via mcp.rs doc comment (hello at initialize): the contents list (mcp.rs is jstream-mcp's server over the same session) still holds" }
+verified = { hash = "b3:3455cf7d6e06899b", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: args.rs gained source.rename and run/tests.rs reads PROTOCOL_VERSION instead of a literal 0.6; the contents list (commands, running, exit codes, blocking, MCP proxy) still holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:cd944448eb8fbc79", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited the One session bullet: hello is now sent at initialize because the server closes a connection without hello in time; re-read the rest of the MCP paragraph against mcp.rs and run.rs, unchanged" }
+verified = { hash = "b3:cfb85de61190fb1f", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: edited the Edits bullet: every protocol edit except settings (source.set_settings, source.create with settings) is supported, since those need a JSON argument form; source.rename added to the usage text in args.rs. Output and reads bullets unchanged (source tables still print kind only)" }
 -->
 
 ```sh
@@ -94,7 +94,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported. Several edits on one line go as **one atomic batch**: one new
+  protocol is supported except settings: `source.set_settings`, and `source.create`
+  with settings, need a JSON argument form the CLI doesn't have yet, so a source it
+  creates gets its kind's defaults. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
@@ -177,7 +179,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:17517c2da2fc2d41", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited: the MCP proxy bullet says the server sends hello at initialize, and the Tests bullet names the new idle-past-handshake-timeout test in tests/mcp.rs; parsing, block_on and connector bullets unchanged" }
+verified = { hash = "b3:7bf0b5046e143aa1", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: parsing is still fixed-arity edits (source.rename is one more of arity 2); connector, mock, writers, MCP proxy and errors bullets unaffected; tests bullet unchanged (the version tests now format PROTOCOL_VERSION)" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

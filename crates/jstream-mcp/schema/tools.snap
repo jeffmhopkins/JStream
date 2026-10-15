@@ -93,7 +93,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it: delete those sources first (in\nthe same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -266,11 +266,15 @@ source: crates/jstream-mcp/src/tests.rs
                 "properties": {
                   "kind": {
                     "$ref": "#/$defs/SourceKind",
-                    "description": "What the source shows. A `scene` source must name an existing scene."
+                    "description": "What the source shows. A `scene` source must name an existing scene; a\n`builtin` one a kind that `kind.list` reports."
                   },
                   "name": {
                     "description": "Display name.",
                     "type": "string"
+                  },
+                  "settings": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Initial settings, checked against the kind's descriptor (`kind.describe`).\nParameters left out, or sent as `null`, take their defaults, and the engine\nstores the complete map. A `scene` source has no settings. Omitted means all\ndefaults."
                   },
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -286,6 +290,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "source_id",
                   "name",
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Renames a source. Inverse: `source.rename` back to the previous name.",
+                "properties": {
+                  "name": {
+                    "description": "The new display name.",
+                    "type": "string"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to rename."
+                  },
+                  "type": {
+                    "const": "source.rename",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes some of a source's settings. Each entry of `patch` is checked against the\nkind's descriptor like `source.create`'s settings, and replaces that parameter's\nvalue; `null` resets a parameter to its default (a reference parameter to no\nreference). Parameters not in the patch keep their values. A reference that would\nmake a cycle is rejected with `invalid_argument` naming it. Inverse:\n`source.set_settings` with the patched parameters' previous values.",
+                "properties": {
+                  "patch": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Parameter ID to new value, or `null` for the default."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to change."
+                  },
+                  "type": {
+                    "const": "source.set_settings",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "patch"
                 ],
                 "type": "object"
               },
@@ -318,7 +368,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it:\nremove those items first (in the same batch if needed). Inverse: `source.create`\nwith its name and kind.",
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Inverse: `source.create` with its\nname, kind and settings.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -408,6 +458,11 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "A scene in the collection.",
             "type": "string"
           },
+          "Settings": {
+            "additionalProperties": true,
+            "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
+            "type": "object"
+          },
           "SourceId": {
             "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
             "type": "string"
@@ -434,10 +489,10 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). Its settings come with `jstream-sources`;\nuntil then the kind is only a name.",
+                "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). `kind.list` reports the kinds, and\n`kind.describe` the settings each takes; the settings travel beside the kind, on\nthe source.",
                 "properties": {
                   "kind": {
-                    "description": "The kind's name.",
+                    "description": "The kind's ID, as `kind.list` reports it.",
                     "type": "string"
                   },
                   "type": {
@@ -851,6 +906,55 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "item"
     },
     {
+      "description": "Runs one `kind` operation: set `op.type` to one of `kind.list` (query), `kind.describe` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `kind` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Lists every kind the engine can create, ordered by ID. Kinds are not collection\nstate, so the result carries no `rev`.",
+                "properties": {
+                  "type": {
+                    "const": "kind.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "One kind's full descriptor, and a JSON Schema of its settings generated from it.\nFails with `invalid_argument` on `kind_id` if the engine has no such kind.",
+                "properties": {
+                  "kind_id": {
+                    "description": "The kind to describe, as `kind.list` reports it.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "kind.describe",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kind_id"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "kind"
+    },
+    {
       "description": "Runs one `output` operation: set `op.type` to one of `output.start` (action), `output.stop` (action), `output.status` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
@@ -1021,7 +1125,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it: delete those sources first (in\nthe same batch if needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -1087,7 +1191,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "scene"
     },
     {
-      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `source` operation: set `op.type` to one of `source.create` (edit), `source.rename` (edit), `source.set_settings` (edit), `source.duplicate` (edit), `source.delete` (edit), `source.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "IdempotencyKey": {
@@ -1103,6 +1207,11 @@ source: crates/jstream-mcp/src/tests.rs
           "SceneId": {
             "description": "A scene in the collection.",
             "type": "string"
+          },
+          "Settings": {
+            "additionalProperties": true,
+            "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
+            "type": "object"
           },
           "SourceId": {
             "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
@@ -1130,10 +1239,10 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). Its settings come with `jstream-sources`;\nuntil then the kind is only a name.",
+                "description": "A built-in source kind named by the engine (`display`, `window`, `webcam`,\n`image`, `color`, `text`, `media`). `kind.list` reports the kinds, and\n`kind.describe` the settings each takes; the settings travel beside the kind, on\nthe source.",
                 "properties": {
                   "kind": {
-                    "description": "The kind's name.",
+                    "description": "The kind's ID, as `kind.list` reports it.",
                     "type": "string"
                   },
                   "type": {
@@ -1182,11 +1291,15 @@ source: crates/jstream-mcp/src/tests.rs
                 "properties": {
                   "kind": {
                     "$ref": "#/$defs/SourceKind",
-                    "description": "What the source shows. A `scene` source must name an existing scene."
+                    "description": "What the source shows. A `scene` source must name an existing scene; a\n`builtin` one a kind that `kind.list` reports."
                   },
                   "name": {
                     "description": "Display name.",
                     "type": "string"
+                  },
+                  "settings": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Initial settings, checked against the kind's descriptor (`kind.describe`).\nParameters left out, or sent as `null`, take their defaults, and the engine\nstores the complete map. A `scene` source has no settings. Omitted means all\ndefaults."
                   },
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -1202,6 +1315,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "source_id",
                   "name",
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Renames a source. Inverse: `source.rename` back to the previous name.",
+                "properties": {
+                  "name": {
+                    "description": "The new display name.",
+                    "type": "string"
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to rename."
+                  },
+                  "type": {
+                    "const": "source.rename",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes some of a source's settings. Each entry of `patch` is checked against the\nkind's descriptor like `source.create`'s settings, and replaces that parameter's\nvalue; `null` resets a parameter to its default (a reference parameter to no\nreference). Parameters not in the patch keep their values. A reference that would\nmake a cycle is rejected with `invalid_argument` naming it. Inverse:\n`source.set_settings` with the patched parameters' previous values.",
+                "properties": {
+                  "patch": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Parameter ID to new value, or `null` for the default."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source to change."
+                  },
+                  "type": {
+                    "const": "source.set_settings",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id",
+                  "patch"
                 ],
                 "type": "object"
               },
@@ -1234,7 +1393,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it:\nremove those items first (in the same batch if needed). Inverse: `source.create`\nwith its name and kind.",
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Inverse: `source.create` with its\nname, kind and settings.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",

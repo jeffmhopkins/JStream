@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:755a5ebd3c2cb244", by = "agent:grok@stats-tick", note = "Re-read R-API-001 through R-API-004 against the protocol section. stats.tick is an additive event, a minor bump to 0.6, named noun.verb. expected_rev is unchanged. No collection migration. No rule text changed." }
+verified = { hash = "b3:aa106e6dcf60b6be", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: kind.list, kind.describe, source.rename, source.set_settings, the optional settings field on source.create and SourceInfo are additive: a minor bump to 0.7, named noun.verb; expected_rev unchanged; no collection file exists yet so no migration. No rule text changed" }
 -->
 
 <a id="R-API-001"></a>

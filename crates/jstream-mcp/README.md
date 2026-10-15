@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:2d4009ea144de67c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via server.rs: Server still answers one message at a time; contents list unchanged by opening the session at initialize/server/discover" }
+verified = { hash = "b3:cde61ca2b7bc9985", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: no mcp source change beyond tests.rs (the new kind tool in the expected list and count); contents list unchanged" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:10ad376d3a45c6f9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Session and identity (hello at initialize or server/discover, lazy fallback for a failed hello or a client that skips both, why: jstream-server handshake timeout) and the Events read paragraph; checked against server.rs open_early/open and tests.rs" }
+verified = { hash = "b3:3e026157e969093d", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: the tool table row now lists the generated kind tool; generation from the schema means kind.list/kind.describe and source.rename/source.set_settings became ops with no code change, as the section says; tools.snap regenerated" }
 -->
 
 ### Tools
@@ -59,7 +59,7 @@ below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`item`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action or query of that noun | an edit: a batch of one; an action: an action; a query: a query |
+| one per noun (`item`, `kind`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action or query of that noun | an edit: a batch of one; an action: an action; a query: a query |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |

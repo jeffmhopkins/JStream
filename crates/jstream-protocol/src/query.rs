@@ -3,6 +3,8 @@
 use crate::command::{Crop, ItemTransform, SourceKind};
 use crate::event::OutputState;
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::kind::{KindDescriptor, KindSummary};
+use crate::settings::Settings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -46,6 +48,17 @@ pub enum Query {
     /// runtime state and can change without a new `rev`.
     #[serde(rename = "video.snapshot")]
     VideoSnapshot,
+    /// Lists every kind the engine can create, ordered by ID. Kinds are not collection
+    /// state, so the result carries no `rev`.
+    #[serde(rename = "kind.list")]
+    KindList,
+    /// One kind's full descriptor, and a JSON Schema of its settings generated from it.
+    /// Fails with `invalid_argument` on `kind_id` if the engine has no such kind.
+    #[serde(rename = "kind.describe")]
+    KindDescribe {
+        /// The kind to describe, as `kind.list` reports it.
+        kind_id: String,
+    },
 }
 
 impl Query {
@@ -58,6 +71,8 @@ impl Query {
             Query::ItemList { .. } => "item.list",
             Query::StateGet => "state.get",
             Query::VideoSnapshot => "video.snapshot",
+            Query::KindList => "kind.list",
+            Query::KindDescribe { .. } => "kind.describe",
         }
     }
 }
@@ -124,6 +139,21 @@ pub enum QueryResult {
         /// The PNG file, standard base64 with padding and no line breaks.
         png: String,
     },
+    /// The result of `kind.list`.
+    #[serde(rename = "kind.list")]
+    KindList {
+        /// Every kind, ordered by ID.
+        kinds: Vec<KindSummary>,
+    },
+    /// The result of `kind.describe`.
+    #[serde(rename = "kind.describe")]
+    KindDescribe {
+        /// The kind's descriptor.
+        kind: KindDescriptor,
+        /// A JSON Schema (draft 2020-12) of a complete settings map of this kind,
+        /// generated from `kind`.
+        settings_schema: serde_json::Value,
+    },
 }
 
 impl QueryResult {
@@ -136,6 +166,8 @@ impl QueryResult {
             QueryResult::ItemList { .. } => "item.list",
             QueryResult::StateGet { .. } => "state.get",
             QueryResult::VideoSnapshot { .. } => "video.snapshot",
+            QueryResult::KindList { .. } => "kind.list",
+            QueryResult::KindDescribe { .. } => "kind.describe",
         }
     }
 }
@@ -160,6 +192,10 @@ pub struct SourceInfo {
     pub name: String,
     /// What it shows.
     pub kind: SourceKind,
+    /// Its settings: every parameter of its kind. Empty (and omitted) for a `scene`
+    /// source and for a kind without parameters.
+    #[serde(default, skip_serializing_if = "Settings::is_empty")]
+    pub settings: Settings,
 }
 
 /// One scene with its items, as `state.get` reports it.

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:2d87a6e5f078eab3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only via jstream-protocol › Design, whose edit is the render_ticks wording; the graph never reads stats.tick or DropCounts, so Purpose holds" }
+verified = { hash = "b3:4062f94e26392cc2", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: re-read after spelling out the media in the source-reference rejection (video/audio) and its test; the Settings bullet's media sentence still holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -23,10 +23,13 @@ its IDs are the protocol's ID types, and its errors are the protocol's `Protocol
 codes, so the engine passes them to clients unchanged.
 
 **Model** (`model/`, [ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)):
-- `Graph`: the `State` plus its `rev`.
+- `Graph`: the `State` plus its `rev`, and the kind descriptors it validates `builtin`
+  sources against. The engine supplies them (`Graph::with_kinds`); they are not
+  collection state, and `Graph::new()` describes none.
 - `State`: the `sources`, keyed by ID, and the `scenes` in display order.
-- `Source`: a single shared instance with an ID, a name and a `SourceKind` (`builtin` by
-  name, or `scene`, a nested scene). `item.add` places an existing source by reference,
+- `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
+  kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
+  or none for a `scene` source. `item.add` places an existing source by reference,
   so one source can sit in many scenes, or several times in one, and is still one
   capture. `source.duplicate` makes a separate copy under a new ID. Removing an item
   never deletes its source.
@@ -47,26 +50,40 @@ goes up by exactly one, and the result carries the **inverse batch**.
   `item.add` produces, and deleting a scene by `scene.create`, `scene.reorder` and each
   item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
   history (in `jstream-core`) chooses it.
+- **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
+  `source.create` of a `builtin` source needs a kind the graph describes, checks each
+  given value with the protocol's `ParamDescriptor::check`, and stores the complete map
+  with defaults filled in. `source.set_settings` checks and applies a patch (`null`
+  resets a parameter to its default) and its inverse is the patch of the old values.
+  `source.rename` renames. A reference to a missing scene or source is `not_found`, and
+  a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
-  places the source, and `scene.delete` while a `scene` source shows the scene. The
-  error names the blockers, and the client removes them first, in the same batch if it
-  likes. Rejecting rather than cascading keeps each edit's effect, and its inverse,
-  limited to the object it names.
-- **No cycles.** `item.add` of a `scene` source is rejected with `invalid_argument` if
-  the placed scene is the target scene or contains it at any depth. The reason names
-  the cycle (`a -> b -> a`). Only `item.add` adds nesting, so it is the only edit
-  checked.
+  places the source or a setting refers to it, and `scene.delete` while a `scene`
+  source shows the scene or a setting refers to it. The error names the blockers (a
+  setting as `<source>.settings.<param>`), and the client removes them first, in the
+  same batch if it likes. Rejecting rather than cascading keeps each edit's effect, and
+  its inverse, limited to the object it names.
+- **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
+  on the sources its items place, a `scene` source on its scene, and a source on the
+  scenes and sources its settings refer to. Asset references are not edges. Every edit
+  that adds an edge runs the cycle check: `item.add`, `source.create` and
+  `source.set_settings`; `source.duplicate` copies outgoing edges onto a source nothing
+  depends on, so it can't close one. A cycle is `invalid_argument` naming it
+  (for example scene `a` -> source `sa` -> scene `a`).
 
 **Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
 collection (`state.get`, `scene.list`, `source.list` and `item.list`) with the
-protocol's result shapes, at the current `rev`. It returns `None` for a query the graph
-doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
+protocol's result shapes, at the current `rev`, and the kind queries (`kind.list`,
+`kind.describe`, which fails with `invalid_argument` on `kind_id` for an unknown
+kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
 `not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
 display order, items bottom first; `Source::to_info`, `Scene::to_info` and
 `Item::to_info` convert single objects. Reads change nothing.
 
 **Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
-edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds), exact inverses,
+edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds, and through
+settings references, one case per edge-adding edit), settings checks and defaults,
+delete rejection by references, exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
@@ -88,7 +105,9 @@ Planned, and kept possible by the private fields of the model types:
   `src/persist/`. Deferred to keep this first cut reviewable; nothing is saved yet.
 - **Filters and effects:** `filters[]` on sources (applied wherever the source is
   placed) and `effects[]` on items (per placement), with their edits.
-- **Source settings** for builtin kinds, and `source.rename`, come with `jstream-sources`.
+- **Kinds from `jstream-sources`.** The engine's kinds are stubs until that crate
+  supplies the real ones. Kind versions on stored settings, migrations, and keeping
+  data for a missing kind come with persistence.
 - The collection canvas and item `geometry` of
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md), replacing the protocol's
   2D `ItemTransform`, which an item keeps as a legacy placement until 1.0 unless an

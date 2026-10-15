@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d002ffb73e0e21a0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via apps/jstream-cli (mcp.rs comment, README, tests): jstream-cli is still the remote client with the stdio MCP proxy and doesn't link the engine; table and diagram hold" }
+verified = { hash = "b3:f7847f7cdd8db9a1", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: apps/jstream-cli gained source.rename parsing and version-agnostic tests; it is still the remote client with the stdio MCP proxy and links no engine, so the diagram and table hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ffeb76b8de905c81", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the apps/* row against apps/jstream-daemon/Cargo.toml: still layer 6 with unsafe_allowed false; the new direct deps tracing and blake3 are external crates (no new jstream crate edge), so the row text holds" }
+verified = { hash = "b3:f878f7734d849347", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: jstream-graph and jstream-core gained serde_json (external, no new jstream crate edge); layers and rows unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -165,7 +165,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:6c79e1f6a3e80df1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#102 N2: the stale-hotkey sentence now re-points through a hotkey.clear + hotkey.set batch, matching ADR-0024 §5 (set on a bound chord is already_exists); nothing else in the section changed" }
+verified = { hash = "b3:8161dd00b53a1c91", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: edited Built so far: sources carry settings checked against the kind descriptor and stored complete; settings references are dependency edges in the one cycle check; delete is rejected while a setting refers to the target; stub kinds live in jstream-core until jstream-sources; Not yet adds kind versions on stored settings. The target model above already had settings and is unchanged" }
 -->
 
 ```
@@ -336,12 +336,16 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   BT.709 limited range by default. HDR (FP16) capture is tone-mapped to SDR. HDR output is later.
 - **Undo** primitives (an edit plus its inverse) live in `jstream-graph`. The per-client
   undo stacks live in `jstream-core`.
-- **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind name or a nested
-  scene; no settings or filters yet), scenes in display order, and items in stacking
-  order with `source_id`, protocol 0.3's 2D transform (top-left corner and scale, which
-  ADR-0022 replaces), `crop` and `visible`. Items refer to sources; they never copy them.
-  Deleting a source an item still places, or a scene a source still shows, is rejected.
-  Not yet: settings, filters, source audio settings, `opacity`, `blend`, the reserved
+- **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind ID or a nested
+  scene, with `settings` checked against the kind's descriptor and stored complete; no
+  filters yet), scenes in display order, and items in stacking order with `source_id`,
+  protocol 0.3's 2D transform (top-left corner and scale, which ADR-0022 replaces),
+  `crop` and `visible`. Items refer to sources; they never copy them. Scene and source
+  references in settings are dependency edges with items and nested scenes, so one
+  cycle check covers them all. Deleting a source an item still places or a setting
+  refers to, or a scene a source still shows or a setting refers to, is rejected. The
+  built-in kinds are stubs in `jstream-core` until `jstream-sources` exists.
+  Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
   `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
   variants and overrides, folders, labels, favourites and other organisation metadata,
@@ -487,7 +491,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:730d037d3a32ecb6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via the jstream-server README (open question 8): Transport bullet still holds; the handshake timeout is server-local, envelope unchanged" }
+verified = { hash = "b3:778769be0c9db82d", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: re-stale only from a clippy fix in kind.rs (accept.contains instead of iter().any); behaviour and the text re-read earlier in this PR are unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -534,7 +538,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
   `output.status`, `video.snapshot` → the program mix as a PNG in the JSON result,
-  longest side at most 1280, with the layout `rev`; later `audio.levels`).
+  longest side at most 1280, with the layout `rev`; `kind.list` and `kind.describe` →
+  the kinds the engine describes, each with a generated settings schema
+  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); later `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)); the fields are in
@@ -579,11 +585,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:86ae7c32cfa70b9a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via jstream-mcp server.rs/README: tools, events buffer, schema, access and audit bullets unaffected by sending hello at initialize; audit still names the client (clientInfo.name)" }
+verified = { hash = "b3:5b2688aa6447f6d0", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: tool list adds the generated kind tool; tools/list size updated to about 60 KB (tools.snap grew from ~56 KB to ~64 KB with the settings and descriptor schemas); events, access and snapshot bullets unaffected" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -593,7 +599,7 @@ verified = { hash = "b3:86ae7c32cfa70b9a", by = "agent:claude@session_01QBbMRwRu
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 50 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 60 KB
   of `tools/list` today), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

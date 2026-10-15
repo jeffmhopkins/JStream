@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:819bcd6aa4a3e9dd", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the mock bullet against subscriber_count. MockEngine and MockControl are still the in-memory stand-in. The method is a test probe, not a new client API, and the contents list still matches." }
+verified = { hash = "b3:1879d9a9e0e99e6c", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: mock.rs gained settings storage, source.rename/set_settings and settings-reference delete checks; the contents list (trait, errors, mock, ws client) still holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:41bde4792835f4eb", by = "agent:grok@stats-tick", note = "Re-read the event bullets and open question 1 against mock.rs. MockEngine::emit still injects events the mock does not produce, including stats.tick. That event is protocol 0.6 and is emitted about once a second while a pipeline runs. Streams still end with the session." }
+verified = { hash = "b3:09f7b8c88a16347c", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: Mock section now says settings-reference delete rejection, that the mock describes no kinds (accepts any builtin kind, stores settings as sent, null removes, no cycles through settings, kind queries internal), and that reads report settings. Checked against mock.rs" }
 -->
 
 ### The trait
@@ -108,15 +108,21 @@ protocol's rules for them:
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
   - reorder indices out of range;
-  - deleting a source that an item places, or a scene that a scene source shows;
+  - deleting a source that an item places, or a scene that a scene source shows, or
+    either while a source's settings refer to it;
   - nesting cycles.
 
-  Error messages may differ; clients match on codes and fields;
+  Error messages may differ; clients match on codes and fields. The mock describes no
+  kinds, so it accepts any non-empty builtin kind, stores settings as sent without
+  checking them or filling in defaults (a `null` in a `source.set_settings` patch
+  removes the entry), and doesn't follow settings references when it looks for cycles.
+  `kind.list` and `kind.describe` answer `internal`;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID) and `item.list` (bottom first; `not_found` for a missing
   scene), each at the current `rev`, and `output.status`. So it keeps everything an
-  edit sets: source names and kinds, and each item's transform, crop and visibility.
+  edit sets: source names, kinds and settings, and each item's transform, crop and
+  visibility.
   `video.snapshot` is not one of those reads: the mock has no compositor and answers
   it with `internal`, as it does for any protocol variant it does not implement;
 - `state.changed` events carrying the request ID, and `output.start`/`output.stop`
