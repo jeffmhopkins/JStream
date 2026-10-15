@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:c4dfa2c9dcc3ebf6", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Review round 1 N1/N2/N7: http bullet now says why the HttpTransport seam exists (hermetic tests) and that later HTTPS crates reuse it; loopback bullet states the per-connection 5 s budget capped at the wait deadline (Deadlined reader); HttpsTransport says connect, read and write are bounded and resolution is the OS's; N3 wipes on partial reads, matching the zeroed-body claim" }
+verified = { hash = "b3:97194c78632a5a55", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via Y2's platform Purpose (#169, new OAuthTokenStore bullet saying jstream-youtube keeps its refresh token there): Secrets paragraph now names OAuthTokenStore as where the host keeps the refresh token, and Not yet drops the credential-store entry (it exists) and keeps saving to it under engine wiring; the crate itself still never writes it" }
 -->
 
 Layer-2 client for Google sign-in and the
@@ -94,10 +94,12 @@ token, and every response body, are zeroed after use; like `Secret`'s own wiping
 is best effort, and buffers inside rustls are not reached. No error, log line or `Debug` output carries one: errors from Google
 keep only its error code and message (cut to `MAX_REMOTE_TEXT` characters, control
 characters replaced), and a response that fails to parse is reported by line and
-column, never quoted. Storing the refresh token in the OS credential store is the
-host's job: this crate hands it over in a `Grant` and through
-`LiveClient::take_rotated_refresh_token`, and never writes it anywhere.
+column, never quoted. The refresh token is kept in the OS credential store through
+`jstream-platform`'s `OAuthTokenStore`, by the host: this crate hands it over in a
+`Grant` and through `LiveClient::take_rotated_refresh_token`, and never writes it
+anywhere itself.
 
 **Not yet:** chat (reading, sending as the channel, the featured message) and audience
 stats from ADR-0034, quota accounting, the protocol commands and MCP tools that expose
-all of this, the credential-store entry for the refresh token, and the engine wiring.
+all of this, and the engine wiring (including saving the refresh token in the
+`OAuthTokenStore`).
