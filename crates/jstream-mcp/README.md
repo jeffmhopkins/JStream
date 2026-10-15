@@ -31,7 +31,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
   and the decoding of tool arguments into protocol calls.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
-  a bounded, numbered buffer.
+  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`.
 - **JSON-RPC** (`jsonrpc.rs`): parsing one message and building replies.
 - **stdio transport** (`stdio.rs`): `serve_stdio`, newline-delimited messages over any
   `BufRead`/`Write` pair.
@@ -60,7 +60,7 @@ below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`canvas`, `delete`, `device`, `encoder`, `history`, `item`, `kind`, `output`, `pairing`, `scene`, `source`, `state`, `studio`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`audio`, `bus`, `canvas`, `delete`, `device`, `encoder`, `history`, `item`, `kind`, `output`, `pairing`, `scene`, `send`, `source`, `state`, `studio`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -79,7 +79,7 @@ names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-ro
 diff agents will see. After an intended change, regenerate it with
 `INSTA_UPDATE=always cargo test -p jstream-mcp` and review the diff.
 
-The `pairing` and `device` tools (protocol 0.19) need no code here either: the session
+The `pairing` and `device` tools (protocol 0.20) need no code here either: the session
 `jstream-server` hands this crate answers them
 ([ADR-0046](../../docs/adr/0046-server-answers-credential-calls.md)), so an agent can
 pair and revoke devices as any client can (ADR-0006), and gets `unsupported` from a
@@ -192,7 +192,8 @@ the buffer nor the `Control`'s own stream grows while the agent is idle. It keep
 Consequences). A tick carries running totals, so the feed keeps only the newest one,
 outside the buffer, and every read returns it as `stats`; an agent still sees the drop
 counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
-counted in `dropped`. A read drains
+counted in `dropped`. `meters.tick`, about ten a second while the mixer runs, is kept
+the same way as `meters`: each one is a full reading of the levels. A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 
@@ -204,6 +205,7 @@ then returns at most `PAGE_SIZE` events after `after`:
 | `more` | further events are buffered after `next` |
 | `ended` | the subscription has ended with the session; no more events will come |
 | `stats` | the newest `stats.tick`, kept outside the buffer; absent until the first tick |
+| `meters` | the newest `meters.tick`, kept outside the buffer; absent until the first tick |
 
 An `events.dropped` event among `events` is a different gap: over the WebSocket API,
 `jstream-server` dropped events this session's connection had not read yet

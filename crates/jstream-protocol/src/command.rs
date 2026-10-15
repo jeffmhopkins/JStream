@@ -9,11 +9,13 @@
 //!
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
+use crate::audio::AudioFollow;
 use crate::encoder::EncoderProfile;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::id::{
-    DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId,
+    BusId, DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId,
+    SourceId,
 };
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
@@ -210,7 +212,9 @@ pub enum Edit {
         crop: Crop,
     },
     /// Adds a source to the collection. It appears in no scene until an `item.add`
-    /// places it. Inverse: `source.delete`.
+    /// places it. An audio source (its kind produces audio, or it is a `scene` source)
+    /// starts with its kind's default audio settings, and one that is not a `scene`
+    /// source sends to the master bus at 0 dB (ADR-0028). Inverse: `source.delete`.
     #[serde(rename = "source.create")]
     SourceCreate {
         /// The new source's ID, chosen by the client. Rejected if it exists.
@@ -254,8 +258,8 @@ pub enum Edit {
         /// Parameter ID to new value, or `null` for the default.
         patch: Settings,
     },
-    /// Copies a source under a new ID: a separate instance with the same kind and
-    /// settings, which changes independently from then on. The copy's `duplicated_from`
+    /// Copies a source under a new ID: a separate instance with the same kind,
+    /// settings, audio settings and sends, which changes independently from then on. The copy's `duplicated_from`
     /// names the source it was copied from. Placing the *same* source again is `item.add`
     /// with its existing `source_id`. Inverse: `source.delete` of the copy.
     #[serde(rename = "source.duplicate")]
@@ -270,8 +274,11 @@ pub enum Edit {
     /// Deletes a source. Rejected with `invalid_argument` while any item still places it,
     /// or any source's settings refer to it: remove those items, or clear those
     /// references, first (in the same batch if needed). Deleting a source that others were
-    /// copied from is allowed: their `duplicated_from` then reads as absent. Inverse:
-    /// `source.create` with its name, kind, settings and `duplicated_from`.
+    /// copied from is allowed: their `duplicated_from` then reads as absent. Its sends go
+    /// with it. Inverse: `source.create` with its name, kind, settings and
+    /// `duplicated_from`, then `send.remove` of its master send if it had none,
+    /// `send.set` for each send that `source.create` doesn't restore as it was, and
+    /// `source.set_audio` if its audio settings were not the defaults.
     #[serde(rename = "source.delete")]
     SourceDelete {
         /// The source to delete.
@@ -371,6 +378,95 @@ pub enum Edit {
         /// The profile to delete.
         profile_id: EncoderProfileId,
     },
+    /// Changes some of an audio source's settings (ADR-0028): the fields sent change,
+    /// the others keep their values, and sending none is `invalid_argument`. A source
+    /// without audio is `invalid_argument` on `source_id`. A `scene` source has no fader
+    /// or mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so
+    /// is a gain outside −100 to +24 dB. Inverse: `source.set_audio`
+    /// with the previous values of the fields sent.
+    #[serde(rename = "source.set_audio")]
+    SourceSetAudio {
+        /// The source to change.
+        source_id: SourceId,
+        /// Whether the engine opens the source's audio. Off keeps its sends, inactive.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        /// When the source is heard.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        follow: Option<AudioFollow>,
+        /// The fader, in dB.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gain_db: Option<Finite32>,
+        /// Whether it is muted.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        muted: Option<bool>,
+    },
+    /// Adds a bus, at 0 dB, unmuted, with no sends into it. A collection holds at most
+    /// 16 buses, the master included; one more is `invalid_argument`. Inverse:
+    /// `bus.delete`.
+    #[serde(rename = "bus.create")]
+    BusCreate {
+        /// The new bus's ID, chosen by the client. Rejected if it exists, so `master` is
+        /// always taken.
+        bus_id: BusId,
+        /// Display name.
+        name: String,
+    },
+    /// Renames a bus, the master included. Inverse: `bus.rename` back to the previous
+    /// name.
+    #[serde(rename = "bus.rename")]
+    BusRename {
+        /// The bus to rename.
+        bus_id: BusId,
+        /// The new display name.
+        name: String,
+    },
+    /// Changes a bus's fader or mute, the master's included: the fields sent change,
+    /// and sending neither is `invalid_argument`, as is a gain outside −100 to +24 dB.
+    /// Inverse: `bus.set_fader` with the previous values of the fields sent.
+    #[serde(rename = "bus.set_fader")]
+    BusSetFader {
+        /// The bus to change.
+        bus_id: BusId,
+        /// The fader, in dB, applied after the bus's sum.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gain_db: Option<Finite32>,
+        /// Whether the bus is muted.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        muted: Option<bool>,
+    },
+    /// Deletes a bus and every send into it. The master bus can't be deleted
+    /// (`invalid_argument`). Inverse: `bus.create` with its name, `bus.set_fader` if
+    /// its fader or mute were not the defaults, then `send.set` for each send it had.
+    #[serde(rename = "bus.delete")]
+    BusDelete {
+        /// The bus to delete.
+        bus_id: BusId,
+    },
+    /// Sends a source into a bus at a gain, post-fader, or changes that send's gain.
+    /// The source must be an audio source that is not a `scene` source, which has no
+    /// sends of its own (`invalid_argument` on `source_id`), and the gain must be from
+    /// −100 to +24 dB. Buses never feed other buses (ADR-0028), so sends can't form a
+    /// cycle. Inverse: `send.remove` for a new send, else `send.set` with the previous
+    /// gain.
+    #[serde(rename = "send.set")]
+    SendSet {
+        /// The source sending.
+        source_id: SourceId,
+        /// The bus it sends into.
+        bus_id: BusId,
+        /// The send's gain, in dB.
+        gain_db: Finite32,
+    },
+    /// Stops a source sending into a bus. No such send is `invalid_argument` on
+    /// `bus_id`. Inverse: `send.set` with its gain.
+    #[serde(rename = "send.remove")]
+    SendRemove {
+        /// The source sending.
+        source_id: SourceId,
+        /// The bus it sends into.
+        bus_id: BusId,
+    },
 }
 
 impl Edit {
@@ -403,6 +499,13 @@ impl Edit {
             Edit::EncoderCreate { .. } => "encoder.create",
             Edit::EncoderUpdate { .. } => "encoder.update",
             Edit::EncoderDelete { .. } => "encoder.delete",
+            Edit::SourceSetAudio { .. } => "source.set_audio",
+            Edit::BusCreate { .. } => "bus.create",
+            Edit::BusRename { .. } => "bus.rename",
+            Edit::BusSetFader { .. } => "bus.set_fader",
+            Edit::BusDelete { .. } => "bus.delete",
+            Edit::SendSet { .. } => "send.set",
+            Edit::SendRemove { .. } => "send.remove",
             Edit::CanvasSetSize { .. } => "canvas.set_size",
         }
     }
@@ -454,6 +557,11 @@ pub enum Action {
         /// The output whose key to remove.
         output_id: OutputId,
     },
+    /// Restarts the master bus's integrated loudness measurement (ADR-0028). Meters are
+    /// runtime state, so this is an action, never an edit. Succeeds, doing nothing, while
+    /// the mixer isn't running.
+    #[serde(rename = "audio.reset_loudness")]
+    AudioResetLoudness {},
     /// Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every
     /// output that shows program) shows it from the next frame. The program scene is
     /// runtime state, not collection state (ADR-0030): the switch changes no `rev`, is
@@ -496,6 +604,7 @@ impl Action {
             Action::OutputStop { .. } => "output.stop",
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
+            Action::AudioResetLoudness {} => "audio.reset_loudness",
             Action::SceneSwitch { .. } => "scene.switch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",

@@ -201,7 +201,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:8fd3cef444e65af4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (e1e2a94) into pairing: main took protocol 0.18 for virtual_cam, so pairing ships as 0.19; re-read main's text beside this PR's pairing text and checked every pairing version mention says 0.19 and virtual_cam's stays 0.18; holds" }
+verified = { hash = "b3:8c58a5105c467013", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at #295 (clock swap re-plan): re-read against both sides: daemon text is main's; names no audio routing; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
