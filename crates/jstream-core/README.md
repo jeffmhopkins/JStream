@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:b50dccc6da6920f7", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merges (B9, C5): re-read; Audio sources bullet now says inputs are routed (fader, mute, sends) and only the defaults go to master at unity; tests list adds audio_routing.rs and the C5-side meter check; Not here yet drops C5" }
+verified = { hash = "b3:7068db82acdf20e5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 2 B3: re-read; Audio sources bullet says only sources whose audio is on get an input, opened and closed as audio turns on and off; Audio bullet drops the mute-while-off claim; tests line names the off/on check" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -60,8 +60,9 @@ state machine. Contents:
   on the render thread (see *Live sources* and *Snapshots* in [Design](#design)).
   Audio-only kinds make no frames and have no live source.
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
-  input for each `audio_input`, `desktop_audio` and `app_audio` source, added when the
-  source is created and removed when it is deleted, and listed for the audio routing,
+  input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
+  on, added when the source is created or turned on and removed when it is deleted or
+  turned off, and listed for the audio routing,
   which sets its fader, mute and sends; while there is none, the default microphone
   and desktop audio, sent to master at unity (see *Audio sources* in
   [Design](#design)).
@@ -80,8 +81,7 @@ state machine. Contents:
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
-  mixer input has its fader and its sends (silenced while it is `muted`), and is
-  muted and unmetered while its audio is off;
+  mixer input has its fader and its sends (silenced while it is `muted`);
   `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
   `audio.reset_loudness` restarts its integrated loudness.
@@ -151,8 +151,9 @@ state machine. Contents:
   `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
   batches and undo, `meters.tick` while a mixer is attached and none after,
   `audio.reset_loudness`, and the master's true peak and loudness; `src/tests/audio.rs`
-  also checks that a recording audio source is metered and drops out of
-  `meters.tick` when its audio is off. The parity tests add the
+  also checks that a recording audio source is metered, and that turning its audio
+  off closes its input and its meter and turning it on opens them again. The parity
+  tests add the
   fixture's `mic` kind, which no built-in kind matches.
 
 Not here yet: live values, `when_shown`'s activity
@@ -169,7 +170,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:29b33b3e47412f8b", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: cascade from protocol design's envelope example moving to 0.16; re-read, nothing here names the example's version; holds" }
+verified = { hash = "b3:dc45969cad0a3bf8", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 2 B3: re-read; Audio sources says AudioSources holds no target while audio is off so no stream opens, an off source still keeps the defaults away; Audio routing says off means no input, routing mutes and unmeters only until it closes" }
 -->
 
 ### Engine and sessions
@@ -406,9 +407,10 @@ is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 `Source`: the program stage records them (*Audio sources*).
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
-`jstream_sources::AudioTarget` of every audio-only source; `sync` runs beside the live
+`jstream_sources::AudioTarget` of every audio-only source, or none while the source's
+audio is off (ADR-0028: off, the engine doesn't open its stream); `sync` runs beside the live
 sources' and wakes the program stage's thread when that set changes. When the program
-stage starts, its `AudioInputs` opens one mixer input per audio source through
+stage starts, its `AudioInputs` opens one mixer input per audio source that is on through
 `MixerControl` (D1's live API). A source's input opens muted and is listed in
 `audio_sources::Routed`, where the audio routing finds it (see *Audio routing*) and
 sets it up as the collection says; the default microphone and desktop inputs send to
@@ -440,7 +442,7 @@ ledger's. When the program stage stops it joins the thread and closes every inpu
 after the mixer thread has stopped. While the collection has no audio source, the
 program records the default microphone and desktop audio, as it did before audio
 sources existed, so an earlier collection is not silent; the first audio source
-replaces them. Whether a source is recording or unavailable is not reported to
+replaces them, and keeps them away while its audio is off. Whether a source is recording or unavailable is not reported to
 clients yet: that needs a protocol field (D5's lane).
 
 `snapshot::plan_with` asks for the frame of each source an item it reaches places:
@@ -557,8 +559,9 @@ brings the mixer in line with the collection under the collection lock:
 - every bus's fader and mute, the master's on `Mixer::bus`;
 - for each source with a mixer input, its fader and a send into each mixer bus as the
   collection's sends say, removing the others. A `muted` source keeps its sends at
-  silence, so its post-fader meter still reads, as ADR-0028's mute requires; a source
-  whose audio is off is muted in the mixer and has no meter in `meters.tick`. The
+  silence, so its post-fader meter still reads, as ADR-0028's mute requires. A source
+  whose audio is off has no input, since the program stage closes it; until it has,
+  the routing mutes it and leaves it out of `meters.tick`. The
   inputs are the ones the program stage's audio sources thread lists in `Routed` as it
   opens and closes them (see *Audio sources*); it removes them from the mixer itself.
   An input it opened since the last sync is routed on the next `meters.tick` at the

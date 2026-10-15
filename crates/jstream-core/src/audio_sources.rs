@@ -80,9 +80,13 @@ impl Routed {
     }
 }
 
+/// Each audio-only source of the collection, with what it records, or `None` while its
+/// audio is off (ADR-0028: off, the engine doesn't open its stream).
+type Targets = BTreeMap<SourceId, Option<AudioTarget>>;
+
 #[derive(Default)]
 struct WantedState {
-    targets: BTreeMap<SourceId, AudioTarget>,
+    targets: Targets,
     /// How each source fares while the program stage runs.
     status: BTreeMap<SourceId, AudioStatus>,
 }
@@ -100,14 +104,15 @@ impl AudioSources {
     /// Brings the wanted set in line with the collection's audio-only sources, and
     /// wakes the program stage's thread when it changed.
     pub(crate) fn sync(&mut self, state: &jstream_graph::State) {
-        let targets: BTreeMap<SourceId, AudioTarget> = state
+        let targets: Targets = state
             .sources()
             .filter_map(|source| {
                 let SourceKind::Builtin { kind } = source.kind() else {
                     return None;
                 };
                 let target = AudioTarget::of(kind, source.settings())?;
-                Some((source.id().clone(), target))
+                let on = source.audio().is_none_or(|audio| audio.enabled);
+                Some((source.id().clone(), on.then_some(target)))
             })
             .collect();
         let mut wanted = lock(&self.wanted.state);
@@ -178,8 +183,10 @@ impl Want {
     }
 }
 
-/// The inputs to record: one per audio source, or the defaults while there is none.
-fn wanted_inputs(targets: &BTreeMap<SourceId, AudioTarget>) -> BTreeMap<Key, Want> {
+/// The inputs to record: one per audio source whose audio is on, or the defaults while
+/// the collection has no audio source at all (one whose audio is off still counts, so
+/// turning the last one off doesn't bring the defaults back).
+fn wanted_inputs(targets: &Targets) -> BTreeMap<Key, Want> {
     if targets.is_empty() {
         return BTreeMap::from([
             (
@@ -194,7 +201,7 @@ fn wanted_inputs(targets: &BTreeMap<SourceId, AudioTarget>) -> BTreeMap<Key, Wan
     }
     targets
         .iter()
-        .map(|(id, target)| (Key::Source(id.clone()), Want::of(target)))
+        .filter_map(|(id, target)| Some((Key::Source(id.clone()), Want::of(target.as_ref()?))))
         .collect()
 }
 
@@ -355,7 +362,7 @@ enum Note {
 
 impl Pass {
     /// Logs the pass's notes and records the statuses. Called with no lock held.
-    fn finish(self, wanted: &Wanted, targets: &BTreeMap<SourceId, AudioTarget>) {
+    fn finish(self, wanted: &Wanted, targets: &Targets) {
         for note in &self.notes {
             match note {
                 Note::Reopening(key, reason) => {
@@ -383,7 +390,7 @@ impl Open {
     /// what to log:
     /// closes the inputs no longer wanted or wanted differently, reopens failed ones and
     /// those whose application exited, and opens every input that isn't recording.
-    fn reconcile(&mut self, targets: &BTreeMap<SourceId, AudioTarget>) -> Pass {
+    fn reconcile(&mut self, targets: &Targets) -> Pass {
         let mut notes = Vec::new();
         self.removing.retain(|control| !control.remove());
         let wanted = wanted_inputs(targets);

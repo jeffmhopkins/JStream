@@ -9,8 +9,10 @@
 //! every routed source and every bus, with true peak and BS.1770 loudness on the master,
 //! which the mixer thread measures on each block it mixes ([`MasterMeters`]).
 //!
-//! Not yet: a source's mixer input comes with its kind's audio (C5), so only tests attach
-//! one; `follow` (`when_shown`) is D6's activity gain; filters wait for D7b.
+//! The audio sources' inputs are opened and closed by the program stage
+//! (`crate::audio_sources`, which opens none for a source whose audio is off); this
+//! module only sets them up. Not yet: `follow` (`when_shown`) is D6's activity gain;
+//! filters wait for D7b.
 
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{BusControl, InputControl, MeterReading, MixerControl};
@@ -128,8 +130,10 @@ impl AudioRouting {
                 continue;
             };
             input.set_gain_db(audio.gain_db.get());
-            // Off closes the channel: silent and unmetered. A mute keeps the sends but
-            // silences them, so the input's post-fader meter still reads (ADR-0028).
+            // Off, the program stage closes the source's input (`crate::audio_sources`);
+            // until it has, the input is silent and unmetered here. A mute keeps the
+            // sends but silences them, so the input's post-fader meter still reads
+            // (ADR-0028).
             input.set_muted(!audio.enabled);
             let master = (BusId::master(), attached.master.id());
             let others = attached
