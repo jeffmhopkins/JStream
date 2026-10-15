@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:341de0452f28bef3", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: only core tests change (each Backends literal gains video_devices from FakeVideoDevices; CaptureStats literals gain frames_undecodable: 0); with_backends/injection text unchanged and holds" }
+verified = { hash = "b3:c67561b93957b007", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14) into A3: purpose text is main's plus nothing from A3 beyond PublishError::new being public, which the runtime bullet doesn't name; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f96e761c279c4f3b", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up: tests-only edits in core (Backends.video_devices, CaptureStats.frames_undecodable literals); drops table still reads frames_skipped only for capture_frames, which is what drops.rs does (decode failures are not reported in stats.tick yet)" }
+verified = { hash = "b3:5248ce9c9c185f8d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14, item.set_source history) into A3: Outputs paragraph keeps A3's daemon opener line and main's Record sentence; Pipeline keeps the PublishError::new line; history paragraph is main's" }
 -->
 
 ### Engine and sessions
@@ -265,11 +265,12 @@ collection lock:
   (`rev_conflict`); then an empty stack (`history_empty`). None of these drops a step.
 - **Conflicts.** Each applied batch, undo and redo is logged with what it *touched*,
   computed in core from its edits and the inverse's (so a delete also names what it
-  removed): objects created or deleted, objects used (an item's scene and source, a
-  `scene` source's scene, a duplicate's original, the scenes an `item.move` and its
-  inverse name), properties set (names, a scene's role, an item's placement, whether
-  set as a transform or a geometry, crop, visibility, an item's index, which
-  `item.move` also sets, each settings parameter, an output's target), the scenes'
+  removed): objects created or deleted, objects used (an item's scene and source, both
+  sources of an `item.set_source`, a `scene` source's scene, a duplicate's original,
+  the scenes an `item.move` and its inverse name), properties set (names, a scene's
+  role, an item's placement, whether set as a transform or a geometry, crop,
+  visibility, an item's index, which `item.move` also sets, which source an item
+  places, each settings parameter, an output's target), the scenes'
   order, and the canvas size. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
   `scene.create` also deletes the items the scene holds now, even ones whose own step
@@ -473,7 +474,8 @@ delete a running output (`invalid_argument`), so the batch passes it the running
 A host can also declare an output with `Engine::with_output(id)`, outside the
 collection: it starts `stopped`, has no target and stays known whatever the collection
 holds. A live host reads a collection output's target with `output_kind` when its
-publish opener runs; wiring that into the daemon is not done yet. A recording output
+publish opener runs, as `jstream-daemon` does on Windows
+([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)). A recording output
 (`OutputKind::Record`) never calls the opener or takes a one-shot target.
 
 **Stream keys.** `with_key_store` injects the OS credential store
@@ -524,6 +526,7 @@ stop or a failure, and no session sits idle before the start. The opener runs af
 `starting`, outside the collection lock and the pipeline gate, before any device
 opens; its error fails the start like a launch failure (`failed`, then
 `action_failed` with `opening the publish target: <reason>`), and the opener is kept.
+An opener builds its own errors with `PublishError::new`.
 Its error text must not carry a stream key
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)); `connect_rtmp`'s does not. Starts run one at a time (a second waits for the first to settle; a stop never
 waits for a start). The call checks the output is idle,
@@ -808,7 +811,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:3d446468e1f54b00", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b cascade from ARCH#threading (Collector row: the mixer's own collector also frees removed buses' state, filter chains and filters): re-read; edited the last sentence to match: the mixer's collector also frees removed buses' state, chains and filters; core's runtime otherwise unchanged (no filters used, latency 0 so pts unchanged)" }
+verified = { hash = "b3:a7e45af16f8c9a7d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3 made PublishError::new public in runtime/publish.rs; the section's description of the publish target and opener flow is unchanged and holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

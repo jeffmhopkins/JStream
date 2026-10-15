@@ -224,6 +224,8 @@ struct Source {
     name: String,
     kind: SourceKind,
     settings: Settings,
+    /// A plain link, which may name a deleted source; reported only while it exists.
+    duplicated_from: Option<SourceId>,
 }
 
 #[derive(Clone)]
@@ -502,7 +504,8 @@ impl Collection {
     ///
     /// It follows the rules `jstream-graph` enforces for the same edits (existence,
     /// unique IDs, no deleting what is still referenced, index bounds, no nesting
-    /// cycles, no deleting a running output, RTMP server URLs), with the same error
+    /// cycles from `item.add` or `item.set_source`, `duplicated_from` never naming the
+    /// source itself, no deleting a running output, RTMP server URLs), with the same error
     /// codes and `edits.<at>.<field>` paths. It describes no kinds, so it doesn't check
     /// settings, fill in defaults, or follow settings references when it looks for
     /// cycles. `running` are the outputs that run.
@@ -577,17 +580,7 @@ impl Collection {
                 if self.items.contains_key(&item_id) {
                     return Err(already_exists(EntityKind::Item, item_id.as_str()));
                 }
-                if let SourceKind::Scene { scene_id: nested } = kind
-                    && self.contains(nested, &scene_id)
-                {
-                    return Err(invalid(
-                        at,
-                        "source_id",
-                        format!(
-                            "placing scene `{nested}` in scene `{scene_id}` would create a cycle"
-                        ),
-                    ));
-                }
+                self.check_nesting(&scene_id, kind, at)?;
                 let transform = match (transform, geometry) {
                     (Some(_), Some(_)) => {
                         return Err(invalid(
@@ -660,6 +653,14 @@ impl Collection {
             } => {
                 self.placement(&item_id, scene_id.as_ref(), at)?.crop = crop;
             }
+            Edit::ItemSetSource { item_id, source_id } => {
+                let scene_id = self.existing_item(&item_id)?.scene_id.clone();
+                let Some(Source { kind, .. }) = self.sources.get(&source_id) else {
+                    return Err(not_found(EntityKind::Source, source_id.as_str()));
+                };
+                self.check_nesting(&scene_id, kind, at)?;
+                self.existing_item(&item_id)?.source_id = source_id;
+            }
             Edit::ItemSetVisible {
                 item_id,
                 scene_id,
@@ -672,9 +673,17 @@ impl Collection {
                 name,
                 kind,
                 settings,
+                duplicated_from,
             } => {
                 check_id(source_id.as_str(), at, "source_id")?;
                 check_name(&name, at)?;
+                if duplicated_from.as_ref() == Some(&source_id) {
+                    return Err(invalid(
+                        at,
+                        "duplicated_from",
+                        "must not name the source itself",
+                    ));
+                }
                 match &kind {
                     SourceKind::Scene { scene_id } => {
                         self.existing_scene(scene_id)?;
@@ -685,7 +694,7 @@ impl Collection {
                     SourceKind::Builtin { .. } => {}
                     _ => return Err(unimplemented_by_mock("this source kind")),
                 }
-                self.create_source(source_id, name, kind, settings)?;
+                self.create_source(source_id, name, kind, settings, duplicated_from)?;
             }
             Edit::SourceRename { source_id, name } => {
                 check_name(&name, at)?;
@@ -716,7 +725,7 @@ impl Collection {
                 };
                 check_id(new_source_id.as_str(), at, "new_source_id")?;
                 check_name(&name, at)?;
-                self.create_source(new_source_id, name, kind, settings)?;
+                self.create_source(new_source_id, name, kind, settings, Some(source_id))?;
             }
             Edit::SourceDelete { source_id } => {
                 if !self.sources.contains_key(&source_id) {
@@ -858,6 +867,7 @@ impl Collection {
         name: String,
         kind: SourceKind,
         settings: Settings,
+        duplicated_from: Option<SourceId>,
     ) -> Result<(), ProtocolError> {
         if self.sources.contains_key(&id) {
             return Err(already_exists(EntityKind::Source, id.as_str()));
@@ -868,6 +878,7 @@ impl Collection {
                 name,
                 kind,
                 settings,
+                duplicated_from,
             },
         );
         Ok(())
@@ -895,6 +906,10 @@ impl Collection {
                 name: source.name.clone(),
                 kind: source.kind.clone(),
                 settings: source.settings.clone(),
+                duplicated_from: source
+                    .duplicated_from
+                    .clone()
+                    .filter(|original| self.sources.contains_key(original)),
             })
             .collect()
     }
@@ -944,6 +959,26 @@ impl Collection {
                 })
             })
             .collect()
+    }
+
+    /// Rejects placing a source of `kind` in scene `scene_id` (`item.add`,
+    /// `item.set_source`) if the scene would then contain itself.
+    fn check_nesting(
+        &self,
+        scene_id: &SceneId,
+        kind: &SourceKind,
+        at: usize,
+    ) -> Result<(), ProtocolError> {
+        match kind {
+            SourceKind::Scene { scene_id: nested } if self.contains(nested, scene_id) => {
+                Err(invalid(
+                    at,
+                    "source_id",
+                    format!("placing scene `{nested}` in scene `{scene_id}` would create a cycle"),
+                ))
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Whether scene `outer` is `inner` or shows it, directly or through nested scene
@@ -1376,6 +1411,7 @@ mod tests {
                 kind: "webcam".into(),
             },
             settings: Default::default(),
+            duplicated_from: None,
         }
     }
 
@@ -1523,6 +1559,7 @@ mod tests {
                         scene_id: SceneId::new("b"),
                     },
                     settings: Default::default(),
+                    duplicated_from: None,
                 },
                 add("a", "i1", "webcam"),
                 add("a", "i2", "nested_b"),
@@ -1571,6 +1608,7 @@ mod tests {
                         scene_id: SceneId::new("a"),
                     },
                     settings: Default::default(),
+                    duplicated_from: None,
                 },
                 add("b", "i3", "nested_a"),
             ],
@@ -1670,12 +1708,103 @@ mod tests {
         assert_eq!(
             names,
             [
+                ("aux", "Aux"),
                 ("b_src", "Scene B"),
                 ("cam", "Camera"),
-                ("cam_2", "Camera 2")
+                ("cam_2", "Camera 2"),
+                ("cam_copy", "Camera copy"),
             ]
         );
-        assert_eq!(sources[2].kind, sources[1].kind);
+        assert_eq!(sources[3].kind, sources[2].kind);
+        assert_eq!(sources[3].duplicated_from, Some(SourceId::new("cam")));
+
+        // Deleting the original leaves the copies, whose link then reads as absent.
+        let unplace = Batch {
+            edits: vec![
+                Edit::ItemRemove {
+                    item_id: ItemId::new("i3"),
+                },
+                Edit::ItemRemove {
+                    item_id: ItemId::new("i4"),
+                },
+                Edit::SourceDelete {
+                    source_id: SourceId::new("cam"),
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, unplace), Ok(Rev(3)));
+        let Ok(QueryResult::SourceList { sources, .. }) = query(&*control, Query::SourceList)
+        else {
+            panic!("not a source list");
+        };
+        assert!(sources.iter().all(|s| s.duplicated_from.is_none()));
+    }
+
+    /// `item.set_source` keeps the item and is cycle checked like `item.add`.
+    #[test]
+    fn set_source_retargets_an_item_without_a_cycle() {
+        let (_engine, control) = parity_engine();
+        // Scene `a` shows `b` through `i2`; a source showing `a` can't go into `b`...
+        let setup = Batch {
+            edits: vec![
+                Edit::SourceCreate {
+                    source_id: SourceId::new("a_src"),
+                    name: "Scene A".into(),
+                    kind: SourceKind::Scene {
+                        scene_id: SceneId::new("a"),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("b"),
+                    item_id: ItemId::new("ib"),
+                    source_id: SourceId::new("cam"),
+                    transform: None,
+                    geometry: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(2)));
+        let cycle = Batch::single(Edit::ItemSetSource {
+            item_id: ItemId::new("ib"),
+            source_id: SourceId::new("a_src"),
+        });
+        let error = batch(&*control, cycle).expect_err("cycle");
+        assert_eq!(code(&error), Some("invalid_argument"));
+        // ... until `a` stops showing `b`, in the same batch.
+        let retarget = Batch {
+            edits: vec![
+                Edit::ItemSetSource {
+                    item_id: ItemId::new("i2"),
+                    source_id: SourceId::new("cam"),
+                },
+                Edit::ItemSetSource {
+                    item_id: ItemId::new("ib"),
+                    source_id: SourceId::new("a_src"),
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, retarget), Ok(Rev(3)));
+        let Ok(QueryResult::ItemList { items, .. }) = query(
+            &*control,
+            Query::ItemList {
+                scene_id: SceneId::new("b"),
+            },
+        ) else {
+            panic!("not an item list");
+        };
+        let ib = items
+            .iter()
+            .find(|item| item.item_id.as_str() == "ib")
+            .expect("ib is in b");
+        assert_eq!(ib.source_id.as_str(), "a_src");
     }
 
     /// Every batch the shared parity fixture rejects fails with exactly the error
@@ -1730,6 +1859,7 @@ mod tests {
                 kind: "color".into(),
             },
             settings: Default::default(),
+            duplicated_from: None,
         };
         assert_eq!(field(source), "edits.0.source_id");
         let duplicate = Edit::SourceDuplicate {

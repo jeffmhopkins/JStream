@@ -31,6 +31,7 @@ fn source(id: &str, kind: &str, settings: Settings) -> Edit {
         name: id.into(),
         kind: SourceKind::Builtin { kind: kind.into() },
         settings,
+        duplicated_from: None,
     }
 }
 
