@@ -112,7 +112,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e9fc80cb31acda93", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#176 B2 undo/redo) into C1a: stamp from main; B2's history design and C1a's Dependencies (jstream-sources, serde_json dev-only) and Not yet bullet both hold" }
+verified = { hash = "b3:3f8a5ffe3da8d846", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1 (protocol README only changed): re-read Undo and redo; Order of checks and Conflicts agree with the protocol README's new wording" }
 -->
 
 ### Engine and sessions

@@ -3,8 +3,8 @@
 //! background. Only the probe row is read back to the CPU, for the checks.
 
 use std::ffi::c_void;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::err::{Context, Result, bail};
@@ -15,9 +15,7 @@ use wgpu::hal::api::Dx12;
 use windows::Win32::Foundation::{HANDLE, LUID};
 use windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL_11_0;
 use windows::Win32::Graphics::Direct3D12::{D3D12CreateDevice, ID3D12Device, ID3D12Resource};
-use windows::Win32::Graphics::Dxgi::Common::{
-    DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM,
-};
+use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, IDXGIAdapter, IDXGIAdapter1, IDXGIDevice, IDXGIFactory1,
 };
@@ -150,6 +148,9 @@ pub fn owner_of(handle: *mut c_void) -> String {
 // crash).
 pub struct Gpu {
     d3d12: ID3D12Device,
+    /// wgpu errors raised outside an error scope. wgpu's default handler panics, and a
+    /// panic inside a CEF callback aborts with no report, so they become failed paints.
+    errors: Arc<Mutex<Option<String>>>,
     pub dxgi_adapter: IDXGIAdapter,
     queue: wgpu::Queue,
     device: wgpu::Device,
@@ -204,14 +205,29 @@ impl Gpu {
         let d3d12 = unsafe { device.as_hal::<Dx12>() }
             .map(|d| d.raw_device().clone())
             .context("wgpu device is not DX12")?;
+        let errors = Arc::new(Mutex::new(None::<String>));
+        let sink = errors.clone();
+        device.on_uncaptured_error(Arc::new(move |e: wgpu::Error| {
+            let mut slot = sink.lock().unwrap_or_else(|p| p.into_inner());
+            slot.get_or_insert_with(|| e.to_string());
+        }));
         Ok(Self {
             d3d12,
+            errors,
             dxgi_adapter,
             queue,
             device,
             adapter,
             selection: selection.to_owned(),
         })
+    }
+
+    /// Fails with the first wgpu error raised since the last check.
+    fn check(&self) -> Result<()> {
+        match self.errors.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            Some(e) => bail!("wgpu error: {e}"),
+            None => Ok(()),
+        }
     }
 
     fn wait(&self, index: wgpu::SubmissionIndex) -> Result<()> {
@@ -356,12 +372,7 @@ impl Compositor {
             multiview_mask: None,
             cache: None,
         });
-        let readback = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("probe rows"),
-            size: ROW_BYTES * 2,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+        let readback = readback_buffer(device);
         Self {
             page: None,
             out,
@@ -397,11 +408,8 @@ impl Compositor {
         };
         let format = match desc.Format {
             DXGI_FORMAT_B8G8R8A8_UNORM => wgpu::TextureFormat::Bgra8Unorm,
-            DXGI_FORMAT_R8G8B8A8_UNORM => wgpu::TextureFormat::Rgba8Unorm,
-            other => bail!(
-                "CEF texture has DXGI format {}, expected BGRA8 or RGBA8",
-                other.0
-            ),
+            // CEF documents BGRA on Windows, and the probes decode BGRA rows.
+            other => bail!("CEF texture has DXGI format {}, expected BGRA8", other.0),
         };
         let size = (
             u32::try_from(desc.Width).context("texture width")?,
@@ -475,11 +483,17 @@ impl Compositor {
             }),
         );
         let index = self.gpu.queue.submit([encoder.finish()]);
-        self.gpu.wait(index)?;
+        let waited = self.gpu.wait(index);
         drop(cef_texture);
+        waited?;
+        self.gpu.check()?;
         let copied_at = Instant::now();
 
-        let (page_row, composite_row) = self.composite()?;
+        // A recorded wgpu error explains a failed composite, and must not be left behind to
+        // fail the next paint too.
+        let composited = self.composite();
+        self.gpu.check()?;
+        let (page_row, composite_row) = composited?;
         Ok(Frame {
             open_ms: ms(opened_at - start),
             copy_ms: ms(copied_at - opened_at),
@@ -609,8 +623,12 @@ impl Compositor {
         slice.map_async(wgpu::MapMode::Read, move |r| {
             flag.store(r.is_ok(), Ordering::Release)
         });
-        self.gpu.wait(index)?;
-        if !mapped.load(Ordering::Acquire) {
+        let waited = self.gpu.wait(index);
+        if waited.is_err() || !mapped.load(Ordering::Acquire) {
+            // The map may still be pending, which would make the next copy into this
+            // buffer invalid; start over with a fresh one.
+            self.readback = readback_buffer(&self.gpu.device);
+            waited?;
             bail!("probe readback did not map");
         }
         let rows = {
@@ -623,6 +641,15 @@ impl Compositor {
         self.readback.unmap();
         Ok(rows)
     }
+}
+
+fn readback_buffer(device: &wgpu::Device) -> wgpu::Buffer {
+    device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("probe rows"),
+        size: ROW_BYTES * 2,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    })
 }
 
 fn ms(d: Duration) -> f64 {

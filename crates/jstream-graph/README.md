@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:141a9c4a72a1bc09", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#176 B2 undo/redo) into C1a: stamp from main; B2's inverse/history text holds; graph code untouched by C1a" }
+verified = { hash = "b3:8b3c7c7776443c1e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1 (protocol README only changed): re-read; apply.rs expected_rev/empty_batch order and inverse-without-expected_rev text unaffected" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

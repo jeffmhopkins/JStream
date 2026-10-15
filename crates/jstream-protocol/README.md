@@ -98,7 +98,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:b1b6243ce4d95b48", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): handshake example 0.10, state.changed cause (0.10), open question 4 built in 0.10, geometry version paragraph names 0.10/0.9; #170's OutputKind fallback text unaffected" }
+verified = { hash = "b3:124d3cf1910b12af", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1: re-read Undo and redo requests; check order (key, expected_rev, stack) and the keep-step case now match core engine.rs history() and core README Order of checks/Conflicts; reading of ADR-0032's 'checked first' stated" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -370,15 +370,29 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
   step: the step moves between the client's undo and redo stacks. The client's next
   batch clears its redo stack. Another client's batches never touch either stack.
 - `expected_rev` and `idempotency_key` work as for a batch, and keys are shared with
-  the client's batches: a retried undo gets the original result instead of undoing a
-  second step. `expected_rev` is checked before the history.
+  the client's batches. The engine checks in this order:
+  1. **The key.** A key the client already used gets that call's stored result, whatever
+     `expected_rev` says now, so a retried undo whose response was lost never undoes a
+     second step. A batch's retry works the same way.
+  2. **`expected_rev`.** A stale one fails with `rev_conflict` and leaves both stacks
+     as they were. This is what ADR-0032 means by "checked first": no part of the
+     history is read or changed before it passes.
+  3. **The stack.** An empty one fails with `history_empty`.
 - `rev` is the revision produced, `step_rev` the revision the step's batch originally
   produced (it names the step), and the depths say what can be undone and redone next.
 - `undo_conflict` (`step_rev`, and the `client_id` and `rev` of the conflicting batch)
   refuses an undo or redo when another client's batch after it changed a property the
-  step sets, created or deleted an object the step touches, or made its edits no longer
-  apply. Nothing is applied and the step is dropped, so the next undo reaches the step
-  before it. `history_empty` (`direction`) means there is nothing to undo or redo.
+  step sets, created or deleted an object the step touches, touched an object the step
+  creates or deletes, also reordered the scenes, or made its edits no longer apply. An
+  edit touches the objects it creates, deletes or edits and the ones it places or
+  names, such as an item's source. What the step touches is taken both from when it was recorded and from
+  the edits it would apply now. Nothing is applied and the step is dropped, so the next
+  undo reaches the step before it.
+- A step whose edits fail for a reason no other client caused keeps its place and the
+  call fails with the graph's own error. The usual case is a running output that blocks
+  undoing its `output.create`, which fails with `invalid_argument` until the output
+  stops.
+- `history_empty` (`direction`) means there is nothing to undo or redo.
 - Actions (outputs, stream keys), queries and history calls are never steps. The engine
   keeps 100 steps per client by default, in memory, for the session's lifetime.
 
