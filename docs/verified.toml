@@ -1704,7 +1704,7 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:20caa632a5d049a6" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:593d770c1aad557d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#371 recorder no-replace move) into #320: re-read; main's recorder bullet (hard link then unlink, placeholder fallback) and Tests text beside this PR's line that the virtual-camera output runs in jstream-core's runtime; both hold" }
+stamp = { hash = "b3:877a14f301fe5a09", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the whole Purpose section against the #399 fix: the Reconnect bullet now says the cached video header is the AVC header or the enhanced RTMP SequenceStart (HEVC/AV1), never a SequenceEnd, and that it is re-sent before the next keyframe; the Tests paragraph lists the new enhanced reconnect test; the Not-yet line says enhanced RTMP is not end to end (no fourCcList in connect) while the resync understands enhanced tags. Other bullets (handshake, chunk, commands, media, transport, URLs, recorder, threading) are untouched by the diff and still hold." }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:230ac9edc35e19b9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main: rtmp and record modules as lib.rs says; Output trait still later; vcam output is in jstream-core runtime (runtime/vcam.rs), and the jstream-core README#runtime anchor exists; deps unchanged." }
@@ -1752,10 +1752,10 @@ stamp = { hash = "b3:39da26659f649772", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:2a8136c51316c064", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against PR #370 diff: URLs-and-keys bullet now states Rejected redacts the key, then cuts code/description to 512 chars (MAX_REMOTE_TEXT) and replaces control chars with spaces, matching rejected()/remote_text() in rtmp/publisher.rs and its new tests; rest of section unaffected by the merge." }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/reconnect.rs"]
-stamp = { hash = "b3:2e491927c123a8d9" }
+stamp = { hash = "b3:4578655c32dd54e1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the whole Purpose section against the #399 fix: the Reconnect bullet now says the cached video header is the AVC header or the enhanced RTMP SequenceStart (HEVC/AV1), never a SequenceEnd, and that it is re-sent before the next keyframe; the Tests paragraph lists the new enhanced reconnect test; the Not-yet line says enhanced RTMP is not end to end (no fourCcList in connect) while the resync understands enhanced tags. Other bullets (handshake, chunk, commands, media, transport, URLs, recorder, threading) are untouched by the diff and still hold." }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/reconnect/tests.rs"]
-stamp = { hash = "b3:1dca1b9e35c2f81a" }
+stamp = { hash = "b3:e2fbf3dae0d0df7b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the whole Purpose section against the #399 fix: the Reconnect bullet now says the cached video header is the AVC header or the enhanced RTMP SequenceStart (HEVC/AV1), never a SequenceEnd, and that it is re-sent before the next keyframe; the Tests paragraph lists the new enhanced reconnect test; the Not-yet line says enhanced RTMP is not end to end (no fourCcList in connect) while the resync understands enhanced tags. Other bullets (handshake, chunk, commands, media, transport, URLs, recorder, threading) are untouched by the diff and still hold." }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/test_util.rs"]
 stamp = { hash = "b3:1b537bb60e282a9b" }
