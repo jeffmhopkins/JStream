@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:96e13dacf00dc62d", by = "agent:claude@session_01HGK7agjEsYDqGN4QkkiUjA", note = "G3a: added the WindowsVcam bullet (format, start, one producer per session, publish, heartbeat, stop, threads) against src/vcam; Not yet and Tests updated; other bullets unchanged; crate-map row, threading and RULES unsafe still hold" }
+verified = { hash = "b3:d67a685eabc8b765", by = "agent:claude@session_01HGK7agjEsYDqGN4QkkiUjA", note = "G3a hw-test fix: the test's source reader now enables video processing and publishes grey; README's description of the virtual-camera test (solid colour served back through an RGB32 reader) still holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

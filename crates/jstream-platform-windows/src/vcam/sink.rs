@@ -562,15 +562,17 @@ mod hw_tests {
 
     use jstream_platform::media::{ColorInfo, MediaTime, Timebase, VideoFrame, VideoFrameInfo};
     use windows::Win32::Media::MediaFoundation::{
-        IMFSample, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE, MF_SOURCE_READER_FIRST_VIDEO_STREAM,
-        MFCreateMediaType, MFCreateSourceReaderFromMediaSource, MFMediaType_Video,
-        MFVideoFormat_RGB32,
+        IMFSample, MF_MT_MAJOR_TYPE, MF_MT_SUBTYPE, MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING,
+        MF_SOURCE_READER_FIRST_VIDEO_STREAM, MFCreateAttributes, MFCreateMediaType,
+        MFCreateSourceReaderFromMediaSource, MFMediaType_Video, MFVideoFormat_RGB32,
     };
 
     use super::*;
 
-    /// The test picture's colour, as B, G, R.
-    const COLOUR: [u8; 3] = [0x20, 0x80, 0xc0];
+    /// The test picture's colour, as B, G, R. A grey has no chroma, so it survives the
+    /// DLL's BGRA to NV12 and the reader's NV12 to RGB32 whichever YUV matrix each uses;
+    /// the DLL's colour bars are magenta at the centre.
+    const COLOUR: [u8; 3] = [0x60, 0x60, 0x60];
 
     fn solid_frame(n: i64) -> VideoSurface {
         let format = WindowsVcam::offered_format().unwrap();
@@ -607,9 +609,9 @@ mod hw_tests {
         }
     }
 
-    /// Whether a pixel is the test colour, give or take rounding.
+    /// Whether a pixel is the test colour, give or take two YUV round trips' rounding.
     fn close(px: [u8; 3]) -> bool {
-        px.iter().zip(COLOUR).all(|(a, b)| a.abs_diff(b) <= 2)
+        px.iter().zip(COLOUR).all(|(a, b)| a.abs_diff(b) <= 6)
     }
 
     #[test]
@@ -632,10 +634,18 @@ mod hw_tests {
             let source = unsafe { live.camera.0.GetMediaSource() }.unwrap();
             (source, Arc::clone(&live.producer.mapping))
         };
-        // SAFETY: plain MF calls on live objects; the stream index is the reader's
-        // first-video-stream constant.
+        // Frame Server may offer only NV12 here, so the reader converts to RGB32 itself
+        // (without video processing, asking for RGB32 is MF_E_TOPO_CODEC_NOT_FOUND).
+        // SAFETY: plain MF calls on live objects; `attributes` is a valid out-pointer;
+        // the stream index is the reader's first-video-stream constant.
         let reader = unsafe {
-            let reader = MFCreateSourceReaderFromMediaSource(&source, None).unwrap();
+            let mut attributes = None;
+            MFCreateAttributes(&mut attributes, 1).unwrap();
+            let attributes = attributes.unwrap();
+            attributes
+                .SetUINT32(&MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, 1)
+                .unwrap();
+            let reader = MFCreateSourceReaderFromMediaSource(&source, &attributes).unwrap();
             let rgb32 = MFCreateMediaType().unwrap();
             rgb32
                 .SetGUID(&MF_MT_MAJOR_TYPE, &MFMediaType_Video)
