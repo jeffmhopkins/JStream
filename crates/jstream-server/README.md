@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ac8757e0fb95cd64", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; per-MCP-session clients each get their own undo history; request/event mapping unchanged" }
+verified = { hash = "b3:f8f090077d6b21f6", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B2 #176 history 0.10, B8 #171 audit) into B6, now protocol 0.11: cascade; server relays any call unchanged" }
 -->
 
 ### Listening and admission

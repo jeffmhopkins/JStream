@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:def975a39c65fe0d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; tool table lists history; expected_rev/idempotency_key for edits and history ops; tools.snap regenerated at 0.10" }
+verified = { hash = "b3:7b7b2b9d63640425", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B2 #176 history 0.10, B8 #171 audit) into B6, now protocol 0.11: tools table unchanged; history and B6 ops come from the generated schema (tools.snap regenerated)" }
 -->
 
 ### Tools

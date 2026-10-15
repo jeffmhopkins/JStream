@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:5cf1ff37c74d8023", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; mock now has outputs (#166) and still answers history with internal; contents hold" }
+verified = { hash = "b3:cda4a232b8931c5b", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B2 #176 history 0.10, B8 #171 audit) into B6, now protocol 0.11: mock contents hold; history and B6 edits unimplemented in the mock as stated" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:0d4c5883c7b50811", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; call() lists history calls; 'no undo ... internal for what it doesn't know' holds for the mock" }
+verified = { hash = "b3:c1cff271b5b82d9b", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B2 #176 history 0.10, B8 #171 audit) into B6, now protocol 0.11: mock bullet: every edit but 0.11's scene.set_role/item.move; scene_id own-scene check" }
 -->
 
 ### The trait

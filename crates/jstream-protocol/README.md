@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:282e2dba9c68124f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): History bullet and version line: 0.10 history, 0.9 record kind (version.rs)" }
+verified = { hash = "b3:9db68aae8fe648e2", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B2 #176 history 0.10, B8 #171 audit) into B6, now protocol 0.11: version sentence: 0.11 groups, 0.10 history, 0.9 record (version.rs minor 11)" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -101,7 +101,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:b1b6243ce4d95b48", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): handshake example 0.10, state.changed cause (0.10), open question 4 built in 0.10, geometry version paragraph names 0.10/0.9; #170's OutputKind fallback text unaffected" }
+verified = { hash = "b3:252b065624c71ed7", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B2 #176 history 0.10, B8 #171 audit) into B6, now protocol 0.11: groups subsection says 0.11 and a 0.10 reader sees no change; geometry paragraph lists 0.11/0.10/0.9; B2's History section kept" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

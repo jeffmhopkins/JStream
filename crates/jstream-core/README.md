@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:7264fb2daaf15212", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#171 B8 audit log) into B2: re-read; Engine bullet lists with_audit and with_history_limit, Audit log bullet now covers undo and redo, tests list adds undo_and_redo_are_audited; Not-yet drops the audit log" }
+verified = { hash = "b3:2e839c2f8e9e7076", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B2 #176 history 0.10, B8 #171 audit) into B6, now protocol 0.11: history.rs now classifies scene.set_role (role prop) and item.move (index prop, both scenes used) instead of treating them as unknown; audit names them via Edit::name; History bullet holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:78ac639e0515641a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#171 B8) into B2: re-read Audit log subsection; it now says undo and redo are recorded (history.undo/history.redo as the call, replayed for a keyed retry, rev before = own rev minus one) matching audit.rs sink_for/Pending; Undo and redo and Not yet unchanged" }
+verified = { hash = "b3:42fd65d039cd6591", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B2 #176 history 0.10, B8 #171 audit) into B6, now protocol 0.11: Conflicts bullet now lists a scene's role and item.move's index and scenes, matching Touched::add in history.rs; audit text holds for the new edits (Edit::name)" }
 -->
 
 ### Engine and sessions
