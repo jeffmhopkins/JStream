@@ -94,7 +94,7 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:9bd6579854d0766e", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs moved to jstream-platform paths with the same behaviour; design bullets don't name it and still hold" }
+verified = { hash = "b3:d8c3940849482bc8", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "Merge of main into P1: main added the daemon e2e test, the CLAP plugin-proto row and plugin-host status; P1's data-folder/paths and dist text is unchanged and both hold together" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS

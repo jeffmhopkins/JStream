@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:1317751946650021", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: new Data folder bullet for paths.rs; deps unchanged (std only), no unsafe" }
+verified = { hash = "b3:3e8ed5fd47e4007a", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "Merge of main into P1: main added the daemon e2e test, the CLAP plugin-proto row and plugin-host status; P1's data-folder/paths and dist text is unchanged and both hold together" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -146,7 +146,7 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:22b26936933cb8c5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale only via the crate-map platform row gaining paths; GPU frame design untouched" }
+verified = { hash = "b3:f6aaadc5fa923a31", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "Merge of main into P1: main added the daemon e2e test, the CLAP plugin-proto row and plugin-host status; P1's data-folder/paths and dist text is unchanged and both hold together" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

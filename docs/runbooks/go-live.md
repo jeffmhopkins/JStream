@@ -36,7 +36,7 @@ verified = { hash = "b3:1d308f508d80a48c", by = "agent:claude@session_012JH6K3Te
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:5be5c3f3494cd7b2", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via daemon usage (log files bullet adds the portable data folder); runbook uses the default %APPDATA% layout and run-folder logs, holds" }
+verified = { hash = "b3:de11b09b8d74f8da", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "Merge of main into P1: main added the daemon e2e test, the CLAP plugin-proto row and plugin-host status; P1's data-folder/paths and dist text is unchanged and both hold together" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI

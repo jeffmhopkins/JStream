@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:af9b851c7b8b42db", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of main (U3b outputs panel, U4 canvas) into U5: kept main's Panels and Canvas bullets and U5's Host detection bullet; re-read against panels/, canvas/, host.rs; holds" }
+verified = { hash = "b3:d062616cd6fdcbc4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: only lib.rs's test module and style.css's header comment changed; contents list holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:37514afcfa6ed27f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: 'pairing is not decided yet' now says a remote browser will pair with a one-time code per ADR-0044, not built yet; holds" }
+verified = { hash = "b3:d4503391660c5cb0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: only lib.rs's test module and style.css's header comment changed; no design bullet describes either; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -91,7 +91,8 @@ verified = { hash = "b3:37514afcfa6ed27f", by = "agent:claude@session_01WbL3WRbc
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
   output, and starts and stops each. "Go live" starts every stopped or failed RTMP
   output whose stream key is set, and "End stream" stops the running ones; recordings
-  have only their own buttons. An RTMP output without a key can't be started from the
+  have only their own buttons. Both try every output, even after one fails, and report
+  each failure. An RTMP output without a key can't be started from the
   panel. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
@@ -102,6 +103,12 @@ verified = { hash = "b3:37514afcfa6ed27f", by = "agent:claude@session_01WbL3WRbc
   sends it back: the panel shows only `output.status`'s `key_set`, re-read after it
   sets or clears a key, since no event reports that. Another client's key change shows
   on the next re-read.
+- **Browser password managers are out of scope.** The stream key and the control
+  token are secrets for the OS credential store, not for the browser's
+  ([R-SEC-001](../../docs/RULES.md#R-SEC-001)), so their fields opt out: each is
+  `autocomplete="off"` with a name that doesn't look like a credential, and neither
+  sits in a `<form>`: a button click or Enter saves the key or connects, so there is
+  no form submission for the browser to offer saving. A test checks both fields.
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`); only `start()` needs a browser.
@@ -111,7 +118,7 @@ verified = { hash = "b3:37514afcfa6ed27f", by = "agent:claude@session_01WbL3WRbc
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:50bd20b4a20be791", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Review N1/N2: resize follows pointer movement (no jump), aspect-locked corners scale by the axis that changed more so inward drags shrink, nudges and new drags build on the pending geometry; section's claims re-read, hold" }
+verified = { hash = "b3:8120b6e7a0057203", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: Styles bullet now says the test refuses any style attribute, static or set at run time (style=move, attr:style), outside test modules; matches sets_style_attribute in lib.rs" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
@@ -150,7 +157,11 @@ scene and sends the edits. These three are pure and tested natively against
   the protocol yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
   while the canvas has focus) are `history.undo` and `history.redo`; the buttons grey
   out when the engine reports nothing left, and an `undo_conflict` is explained.
-- **Styles** are inline, since the shell's stylesheet belongs to the shell.
+- **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
+  `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
+  run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos
+  `style:` binding, which sets it through the CSSOM. A test fails on any `style`
+  attribute in the crate's sources outside test modules, or in `index.html`.
 
 <a id="build"></a>
 ## Build

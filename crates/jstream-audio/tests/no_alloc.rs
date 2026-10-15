@@ -22,8 +22,10 @@
 //! frames), an input added and another removed while the mixer runs, a bus added, sent
 //! to, filtered and removed, filters added, edited and removed (changing the chains'
 //! latency, so the compensation delays move), master filters added to every bus's copy,
-//! edited and removed, and output taps added (one with its own chain, on a bus that is
-//! later removed) and removed. The test asserts afterwards that each path actually ran.
+//! edited and removed, output taps added (one with its own chain, on a bus that is
+//! later removed) and removed, and a CLAP filter whose host keeps up, then goes missing
+//! and comes back (its blocks bypassed and crossfaded), then is removed. The test
+//! asserts afterwards that each path actually ran.
 //!
 //! Dropping an input's producer frees its resampler state, so a producer is dropped
 //! outside the checked scope: that is stream teardown, not steady state.
@@ -32,10 +34,13 @@ use assert_no_alloc::{AllocDisabler, assert_no_alloc, reset_violation_count, vio
 use jstream_audio::filter::{AudioFilter, Compressor, CompressorParams, GateParams, LimiterParams};
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{
-    FilterParams, FilterSpec, InputControl, InputProducer, Mixer, MixerConfig, OutputTapId,
+    FilterParams, FilterSpec, HostMemory, InputControl, InputProducer, Mixer, MixerConfig,
+    OutputTapId,
 };
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, SampleFormat, Timebase};
 use jstream_platform::{AudioInputHandler, AudioPacket, AudioPacketFlags};
+use jstream_plugin_proto::{Config, DEFAULT_DEPTH, Shared, first_useful};
+use std::sync::Arc;
 
 #[global_allocator]
 static ALLOC: AllocDisabler = AllocDisabler;
@@ -255,6 +260,30 @@ impl BusChain {
     }
 }
 
+/// A CLAP plugin host, as its process would run it between the mixer's blocks: each
+/// step processes every input block the mixer can still read (a gain of 0.5).
+struct FakeHost {
+    shared: Arc<Shared>,
+    next: u64,
+    buf: Vec<f32>,
+    processed: u64,
+}
+
+impl FakeHost {
+    fn step(&mut self) {
+        let head = self.shared.input.head();
+        self.next = self.next.max(first_useful(head, DEFAULT_DEPTH));
+        while self.next < head {
+            if self.shared.input.read(self.next, &mut self.buf) {
+                self.buf.iter_mut().for_each(|s| *s *= 0.5);
+                self.shared.output.write(self.next, &self.buf);
+                self.processed += 1;
+            }
+            self.next += 1;
+        }
+    }
+}
+
 struct Sim {
     mixer: Mixer,
     devices: Vec<Device>,
@@ -389,6 +418,8 @@ mod rt {
         let mut aux = None;
         let mut aux_limiter = None;
         let mut extra = None;
+        let mut clap = None;
+        let mut host: Option<FakeHost> = None;
         let mut latencies = std::collections::BTreeSet::new();
 
         reset_violation_count();
@@ -437,6 +468,33 @@ mod rt {
                     );
                 }
                 2_500 => assert!(extra.take().expect("added").remove(), "removal queued"),
+                // A CLAP filter on the loopback input, its host ready.
+                1_580 => {
+                    let block = sim.mixer.config().block_frames;
+                    let shared: Arc<Shared> = Arc::from(Shared::new_boxed());
+                    shared
+                        .init(Config {
+                            sample_rate: ENGINE,
+                            block_frames: block as u32,
+                            depth: DEFAULT_DEPTH,
+                        })
+                        .expect("valid config");
+                    shared.publish_ready(0);
+                    let memory: HostMemory = Arc::new(Arc::clone(&shared));
+                    clap = Some(
+                        sim.devices[1]
+                            .control
+                            .insert_host_filter(usize::MAX, memory)
+                            .expect("a ready host"),
+                    );
+                    host = Some(FakeHost {
+                        shared,
+                        next: 0,
+                        buf: vec![0.0; 2 * block],
+                        processed: 0,
+                    });
+                }
+                2_450 => assert!(clap.take().expect("added").remove(), "removal queued"),
                 2_600 => assert!(
                     aux_limiter.take().expect("added").remove(),
                     "removal queued"
@@ -526,6 +584,13 @@ mod rt {
                 let _ = (bus.take_meter(), bus.stats());
             }
 
+            // The CLAP host's process: it keeps up, except for 0.5 s in every 2 s.
+            if let Some(host) = &mut host
+                && (tick / 50) % 4 != 3
+            {
+                host.step();
+            }
+
             if tick < WARMUP {
                 sim.run_rt(tick);
             } else {
@@ -564,6 +629,17 @@ mod rt {
         );
         assert!(removed.packets > 0, "{removed:?}");
         assert!(bus.skipped_frames > 0, "{bus:?}");
+        let host = host.expect("added");
+        let misses = host
+            .shared
+            .status
+            .mixer_misses
+            .load(std::sync::atomic::Ordering::Relaxed);
+        assert!(
+            host.processed > 100 && misses > 10,
+            "{} {misses}",
+            host.processed
+        );
         let aux = aux.expect("added").stats();
         // 11.5 s of blocks, minus the stall's.
         assert!(aux.blocks > 400, "{aux:?}");

@@ -25,3 +25,5 @@ thiserror.workspace = true
 
 [dev-dependencies]
 jstream-protocol = { workspace = true, features = ["fixtures"] }
+# The property suites in `tests/` (shrinking counterexamples).
+proptest.workspace = true
