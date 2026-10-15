@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:10a301dfb91a4c0d", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; kinds and audio filters bullets, audio inputs running filters, tests list; holds" }
+verified = { hash = "b3:b643ac9e74a1a80d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: only tests.rs gains a flipped-geometry video.snapshot test; snapshot bullet and tests list still describe it; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -164,7 +164,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:512791f210147d8f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; serde_json dependency, touched properties, opacity in linear light, audio filter chain paragraph, Not yet; main's D8 master chain text consistent; holds" }
+verified = { hash = "b3:b1923bc6829f6ff8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: snapshot draws a geometry by the shared formula, which now includes the flips; placement mapping passes ItemGeometry through unchanged; holds" }
 -->
 
 ### Engine and sessions

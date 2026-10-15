@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:d35d5306bc8ac01f", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: render's link to ARCH Threads for the cache hand-off still points at the model's State-to-RT-threads text; holds" }
+verified = { hash = "b3:46b9a73f9cf84290", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: geometry placement bullet now says the image is mirrored in the box by flip_h/flip_v before rotation; place.rs applies content's swapped UVs; scene types unchanged; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -40,7 +40,8 @@ and calls this crate.
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two placement forms:
   - a **geometry** (decisions 2 and 3): a box on the canvas. The image is cropped in
     source pixels, fitted into the box by its fit mode (`stretch`, `fit` or `fill`,
-    which is clipped to the box), and rotated clockwise about the box's centre;
+    which is clipped to the box), mirrored inside the box by `flip_h` and `flip_v`, and
+    rotated clockwise about the box's centre;
   - a **legacy 0.3 placement** (decision 5): crop in source pixels, then scale the
     remaining rectangle by `scale` relative to the source's current size, put its
     top-left at `position` in canvas pixels, and rotate clockwise about that corner.
@@ -112,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c91d3972472d19b9", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
+verified = { hash = "b3:908a25964676949d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: Placement math says flips swap content's u or v pair and the box clip keeps the mirrored middle of fill; matches place.rs boxed(); legacy negative-scale text unchanged; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -225,9 +226,11 @@ what the compositor draws and what a UI overlay computes cannot disagree.
 **Geometry.** `ItemGeometry::content` gives the cropped image's rectangle in the box's
 local frame (origin at the box centre, before rotation) and its UVs: the whole box for
 `stretch`, the centred largest rectangle of the crop's aspect ratio for `fit`, the
-centred smallest covering one for `fill`. `place` intersects that rectangle with the
+centred smallest covering one for `fill`. `flip_h` and `flip_v` swap that rectangle's
+`u` or `v` pair, which mirrors the cropped, fitted image about the box centre without
+moving the box. `place` intersects that rectangle with the
 box, which only changes `fill`, and cuts the UVs in proportion, so the clip needs no
-scissor or shader change. Clipping in the local frame is exact for any in-plane
+scissor or shader change, and a flipped `fill` keeps the mirror of the same middle. Clipping in the local frame is exact for any in-plane
 rotation. `ItemGeometry::place` then maps the four clipped corners: rotation about the
 centre, then `center` added. With 3D neutral that mapping is affine, so linear UVs
 across the quad are correct; a non-neutral 3D field would need perspective-correct
@@ -279,7 +282,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:c92966a4c0c88ccd", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 golden geometry tests) into E1: the E1 layer/cache test list and B3's golden tests are both in tests.rs; holds" }
+verified = { hash = "b3:cb6a923ce0f129d5", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: Geometry goldens now lists the flip grid (unflipped, flip_h, flip_v, both, flipped then turned, flipped fill) and the legacy negative scale vs from_legacy grid; both tests in tests.rs, ran on lavapipe; holds" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -309,7 +312,10 @@ the expected layout in the diff. These are not R-TEST-003's golden PNGs under
 `tests/golden/`, which wait for `cargo xtask golden`. The grids cover `fit`
 (letterboxed), `fill` (clipped to the box, the middle of the image showing), `stretch`
 rotated 90° about the box centre, crop before fitting, a legacy item beside them, and
-a non-axis-aligned box turning about its centre.
+a non-axis-aligned box turning about its centre. A flip grid draws a four-quadrant
+image unflipped, with `flip_h`, `flip_v` and both, flipped then turned 90° (the mirror
+is in the box's own frame), and a flipped `fill`; another checks that a legacy
+negative scale and the geometry `from_legacy` makes of it draw the same grid.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an

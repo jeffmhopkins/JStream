@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:f524cd0416ff55b7", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; B7 Source/Filter rows, Filters bullet, Built so far and Not yet merged with main's ADR-0030 dependency; holds" }
+verified = { hash = "b3:df1a927496d28aa0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: canvas and geometry bullet adds horizontal and vertical flips mirroring content in the box (ADR-0022 reserved them); model code unchanged since flips are ItemGeometry fields; Built so far still holds" }
 -->
 
 ```
@@ -217,8 +217,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   collection's `canvas` is every scene's coordinate space, in pixels, and a `VideoMix`
   scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
   canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
-  and 3D tilt, turn, depth and per-item perspective, drawn in stacking order with no
-  depth buffer. `crop` is in source pixels. A source's current size is runtime state,
+  horizontal and vertical flips that mirror the content inside the box, and 3D tilt,
+  turn, depth and per-item perspective, drawn in stacking order with no depth buffer. `crop` is in source pixels. A source's current size is runtime state,
   not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,
   protocol 0.3's transform as written, which the compositor evaluates against the
   source's current size every frame. Only an explicit `item.set_geometry` turns it into
@@ -539,7 +539,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f0f3aad0184ad054", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Edits bullet's opacity/blend and filter edits sit beside main's scene.switch text; no version number until the queue bump; holds" }
+verified = { hash = "b3:818607351eef54cb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: item.set_geometry still sets an item's box, now including its flips; no new edit and no version bump until the queue slot; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -670,7 +670,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:2f74f99cfb552b17", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; tool list has filter and studio; tools.snap is now 181142 bytes, text says about 181 KB; holds" }
+verified = { hash = "b3:a62f09800aabf8ce", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: tools.snap grew to 182606 bytes with the flip fields, so the text now says about 183 KB; tool list unchanged; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -684,7 +684,7 @@ verified = { hash = "b3:2f74f99cfb552b17", by = "agent:claude@session_01BL6HM3DJ
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 181 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 183 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -714,7 +714,7 @@ verified = { hash = "b3:2f74f99cfb552b17", by = "agent:claude@session_01BL6HM3DJ
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:dc199b6560c865f5", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
+verified = { hash = "b3:8fa77bf495440f6d", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: one-scene compositor text now says a geometry is mirrored by its flips before rotation about the box centre; matches place.rs; rest unchanged; holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -744,7 +744,7 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
 one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
 is evaluated with `jstream-protocol`'s shared formula in either of ADR-0022's forms: a
 geometry (crop in source pixels, fitted into the box by `stretch`, `fit` or `fill`,
-which is clipped to the box, then rotated about the box centre), or a legacy 0.3
+which is clipped to the box, mirrored by its flips, then rotated about the box centre), or a legacy 0.3
 transform through `legacy_quad` (crop, scale against the current source size,
 top-left at `position`, clockwise rotation about that corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
@@ -871,7 +871,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:2e69a6274102064a", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; kind_version refusal for filters, opacity/blend/enabled written when non-default, effects empty; holds against persist" }
+verified = { hash = "b3:cad3a75cd85a42b4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: added that a geometry's flip_h and flip_v are written only when true (serde skip in ItemGeometry); v1 fixture carries a flipped i4; no schema_version bump since the field is optional; holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
@@ -883,8 +883,8 @@ verified = { hash = "b3:2e69a6274102064a", by = "agent:claude@session_01BL6HM3DJ
   like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until
   kinds ship settings migrations, a source or filter saved at another version is
   refused on load. A placement's `opacity` and `blend` are written only when they differ
-  from 1 and `normal`, a disabled filter's `enabled` only when false, and the reserved
-  `effects[]` must be empty.
+  from 1 and `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled
+  filter's `enabled` only when false, and the reserved `effects[]` must be empty.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
 - **Control token:** a random token in a user-only file in the config directory

@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:6a7151f5d26b4ed0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; tool table lists filter and now studio (main's list missed studio; tools.snap has both); holds" }
+verified = { hash = "b3:3b9e7892e7ede7d1", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: stale by cascade from ARCH mcp (size now about 183 KB); tool table and design unchanged; tools.snap regenerated only for the ItemGeometry flip fields; holds" }
 -->
 
 ### Tools

@@ -1028,3 +1028,180 @@ fn a_rotated_geometry_turns_about_its_centre() {
     near(&snapshot, 32, 16, [255, 0, 0, 255], 1);
     near(&snapshot, 16, 32, [0, 0, 0, 255], 0);
 }
+
+/// An image of four equal quadrants: `colors` is top-left, top-right, bottom-left,
+/// bottom-right.
+fn quadrants(compositor: &Compositor, side: u32, colors: [[u8; 4]; 4]) -> crate::Image {
+    let half = side / 2;
+    let pixels: Vec<u8> = (0..side)
+        .flat_map(|y| (0..side).map(move |x| (x, y)))
+        .flat_map(|(x, y)| colors[usize::from(y >= half) * 2 + usize::from(x >= half)])
+        .collect();
+    compositor
+        .upload_rgba8(side, side, &pixels)
+        .expect("invariant: the image bytes match")
+}
+
+/// [`geometry`] with `flip_h` and `flip_v` set.
+fn flipped(
+    center: [f32; 2],
+    size: [f32; 2],
+    fit_mode: jstream_protocol::FitMode,
+    rotation_deg: f32,
+    flip_h: bool,
+    flip_v: bool,
+) -> Placement {
+    let Placement::Geometry(base) = geometry(center, size, fit_mode, rotation_deg) else {
+        unreachable!("geometry is a geometry");
+    };
+    Placement::Geometry(jstream_protocol::ItemGeometry {
+        flip_h,
+        flip_v,
+        ..base
+    })
+}
+
+/// Golden test of a geometry's flips on a 64×32 canvas, sampled every 4 pixels. An 8×8
+/// image with red, green, blue and white quadrants (top-left, top-right, bottom-left,
+/// bottom-right) is stretched into 16×16 boxes:
+/// - top row, left to right: unflipped, `flip_h`, `flip_v`, both;
+/// - bottom left, at (8, 24): `flip_h` and turned 90° clockwise, so the mirror happens
+///   in the box's own frame before the turn (green|red over white|blue, turned, is
+///   white|green over blue|red);
+/// - beside it, at (24, 24): the red|green|blue|white bands filling the box and flipped,
+///   so the middle green|blue half shows mirrored as blue|green.
+#[test]
+fn golden_geometry_flips_mirror_the_content_in_the_box() {
+    use jstream_protocol::FitMode;
+
+    let Some(mut opened) = open() else {
+        return;
+    };
+    const R: [u8; 4] = [255, 0, 0, 255];
+    const G: [u8; 4] = [0, 255, 0, 255];
+    const B: [u8; 4] = [0, 0, 255, 255];
+    const W: [u8; 4] = [255, 255, 255, 255];
+    let image = quadrants(&opened.compositor, 8, [R, G, B, W]);
+    let quarters = bands(&opened.compositor, 8, 8, &[R, G, B, W]);
+    let boxed = |x: f32, flip_h: bool, flip_v: bool| {
+        item(
+            &image,
+            flipped(
+                [x, 8.0],
+                [16.0, 16.0],
+                FitMode::Stretch,
+                0.0,
+                flip_h,
+                flip_v,
+            ),
+            Crop::NONE,
+            1.0,
+        )
+    };
+    let items = [
+        boxed(8.0, false, false),
+        boxed(24.0, true, false),
+        boxed(40.0, false, true),
+        boxed(56.0, true, true),
+        item(
+            &image,
+            flipped(
+                [8.0, 24.0],
+                [16.0, 16.0],
+                FitMode::Stretch,
+                90.0,
+                true,
+                false,
+            ),
+            Crop::NONE,
+            1.0,
+        ),
+        item(
+            &quarters,
+            flipped([24.0, 24.0], [16.0, 16.0], FitMode::Fill, 0.0, true, false),
+            Crop::NONE,
+            1.0,
+        ),
+    ];
+    let snapshot = draw(&mut opened.compositor, 64, 32, Color::BLACK, &items);
+    let expected = "\
+RRGGGGRRBBWWWWBB
+RRGGGGRRBBWWWWBB
+BBWWWWBBRRGGGGRR
+BBWWWWBBRRGGGGRR
+WWGGBBGG........
+WWGGBBGG........
+BBRRBBGG........
+BBRRBBGG........
+";
+    assert_eq!(grid(&snapshot, 4), expected);
+}
+
+/// A flipped geometry draws the same pixels as the legacy negative scale it converts
+/// from ([`jstream_protocol::ItemGeometry::from_legacy`]).
+#[test]
+fn a_flipped_geometry_matches_its_legacy_negative_scale() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let image = quadrants(
+        &opened.compositor,
+        8,
+        [
+            [255, 0, 0, 255],
+            [0, 255, 0, 255],
+            [0, 0, 255, 255],
+            [255, 255, 255, 255],
+        ],
+    );
+    // Top-left at (24, 4), reflected left to right: it covers x 8..24 and y 4..28.
+    let transform = LegacyTransform {
+        position: [24.0, 4.0],
+        scale: [-2.0, 3.0],
+        rotation_deg: 0.0,
+    };
+    let legacy = jstream_protocol::ItemGeometry::from_legacy(
+        jstream_protocol::ItemTransform {
+            position: jstream_protocol::Vec2::new(24.0, 4.0).expect("finite"),
+            scale: jstream_protocol::Vec2::new(-2.0, 3.0).expect("finite"),
+            rotation_deg: jstream_protocol::Finite32::ZERO,
+        },
+        jstream_protocol::Crop::NONE,
+        8,
+        8,
+    )
+    .expect("finite")
+    .expect("drawn");
+    assert!(legacy.geometry.flip_h && !legacy.geometry.flip_v);
+    let old = draw(
+        &mut opened.compositor,
+        32,
+        32,
+        Color::BLACK,
+        &[item(&image, Placement::Legacy(transform), Crop::NONE, 1.0)],
+    );
+    let new = draw(
+        &mut opened.compositor,
+        32,
+        32,
+        Color::BLACK,
+        &[item(
+            &image,
+            Placement::Geometry(legacy.geometry),
+            Crop::NONE,
+            1.0,
+        )],
+    );
+    let expected = "\
+........
+..GGRR..
+..GGRR..
+..GGRR..
+..WWBB..
+..WWBB..
+..WWBB..
+........
+";
+    assert_eq!(grid(&old, 4), expected);
+    assert_eq!(grid(&new, 4), expected);
+}

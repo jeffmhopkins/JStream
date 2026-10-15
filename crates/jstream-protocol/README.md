@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:34a4937a99c6c3ea", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Commands list has B7's edits plus main's scene.switch action; Filters bullet; parity bullet; holds" }
+verified = { hash = "b3:1338bb7a298724cd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: geometry bullet now says content mirrors with flip_h/flip_v and from_legacy stores a negative scale as the flip; parity bullet names the flipped geometry item; PROTOCOL_VERSION 0.17 unchanged; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -88,11 +88,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `PlacementForm` and the shared placement formula
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). `project` places the
   box, rotation about its centre, with the 3D fields in the formula and defaulting to
-  neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`.
+  neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`, and
+  `flip_h` and `flip_v` mirror it in the box.
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
-  negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.17 because of
+  negative scale is not refused: `from_legacy` returns the drawn outline with the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.17 because of
   `scene.create`'s optional `role`; 0.16 added `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
@@ -108,7 +109,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a recording output and two
+  canvas, legacy items, one geometry item (flipped left to right), two RTMP outputs, a recording output and two
   encoder profiles), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
   URL, recording path and encoder profile checks, and `item.set_source` and
@@ -130,7 +131,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:554547a53e61d7f1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Opacity, blend and filters subsection, edges, blockers, plans, reads, undo, compat notes merged with main's f64 number text; holds" }
+verified = { hash = "b3:567d9b62e333c7bb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: Item geometry lists flip_h/flip_v (default false, omitted when false), a flip bullet (UV swap in the local frame before rotation; box, project and transform_view unchanged; no new edit), the legacy bullet says the reflection becomes the flip, and a not-yet-versioned note; checked against geometry.rs, protocol.snap and examples.snap" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -670,8 +671,10 @@ after 1.0:
 [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) defines an item's box as
 `ItemGeometry` ([`geometry.rs`](src/geometry.rs)): `center` and `size` in canvas pixels,
 `fit_mode` (`stretch`, `fit` or `fill`, default `fit`), clockwise `rotation_deg` about
-the centre, and 3D `tilt_deg`, `turn_deg`, `depth_px` and optional `perspective_px`.
-The 3D fields default to neutral: zeros, and perspective absent. The formula is a pure
+the centre, 3D `tilt_deg`, `turn_deg`, `depth_px` and optional `perspective_px`, and
+the flips `flip_h` and `flip_v`. The 3D fields default to neutral: zeros, and
+perspective absent. The flips default to `false` and are omitted from the wire when
+`false`, so an unflipped geometry's JSON is what it was before they existed. The formula is a pure
 function in this crate so the compositor and the UI share one implementation.
 
 - `place` and `project` map a local-frame point, and the box's four corners, through
@@ -687,13 +690,21 @@ function in this crate so the compositor and the UI share one implementation.
   rectangle that covers the box, centred, and may extend past it; the compositor clips.
   A crop that leaves no pixels draws nothing. Crop stays [`Crop`](src/command.rs), in
   source pixels, applied before fitting.
+- `flip_h` and `flip_v` are the additive booleans ADR-0022 reserved for flips. They
+  mirror the cropped, fitted content about the box centre, in the box's local frame
+  before rotation and 3D: `content` swaps `u0` with `u1` or `v0` with `v1`. The box,
+  its projected corners and `transform_view` do not change, so selection handles and
+  0.3 clients see the same box. A negative `size` is still rejected, not read as a
+  flip. The flips travel inside `ItemGeometry`, so `item.add`, `item.set_geometry` and
+  its inverse carry them with no edit of their own. The compositor draws them, so the
+  engine accepts both.
 - `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 `ItemTransform`: crop,
   then scale, top-left at `position`, clockwise about that corner. `from_legacy`
   returns that outline as a box with `fit_mode = stretch` and neutral 3D, so a
   non-uniform scale stays exact, plus whether a negative scale flipped an axis.
-  A negative scale is not refused. Geometry has no flip field, so projecting that box
-  matches the outline and not the reflected corner order. `legacy_quad` is the
-  reflected quad.
+  A negative scale is not refused: it becomes the box's `flip_h` or `flip_v`, so the
+  box draws the same pixels. Projecting that box gives its outline, not the reflected
+  corner order, which `legacy_quad` keeps.
 
 **On the wire (0.11).** ADR-0022 names these additions as 0.4, which had already
 shipped with `events.dropped`, so they ship as 0.11, an additive minor under
@@ -728,6 +739,11 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   `item.add`'s `transform` and `ItemInfo.transform`. Their doc comments, and so the
   schema descriptions in `protocol.snap` and the MCP `tools.snap`, say so
   ([R-TEST-002](../../docs/RULES.md#R-TEST-002)).
+- **Flips, not yet versioned.** `flip_h` and `flip_v` wait for a protocol queue slot,
+  so `PROTOCOL_VERSION` does not name them yet. They are optional fields, an additive
+  minor under [R-API-001](../../docs/RULES.md#R-API-001): an older peer ignores them,
+  so it shows a flipped item unflipped, and one that writes the geometry back drops
+  the flip.
 - **Not in 0.11 yet:** `source.sizes` and `source.size_changed` (decision 4), which need
   the engine's runtime source sizes, and live geometry values (ADR-0032's `live.set`),
   which need the live-value channel. Both are later minors.

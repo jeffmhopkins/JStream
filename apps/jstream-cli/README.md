@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:0fe0c682590c53a4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; contents list unchanged by B7 or main; holds" }
+verified = { hash = "b3:f68813db7ebef31c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: args.rs only sets item.set_geometry's flips false; contents list (args, run, exit, block, mcp) unchanged; holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:91fae55e6dd30f37", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; B7's opacity/blend commands and filter-edit exclusion merged cleanly with main's text; holds against args.rs" }
+verified = { hash = "b3:4c24c7109bb87239", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: added that item.set_geometry sends no flip and has no flip argument yet; matches args.rs; rest holds" }
 -->
 
 ```sh
@@ -113,7 +113,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   placement, so its item is a legacy one; place it with `item.set_geometry <item-id>
   <center-x> <center-y> <width> <height> <rotation-deg> stretch|fit|fill` in the same
   batch ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Its 3D fields
-  are always sent neutral, since the engine refuses anything else until it draws 3D.
+  are always sent neutral, since the engine refuses anything else until it draws 3D,
+  and it sends no flip (`flip_h` and `flip_v` false): the command has no flip argument
+  yet.
   `canvas.set_size <width> <height>` sets the canvas. Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
@@ -239,7 +241,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:42de2996be9ddaa0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; parser, connector, mock and MCP proxy design unchanged; holds" }
+verified = { hash = "b3:fd4accc40cace418", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: hand-rolled fixed-arity parser unchanged (item.set_geometry keeps 7 args); holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

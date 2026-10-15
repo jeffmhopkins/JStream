@@ -1167,7 +1167,8 @@ pub const CANVAS: Canvas = Canvas {
     height: 720,
 };
 
-/// Item `i4`'s geometry: a 320×180 box centred at (640, 360), filled.
+/// Item `i4`'s geometry: a 320×180 box centred at (640, 360), filled and mirrored left
+/// to right.
 const BOXED: ItemGeometry = ItemGeometry {
     center: Vec2 {
         x: finite(640.0),
@@ -1183,6 +1184,8 @@ const BOXED: ItemGeometry = ItemGeometry {
     turn_deg: Finite32::ZERO,
     depth_px: Finite32::ZERO,
     perspective_px: None,
+    flip_h: true,
+    flip_v: false,
 };
 
 /// `ItemInfo.transform` for [`BOXED`]: its unrotated top-left corner at scale (1, 1).

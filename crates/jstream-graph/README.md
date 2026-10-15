@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a4a663441b05d978", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Chains/Filter model, opacity/blend/effects, filter checks, edges, plans, reads, persistence and tests merged with main's Q1 property-suite text; holds" }
+verified = { hash = "b3:482de906b3cb6c85", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V1b flips: model/apply unchanged in code; flips live in ItemGeometry so set_geometry, its inverse and the collection file carry them; added that, the flip graph test, the flipped fixture item and the persist flip test; property generator now flips; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -112,6 +112,8 @@ the batch **touched**.
   `item.set_transform`. A geometry is checked before it is stored: a positive size and
   perspective, finite corners, and neutral tilt, turn, depth and perspective until the
   compositor draws 3D; each failure names its field (`edits.N.geometry.tilt_deg`).
+  A geometry's `flip_h` and `flip_v` are part of it, so they are stored, undone and
+  persisted with it (the collection file writes them only when set).
   `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
   `item.add`'s `opacity` accept 0 to 1; `item.set_blend` and `item.add`'s `blend`
   accept only `normal` until the compositor draws the other modes. Each is undone by
@@ -236,7 +238,8 @@ edit, shared sources, references and clones (`item.set_source` keeping the item,
 `duplicated_from` link through deletes and undo, and both conversions as one batch),
 cycles (self, 2- and 3-cycles, legal diamonds, and through settings references, one
 case per edge-adding edit), settings checks and defaults,
-placement conversions and their inverses, geometry and canvas validation,
+placement conversions and their inverses, a flip set and undone through
+`item.set_geometry`, geometry and canvas validation,
 delete rejection by references, roles, moves and the grouping and ungrouping batches,
 `scene_id` addressing, output URL checks and the refused delete of a running
 output, encoder edits and their inverses (a profile freed and deleted in one batch),
@@ -262,7 +265,7 @@ exactly when something refers to it, a scene's or source's with the blockers the
 works out itself. The
 seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
-1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
+1280×720 canvas, legacy items and a flipped geometry item, two encoder profiles that two outputs use,
 scene `b` made a group, a clone, a `duplicated_from` naming a missing source,
 opacities and a desktop audio source with two gain filters, one disabled) plus a source whose
 settings refer to a later one must produce exactly the checked-in
@@ -270,7 +273,7 @@ settings refer to a later one must produce exactly the checked-in
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none; a profile's
-round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
+round trip; a geometry's flip loading back and a file without one loading unflipped; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that
