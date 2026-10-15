@@ -11,7 +11,7 @@ use windows::Win32::System::Threading::{
     GetCurrentProcessId, GetProcessTimes, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
-use crate::json::{self, Obj};
+use s4_browser::json::{self, Obj};
 
 #[derive(Clone)]
 pub struct Sample {

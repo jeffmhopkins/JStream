@@ -22,14 +22,14 @@ use cef::{
     AcceleratedPaintInfo, BrowserSettings, CefString, LogSeverity, Settings, ThreadId, WindowInfo,
 };
 
-use crate::analysis::{ChannelStats, FrameTracker, ProbeTally, decode_counter};
-use crate::cli::{Args, Helper};
 use crate::err::{Context, Error, Result, bail};
-use crate::json::{self, Obj};
-use crate::page;
-use crate::stats::Samples;
 pub use crash::stage;
 use handlers::Ctx;
+use s4_browser::analysis::{ChannelStats, FrameTracker, ProbeTally, decode_counter};
+use s4_browser::cli::{Args, Helper};
+use s4_browser::json::{self, Obj};
+use s4_browser::page;
+use s4_browser::stats::Samples;
 
 /// What the audio handler asks CEF for: 48 kHz, 10 ms packets (CEF's default is 1024
 /// frames). The engine's mixer runs at 48 kHz (ADR-0028).
@@ -234,7 +234,7 @@ fn runtime_json(dir: &std::path::Path) -> String {
     // Build products of this crate and cargo's own folders aren't part of the runtime.
     let ours = |name: &str| {
         name.starts_with("s4-browser")
-            || name.starts_with("s4_browser")
+            || name.contains("s4_browser")
             || matches!(
                 name,
                 "build" | "deps" | "examples" | "incremental" | ".fingerprint"
@@ -744,7 +744,7 @@ impl Shared {
                     Obj::new()
                         .num("left_hz", page::TONE_LEFT_HZ)
                         .num("right_hz", page::TONE_RIGHT_HZ)
-                        .num("peak_dbfs", crate::analysis::dbfs(page::TONE_GAIN))
+                        .num("peak_dbfs", s4_browser::analysis::dbfs(page::TONE_GAIN))
                         .build()
                 } else {
                     "null".into()
@@ -845,7 +845,7 @@ impl Shared {
             line(format!(
                 "  channel {i}: {:.1} Hz, peak {:.1} dBFS",
                 ch.frequency(rate),
-                crate::analysis::dbfs(f64::from(ch.peak))
+                s4_browser::analysis::dbfs(f64::from(ch.peak))
             ));
         }
         if let Some(e) = &v.first_error {

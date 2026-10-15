@@ -1,35 +1,13 @@
-//! Spike S4: CEF browser source on Windows.
-//!
-//! CEF off-screen rendering with accelerated paint -> the shared D3D11 texture opened on
-//! wgpu's D3D12 device -> copied out of CEF's pool and composited over a background, with
-//! no CPU copy of frame data; plus CEF's per-browser audio handler. Throwaway code that
-//! answers ADR-0021's "prove it first"; see `README.md` next to `Cargo.toml`.
-//!
-//! Docs: docs/adr/0021-browser-source.md, docs/adr/0004-wgpu-with-native-interop.md
+//! Spike S4's exe: the Windows run (CEF, wgpu, the audio handler). The options, test page
+//! and checks it shares with the unit tests are in `lib.rs`.
 
-// Off Windows only the unit tests of the platform-independent modules build.
-#![cfg_attr(
-    not(windows),
-    allow(
-        dead_code,
-        reason = "the Windows run uses these; elsewhere only tests do"
-    )
-)]
-
-#[cfg(any(windows, test))]
-mod analysis;
-#[cfg(any(windows, test))]
-mod cli;
 #[cfg(windows)]
 mod err;
-#[cfg(any(windows, test))]
-mod json;
-#[cfg(any(windows, test))]
-mod page;
-#[cfg(any(windows, test))]
-mod stats;
 #[cfg(windows)]
 mod win;
+
+#[cfg(windows)]
+use s4_browser::cli;
 
 use std::process::ExitCode;
 

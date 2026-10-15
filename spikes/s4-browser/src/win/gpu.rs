@@ -7,10 +7,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use crate::analysis::Px;
 use crate::err::{Context, Result, bail};
-use crate::json::{self, Obj};
-use crate::page::{PROBE_Y, ROW_PIXELS};
+use s4_browser::analysis::Px;
+use s4_browser::json::{self, Obj};
+use s4_browser::page::{PROBE_Y, ROW_PIXELS};
 use wgpu::hal::api::Dx12;
 use windows::Win32::Foundation::{HANDLE, LUID};
 use windows::Win32::Graphics::Direct3D::D3D_FEATURE_LEVEL_11_0;
