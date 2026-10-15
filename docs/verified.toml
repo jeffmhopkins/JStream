@@ -141,7 +141,7 @@ stamp = { hash = "b3:d63ee0e9a7bb859a" }
 stamp = { hash = "b3:112f148ae88f982d" }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:49324e4ee28be6df", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; as-built paragraph (composite on GpuContext, on_context, one import per texture, PRESENT hand-back, CPU readback until E3c) matches render and core; steps 1-6 unchanged; holds" }
+stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "re-read after merging wave/m1 into E3c: the E3c text on encoder GPU input (Codecs::on_context, H.264 on encode targets) holds alongside E3b's composite path" }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -1791,13 +1791,13 @@ stamp = { hash = "b3:4a6d6e6f01f968f4" }
 stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 
 ["CRATE-jstream-platform#gpu-frames"."body"]
-stamp = { hash = "b3:76df49408e9eabb9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; frames are delivered and composited, encoders don't take them yet, on_context default method text matches capture.rs; holds" }
+stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "re-read after merging wave/m1 into E3c: the E3c text on encoder GPU input (Codecs::on_context, H.264 on encode targets) holds alongside E3b's composite path" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
 stamp = { hash = "b3:22338c0c00b36187", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of wave/m1: re-read against the merged crate map; the platform rows it relies on match, and the CEF move to jstream-browser is consistent with this section" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:49324e4ee28be6df", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; frames are delivered and composited, encoders don't take them yet, on_context default method text matches capture.rs; holds" }
+stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "re-read after merging wave/m1 into E3c: the E3c text on encoder GPU input (Codecs::on_context, H.264 on encode targets) holds alongside E3b's composite path" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via the crate map (new jstream-browser row, CEF off the platform-windows row) and R-UNSAFE-001 (adds jstream-browser); the GPU frame design is untouched, and the browser backend's shared-texture copy uses GpuFrame as described; holds" }
@@ -1806,7 +1806,7 @@ stamp = { hash = "b3:1f18ef7243c3a01d", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:3356d3703539746c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; Capture bullet's on_context (default None) matches capture.rs, Not-yet says the engine composites GPU frames but encoders and vcam don't take them; holds" }
+stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "re-read after merging wave/m1 into E3c: the E3c text on encoder GPU input (Codecs::on_context, H.264 on encode targets) holds alongside E3b's composite path" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:e204cadb57ccceae" }
@@ -1878,10 +1878,10 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:a7c9e7bbf0b3064e", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU path bullet's Capture::on_context answered by on_gpu matches wgc.rs, open-questions text on encoders still open for E3c; holds" }
+stamp = { hash = "b3:574e358c2bd2905b", by = "agent:claude", note = "re-read after merging wave/m1 into E3c: the E3c text on encoder GPU input (Codecs::on_context, H.264 on encode targets) holds alongside E3b's composite path" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:3356d3703539746c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; GPU path bullet's Capture::on_context answered by on_gpu matches wgc.rs, open-questions text on encoders still open for E3c; holds" }
+stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "re-read after merging wave/m1 into E3c: the E3c text on encoder GPU input (Codecs::on_context, H.264 on encode targets) holds alongside E3b's composite path" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:43948c5058fe4611", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via its crate-map row, which drops the CEF browser backend (now in jstream-browser), and R-UNSAFE-001 (adds jstream-browser); this README never described CEF, its text holds" }
@@ -2232,13 +2232,13 @@ stamp = { hash = "b3:ff7828f70313a653", by = "agent:claude@session_01VJKy1iBUkPG
 stamp = { hash = "b3:7bb23bacf002a8e0", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
-stamp = { hash = "b3:76df49408e9eabb9", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
+stamp = { hash = "b3:74089efe2d4ea366", by = "agent:claude", note = "re-read: render still composites on the context and does not write NV12 encode targets; E3c's encoder text in its deps changes nothing here" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-render"]
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:49324e4ee28be6df", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3b on the ledger: re-read; ResourceCache bullet (imports, hold only for the drawing frame) and PRESENT staging sentence match cache.rs import and compositor record_release; holds" }
+stamp = { hash = "b3:a6f6991c32106b42", by = "agent:claude", note = "re-read: render still composites on the context and does not write NV12 encode targets; E3c's encoder text in its deps changes nothing here" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -2733,7 +2733,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: stale via platform#purpose only; Secret and OAuthTokenStore text unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:3356d3703539746c", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (#376) into #219: stale via platform#purpose only (Capture::on_context added); youtube text names neither; holds" }
+stamp = { hash = "b3:94ddd281fa3bc568", by = "agent:claude", note = "re-read: still depends on jstream-platform only for Secret; the platform purpose change (GPU encoder text) does not affect it" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:e3b27ea549009815" }
