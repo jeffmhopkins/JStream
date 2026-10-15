@@ -34,6 +34,11 @@ impl Driver for VideoDriver {
         self.encoder.poll(out)
     }
 
+    fn request_keyframe(&mut self) -> bool {
+        // A refusal leaves the regular keyframes, which subscribers wait for instead.
+        self.encoder.request_keyframe().is_ok()
+    }
+
     fn finish(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError> {
         self.encoder.finish(out)
     }
@@ -102,14 +107,25 @@ impl VideoSession {
 
     /// Subscribes with the session's default queue capacity
     /// ([`SessionOptions::subscriber_capacity`]). The subscription starts at the next
-    /// keyframe the encoder produces.
+    /// keyframe the encoder produces. Subscribing [requests](Self::request_keyframe) one,
+    /// so with an encoder that can force keyframes that is the next frame encoded.
     pub fn subscribe(&self) -> Subscription {
         self.core.subscribe(None)
     }
 
-    /// Subscribes with a queue of `capacity` packets (at least one).
+    /// Subscribes with a queue of `capacity` packets (at least one), requesting a
+    /// keyframe as [`subscribe`](Self::subscribe) does.
     pub fn subscribe_with_capacity(&self, capacity: usize) -> Subscription {
         self.core.subscribe(Some(capacity))
+    }
+
+    /// Asks for the next frame encoded to be a keyframe, for a consumer that has to
+    /// restart decoding, such as an RTMP output that just reconnected. Never blocks.
+    /// Requests made before that frame ask for one keyframe. An encoder that can't force
+    /// keyframes ignores it, and the next regular keyframe comes as usual.
+    /// [`SessionStats::keyframes_requested`] counts the requests the encoder accepted.
+    pub fn request_keyframe(&self) {
+        self.core.request_keyframe();
     }
 
     /// The codec and settings of the stream.

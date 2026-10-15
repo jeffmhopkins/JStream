@@ -283,6 +283,35 @@ fn video_encoder_keeps_timing_marks_keyframes_and_pushes_back() {
 }
 
 #[test]
+fn video_encoder_forces_a_keyframe_on_request_and_restarts_the_cadence() {
+    let (_, b) = setup();
+    let mut config = video_config();
+    config.keyframe_interval = 4;
+    let mut enc = b.codecs.video_encoder(&config).unwrap();
+    let mut out = Vec::new();
+    for i in 0..8 {
+        if i == 2 {
+            // Two requests before one frame ask for one keyframe.
+            enc.request_keyframe().unwrap();
+            enc.request_keyframe().unwrap();
+        }
+        enc.encode(nv12(ms(i * 16))).unwrap();
+        enc.poll(&mut out).unwrap();
+    }
+    enc.finish(&mut out).unwrap();
+    let keyframes: Vec<bool> = out.iter().map(Packet::is_keyframe).collect();
+    assert_eq!(
+        keyframes,
+        [true, false, true, false, false, false, true, false],
+        "frame 2 is forced, and the next one comes an interval after it"
+    );
+    assert!(matches!(
+        enc.request_keyframe(),
+        Err(PlatformError::InvalidState { .. })
+    ));
+}
+
+#[test]
 fn video_encoder_rejects_mismatched_frames_and_configs() {
     let (_, b) = setup();
     let mut enc = b.codecs.video_encoder(&video_config()).unwrap();
