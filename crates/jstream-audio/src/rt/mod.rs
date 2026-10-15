@@ -14,6 +14,7 @@ pub(crate) mod continuity;
 pub(crate) mod control;
 pub(crate) mod downmix;
 pub(crate) mod drift;
+pub(crate) mod host;
 pub(crate) mod input;
 pub(crate) mod mixer;
 pub(crate) mod retire;
