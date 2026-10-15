@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:f759fa28f5000c3b", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 D5 merge follow-up: OutputInfo.video_mix doc now says older than 0.20; section text unchanged and still holds" }
+verified = { hash = "b3:eba200dc806a87e7", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): actions/queries/events lists merged with D5's; version line 0.21 privacy, 0.20 mixes, 0.19 audio" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -145,7 +145,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:d93a63db78410c2c", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 D5 merge follow-up: OutputInfo.video_mix doc now says older than 0.20; section text unchanged and still holds" }
+verified = { hash = "b3:f8cae17cb03a9924", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): privacy.get, privacy.changed and dedicated now say 0.21; envelope example at 0.21; mixes stay 0.20, audio 0.19" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

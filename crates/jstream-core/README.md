@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:a79b434ee8777654", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): Contents merged: D5's audio-input routing text with E2's snapshot/render-thread mix text; tests list has mix and vcam and audio tests" }
+verified = { hash = "b3:cac21261050e185a", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): actions list merged: scene.switch, privacy.set and audio.reset_loudness; studio.get and privacy.get reads; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -186,7 +186,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:cf41bd046575c196", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): re-read the render snapshot, compose, video mixes and session key paragraphs next to D5's audio sources and routing; both hold" }
+verified = { hash = "b3:5fac141e82408484", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): privacy screen, sharing key and cost paragraphs read next to D5's audio routing; the mixer still ignores privacy; holds" }
 -->
 
 ### Engine and sessions
@@ -1076,7 +1076,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:4e373e0e17476f5c", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): render thread composites each due mix; mixer thread routes D5's buses and sends; session key is mix+profile; both hold" }
+verified = { hash = "b3:1acfe4009b1026f9", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): render thread loads the privacy flag per tick and covers each drawn mix; mixer routing from D5 unchanged; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

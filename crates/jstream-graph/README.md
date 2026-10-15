@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:d772b10419903e6b", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 merge of main (D5 audio at 0.19; mixes now 0.20): merged State, touched sets, reads, plan, persist and tests text: video mixes and buses/sends side by side; file order mixes then outputs then buses" }
+verified = { hash = "b3:5598abca5265bbaa", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): cascade only; privacy is runtime state, not in the graph" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
