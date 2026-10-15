@@ -54,6 +54,7 @@ Edits (each is its protocol command name followed by its arguments):
   scene.delete <scene-id>
   scene.reorder <scene-id> <index>
   source.create <source-id> <name> builtin:<kind> | scene:<scene-id>
+  source.rename <source-id> <name>
   source.duplicate <source-id> <new-source-id> <name>
   source.delete <source-id>
   item.add <scene-id> <item-id> <source-id>
@@ -312,9 +313,8 @@ fn parse_batch(mut args: &[&str]) -> Result<Batch, CliError> {
 fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "scene.delete" | "source.delete" | "item.remove" => 1,
-        "scene.create" | "scene.rename" | "scene.reorder" | "item.reorder" | "item.set_visible" => {
-            2
-        }
+        "scene.create" | "scene.rename" | "scene.reorder" | "source.rename" | "item.reorder"
+        | "item.set_visible" => 2,
         "source.create" | "source.duplicate" | "item.add" => 3,
         "item.set_crop" => 5,
         "item.set_transform" => 6,
@@ -359,6 +359,11 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
             source_id: SourceId::new(*id),
             name: (*name).to_owned(),
             kind: source_kind(kind)?,
+            settings: Default::default(),
+        },
+        ("source.rename", [id, name]) => Edit::SourceRename {
+            source_id: SourceId::new(*id),
+            name: (*name).to_owned(),
         },
         ("source.duplicate", [id, new_id, name]) => Edit::SourceDuplicate {
             source_id: SourceId::new(*id),
@@ -607,6 +612,7 @@ mod tests {
                         kind: SourceKind::Builtin {
                             kind: "webcam".into()
                         },
+                        settings: Default::default(),
                     },
                     Edit::SourceCreate {
                         source_id: SourceId::new("nest"),
@@ -614,6 +620,7 @@ mod tests {
                         kind: SourceKind::Scene {
                             scene_id: SceneId::new("s1")
                         },
+                        settings: Default::default(),
                     },
                     Edit::ItemAdd {
                         scene_id: SceneId::new("s1"),
