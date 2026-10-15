@@ -104,7 +104,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:36b9fdf792806e2e", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "#171 B1/N1/N2: Audit log field list now has client_name (latest hello, cut to 128 bytes, kept for the engine's lifetime) matching audit.rs, register_client/rename_client and session.rs; hello bullet says a second hello renames; request_id note (N1) and AuditSink seam reason (N2) added" }
+verified = { hash = "b3:46d8899a76dab282", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#166 A5, #181, #149) into B8 #171: main changed only Design's verified line (A5's differential-script paragraph was already in); re-read the Audit log subsection, hello bullet and Locking against audit.rs, engine.rs and session.rs after the merge; all hold" }
 -->
 
 ### Engine and sessions

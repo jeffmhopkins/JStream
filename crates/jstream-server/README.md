@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5dd7012556e9c84a", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1 CI fix: MCP table's 413 row says a declared over-long body is refused from Content-Length before it is read, as mcp.rs does and mcp_refuses_malformed_requests tests; rest unchanged" }
+verified = { hash = "b3:159ac72a9ba210fc", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (I1 #153 /mcp) into A5: only the verified line conflicted; prose is I1's new MCP-over-streamable-HTTP section, sessions, limits and logging; A5 changed only the control mock, which the server's tests serve and which the design doesn't describe" }
 -->
 
 ### Listening and admission
