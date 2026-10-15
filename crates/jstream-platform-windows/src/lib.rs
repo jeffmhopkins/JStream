@@ -1,9 +1,10 @@
 //! Windows platform backends: the implementations of the `jstream-platform` traits on
 //! Windows. It has the QPC media clock (`QpcClock`), WASAPI audio I/O (`WasapiAudio`),
 //! Windows.Graphics.Capture display and window capture (`WgcCapture`), Media Foundation
-//! codecs (`MfCodecs`) and GPU interop (`WindowsGpu`); video decoders follow. Layer 2,
+//! codecs (`MfCodecs`), GPU interop (`WindowsGpu`) and the Credential Manager store for
+//! stream keys (`WindowsCredentials`); video decoders follow. Layer 2,
 //! and one of the few crates allowed `unsafe` (R-UNSAFE-001): every OS call is wrapped
-//! here behind the safe trait APIs.
+//! here behind safe APIs.
 //!
 //! The backends exist only on Windows. On other platforms the crate builds empty except
 //! for its platform-independent helpers, which are tested everywhere.
@@ -16,6 +17,7 @@ mod clock;
 mod codec;
 #[cfg(windows)]
 mod com;
+mod credential;
 #[cfg(windows)]
 mod gpu;
 
@@ -28,5 +30,8 @@ pub use clock::QpcClock;
 pub use clock::timebase;
 #[cfg(windows)]
 pub use codec::MfCodecs;
+#[cfg(windows)]
+pub use credential::WindowsCredentials;
+pub use credential::{CredentialTarget, Secret};
 #[cfg(windows)]
 pub use gpu::WindowsGpu;
