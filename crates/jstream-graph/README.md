@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:b244e02935a65176", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: cascade from protocol design's envelope example moving to 0.16; re-read, nothing here names the example's version; holds" }
+verified = { hash = "b3:8e8c866da071592e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 3: cascade from the protocol/core filter wording (D7b has mixer chains, protocol has no filters yet); re-read, nothing here contradicts it; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

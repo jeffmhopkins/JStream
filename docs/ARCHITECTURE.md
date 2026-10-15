@@ -528,7 +528,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:c059dee4b946134b", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: cascade from protocol design's envelope example moving to 0.16; re-read, nothing here names the example's version; holds" }
+verified = { hash = "b3:4515fda4a5cd88cd", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 3: cascade from the protocol/core filter wording (D7b has mixer chains, protocol has no filters yet); re-read, nothing here contradicts it; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

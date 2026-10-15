@@ -117,9 +117,11 @@ impl AudioSources {
             .collect();
         let mut wanted = lock(&self.wanted.state);
         if wanted.targets != targets {
-            // A deleted source has no status from now on, even before the thread closes
-            // its input.
-            wanted.status.retain(|id, _| targets.contains_key(id));
+            // A deleted source, or one whose audio is off, has no status from now on,
+            // even before the thread closes its input.
+            wanted
+                .status
+                .retain(|id, _| targets.get(id).is_some_and(Option::is_some));
             wanted.targets = targets;
             self.wanted.changed.notify_all();
         }

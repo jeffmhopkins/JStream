@@ -11,8 +11,9 @@
 //!
 //! The audio sources' inputs are opened and closed by the program stage
 //! (`crate::audio_sources`, which opens none for a source whose audio is off); this
-//! module only sets them up. Not yet: `follow` (`when_shown`) is D6's activity gain;
-//! filters wait for D7b.
+//! module only sets them up. Not yet: `follow` (`when_shown`) is D6's activity gain,
+//! and filters: the mixer has filter chains (D7b), but the collection has no filters
+//! to route into them until they reach the protocol.
 
 use jstream_audio::meter::{LoudnessMeter, TruePeakMeter};
 use jstream_audio::{BusControl, InputControl, MeterReading, MixerControl};

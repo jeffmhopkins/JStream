@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:7068db82acdf20e5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 2 B3: re-read; Audio sources bullet says only sources whose audio is on get an input, opened and closed as audio turns on and off; Audio bullet drops the mute-while-off claim; tests line names the off/on check" }
+verified = { hash = "b3:8225afda4d2a3793", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 3: audio_sources sync now drops an off source's status at once; Audio sources bullet still holds; re-read" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -170,7 +170,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:dc45969cad0a3bf8", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 2 B3: re-read; Audio sources says AudioSources holds no target while audio is off so no stream opens, an off source still keeps the defaults away; Audio routing says off means no input, routing mutes and unmeters only until it closes" }
+verified = { hash = "b3:85c3c72bee59ba75", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 3: Not yet line says the mixer has filter chains since D7b and the routing sets none yet; status of an off source drops at once (sync); re-read, holds" }
 -->
 
 ### Engine and sessions
@@ -940,7 +940,7 @@ history and idempotency keys are not saved.
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
 - `when_shown`'s activity gain (D6), filter
-  chains in the protocol (after D7b), and meters for every bus's true peak and loudness.
+  chains in the protocol (the mixer has them since D7b; the routing sets none yet), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one

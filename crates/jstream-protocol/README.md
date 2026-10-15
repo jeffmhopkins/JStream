@@ -132,7 +132,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:59f3a6df747d9c85", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of B9: re-read; envelope example now at 0.16; Audio subsection and meters.tick say 0.16; delete.plan, blockers and OQ12 from main kept; examples.snap and protocol.snap regenerated at 0.16" }
+verified = { hash = "b3:a88debcbcad300fd", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 round 3: Audio subsection now says the mixer has filter chains (D7b) but filters are not in the protocol yet; rest re-read, holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -285,8 +285,8 @@ the inverses put them back. Every gain is in dB from −100 to +24; silence is `
 
 Buses never feed buses (ADR-0028), so a send always runs from a source to a bus, and
 an audio routing cycle can't be expressed. A routing check comes with filters, the
-first thing that could feed one bus from another; filters stay out of the protocol
-until the mixer has them (D7b). `follow`'s activity gain is the engine's (D6); the
+first thing that could feed one bus from another. The mixer has filter chains (D7b),
+but filters are not in the protocol yet. `follow`'s activity gain is the engine's (D6); the
 protocol only stores it.
 
 Levels and loudness are runtime state: `meters.tick` carries them (see
