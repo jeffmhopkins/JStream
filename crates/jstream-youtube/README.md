@@ -12,13 +12,13 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:e13f76f93a4626c3", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via the platform Purpose after main's E3a/B3 merges (GPU frames: WgcCapture::on_gpu delivers them); its OAuth tokens/OAuthTokenStore and Secret text this section relies on are unchanged, crate-map youtube row unchanged, R-SEC-001/R-DEP-006 text unchanged, so Secrets and Not yet still hold" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
+verified = { hash = "b3:a3aadf552505069e", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Covered src/oauth.rs changed: OAuthClient::authorize's rustdoc now says JStream asks for Scope::Manage once (ADR-0041 §4), matching the Scopes bullet (review N3); no behavior change" }
 -->
 
 Layer-2 client for Google sign-in and the
 [YouTube Live API](https://developers.google.com/youtube/v3/live/getting-started), the
-optional half of [ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md) (the
+optional half of [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) (the
 generic RTMPS output works with a stream key alone). It has no media code and no
 `unsafe`. Its JStream dependency is [`jstream-platform`](../jstream-platform/README.md#purpose),
 for `Secret`. Its third-party ones are `rustls` (with `ring`) and `rustls-native-certs`
@@ -47,13 +47,13 @@ Contents:
   `refresh` gets a new access token and reports a rotated refresh token; `revoke` signs
   out. Access tokens record their expiry (timed from when the request was sent) and the
   scopes granted.
-  - **Scopes** (ADR-0034 §4): `Scope::Readonly` (`youtube.readonly`) for listing and
+  - **Scopes** (ADR-0041 §4): `Scope::Readonly` (`youtube.readonly`) for listing and
     stream health, `Scope::Manage` (`youtube`) for creating, binding and transitioning.
     The Live API reference pages list exactly these: the list methods accept either
     (or `youtube.force-ssl`), the write methods `youtube` or `youtube.force-ssl`. A
-    granted `force-ssl` counts as `Manage`. Google doesn't support incremental
-    authorization for installed apps, so asking for `Manage` later is a new sign-in
-    with both scopes.
+    granted `force-ssl` counts as `Manage`. JStream signs in once, asking for
+    `Manage` alone, which the reads accept too (ADR-0041 §4); `Readonly` stays for a
+    grant that holds only it.
   - A refresh refused with `invalid_grant` is `YoutubeError::SignInRequired`.
 - **`LoopbackRedirect`:** the redirect listener, bound to `127.0.0.1` on an OS-chosen
   port (`http://127.0.0.1:<port>`). Google redirects the user's browser to it, so it
@@ -86,7 +86,7 @@ Contents:
   ([R-TEST-004](../../docs/RULES.md#R-TEST-004)); the HTTPS tests use a TLS server on
   loopback with certificates made at test time.
 - **Errors:** one `thiserror` enum, `YoutubeError`. `is_quota` recognises quota and
-  rate-limit reasons, which the engine surfaces as protocol errors (ADR-0034 §5).
+  rate-limit reasons, which the engine surfaces as protocol errors (ADR-0041 §5).
 
 **Secrets** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): tokens, codes, the client
 secret and stream keys are held as `Secret`s. The request head that carries the bearer
@@ -100,6 +100,6 @@ column, never quoted. The refresh token is kept in the OS credential store throu
 anywhere itself.
 
 **Not yet:** chat (reading, sending as the channel, the featured message) and audience
-stats from ADR-0034, quota accounting, the protocol commands and MCP tools that expose
+stats from ADR-0041, quota accounting, the protocol commands and MCP tools that expose
 all of this, and the engine wiring (including saving the refresh token in the
 `OAuthTokenStore`).
