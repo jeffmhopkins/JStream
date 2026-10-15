@@ -1,7 +1,8 @@
 //! Windows platform backends: the implementations of the `jstream-platform` traits on
 //! Windows. It has the QPC media clock (`QpcClock`), WASAPI audio I/O (`WasapiAudio`),
 //! Windows.Graphics.Capture display and window capture (`WgcCapture`), Media Foundation
-//! codecs (`MfCodecs`) and GPU interop (`WindowsGpu`); video decoders follow. Layer 2,
+//! codecs (`MfCodecs`), GPU interop (`WindowsGpu`), and `check_media_foundation`, which
+//! reports a Windows N edition without Media Foundation; video decoders follow. Layer 2,
 //! and one of the few crates allowed `unsafe` (R-UNSAFE-001): every OS call is wrapped
 //! here behind the safe trait APIs.
 //!
@@ -18,6 +19,9 @@ mod codec;
 mod com;
 #[cfg(windows)]
 mod gpu;
+// Its decision logic is tested on every platform.
+#[cfg(any(windows, test))]
+mod n_edition;
 
 #[cfg(windows)]
 pub use audio::WasapiAudio;
@@ -30,3 +34,5 @@ pub use clock::timebase;
 pub use codec::MfCodecs;
 #[cfg(windows)]
 pub use gpu::WindowsGpu;
+#[cfg(windows)]
+pub use n_edition::check_media_foundation;

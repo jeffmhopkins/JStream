@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ffeb76b8de905c81", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the apps/* row against apps/jstream-daemon/Cargo.toml: still layer 6 with unsafe_allowed false; the new direct deps tracing and blake3 are external crates (no new jstream crate edge), so the row text holds" }
+verified = { hash = "b3:8a9bb235aa0f2dd0", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Re-read the jstream-platform-windows row against its Cargo.toml: only two windows-crate features were added (LibraryLoader, Registry); layer 2, unsafe allowed and no new jstream edge, so the table holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

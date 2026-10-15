@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:7d9b783f1b6689be", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via ARCH#threading's handover paragraph; WASAPI/WGC/MF threads aren't snapshot readers, so the rule doesn't apply" }
+verified = { hash = "b3:ed1626038251e170", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Added the check_media_foundation bullet (System32-only mfplat.dll probe, EditionID advice, delay-load requirement for binaries) and the tests paragraph's new entries; checked against n_edition.rs and lib.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -175,6 +175,21 @@ The code is ported from spikes S1 to S3. This first cut has:
   - **Not yet:** the D3D11 side. Capture and the encoders don't take GPU frames yet; see
     [Open questions](#open-questions).
 
+- **`check_media_foundation`**, the Media Foundation check
+  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md#consequences)): Windows N and
+  KN editions ship without Media Foundation until the user installs the Media Feature
+  Pack, and Windows Server until it adds the Server Media Foundation feature. The check
+  loads `mfplat.dll` from System32 only and looks for `MFStartup`. If that fails, it
+  returns `PlatformError::MissingComponent`, and the registry's `EditionID` picks the
+  advice: the Media Feature Pack for an N edition (an ID ending in a capital `N`), the
+  server feature for an ID starting with `Server`, and both otherwise. The host calls it
+  before creating the backends.
+  - **Delay-loading:** the `windows` crate imports `mfplat.dll` when the process
+    loads, so on such a machine Windows refuses to start a binary that links `MfCodecs`
+    before any check can run. That binary must delay-load the DLL (MSVC
+    `/DELAYLOAD:mfplat.dll` with `delayimp.lib`) for the check to report anything. The
+    check itself never imports Media Foundation.
+
 **Not yet:** Media Foundation video decoders, the D3D11 side of the GPU path (capture
 into shared textures, encoders taking `VideoSurface::Gpu`), the virtual-camera sink, and
 a `Backends` constructor, which needs all of them.
@@ -183,8 +198,9 @@ a `Backends` constructor, which needs all of them.
 packet flags, positions across a device move), the capture helpers (BGRA to NV12 with
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding) and the
-H.264 helpers (configuration check, NV12 packing, `pts` mapping) run on every platform,
-and the QPC clock test and the start-race test (a destroyed message-only window maps to
+H.264 helpers (configuration check, NV12 packing, `pts` mapping) and the Media
+Foundation check's decision (edition kinds and the advice for each) run on every platform,
+and the QPC clock test, the Media Foundation probe and the edition read and the start-race test (a destroyed message-only window maps to
 `NotFound`) run on Windows. Tests against real devices, the OS encoder, the
 GPU and a display are platform tests: behind the `hw-tests` feature and `#[ignore]`d,
 because CI machines may have no audio devices, no Media Foundation, no GPU and no display
