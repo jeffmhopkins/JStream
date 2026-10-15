@@ -225,18 +225,19 @@ fn check_opened(file: &File, base: &Path, joined: &Path) -> Result<(), Opened> {
 /// Stable Rust has no file IDs on Windows, so the path is held still instead: its
 /// resolved form is walked from `base` one component at a time, each opened as itself
 /// (not followed if it is a reparse point) and without `FILE_SHARE_DELETE`, so it can't
-/// be renamed, deleted or replaced while the walk holds it. A component that is a
-/// reparse point by then was swapped after resolving, and is refused.
+/// be renamed, deleted or replaced while the walk holds it. A component that is a link by
+/// then (a name-surrogate reparse point: symlink, junction, WSL link) was swapped after
+/// resolving, and is refused. Other reparse points, such as OneDrive placeholders and
+/// dedup files, are files `canonicalize` left in place, and are read.
 #[cfg(windows)]
 fn open_inside(base: &Path, rel: &str) -> Result<File, Opened> {
     use std::fs::OpenOptions;
-    use std::os::windows::fs::{MetadataExt, OpenOptionsExt};
+    use std::os::windows::fs::OpenOptionsExt;
     // Win32 values (winnt.h, winbase.h).
     const FILE_SHARE_READ: u32 = 0x1;
     const FILE_SHARE_WRITE: u32 = 0x2;
     const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
     const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
-    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 
     let canonical = base.join(rel).canonicalize()?;
     let below = canonical.strip_prefix(base).map_err(|_| Opened::Escapes)?;
@@ -256,7 +257,8 @@ fn open_inside(base: &Path, rel: &str) -> Result<File, Opened> {
             .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
             .custom_flags(flags)
             .open(&at)?;
-        if handle.metadata()?.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+        // std reads the reparse tag, and counts only name-surrogate tags as links.
+        if handle.metadata()?.file_type().is_symlink() {
             return Err(Opened::Escapes);
         }
         if last {

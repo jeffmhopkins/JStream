@@ -86,7 +86,8 @@ Unix the opened file must be, by device and inode, the file its path resolves to
 the root afterwards. Stable Rust has no file IDs on Windows, so there the resolved path
 is walked from the root and each folder on it is held open without delete sharing,
 which stops it being renamed or replaced until the file is open; one that has become a
-reparse point is refused. The root folder itself is the host's configuration and is
+link (a symlink, junction or other name-surrogate reparse point) is refused, while a
+OneDrive placeholder or dedup file, also a reparse point, is read. The root folder itself is the host's configuration and is
 trusted.
 Errors name an asset by the root and path its setting holds, never by the host path
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). A missing or
