@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:819bcd6aa4a3e9dd", by = "agent:grok@bc-154a1201-b120-5757-9b7f-71d45e41d992", note = "Re-read the mock bullet against subscriber_count. MockEngine and MockControl are still the in-memory stand-in. The method is a test probe, not a new client API, and the contents list still matches." }
+verified = { hash = "b3:43ab28e081d407b1", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 changed mock.rs only to fill key_set false and empty outputs; Control trait, errors, transports and the mock bullet still hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:41bde4792835f4eb", by = "agent:grok@stats-tick", note = "Re-read the event bullets and open question 1 against mock.rs. MockEngine::emit still injects events the mock does not produce, including stats.tick. That event is protocol 0.6 and is emitted about once a second while a pipeline runs. Streams still end with the session." }
+verified = { hash = "b3:8d484cc48e9ec9b1", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Mock section says every edit but the output ones; output.status key_set always false; the 0.7 output edits, output.list and key actions answer internal and state.get reports no outputs (mock.rs action/edit/query fallthroughs)" }
 -->
 
 ### The trait
@@ -101,7 +101,7 @@ protocol's rules for them:
   retry with a known key answers first; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
-- every protocol edit, with the checks `jstream-graph` makes, in the same order per
+- every protocol edit but the output ones, with the checks `jstream-graph` makes, in the same order per
   edit, and the same error codes and `edits.<n>.<field>` paths:
   - `not_found` and `already_exists`;
   - empty IDs in creating edits (`scene.create`'s `scene_id`, `item.add`'s `item_id`,
@@ -115,10 +115,15 @@ protocol's rules for them:
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID) and `item.list` (bottom first; `not_found` for a missing
-  scene), each at the current `rev`, and `output.status`. So it keeps everything an
+  scene), each at the current `rev`, and `output.status`, whose `key_set` is always
+  `false` because the mock has no key store. So it keeps everything an
   edit sets: source names and kinds, and each item's transform, crop and visibility.
   `video.snapshot` is not one of those reads: the mock has no compositor and answers
-  it with `internal`, as it does for any protocol variant it does not implement;
+  it with `internal`, as it does for any protocol variant it does not implement. The
+  0.7 output configuration is not implemented either: `output.create`,
+  `output.set_target`, `output.delete`, `output.list`, `output.set_key` and
+  `output.clear_key` answer `internal`, and `state.get` reports no outputs. Its
+  outputs are the ones `MockEngine::with_output` declares;
 - `state.changed` events carrying the request ID, and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;

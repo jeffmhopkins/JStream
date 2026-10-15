@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:746dfce1adcc56ac", by = "agent:claude@session_01Q6eRwxiAzJidNbXNzEDHVJ", note = "F4: API list adds request_keyframe on VideoSession and Subscription; Tests list covers forced-keyframe joins, the refusing-encoder fallback and coalesced requests" }
+verified = { hash = "b3:6d1d08042c2dab8a", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Stale via ARCH#data-model (#142 Built so far adds outputs): encode reads no collection outputs; its API and tests list are unchanged" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

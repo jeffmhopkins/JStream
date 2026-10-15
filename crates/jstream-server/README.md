@@ -51,7 +51,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9fc66f6965fe6863", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Merged with main and edited open question 8: the jstream-cli mcp conflict is settled (jstream-mcp says hello at initialize); limits table, Sessions and Logging still match config.rs, listener.rs, lib.rs, session.rs" }
+verified = { hash = "b3:ea7bc5a525af227f", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Stale via ARCH#protocol and control Design (#142): the server forwards calls unchanged and never logs message contents, so a stream key in output.set_key is not logged; limits, sessions and logging hold" }
 -->
 
 ### Listening and admission
