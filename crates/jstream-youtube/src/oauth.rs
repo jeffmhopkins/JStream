@@ -278,12 +278,18 @@ impl OAuthClient {
                 what: "the token type is not Bearer".into(),
             });
         }
+        // Timed from when the request was sent, so the token is never thought to live
+        // longer than it does.
+        let expires_at = requested_at
+            .checked_add(Duration::from_secs(raw.expires_in))
+            .ok_or(YoutubeError::InvalidResponse {
+                endpoint: "token",
+                what: "the token's lifetime is out of range".into(),
+            })?;
         Ok(TokenResponse {
             access: AccessToken {
                 secret: Secret::new(raw.access_token),
-                // Timed from when the request was sent, so the token is never thought to
-                // live longer than it does.
-                expires_at: requested_at + Duration::from_secs(raw.expires_in),
+                expires_at,
                 scopes: Scope::parse_granted(raw.scope.as_deref().unwrap_or_default()),
             },
             refresh_token: raw.refresh_token.map(Secret::new),

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:4a46f132296dbcde", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via #142's platform Purpose rewrite after merging main: it now documents Secret (redacted Debug, not Clone, zeroed on drop), which is what this README says tokens, codes and stream keys travel in; the youtube contents are unchanged" }
+verified = { hash = "b3:c4dfa2c9dcc3ebf6", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Review round 1 N1/N2/N7: http bullet now says why the HttpTransport seam exists (hermetic tests) and that later HTTPS crates reuse it; loopback bullet states the per-connection 5 s budget capped at the wait deadline (Deadlined reader); HttpsTransport says connect, read and write are bounded and resolution is the OS's; N3 wipes on partial reads, matching the zeroed-body claim" }
 -->
 
 Layer-2 client for Google sign-in and the
@@ -28,14 +28,17 @@ blocks, so the engine runs it on a control or worker thread.
 
 Contents:
 - **`http`:** the `HttpTransport` trait, the crate's one seam to the network, and its
-  request and response types. A request's bearer token and form body are `Secret`s; a
+  request and response types. It exists so the API tests can swap in a fake and stay
+  hermetic ([R-TEST-004](../../docs/RULES.md#R-TEST-004)); a later crate that calls
+  HTTPS APIs should reuse it rather than add its own. A request's bearer token and form body are `Secret`s; a
   response body is zeroed on drop; neither type's `Debug` shows a body.
 - **`HttpsTransport`:** the real transport. A small blocking HTTP/1.1 client: one
   request per connection (`Connection: close`), responses framed by `Content-Length`,
   chunked coding or the connection's end, bodies capped at `MAX_BODY_BYTES` (4 MiB),
   `https://` only. TLS is rustls with the `ring` provider and the OS trust store, as the
-  RTMPS client does ([R-DEP-006](../../docs/RULES.md#R-DEP-006)); every connection
-  attempt, read and write is bounded by a timeout (`DEFAULT_TIMEOUT`, 30 s).
+  RTMPS client does ([R-DEP-006](../../docs/RULES.md#R-DEP-006)); every connect, read
+  and write is bounded by a timeout (`DEFAULT_TIMEOUT`, 30 s). Name resolution is left
+  to the OS resolver's own limits.
 - **`oauth`:** Google's
   [OAuth 2.0 for installed apps](https://developers.google.com/identity/protocols/oauth2/native-app).
   `OAuthClient::authorize` builds the consent URL with a [PKCE](https://www.rfc-editor.org/rfc/rfc7636)
@@ -57,8 +60,10 @@ Contents:
   can't ask for the control token ([R-SEC-002](../../docs/RULES.md#R-SEC-002) covers
   the control listeners); instead it requires its own address in `Host` (against DNS
   rebinding) and the sign-in's `state` (compared in constant time), and the code is
-  useless without the PKCE verifier, which never leaves the process. Any other request
-  gets an error page and the wait goes on, until the code, an `error` redirect
+  useless without the PKCE verifier, which never leaves the process. Each connection
+  must send its request head within 5 s in all, and never past the wait's deadline, so a
+  stalled or trickling client can't hold the wait open. Any other request gets an error
+  page and the wait goes on, until the code, an `error` redirect
   (`AuthorizationDenied`) or the timeout.
 - **`live`:** `LiveClient`, built from a refresh token or a fresh `Grant`. It refreshes
   the access token when less than `REFRESH_MARGIN` (60 s) of it is left, retries a call

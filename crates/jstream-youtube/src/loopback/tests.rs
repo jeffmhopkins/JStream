@@ -103,6 +103,34 @@ fn the_wait_times_out() {
 }
 
 #[test]
+fn a_trickling_client_cannot_hold_the_wait_past_its_deadline() {
+    let redirect = LoopbackRedirect::bind().unwrap();
+    let pending = pending(&redirect);
+    let addr = redirect.addr;
+    let client = thread::spawn(move || {
+        let mut stream = TcpStream::connect(addr).unwrap();
+        // One byte at a time for about 5 s, each well inside a per-read timeout.
+        for b in b"GET /?state=0123456789abcdefghijklmnopqrstuvwxyz HTTP/1.1" {
+            if stream.write_all(&[*b]).is_err() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    });
+    let started = std::time::Instant::now();
+    let err = redirect
+        .wait(&pending, Duration::from_millis(300))
+        .unwrap_err();
+    assert!(matches!(err, YoutubeError::AuthorizationTimedOut), "{err}");
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "{:?}",
+        started.elapsed()
+    );
+    client.join().unwrap();
+}
+
+#[test]
 fn state_comparison_is_exact() {
     assert!(constant_time_eq(b"abc", b"abc"));
     assert!(!constant_time_eq(b"abc", b"abd"));

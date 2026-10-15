@@ -135,7 +135,9 @@ impl Drop for HttpResponse {
 
 /// Sends one HTTPS request and reads the whole response.
 ///
-/// This is the crate's one seam to the network (R-RS-007: a transport). Calls block;
+/// This is the crate's one seam to the network. R-RS-007's list of seams names control
+/// transports; this one is here because it is what keeps the API tests hermetic
+/// (R-TEST-004): they swap in a fake that replays recorded JSON. Calls block;
 /// callers run them off any real-time thread. An implementation must not log or put in
 /// an error the bearer token, a form body or a response body.
 pub trait HttpTransport: Send + Sync {

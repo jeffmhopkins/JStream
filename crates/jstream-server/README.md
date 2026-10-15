@@ -51,7 +51,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5b907571e1a851aa", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#150 shutdown tests) into #142: only verified lines conflicted, prose is unchanged on both sides; re-read: serve_with_shutdown and CLOSE_TIMEOUT behaviour unchanged by #150's test-only waits; message contents never logged, so set_key's key is not logged" }
+verified = { hash = "b3:3be7d65340a108dc", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; the server forwards protocol messages opaquely, so neither the kind queries nor the output edits change admission, sessions, limits or logging" }
 -->
 
 ### Listening and admission

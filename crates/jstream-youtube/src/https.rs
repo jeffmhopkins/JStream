@@ -251,7 +251,10 @@ pub(crate) fn read_response(reader: &mut impl BufRead) -> Result<HttpResponse, Y
             return Err(bad("the response body is too large"));
         }
         let mut body = vec![0; n];
-        reader.read_exact(&mut body).map_err(io)?;
+        if let Err(e) = reader.read_exact(&mut body) {
+            wipe(&mut body);
+            return Err(io(e));
+        }
         body
     } else {
         read_to_end(reader)?
@@ -295,9 +298,14 @@ fn read_chunked(reader: &mut impl BufRead) -> Result<Vec<u8>, YoutubeError> {
         }
         let start = body.len();
         body.resize(start + size, 0);
-        reader.read_exact(&mut body[start..]).map_err(io)?;
         let mut crlf = [0; 2];
-        reader.read_exact(&mut crlf).map_err(io)?;
+        let read = reader
+            .read_exact(&mut body[start..])
+            .and_then(|()| reader.read_exact(&mut crlf));
+        if let Err(e) = read {
+            wipe(&mut body);
+            return Err(io(e));
+        }
         if crlf != *b"\r\n" {
             wipe(&mut body);
             return Err(bad("a chunk is not followed by CRLF"));

@@ -25,7 +25,7 @@ use crate::{PendingAuthorization, YoutubeError};
 /// How often an idle wait checks for a connection.
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 
-/// How long one connection may take to send its request.
+/// How long one connection may take to send its whole request head.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The largest request head read.
@@ -70,11 +70,16 @@ impl LoopbackRedirect {
     ) -> Result<Secret, YoutubeError> {
         let deadline = Instant::now() + timeout;
         loop {
+            if Instant::now() >= deadline {
+                return Err(YoutubeError::AuthorizationTimedOut);
+            }
             match self.listener.accept() {
                 Ok((stream, _)) => {
-                    // A connection that fails or sends garbage is answered (if it can
-                    // be) and dropped; the wait goes on.
-                    if let Some(outcome) = self.handle(stream, pending) {
+                    // A connection that fails, stalls or sends garbage is answered (if it
+                    // can be) and dropped; the wait goes on. It gets REQUEST_TIMEOUT in
+                    // all, and never past the wait's own deadline.
+                    let request_deadline = deadline.min(Instant::now() + REQUEST_TIMEOUT);
+                    if let Some(outcome) = self.handle(stream, pending, request_deadline) {
                         return outcome;
                     }
                 }
@@ -96,15 +101,15 @@ impl LoopbackRedirect {
         &self,
         mut stream: TcpStream,
         pending: &PendingAuthorization,
+        deadline: Instant,
     ) -> Option<Result<Secret, YoutubeError>> {
         let setup = stream
             .set_nonblocking(false)
-            .and_then(|()| stream.set_read_timeout(Some(REQUEST_TIMEOUT)))
             .and_then(|()| stream.set_write_timeout(Some(REQUEST_TIMEOUT)));
         if setup.is_err() {
             return None;
         }
-        let request = match read_request(&stream) {
+        let request = match read_request(&stream, deadline) {
             Ok(request) => request,
             Err(_) => {
                 respond(&mut stream, 400, "The request could not be read.");
@@ -125,8 +130,26 @@ struct Request {
     host: Option<String>,
 }
 
-fn read_request(stream: &TcpStream) -> io::Result<Request> {
-    let mut reader = BufReader::new(stream).take(MAX_REQUEST_BYTES);
+/// A stream whose reads all end by one deadline, so a client trickling bytes can't hold
+/// the listener past it.
+struct Deadlined<'s> {
+    stream: &'s TcpStream,
+    deadline: Instant,
+}
+
+impl Read for Deadlined<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let left = self.deadline.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            return Err(io::ErrorKind::TimedOut.into());
+        }
+        self.stream.set_read_timeout(Some(left))?;
+        self.stream.read(buf)
+    }
+}
+
+fn read_request(stream: &TcpStream, deadline: Instant) -> io::Result<Request> {
+    let mut reader = BufReader::new(Deadlined { stream, deadline }).take(MAX_REQUEST_BYTES);
     let mut line = String::new();
     reader.read_line(&mut line)?;
     let mut parts = line.split_ascii_whitespace();

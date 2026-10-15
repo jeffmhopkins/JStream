@@ -244,8 +244,9 @@ fn token_endpoint_failures_never_quote_the_body() {
             200,
             r#"{"access_token": "ya29.leak", "expires_in": 60, "token_type": "MAC"}"#,
         )
-        .respond(502, "<html>ya29.leak</html>");
-    for _ in 0..3 {
+        .respond(502, "<html>ya29.leak</html>")
+        .respond(200, r#"{"access_token": "ya29.leak", "expires_in": 18446744073709551615, "token_type": "Bearer"}"#);
+    for _ in 0..4 {
         let err = client()
             .refresh(&transport, &Secret::new("1//0g"))
             .unwrap_err();
