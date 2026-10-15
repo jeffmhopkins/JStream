@@ -180,12 +180,10 @@ struct Live {
     _mf: MfStarted,
 }
 
-/// Whether the media source's class is registered machine-wide, where Frame Server looks
-/// (ARCH › Packaging: it ignores `HKCU`).
 /// Whether `mfsensorgroup.dll` loads from System32 and exports `MFCreateVirtualCamera`,
 /// which Windows 11 added. A binary that delay-loads the DLL (the daemon does) would
 /// otherwise raise a delay-load exception, not an error, on the first call into a
-/// Windows 10 or an N edition without the Media Feature Pack. Only System32 is
+/// Windows 10. Only System32 is
 /// searched, so a stray copy next to the exe can't satisfy it.
 fn virtual_camera_api() -> bool {
     // SAFETY: plain call with a static, null-terminated name. Loading the DLL runs only
@@ -204,6 +202,8 @@ fn virtual_camera_api() -> bool {
     found
 }
 
+/// Whether the media source's class is registered machine-wide, where Frame Server looks
+/// (ARCH › Packaging: it ignores `HKCU`).
 fn registered() -> Result<bool, PlatformError> {
     let key = HSTRING::from(format!(
         r"Software\Classes\CLSID\{CLSID_STR}\InprocServer32"

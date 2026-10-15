@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:6233fb350f0700fb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b follow-up: Live on Windows bullet now lists WindowsVcam as the virtual camera and when its start fails (no MFCreateVirtualCamera before Windows 11, not registered); delay-load bullet adds mfsensorgroup.dll and says the startup check skips it because WindowsVcam::start probes the export (serve.rs, build.rs)" }
+verified = { hash = "b3:4a3e60814bb404c1", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Re-read the delay-load bullet: N1, the MFCreateVirtualCamera probe protects Windows 10; an N edition without the Media Feature Pack stops at check_media_foundation (exit 3) before output.start" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -238,7 +238,7 @@ verified = { hash = "b3:6233fb350f0700fb", by = "agent:claude@session_01Wfrx1wPt
   warning LNK4199, which CI's `-D warnings` turns into an error. The startup check
   doesn't cover `mfsensorgroup.dll`, since the daemon serves without a camera:
   `WindowsVcam::start` checks that it exports `MFCreateVirtualCamera` before calling
-  it, so a Windows 10 or an N edition gets an `output.start` error, not a delay-load
+  it, so a Windows 10 gets an `output.start` error, not a delay-load
   exception.
   `tests/delay_load.rs` checks the built binary's import tables, so CI's Windows job
   proves `/DELAYLOAD` applies to the `windows` crate's raw-dylib imports.
