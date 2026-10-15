@@ -109,7 +109,7 @@ camera `CaptureTarget`), and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:50567723fbd8bd89", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale only through ARCH#crate-map: the platform-windows row gained the credential store; the wgpu-types-in-jstream-platform point this section cites from the crate map is unchanged" }
+verified = { hash = "b3:6d45418b89299049", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Stale through ARCH#crate-map only (main's #141 platform-windows row plus G1's vcam-proto row); the jstream-platform row it relies on (GpuInterop with wgpu types) is unchanged, so the section holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
