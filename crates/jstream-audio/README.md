@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:a6159ef933958b49", by = "agent:claude@session_01L5hE1i9KRciNcKrq7DGnVM", note = "Merge of main (#133 add_input keep-alive) into D7a: took main's verified line and re-read the section: main's InputControl keep-alive sentence sits beside D7a's filter kernels in the API list, 'come later' list and Errors; both match handle.rs, mixer.rs, meter/ and filter/" }
+verified = { hash = "b3:df7cf6a6ed572be9", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; stale via ARCH#threading (output thread may write MP4); audio threads, rings and mixer unchanged" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends

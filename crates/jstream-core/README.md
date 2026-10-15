@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:77ddb8e8f9eb794c", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Engine, Kinds, Runtime and Tests bullets; #133 only reorders Running's fields and launch's bindings so input rings drop off the real-time thread, which no bullet describes" }
+verified = { hash = "b3:628aa2d498e73df6", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; B4's Kinds bullets hold; F2b: a recording output needs no publish target, Tests bullet lists the four recording tests (including the not-absolute-here start)" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -99,7 +99,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8e54430793e482ea", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Calls (kind queries), Outputs, Pipeline and Locking; #133's drop order changes no described state, error, lock or deadline" }
+verified = { hash = "b3:1db64dd781170c0d", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; B4's kind-query and settings text holds; F2b Recording paragraph matches runtime/sink.rs (absolute-here check, open in launch, provisional .part, keep flag, write errors fatal)" }
 -->
 
 ### Engine and sessions

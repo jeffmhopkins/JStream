@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:469cd47b05c605ba", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Built so far merged: settings checked and stored complete, settings-reference edges and delete rejection (B4), and outputs with Rtmp Generic url (#142); Not yet drops settings and keeps kind versions; checked against graph model/mod.rs" }
+verified = { hash = "b3:985e50d539aea292", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; Built so far keeps B4's settings text and adds Record { path, container: mp4 }; Not yet drops Record" }
 -->
 
 ```
@@ -363,7 +363,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:dafa3940b742c46b", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b: Output pipeline paragraph says a recording needs no publish target, the output thread writes fragmented MP4 syncing each fragment, and a recording write failure is fatal; checked against runtime/pipeline.rs and sink.rs" }
+verified = { hash = "b3:4a7a102cfb02c18c", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; output pipeline paragraph (recording needs no publish target, MP4 written on the output thread, write failure fatal) matches pipeline.rs and sink.rs" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -499,7 +499,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1a7f8a46e389a409", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): output edits and stream-key bullets (#142) and kind queries marked protocol 0.8 (B4); queries bullet lists output.list and kind.list/describe; transport bullets unchanged" }
+verified = { hash = "b3:b6ec380b3e906002", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; output edits bullet says the record kind is 0.9, B4's kind.describe stays 0.8; checked against version.rs" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -600,7 +600,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:cc2b2df213a2b7f3", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): grouped tools list includes kind and output; tools.snap is about 79 KB, so the size line says about 80 KB" }
+verified = { hash = "b3:583f1145aa1ed451", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; tools.snap regenerated after the merge with the record kind under output create; grouping text is main's" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
