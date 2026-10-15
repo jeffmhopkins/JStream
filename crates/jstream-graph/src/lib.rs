@@ -1,5 +1,6 @@
 //! The JStream scene graph: the canvas, sources, scenes and the items that place sources
-//! in scenes, and the outputs' configuration with the encoder profiles they use.
+//! in scenes, the audio buses and sends, and the outputs' configuration with the encoder
+//! profiles they use.
 //! [`Graph::apply`] applies a batch of protocol edits atomically, increments the revision
 //! by one, and returns the inverse batch that undoes it. [`Graph::to_collection_json`] and
 //! [`Graph::with_collection_json`] save and load the collection as versioned JSON. Layer 2:
@@ -10,6 +11,7 @@
 #![forbid(unsafe_code)]
 
 mod apply;
+mod audio;
 mod deps;
 mod encoder;
 mod model;
@@ -18,7 +20,9 @@ mod read;
 mod target;
 
 pub use apply::Applied;
-pub use model::{Encoder, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
+pub use model::{
+    Bus, Encoder, Graph, Item, MAX_BUSES, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State,
+};
 pub use persist::{LoadError, SCHEMA_VERSION};
 
 #[cfg(test)]

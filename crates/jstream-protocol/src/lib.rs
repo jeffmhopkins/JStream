@@ -7,6 +7,7 @@
 
 #![forbid(unsafe_code)]
 
+mod audio;
 mod command;
 mod encoder;
 mod envelope;
@@ -25,6 +26,10 @@ mod schema;
 mod settings;
 mod version;
 
+pub use audio::{
+    AudioFollow, BusInfo, BusMeter, Loudness, MAX_GAIN_DB, MIN_GAIN_DB, SendInfo, SourceAudio,
+    SourceMeter, gain_db_problem,
+};
 pub use command::{
     Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole, SourceKind, Vec2,
 };
@@ -45,7 +50,8 @@ pub use geometry::{
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{
-    ClientId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId,
+    BusId, ClientId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId,
+    SourceId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
