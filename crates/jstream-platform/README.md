@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:7b9e576558c95478", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = '#142: new Stream keys (keys.rs) bullet: StreamKeyStore, Secret (Secret("***"), not Clone, zeroed on drop, from_utf8), held apart from Backends; Fakes list MemoryKeyStore; still no unsafe (black_box + compiler_fence)' }
+verified = { hash = "b3:5d5148d1cf21bd10", by = "agent:claude@session_01CinhSCRTBiaJNaiD4w6CUq", note = "Y2: re-read the purpose section; new OAuth tokens bullet (OAuthTokenStore set/get/clear/is_set per account, Secret only, separate from StreamKeyStore, refresh tokens only, no token in errors) and MemoryTokenStore in Fakes match keys.rs and fake.rs; the rest is unchanged" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -51,6 +51,16 @@ Contents:
   thread takes from it without blocking; `None` means "repeat the last frame". Spike S1
   drains Windows.Graphics.Capture's pool to the newest frame the same way.
   `CaptureStats` counts captured and skipped frames.
+- **Video capture devices** (webcams and capture cards,
+  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `VideoDevices`
+  (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
+  endpoint when the backend can pair one), each device's `VideoDeviceFormat`s (size, frame
+  period, `CaptureEncoding`), and opens a device in one format as a `CaptureStream`, the
+  same mailbox as display capture. `CaptureEncoding` is `Raw` (an engine pixel format),
+  `Yuy2` (converted to NV12 by the backend) or `Mjpeg`. MJPEG is a video codec, so it is
+  decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
+  (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
+  a frame it rejects is dropped and the stream goes on.
 - **Audio:** `AudioIo` (`Send + Sync`) lists devices and opens input (microphone,
   output loopback, process loopback) and output streams. Each stream calls an
   engine-supplied `AudioInputHandler` or `AudioOutputHandler` on the backend's real-time
@@ -82,6 +92,12 @@ Contents:
   read only through `expose`, and its bytes are zeroed on drop (best effort).
   `Secret::from_utf8` takes a store's bytes and refuses non-UTF-8 without naming them.
   The engine holds the store apart from `Backends`, through `Engine::with_key_store`.
+- **OAuth tokens** (`keys.rs`): `OAuthTokenStore` (`Send + Sync`), the same seam for
+  OAuth refresh tokens ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `clear`
+  and `is_set`, one token per caller-chosen account ID, each carried as a `Secret`. It is
+  a separate trait from `StreamKeyStore`, so a token and a stream key never share a name.
+  Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
+  contain a token. `jstream-youtube` keeps its Google refresh token here.
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, audio,
   codec and GPU-interop backends and its optional virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
@@ -92,17 +108,21 @@ Contents:
   only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and
   keyframe pattern, a forced keyframe restarting that pattern, placeholder payloads; the decoder returns frames in presentation
   order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
-  (dropping it stops it; a test watches it through a `FakeVcamProbe`), plus
+  (dropping it stops it; a test watches it through a `FakeVcamProbe`),
+  `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
+  MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
-  `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail) and
+  `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
+  `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 
 **Not yet:** a platform that delivers or consumes GPU frames (the Windows
 `GpuInterop` opens the device and encode targets; its capture and encoders don't use them
-yet), webcam capture (an MJPEG `Codec` variant and a
-camera `CaptureTarget`), and encoder selection by GPU adapter.
+yet), a platform implementation of `VideoDevices` (Media Foundation's source reader is
+C4b) and its place in `Backends`, an MJPEG `Codec` variant with a `CaptureDecoder` built
+from the platform's decoder, and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames

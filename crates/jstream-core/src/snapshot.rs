@@ -185,6 +185,12 @@ impl Shot {
     pub(crate) fn program(&self) -> Option<&SceneId> {
         self.program.as_ref()
     }
+
+    /// Whether a pass shows the pipeline's capture, for tests.
+    #[cfg(test)]
+    pub(crate) fn uses_capture(&self) -> bool {
+        self.uses_capture
+    }
 }
 
 /// Two shots are equal when they draw the same thing: the passes and keys follow from

@@ -77,6 +77,7 @@ fn webcam() -> Edit {
         kind: SourceKind::Builtin {
             kind: "webcam".into(),
         },
+        settings: Default::default(),
     }
 }
 
@@ -332,6 +333,55 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
         ),
         Ok(Rev(2))
     );
+}
+
+/// The engine describes its built-in kinds, and validates and completes settings against
+/// them (ADR-0025).
+#[test]
+fn kinds_are_described_and_settings_checked() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let Ok(QueryResult::KindList { kinds }) = query(&control, Query::KindList) else {
+        panic!("kind.list");
+    };
+    let ids: Vec<&str> = kinds.iter().map(|k| k.kind_id.as_str()).collect();
+    assert!(ids.contains(&"color") && ids.contains(&"webcam"), "{ids:?}");
+    let Ok(QueryResult::KindDescribe { kind, .. }) = query(
+        &control,
+        Query::KindDescribe {
+            kind_id: "color".into(),
+        },
+    ) else {
+        panic!("kind.describe");
+    };
+    assert!(kind.param("color").is_some());
+
+    let color = |settings: serde_json::Value| {
+        Batch::single(Edit::SourceCreate {
+            source_id: SourceId::new("bg"),
+            name: "Background".into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: serde_json::from_value(settings).expect("a settings map"),
+        })
+    };
+    let error =
+        batch(&control, color(serde_json::json!({"color": "red"}))).expect_err("bad colour");
+    assert!(
+        matches!(error.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.settings.color"),
+        "{error:?}"
+    );
+    assert_eq!(
+        batch(&control, color(serde_json::json!({"color": "#ff0000"}))),
+        Ok(Rev(1))
+    );
+    let Ok(QueryResult::SourceList { sources, .. }) = query(&control, Query::SourceList) else {
+        panic!("source.list");
+    };
+    let settings = &sources[0].settings;
+    assert_eq!(settings.get("color"), Some(&serde_json::json!("#ff0000")));
+    assert_eq!(settings.get("width"), Some(&serde_json::json!(1920)));
 }
 
 /// The engine answers every read of the shared parity collection exactly as the fixture
@@ -1331,6 +1381,52 @@ fn output_state(control: &dyn Control, output: &str) -> OutputState {
     }
 }
 
+/// Edits and stored frames republish the render snapshot only when the program mix
+/// changes. A `display` source shows the pipeline's capture until a frame is stored
+/// for it, and a frame for a source nothing on program shows publishes nothing.
+#[test]
+fn the_render_snapshot_follows_the_program_mix() {
+    let engine = Engine::new();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let generation = || hub.load().generation();
+    assert_eq!(generation(), 1);
+    let display = Edit::SourceCreate {
+        source_id: SourceId::new("screen"),
+        name: "Screen".into(),
+        kind: SourceKind::Builtin {
+            kind: "display".into(),
+        },
+        settings: Default::default(),
+    };
+    let edits = Batch {
+        edits: vec![create("main"), display, add("main", "shown", "screen")],
+        expected_rev: None,
+        idempotency_key: None,
+    };
+    batch(&control, edits).expect("batch");
+    assert_eq!(generation(), 2);
+    assert!(
+        hub.load().shot().uses_capture(),
+        "no stored frame: the capture"
+    );
+
+    engine
+        .set_source_frame(&SourceId::new("elsewhere"), 1, 1, &[0, 0, 0, 255])
+        .expect("frame");
+    assert_eq!(generation(), 2, "nothing on program shows that source");
+
+    engine
+        .set_source_frame(&SourceId::new("screen"), 1, 1, &[0, 0, 0, 255])
+        .expect("frame");
+    assert_eq!(generation(), 3);
+    assert!(!hub.load().shot().uses_capture(), "a stored frame wins");
+    engine
+        .set_source_frame(&SourceId::new("screen"), 1, 1, &[9, 9, 9, 255])
+        .expect("frame");
+    assert_eq!(generation(), 4, "a new frame is a new version");
+}
+
 /// How long a GPU test's `output.start` waits for lavapipe or WARP to open. The
 /// engine's 10 s default only guards against a stuck adapter; on a loaded CI runner a
 /// software adapter can take longer, and that is not what these tests check. A real
@@ -1496,6 +1592,7 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
                     kind: SourceKind::Scene {
                         scene_id: SceneId::new("inner"),
                     },
+                    settings: Default::default(),
                 },
                 add("program", "nest", "inner_src"),
             ],

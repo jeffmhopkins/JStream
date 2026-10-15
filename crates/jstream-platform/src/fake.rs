@@ -19,11 +19,12 @@ use jstream_media::{
 use crate::{
     AudioDeviceInfo, AudioDirection, AudioEncoder, AudioEncoderConfig, AudioInputHandler,
     AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget, AudioPacket,
-    AudioPacketFlags, AudioRenderBuffer, AudioStream, Backends, Capture, CaptureStats,
-    CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo, CodecRole, Codecs, DeviceId,
-    GpuContext, GpuFrame, GpuInterop, HardwarePreference, MediaClock, PlatformError, Secret,
-    StreamKeyStore, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoEncoder,
-    VideoEncoderConfig, VideoSurface,
+    AudioPacketFlags, AudioRenderBuffer, AudioStream, Backends, Capture, CaptureDecoder,
+    CaptureEncoding, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo,
+    CodecRole, Codecs, CompressedFrame, DeviceId, GpuContext, GpuFrame, GpuInterop,
+    HardwarePreference, MediaClock, OAuthTokenStore, PlatformError, Secret, StreamKeyStore,
+    VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat, VideoDeviceInfo,
+    VideoDevices, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 
 /// A full set of fake backends on `clock`: a 320x180 display, a stereo 48 kHz
@@ -200,6 +201,239 @@ impl CaptureStream for FakeCaptureStream {
 
     fn stats(&self) -> CaptureStats {
         self.stats
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// Video capture devices
+
+/// The ID of [`FakeVideoDevices`]'s webcam, paired with [`FAKE_MIC`].
+pub const FAKE_WEBCAM: &str = "fake-webcam-0";
+/// The ID of [`FakeVideoDevices`]'s capture card, which has no paired audio.
+pub const FAKE_CAPTURE_CARD: &str = "fake-capture-card-0";
+
+/// Two video capture devices: a webcam ([`FAKE_WEBCAM`], paired with [`FAKE_MIC`]) that
+/// offers 640x360 NV12 and YUY2 and 1280x720 MJPEG at 30 fps, and a capture card
+/// ([`FAKE_CAPTURE_CARD`], no audio) that offers 1280x720 NV12 at 60 fps.
+///
+/// A stream delivers a frame, stamped with the clock, whenever the clock has moved since
+/// its last one, as [`FakeCapture`]'s does. Raw and YUY2 frames are all-zero NV12. An
+/// MJPEG frame is a placeholder (a JPEG start marker, the frame number, an end marker)
+/// handed to the stream's [`CaptureDecoder`]; a frame the decoder rejects is dropped.
+/// Clones share the devices, so a test keeps a clone to [`unplug`](Self::unplug) one.
+#[derive(Clone)]
+pub struct FakeVideoDevices {
+    clock: FakeClock,
+    state: Arc<Mutex<VideoDeviceState>>,
+}
+
+#[derive(Default)]
+struct VideoDeviceState {
+    next_id: u64,
+    /// Open streams, by stream ID, with the device each one captures.
+    streams: BTreeMap<u64, DeviceId>,
+    unplugged: Vec<DeviceId>,
+}
+
+impl FakeVideoDevices {
+    /// Both devices, stamped by `clock`.
+    pub fn new(clock: FakeClock) -> Self {
+        Self {
+            clock,
+            state: Arc::default(),
+        }
+    }
+
+    /// Removes the device `id`: it is no longer listed or opened, and its open streams
+    /// report [`PlatformError::DeviceLost`].
+    pub fn unplug(&self, id: &DeviceId) {
+        let mut state = lock(&self.state);
+        if !state.unplugged.contains(id) {
+            state.unplugged.push(id.clone());
+        }
+    }
+
+    /// How many streams are open.
+    pub fn open_streams(&self) -> usize {
+        lock(&self.state).streams.len()
+    }
+
+    fn all() -> Vec<VideoDeviceInfo> {
+        vec![
+            VideoDeviceInfo {
+                id: DeviceId::new(FAKE_WEBCAM),
+                name: "Fake webcam".into(),
+                audio: Some(DeviceId::new(FAKE_MIC)),
+            },
+            VideoDeviceInfo {
+                id: DeviceId::new(FAKE_CAPTURE_CARD),
+                name: "Fake capture card".into(),
+                audio: None,
+            },
+        ]
+    }
+
+    fn present(&self, id: &DeviceId) -> Result<(), PlatformError> {
+        let known = Self::all().iter().any(|d| &d.id == id);
+        if !known || lock(&self.state).unplugged.contains(id) {
+            return Err(PlatformError::NotFound {
+                kind: "video capture device",
+                id: id.to_string(),
+            });
+        }
+        Ok(())
+    }
+}
+
+impl VideoDevices for FakeVideoDevices {
+    fn devices(&self) -> Result<Vec<VideoDeviceInfo>, PlatformError> {
+        let state = lock(&self.state);
+        Ok(Self::all()
+            .into_iter()
+            .filter(|d| !state.unplugged.contains(&d.id))
+            .collect())
+    }
+
+    fn formats(&self, device: &DeviceId) -> Result<Vec<VideoDeviceFormat>, PlatformError> {
+        self.present(device)?;
+        let format = |w, h, fps, encoding| -> Result<VideoDeviceFormat, PlatformError> {
+            Ok(VideoDeviceFormat {
+                size: FrameSize::new(w, h)?,
+                frame_period: Timebase::new(1, fps)?,
+                encoding,
+            })
+        };
+        let nv12 = CaptureEncoding::Raw(PixelFormat::Nv12);
+        if device.as_str() == FAKE_WEBCAM {
+            Ok(vec![
+                format(640, 360, 30, nv12)?,
+                format(640, 360, 30, CaptureEncoding::Yuy2)?,
+                format(1280, 720, 30, CaptureEncoding::Mjpeg)?,
+            ])
+        } else {
+            Ok(vec![format(1280, 720, 60, nv12)?])
+        }
+    }
+
+    fn open(
+        &self,
+        device: &DeviceId,
+        format: &VideoDeviceFormat,
+        decoder: Option<Box<dyn CaptureDecoder>>,
+    ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        if !self.formats(device)?.contains(format) {
+            return Err(PlatformError::Unsupported {
+                what: format!("{format:?} on {device}"),
+            });
+        }
+        let decoder = match (format.encoding.is_compressed(), decoder) {
+            (true, None) => {
+                return Err(PlatformError::Unsupported {
+                    what: format!("{:?} without a decoder", format.encoding),
+                });
+            }
+            (true, decoder) => decoder,
+            (false, _) => None,
+        };
+        let mut state = lock(&self.state);
+        let id = state.next_id;
+        state.next_id += 1;
+        state.streams.insert(id, device.clone());
+        Ok(Box::new(FakeVideoDeviceStream {
+            id,
+            device: device.clone(),
+            clock: self.clock.clone(),
+            format: *format,
+            decoder,
+            state: Arc::clone(&self.state),
+            last: None,
+            stats: CaptureStats::default(),
+        }))
+    }
+}
+
+struct FakeVideoDeviceStream {
+    id: u64,
+    device: DeviceId,
+    clock: FakeClock,
+    format: VideoDeviceFormat,
+    decoder: Option<Box<dyn CaptureDecoder>>,
+    state: Arc<Mutex<VideoDeviceState>>,
+    last: Option<MediaTime>,
+    stats: CaptureStats,
+}
+
+impl CaptureStream for FakeVideoDeviceStream {
+    fn latest(&mut self) -> Result<Option<VideoSurface>, PlatformError> {
+        if lock(&self.state).unplugged.contains(&self.device) {
+            return Err(PlatformError::DeviceLost {
+                what: self.device.to_string(),
+                reason: "unplugged".into(),
+            });
+        }
+        let now = self.clock.now();
+        if self.last == Some(now) {
+            return Ok(None);
+        }
+        self.last = Some(now);
+        self.stats.frames_captured += 1;
+        let Some(decoder) = self.decoder.as_mut() else {
+            let frame = VideoFrame::zeroed(VideoFrameInfo {
+                size: self.format.size,
+                format: PixelFormat::Nv12,
+                color: ColorInfo::default(),
+                pts: now,
+            })?;
+            return Ok(Some(frame.into()));
+        };
+        // A JPEG start-of-image marker, the frame number, an end-of-image marker.
+        let mut data = vec![0xFF, 0xD8];
+        data.extend_from_slice(&self.stats.frames_captured.to_be_bytes());
+        data.extend_from_slice(&[0xFF, 0xD9]);
+        let frame = CompressedFrame {
+            encoding: self.format.encoding,
+            data: &data,
+            size: self.format.size,
+            pts: now,
+        };
+        // As the trait says, a frame the decoder rejects is dropped and the stream goes on.
+        Ok(decoder.decode(&frame).ok())
+    }
+
+    fn stats(&self) -> CaptureStats {
+        self.stats
+    }
+}
+
+impl Drop for FakeVideoDeviceStream {
+    fn drop(&mut self) {
+        lock(&self.state).streams.remove(&self.id);
+    }
+}
+
+/// A [`CaptureDecoder`] that turns every compressed frame into an all-zero frame of the
+/// frame's size, in one pixel format, keeping its `pts`. It never looks at the bytes.
+#[derive(Clone, Copy, Debug)]
+pub struct FakeCaptureDecoder {
+    format: PixelFormat,
+}
+
+impl FakeCaptureDecoder {
+    /// A decoder that outputs `format`.
+    pub fn new(format: PixelFormat) -> Self {
+        Self { format }
+    }
+}
+
+impl CaptureDecoder for FakeCaptureDecoder {
+    fn decode(&mut self, frame: &CompressedFrame<'_>) -> Result<VideoSurface, PlatformError> {
+        let frame = VideoFrame::zeroed(VideoFrameInfo {
+            size: frame.size,
+            format: self.format,
+            color: ColorInfo::default(),
+            pts: frame.pts,
+        })?;
+        Ok(frame.into())
     }
 }
 
@@ -961,6 +1195,67 @@ impl StreamKeyStore for MemoryKeyStore {
         let mut state = lock(&self.state);
         Self::check(&state, "MemoryKeyStore::clear")?;
         state.keys.remove(output_id);
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// OAuth tokens
+
+/// An in-memory [`OAuthTokenStore`], for tests: one refresh token per account, kept apart
+/// from any [`MemoryKeyStore`]. Clones share the same tokens, and
+/// [`set_failing`](Self::set_failing) makes every call fail; the error names the call,
+/// never a token.
+#[derive(Clone, Debug, Default)]
+pub struct MemoryTokenStore {
+    state: Arc<Mutex<KeyState>>,
+}
+
+impl MemoryTokenStore {
+    /// An empty store.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Makes every later call fail (`true`) or work again (`false`).
+    pub fn set_failing(&self, failing: bool) {
+        lock(&self.state).failing = failing;
+    }
+
+    /// How many tokens are stored.
+    pub fn len(&self) -> usize {
+        lock(&self.state).keys.len()
+    }
+
+    /// Whether no token is stored.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl OAuthTokenStore for MemoryTokenStore {
+    fn set(&self, account: &str, token: &Secret) -> Result<(), PlatformError> {
+        let mut state = lock(&self.state);
+        MemoryKeyStore::check(&state, "MemoryTokenStore::set")?;
+        state
+            .keys
+            .insert(account.to_owned(), Secret::new(token.expose()));
+        Ok(())
+    }
+
+    fn get(&self, account: &str) -> Result<Option<Secret>, PlatformError> {
+        let state = lock(&self.state);
+        MemoryKeyStore::check(&state, "MemoryTokenStore::get")?;
+        Ok(state
+            .keys
+            .get(account)
+            .map(|token| Secret::new(token.expose())))
+    }
+
+    fn clear(&self, account: &str) -> Result<(), PlatformError> {
+        let mut state = lock(&self.state);
+        MemoryKeyStore::check(&state, "MemoryTokenStore::clear")?;
+        state.keys.remove(account);
         Ok(())
     }
 }

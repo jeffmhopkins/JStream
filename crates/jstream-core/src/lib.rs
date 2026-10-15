@@ -19,6 +19,7 @@
 mod drops;
 mod engine;
 mod events;
+mod kinds;
 mod outputs;
 mod runtime;
 mod session;

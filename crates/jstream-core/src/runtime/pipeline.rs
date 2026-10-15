@@ -242,6 +242,9 @@ pub(crate) struct Running {
     _streams: Vec<Box<dyn AudioStream>>,
     stats: Arc<PipelineStats>,
     capture_drops: DropSnapshot,
+    /// Declared after `_streams` (fields drop in order), so the input rings outlive
+    /// both producers and the mixer and are freed here, not on a real-time thread
+    /// (docs/RULES.md#R-RT-003).
     mic: InputControl,
     desktop: InputControl,
     bus: BusControl,
@@ -430,11 +433,14 @@ pub(crate) fn launch(
 ) -> Result<Running, String> {
     let (size, capture) = open_capture(&parts)?;
     let format = engine_format()?;
+    // Bindings drop in reverse pattern order, so on an early return the streams (and
+    // their producers) go before the input controls, and the rings are freed here
+    // rather than on a real-time thread (docs/RULES.md#R-RT-003).
     let OpenedAudio {
-        mixer,
-        streams,
         mic,
         desktop,
+        mixer,
+        streams,
     } = open_audio(&parts, format)?;
     let bus = mixer.bus();
     let period = frame_period(parts.clock.timebase())?;
