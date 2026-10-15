@@ -425,7 +425,10 @@ fn reference(value: &Value, want: &str) -> Result<Option<Reference>, String> {
 ///
 /// Under `collection` and `app` the path is relative: `/` separators, and no empty or
 /// `..` segment, drive letter, leading `/` or backslash. Under `absolute` it must be
-/// absolute (`/…`, `C:/…` or `C:\…`) and still has no `..` segment.
+/// absolute (`/…`, `\…`, `C:/…` or `C:\…`) and still has no `..` segment. It must not
+/// start with two separators, which on Windows name a UNC share (`\\host\share\…`) or a
+/// device (`\\.\…`, `\\?\…`): opening one would send the engine's credentials to that
+/// host. Nor may it contain `:` other than a drive letter's.
 pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
     if path.is_empty() {
         return Err("the asset path must not be empty".into());
@@ -438,10 +441,17 @@ pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
         path.len() >= 2 && path.as_bytes()[1] == b':' && path.as_bytes()[0].is_ascii_alphabetic();
     match root {
         AssetRoot::Absolute => {
-            if path.starts_with('/') || path.starts_with('\\') || drive {
-                Ok(())
-            } else {
+            let rest = if drive { &path[2..] } else { path };
+            let separator = |c: char| c == '/' || c == '\\';
+            if !rest.starts_with(separator) {
                 Err("an `absolute` asset path must be absolute".into())
+            } else if rest[1..].starts_with(separator) {
+                Err("an `absolute` asset path must not start with two separators".into())
+            } else if rest.contains(':') {
+                // On Windows `C:\a.png:s` names an NTFS alternate data stream of `a.png`.
+                Err("an `absolute` asset path must not contain `:` but a drive letter's".into())
+            } else {
+                Ok(())
             }
         }
         _ => {
@@ -616,6 +626,39 @@ mod tests {
         }
         assert!(file.check(&asset("absolute", "img/a.png")).is_err());
         assert!(super::check_asset_path(AssetRoot::App, "x/y.png").is_ok());
+    }
+
+    /// Issue #345: UNC, device and stream paths are refused under `absolute`.
+    #[test]
+    fn absolute_asset_paths_refuse_unc_device_and_stream_forms() {
+        let check = |path: &str| super::check_asset_path(AssetRoot::Absolute, path);
+        for good in [
+            "/home/a.png",
+            "\\home\\a.png",
+            "C:\\a.png",
+            "C:/a.png",
+            "c:\\img/a.png",
+        ] {
+            assert!(check(good).is_ok(), "{good}");
+        }
+        for bad in [
+            "\\\\host\\share\\a.png",
+            "//host/share/a.png",
+            "\\/host/share/a.png",
+            "/\\host\\share\\a.png",
+            "\\\\.\\pipe\\x.png",
+            "\\\\?\\C:\\a.png",
+            "\\\\?\\UNC\\host\\share\\a.png",
+            "//./pipe/x.png",
+            "C:\\\\host\\a.png",
+            "C://a.png",
+            "C:a.png",
+            "C:\\a.png:stream",
+            "/home/a:b.png",
+            "\\C:\\a.png",
+        ] {
+            assert!(check(bad).is_err(), "{bad}");
+        }
     }
 
     #[test]

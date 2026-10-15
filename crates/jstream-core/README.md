@@ -162,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:67ca169f728f9e96", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286, #297): re-read main's design text (differential script paragraph) beside this PR's clock-swap sentence in the live-sources paragraph; different paragraphs; swap sentence still matches LiveSources::set_clock; holds" }
+verified = { hash = "b3:5f008437b8320780", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#345 (stale via protocol Design): re-read the asset resolution and recording-path paragraphs; asset roots resolve as before, only the protocol's absolute-path check got stricter; nothing here describes absolute asset path syntax; holds" }
 -->
 
 ### Engine and sessions
