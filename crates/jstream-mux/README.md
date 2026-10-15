@@ -12,14 +12,14 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-mux/src/**", "crates/jstream-mux/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mux", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0041-youtube-interaction-scope-v3.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:ed46d150b8fc72b6", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ADR-0041, whose only change is text (review N2): the Context bullet is rewrapped and the follow-on list names jstream-media and ARCH's protocol section; the decision is unchanged, so this section holds" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mux", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0051-youtube-without-a-required-oauth-client.md", "crates/jstream-media/README.md#purpose"]
+verified = { hash = "b3:e8d2af2f2b78387a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "ADR-0051 accepted (Jeff, #367): re-read; links re-pointed from superseded ADR-0041 to ADR-0051, which restates its decision with the API optional; text holds" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):
 muxers are written in Rust, no FFmpeg). It writes H.264 and AAC into **FLV**, the
 container M1a's RTMP(S) output sends to YouTube
-([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)), along with HEVC and
+([ADR-0051](../../docs/adr/0051-youtube-without-a-required-oauth-client.md)), along with HEVC and
 AV1 through [enhanced RTMP](https://github.com/veovera/enhanced-rtmp/blob/main/docs/enhanced/enhanced-rtmp-v2.md);
 and it writes H.264 and AAC into **fragmented MP4**, the container recording writes. It consumes
 [`jstream-media`](../jstream-media/README.md#purpose) `Packet`s, does no network I/O,

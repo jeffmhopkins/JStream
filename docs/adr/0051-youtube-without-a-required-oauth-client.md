@@ -2,17 +2,17 @@
 id = "ADR-0051"
 title = "YouTube v4: no required OAuth client"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0051: YouTube v4: no required OAuth client
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
-Would supersede [ADR-0041](0041-youtube-interaction-scope-v3.md). It restates
+Supersedes [ADR-0041](0041-youtube-interaction-scope-v3.md). It restates
 ADR-0041's decision, which stands, except for one change: the YouTube Live API features
 become optional. They turn on only when a user configures **their own** Google OAuth
 client. JStream never embeds one.

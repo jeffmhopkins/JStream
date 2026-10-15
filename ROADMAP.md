@@ -138,9 +138,11 @@ verified = { hash = "b3:86e4c1f1ce342936", by = "agent:claude@session_01SHnfsdCu
 -->
 
 - Full 3D transforms; WGSL effect packs with hot reload.
-- `jstream-youtube`: OAuth, broadcasts, metadata, health, chat, sending chat as the
-  channel, a featured chat message shown on stream by a chat message source, and audience
-  stats, all exposed over MCP ([ADR-0041](docs/adr/0041-youtube-interaction-scope-v3.md)).
+- YouTube with no required OAuth client: a stream key with Studio's auto-start, and chat
+  through a browser-source preset. With the user's own OAuth client, `jstream-youtube`
+  adds broadcasts, metadata, health, chat, sending chat as the channel, a featured chat
+  message shown on stream by a chat message source, and audience stats, all exposed
+  over MCP ([ADR-0051](docs/adr/0051-youtube-without-a-required-oauth-client.md)).
 - Direct NVENC/AMF encoders where measurements justify them; HEVC/AV1 via enhanced RTMP.
 - WASM automation plugins.
 - CLAP audio effect filters, hosted out of process

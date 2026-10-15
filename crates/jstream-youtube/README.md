@@ -12,13 +12,13 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:639f4a45779a28c7", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via platform#purpose (Audio and FakeAudioIo lines); Secret and OAuthTokenStore text unchanged; holds" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0051-youtube-without-a-required-oauth-client.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
+verified = { hash = "b3:fd30f8d7edbfc26c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "ADR-0051 accepted (Jeff, #367): re-read; links re-pointed from superseded ADR-0041 to ADR-0051, which restates its decision with the API optional; text holds" }
 -->
 
 Layer-2 client for Google sign-in and the
 [YouTube Live API](https://developers.google.com/youtube/v3/live/getting-started), the
-optional half of [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) (the
+optional half of [ADR-0051](../../docs/adr/0051-youtube-without-a-required-oauth-client.md) (the
 generic RTMPS output works with a stream key alone). It has no media code and no
 `unsafe`. Its JStream dependency is [`jstream-platform`](../jstream-platform/README.md#purpose),
 for `Secret`. Its third-party ones are `rustls` (with `ring`) and `rustls-native-certs`
