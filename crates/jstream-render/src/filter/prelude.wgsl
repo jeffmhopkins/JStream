@@ -13,7 +13,9 @@ struct Frame {
     out_size: vec2<f32>,
     // Auxiliary image size in pixels (the input's when no aux image is bound).
     aux_size: vec2<f32>,
-    // Media-clock seconds, wrapped to a day so f32 keeps sub-millisecond precision.
+    // Media-clock seconds, wrapped to a day so f32 keeps better than 10 ms precision.
+    // It jumps back to 0 once a day: a kind that moves with time computes its phase
+    // on the CPU in f64 and passes it in its Params instead.
     time: f32,
     // 1 when the input is straight alpha (an import), else 0.
     straight: f32,

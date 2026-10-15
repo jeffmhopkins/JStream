@@ -2530,6 +2530,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-ui-e2e"
+version = "0.0.0"
+dependencies = [
+ "jstream-control",
+ "jstream-server",
+ "tokio",
+]
+
+[[package]]
 name = "jstream-vcam-proto"
 version = "0.0.0"
 

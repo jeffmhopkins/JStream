@@ -9,7 +9,6 @@
 
 #![allow(
     dead_code,
-    unused_imports,
     reason = "Lane V: the harness lands before the filter groups that use it"
 )]
 
@@ -25,6 +24,10 @@ pub(crate) mod testing;
 
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
+#[allow(
+    unused_imports,
+    reason = "Lane V: only the tests use Blend, Draw and Shader until the filter groups land"
+)]
 pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Shader};
 
 use jstream_protocol::{KindDescriptor, Settings};

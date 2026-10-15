@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:51898578685d0469", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 cascade from filter/**: purpose text unchanged and holds" }
+verified = { hash = "b3:da11d7daa9e25d75", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "Cascade from filter/** and the #300 merge; purpose text unchanged; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:a8216c5d8d7c2549", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1: 'Not in this cut' now says pack loading is jstream-effects and render only draws them; re-read" }
+verified = { hash = "b3:76aa3827289c3795", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "Cascade from the #300 merge and filter changes; 'Not in this cut' pack wording still holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:5d99d2a7915edabe", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1: added External kinds paragraph (ExternalFilter, VideoFilter::external, FILTER_PRELUDE) and the label-keyed rebuild plus error scope; re-read against pass.rs/external.rs" }
+verified = { hash = "b3:1cf0083a4351c028", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "#368 B1/N1/N2: pipeline cache keyed by label and source (4 per label), Validation and Internal error scopes, cached refusals, uniform length check; re-read against pass.rs and external.rs and their tests" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -304,16 +304,22 @@ kinds.
   so a filter can change the source's reported size (aspect ratio, padding).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
-  that move or hold frames. An imported input's `FrameSync` is staged before the submit.
+  that move or hold frames. An imported input's `FrameSync` is staged once the pass has
+  recorded, right before the submit. The prelude's `frame.time` is that time wrapped
+  to a day (better than 10 ms in an `f32`) and jumps back once a day, so a kind that
+  moves with time computes its phase on the CPU in `f64` and passes it in its `Params`.
 - A pass records fullscreen draws through `Ctx::draw`. Every filter shader is appended
   to one prelude (`prelude.wgsl`) that defines the fullscreen triangle, the bindings
   (input, a linear clamp sampler, a `Frame` uniform with the input, output and aux
   sizes and the time, an optional aux image, and the filter's `Params` uniform) and
   colour helpers. `src` and `aux` always return premultiplied linear colour; an
   imported input is premultiplied after sampling. A pipeline is built on first use and
-  kept for the compositor's life, keyed by the shader's label; a later draw whose label
-  has different source rebuilds it. A shader wgpu refuses is a `RenderError`, not a
-  panic (an error scope around the build).
+  kept for the compositor's life, keyed by the shader's label and source (up to four
+  sources per label, so a reloaded pack's old and new filters don't evict each other).
+  A shader wgpu refuses, by its own validation or a backend compiler's, is a
+  `RenderError`, not a panic: error scopes for both catch the build, and the refusal is
+  cached so it isn't recompiled every frame. An external filter's uniform bytes that
+  aren't a multiple of 16 (at least 16) are refused the same way.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
 - Each draw creates its two small uniform buffers, two views and a bind group, and each

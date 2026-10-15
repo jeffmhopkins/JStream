@@ -110,14 +110,19 @@ pub(crate) struct Runtime {
     layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
     sampler: wgpu::Sampler,
-    pipelines: HashMap<String, Cached>,
+    pipelines: HashMap<String, Vec<Cached>>,
 }
 
 /// A built pipeline and the source it was built from.
 struct Cached {
     source: String,
-    pipeline: wgpu::RenderPipeline,
+    /// The pipeline, or why wgpu refused it, so a refused shader isn't rebuilt each frame.
+    built: Result<wgpu::RenderPipeline, String>,
 }
+
+/// The most sources kept per label: a reloaded pack's old and new filters may both be
+/// live in different chains for a while, and each must not evict the other every frame.
+const SOURCES_PER_LABEL: usize = 4;
 
 impl Runtime {
     pub(crate) fn new(device: &wgpu::Device) -> Self {
@@ -181,76 +186,86 @@ impl Runtime {
 
     /// The pipeline for `shader`, built on first use or when its source changed. A
     /// shader wgpu refuses is an error, not a panic: a pack's WGSL arrives at run time.
+    /// The pipeline for `shader`, built on first use of its label and source. A shader
+    /// wgpu refuses is an error, not a panic: a pack's WGSL arrives at run time. The
+    /// refusal is kept too, so the shader is not recompiled every frame.
     fn pipeline(
         &mut self,
         device: &wgpu::Device,
         shader: ShaderRef<'_>,
     ) -> Result<&wgpu::RenderPipeline, RenderError> {
-        let fresh = self
-            .pipelines
-            .get(shader.label)
-            .is_some_and(|c| c.source == shader.source);
-        if !fresh {
-            let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
-            let pipeline = self.build(device, shader);
-            if let Some(error) = ready(scope.pop()) {
-                return Err(RenderError::Invalid {
-                    what: "filter shader",
-                    detail: format!("{}: {error}", shader.label),
-                });
-            }
-            self.pipelines.insert(
-                shader.label.to_owned(),
-                Cached {
+        let entries = self.pipelines.entry(shader.label.to_owned()).or_default();
+        let index = match entries.iter().position(|c| c.source == shader.source) {
+            Some(index) => index,
+            None => {
+                // Validation errors (wgpu's own checks) and internal ones (a backend
+                // compiler refusing naga's output) both go to wgpu's panicking default
+                // handler unless a scope catches them.
+                let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
+                let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
+                let pipeline = build(&self.pipeline_layout, device, shader);
+                let error = ready(validation.pop()).or_else(|| ready(internal.pop()));
+                if entries.len() >= SOURCES_PER_LABEL {
+                    entries.remove(0);
+                }
+                entries.push(Cached {
                     source: shader.source.to_owned(),
-                    pipeline,
-                },
-            );
-        }
-        self.pipelines
-            .get(shader.label)
-            .map(|c| &c.pipeline)
-            .ok_or_else(|| RenderError::Invalid {
-                what: "filter shader",
-                detail: "invariant: the pipeline was just cached".into(),
-            })
-    }
-
-    fn build(&self, device: &wgpu::Device, shader: ShaderRef<'_>) -> wgpu::RenderPipeline {
-        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some(shader.label),
-            source: wgpu::ShaderSource::Wgsl(format!("{PRELUDE}\n{}", shader.source).into()),
-        });
-        let blend = match shader.blend {
-            Blend::Replace => None,
-            Blend::Over => Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                    built: match error {
+                        None => Ok(pipeline),
+                        Some(error) => Err(error.to_string()),
+                    },
+                });
+                entries.len() - 1
+            }
         };
-        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some(shader.label),
-            layout: Some(&self.pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: LAYER_FORMAT,
-                    blend,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
+        match &entries[index].built {
+            Ok(pipeline) => Ok(pipeline),
+            Err(error) => Err(RenderError::Invalid {
+                what: "filter shader",
+                detail: format!("{}: {error}", shader.label),
             }),
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            multiview_mask: None,
-            cache: None,
-        })
+        }
     }
+}
+
+fn build(
+    pipeline_layout: &wgpu::PipelineLayout,
+    device: &wgpu::Device,
+    shader: ShaderRef<'_>,
+) -> wgpu::RenderPipeline {
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some(shader.label),
+        source: wgpu::ShaderSource::Wgsl(format!("{PRELUDE}\n{}", shader.source).into()),
+    });
+    let blend = match shader.blend {
+        Blend::Replace => None,
+        Blend::Over => Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+    };
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some(shader.label),
+        layout: Some(pipeline_layout),
+        vertex: wgpu::VertexState {
+            module: &module,
+            entry_point: Some("vs"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &module,
+            entry_point: Some("fs"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: LAYER_FORMAT,
+                blend,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        multiview_mask: None,
+        cache: None,
+    })
 }
 
 /// The value of a future that native wgpu resolves at once (an error scope's pop).

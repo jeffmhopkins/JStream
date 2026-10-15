@@ -51,11 +51,100 @@ impl Pass for External {
         input: &Image,
         output: &Image,
     ) -> Result<(), RenderError> {
+        // A short or ragged buffer would fail wgpu's binding-size check at draw time,
+        // outside any error scope, and panic.
+        if self.params.len() < 16 || !self.params.len().is_multiple_of(16) {
+            return Err(RenderError::Invalid {
+                what: "filter uniforms",
+                detail: format!(
+                    "{}: {} bytes; the Params uniform is a multiple of 16, at least 16",
+                    self.filter.label(),
+                    self.params.len()
+                ),
+            });
+        }
         let shader = ShaderRef {
             label: self.filter.label(),
             source: self.filter.wgsl(),
             blend: Blend::Replace,
         };
         ctx.draw_ref(shader, input, None, &self.params, output)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use jstream_protocol::Settings;
+
+    use super::ExternalFilter;
+    use crate::filter::testing::image;
+    use crate::filter::{FilterClock, VideoFilter};
+    use crate::tests::open;
+
+    struct Fake {
+        wgsl: &'static str,
+        uniforms: usize,
+    }
+
+    impl ExternalFilter for Fake {
+        fn label(&self) -> &str {
+            "test/fake"
+        }
+
+        fn wgsl(&self) -> &str {
+            self.wgsl
+        }
+
+        fn uniforms(&self, _: &Settings) -> Vec<u8> {
+            vec![0; self.uniforms]
+        }
+    }
+
+    fn apply(fake: Fake) -> Result<(), crate::RenderError> {
+        let Some(mut opened) = open() else {
+            return Ok(());
+        };
+        let input = image(&opened, 1, &[[255, 0, 0, 255]]);
+        let mut filter = VideoFilter::external("test/fake", Arc::new(fake), &Settings::default());
+        let clock = FilterClock::default();
+        // Twice: the second draw meets the cached result.
+        opened.compositor.apply_filter(&mut filter, &input, clock)?;
+        opened
+            .compositor
+            .apply_filter(&mut filter, &input, clock)
+            .map(drop)
+    }
+
+    #[test]
+    fn a_refused_external_shader_is_an_error_not_a_panic() {
+        let result = apply(Fake {
+            wgsl: "@fragment fn fs(in: VsOut) -> @location(0) vec4<f32> { return nope; }",
+            uniforms: 16,
+        });
+        if open().is_some() {
+            assert!(result.is_err(), "the shader was accepted");
+        }
+    }
+
+    #[test]
+    fn short_external_uniforms_are_an_error() {
+        let result = apply(Fake {
+            wgsl: "@fragment fn fs(in: VsOut) -> @location(0) vec4<f32> { return src(in.uv); }",
+            uniforms: 8,
+        });
+        if open().is_some() {
+            assert!(result.is_err());
+        }
+    }
+
+    #[test]
+    fn a_valid_external_shader_draws() {
+        let result = apply(Fake {
+            wgsl: "@fragment fn fs(in: VsOut) -> @location(0) vec4<f32> { return src(in.uv); }",
+            uniforms: 16,
+        });
+        assert!(result.is_ok(), "{result:?}");
     }
 }
