@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:f8fec75ecf0af180", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:4abcc98ec4f361c0", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the V3 asset filters and a data upload in image.rs; nothing stated changed; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c17ddc66af14c910", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:309bec7ca227b236", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V3 asset filters; the passes text covers RGBA8 uploads, the filter-only f16 data upload is documented under Filters; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:70c4b4131cfd19bb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Group modules (pack, aspect, multipass, assets) and the descriptor test described as built" }
+verified = { hash = "b3:ed22d90068a5c690", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Replaced the V3 paragraph with apply_lut, image_mask and scene_mask, their settings, set_reference and the LUT layout; rest of the harness text holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
