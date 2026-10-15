@@ -22,3 +22,47 @@ pub use app::{App, SessionContext};
 pub fn start() {
     leptos::mount::mount_to_body(App);
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::{Path, PathBuf};
+
+    /// Collects every `.rs` file under `dir`.
+    fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in std::fs::read_dir(dir).expect("read src dir") {
+            let path = entry.expect("dir entry").path();
+            if path.is_dir() {
+                rust_files(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push(path);
+            }
+        }
+    }
+
+    /// The hosts' CSP allows styles only from `'self'` and a nonce, so the browser refuses
+    /// a `style` attribute (#261). Static styles go in `style.css`; dynamic ones use a
+    /// `style:` binding, which goes through the CSSOM.
+    #[test]
+    fn views_set_no_inline_style_attributes() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut files = Vec::new();
+        rust_files(&root.join("src"), &mut files);
+        files.push(root.join("index.html"));
+        let needle = concat!("style", "=\"");
+        let offenders: Vec<String> = files
+            .iter()
+            .flat_map(|path| {
+                let text = std::fs::read_to_string(path).expect("read source");
+                text.lines()
+                    .enumerate()
+                    .filter(|(_, line)| line.contains(needle))
+                    .map(|(n, _)| format!("{}:{}", path.display(), n + 1))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        assert!(
+            offenders.is_empty(),
+            "inline style attributes: {offenders:?}"
+        );
+    }
+}
