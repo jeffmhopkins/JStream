@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:c5655013dcb73405", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main into #143: re-read main's text incl. virtual camera bullets; this PR only rewords tests/mcp.rs block_on rustdoc (hello wait's timer); purpose still accurate; holds" }
+verified = { hash = "b3:2dcf735e7d6032e0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#297, #286) into #143: re-read main's purpose text; this PR's tests/mcp.rs change is only block_on's doc comment (hello wait timer), Tests bullet still describes tests/mcp.rs; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -162,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:976f16cf7c1baa87", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:e6d045266787a69b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#241 N1: differential script adds an item.list b query after the redo, compared like the other calls; the script paragraph holds" }
 -->
 
 ### Engine and sessions
