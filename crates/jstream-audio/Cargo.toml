@@ -23,4 +23,9 @@ jstream-plugin-proto.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 assert_no_alloc.workspace = true
+
+[[bench]]
+name = "mix"
+harness = false

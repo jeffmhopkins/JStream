@@ -626,16 +626,33 @@ fn help_and_version_print_to_stdout() {
 /// Posts `body` to the daemon's pairing endpoint at `authority`, returning the status and
 /// the body.
 fn pair_post(authority: &str, body: &str) -> (u16, String) {
-    use std::io::Write;
-    let mut stream = std::net::TcpStream::connect(authority).expect("connects");
-    stream
-        .set_read_timeout(Some(Duration::from_secs(10)))
-        .expect("a read timeout");
     let request = format!(
         "POST /api/v1/pair HTTP/1.1\r\nHost: {authority}\r\nContent-Type: application/json\r\n\
          Connection: close\r\nContent-Length: {}\r\n\r\n{body}",
         body.len()
     );
+    exchange(authority, &request)
+}
+
+/// `GET path` on the daemon at `authority` with `authorization`, if any; the status and
+/// the body.
+fn get(authority: &str, path: &str, authorization: Option<&str>) -> (u16, String) {
+    let authorization = authorization
+        .map(|value| format!("Authorization: {value}\r\n"))
+        .unwrap_or_default();
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nHost: {authority}\r\n{authorization}Connection: close\r\n\r\n"
+    );
+    exchange(authority, &request)
+}
+
+/// Sends one raw HTTP/1.1 `request` to the daemon at `authority`; the status and the body.
+fn exchange(authority: &str, request: &str) -> (u16, String) {
+    use std::io::Write;
+    let mut stream = std::net::TcpStream::connect(authority).expect("connects");
+    stream
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .expect("a read timeout");
     stream.write_all(request.as_bytes()).expect("sends");
     let mut answer = String::new();
     stream
@@ -752,5 +769,81 @@ async fn pairs_a_device_that_survives_a_restart() {
     .expect("still paired after a restart");
     timely(device.hello(hello())).await.expect("welcome");
     drop(again);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Standard base64 of `text`, for `Basic` credentials.
+fn base64(text: &str) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for chunk in text.as_bytes().chunks(3) {
+        let n = chunk
+            .iter()
+            .enumerate()
+            .fold(0u32, |n, (i, &b)| n | u32::from(b) << (16 - 8 * i));
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(char::from(ALPHABET[(n >> (18 - 6 * i) & 63) as usize]));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn serves_the_ui_directory_to_the_token_holder() {
+    let dir = scratch("ui");
+    let dist = dir.join("dist");
+    std::fs::create_dir_all(&dist).expect("the dist directory");
+    std::fs::write(dist.join("index.html"), "<p>JStream UI</p>").expect("written");
+    let token_file = dir.join("token");
+    let mut daemon = start(&[
+        "--token-file",
+        token_file.to_str().expect("a UTF-8 path"),
+        "--log-dir",
+        dir.join("logs").to_str().expect("a UTF-8 path"),
+        "--ui-dir",
+        dist.to_str().expect("a UTF-8 path"),
+    ]);
+    let authority = daemon
+        .url
+        .strip_prefix("ws://")
+        .and_then(|rest| rest.strip_suffix("/api/v1/ws"))
+        .expect("ws://<authority>/api/v1/ws")
+        .to_owned();
+    assert_eq!(
+        daemon.banner.last().map(String::as_str),
+        Some(format!("ui: http://{authority}/").as_str()),
+        "{:?}",
+        daemon.banner
+    );
+    let token = std::fs::read_to_string(&token_file).expect("the token file");
+    let basic = format!("Basic {}", base64(&format!("jstream:{}", token.trim())));
+    assert_eq!(get(&authority, "/", None).0, 401);
+    let (status, body) = get(&authority, "/", Some(&basic));
+    assert_eq!((status, body.as_str()), (200, "<p>JStream UI</p>"));
+    stop(&mut daemon);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_missing_ui_directory_exits_1() {
+    let dir = scratch("no-ui");
+    let output = daemon()
+        .arg("--token-file")
+        .arg(dir.join("token"))
+        .arg("--log-dir")
+        .arg(dir.join("logs"))
+        .arg("--ui-dir")
+        .arg(dir.join("missing"))
+        .output()
+        .expect("the binary runs");
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("unusable UI directory"), "{stderr}");
+    // Refused before anything is written.
+    assert!(!dir.join("token").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }
