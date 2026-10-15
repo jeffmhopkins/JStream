@@ -3,9 +3,9 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId,
-    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId, SourceKind,
-    parity,
+    BusId, Edit, EncoderProfile, EncoderProfileId, KindCategory, KindDescriptor, OutputId,
+    OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneRole, SourceId,
+    SourceKind, parity,
 };
 use serde_json::{Value, json};
 
@@ -67,7 +67,9 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 }
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
-/// after it, and scene `b` made a group, in one more batch: rev 2.
+/// after it, and scene `b` made a group, in one more batch: rev 2. That batch also
+/// deletes the virtual camera `vcam`, which the parity collection gained after the
+/// fixture was written; `a_virtual_camera_round_trips` covers it.
 fn fixture_graph() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds());
     let applied = graph.apply_batch(&parity::collection());
@@ -79,6 +81,9 @@ fn fixture_graph() -> Graph {
             Edit::SceneSetRole {
                 scene_id: SceneId::new("b"),
                 role: SceneRole::Group,
+            },
+            Edit::OutputDelete {
+                output_id: OutputId::new("vcam"),
             },
         ],
         None,
@@ -125,6 +130,29 @@ fn an_empty_collection_round_trips() {
             "sources": [],
             "outputs": []
         }))
+    );
+    assert_eq!(load(&json), Ok(graph));
+}
+
+/// A virtual camera output saves as its bare kind and loads back the same.
+#[test]
+fn a_virtual_camera_round_trips() {
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[Edit::OutputCreate {
+            output_id: OutputId::new("cam"),
+            kind: OutputKind::VirtualCam,
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let saved: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert!(
+        saved["outputs"].as_array().is_some_and(
+            |outputs| outputs.contains(&json!({"id": "cam", "kind": {"type": "virtual_cam"}}))
+        ),
+        "{json}"
     );
     assert_eq!(load(&json), Ok(graph));
 }
@@ -213,6 +241,67 @@ fn a_file_without_encoder_profiles_loads() {
             .outputs()
             .all(|o| o.encoder_profile().is_none())
     );
+}
+
+/// A file written before sends existed (no `sends`, `buses` or `audio`): each audio
+/// source keeps the master send its creation gives it, at 0 dB, rather than losing it.
+#[test]
+fn a_file_from_before_audio_keeps_the_master_sends() {
+    let file = edit_file(|v| {
+        if let Some(o) = v.as_object_mut() {
+            o.remove("sends");
+            o.remove("buses");
+        }
+        for source in v["sources"].as_array_mut().into_iter().flatten() {
+            source.as_object_mut().map(|o| o.remove("audio"));
+        }
+    });
+    let Ok(graph) = load(&file) else {
+        panic!("the file did not load");
+    };
+    let sends: Vec<_> = graph
+        .state()
+        .sends()
+        .map(|(source, bus, gain)| (source.as_str().to_owned(), bus.clone(), gain.get()))
+        .collect();
+    assert_eq!(
+        sends,
+        [
+            ("desk".to_owned(), BusId::master(), 0.0),
+            ("mic".to_owned(), BusId::master(), 0.0),
+            ("mic_copy".to_owned(), BusId::master(), 0.0),
+        ]
+    );
+}
+
+/// A source whose master send was removed saves an empty `sends`, which tells the load
+/// to remove it again.
+#[test]
+fn a_removed_master_send_round_trips() {
+    let mut graph = Graph::new().with_kinds(kinds());
+    let applied = graph.apply(
+        &[
+            Edit::SourceCreate {
+                source_id: SourceId::new("mic"),
+                name: "mic".into(),
+                kind: SourceKind::Builtin { kind: "mic".into() },
+                settings: jstream_protocol::Settings::default(),
+                duplicated_from: None,
+            },
+            Edit::SendRemove {
+                source_id: SourceId::new("mic"),
+                bus_id: BusId::master(),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    let value: Value = serde_json::from_str(&json).unwrap_or_default();
+    assert_eq!(value["sends"], json!([]));
+    let loaded = load(&json);
+    assert_eq!(loaded.as_ref().map(|g| g.state().sends().count()), Ok(0));
+    assert_eq!(loaded.as_ref(), Ok(&graph));
 }
 
 #[test]

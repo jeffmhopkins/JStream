@@ -5,6 +5,7 @@
 //! inverse of a batch is the inverses of its edits in reverse order. Only when every
 //! edit succeeds does the working copy replace the state.
 
+use crate::audio;
 use crate::deps::{self, Node};
 use crate::model::{Chains, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
 use crate::target::{record_path_problem, rtmp_url_problem};
@@ -13,7 +14,7 @@ use jstream_protocol::{
     Batch, BlendMode, Blocker, Canvas, Crop, Edit, EntityKind, Finite32, GeometryError,
     ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputKind,
     ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference, Rev, RtmpTarget,
-    SceneId, Settings, SourceId, SourceKind,
+    SceneId, Settings, SourceAudio, SourceId, SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -289,6 +290,9 @@ fn apply_edit(
         return applied;
     }
     if let Some(applied) = crate::filter::apply(state, kinds, edit, at) {
+        return applied;
+    }
+    if let Some(applied) = crate::audio::apply(state, edit, at) {
         return applied;
     }
     match edit {
@@ -593,6 +597,7 @@ fn apply_edit(
                     return Err(unsupported(at, "kind", "this source kind"));
                 }
             };
+            let audio = audio::default_audio(kind, kinds);
             let inverse = create_source(
                 state,
                 source_id,
@@ -600,6 +605,7 @@ fn apply_edit(
                 kind,
                 settings,
                 duplicated_from.clone(),
+                audio,
             )?;
             check_reference_cycles(state, source_id, at, "settings")?;
             Ok(inverse)
@@ -625,10 +631,12 @@ fn apply_edit(
                 &kind,
                 settings,
                 Some(source_id.clone()),
+                None,
             )?;
             if let Some(copy) = state.sources.get_mut(new_source_id) {
                 copy.filters = filters;
             }
+            audio::copied(state, source_id, new_source_id);
             Ok(inverse)
         }
         Edit::SourceRename { source_id, name } => {
@@ -659,14 +667,18 @@ fn apply_edit(
                 .sources
                 .remove(source_id)
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
+            let restore_audio =
+                audio::deleted(state, kinds, &source.id, &source.kind, source.audio);
+            let restore_filters = crate::filter::restore_all(&source);
             let mut inverse = vec![Edit::SourceCreate {
-                source_id: source.id.clone(),
-                name: source.name.clone(),
-                kind: source.kind.clone(),
-                settings: source.settings.clone(),
-                duplicated_from: source.duplicated_from.clone(),
+                source_id: source.id,
+                name: source.name,
+                kind: source.kind,
+                settings: source.settings,
+                duplicated_from: source.duplicated_from,
             }];
-            inverse.extend(crate::filter::restore_all(&source));
+            inverse.extend(restore_audio);
+            inverse.extend(restore_filters);
             Ok(inverse)
         }
         Edit::OutputCreate { output_id, kind } => {
@@ -679,6 +691,7 @@ fn apply_edit(
                 OutputKind::Record { path, container } => {
                     check_record(path, *container, at)?;
                 }
+                OutputKind::VirtualCam => {}
                 OutputKind::Unknown => {
                     return Err(invalid(
                         at,
@@ -879,6 +892,7 @@ fn create_source(
     kind: &SourceKind,
     settings: Settings,
     duplicated_from: Option<SourceId>,
+    audio: Option<SourceAudio>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     if state.sources.contains_key(id) {
         return Err(already_exists(EntityKind::Source, id.as_str()));
@@ -892,8 +906,10 @@ fn create_source(
             settings,
             duplicated_from,
             filters: Chains::default(),
+            audio,
         },
     );
+    audio::created(state, id);
     Ok(vec![Edit::SourceDelete {
         source_id: id.clone(),
     }])
