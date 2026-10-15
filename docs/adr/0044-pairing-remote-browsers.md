@@ -2,14 +2,14 @@
 id = "ADR-0044"
 title = "Pairing remote browsers with a one-time code"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0044: Pairing remote browsers with a one-time code
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
