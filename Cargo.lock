@@ -926,6 +926,21 @@ name = "jstream-types"
 version = "0.0.0"
 
 [[package]]
+name = "jstream-youtube"
+version = "0.0.0"
+dependencies = [
+ "jstream-platform",
+ "rcgen",
+ "ring",
+ "rustls",
+ "rustls-native-certs",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

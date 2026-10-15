@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:1866d0ba10ec12ca", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#141 review N1: platform-windows package description now names the Credential Manager store; re-read the crate map: the row (layer 2, unsafe yes, Credential Manager store listed) still matches the manifest summary, no dependency edge changed" }
+verified = { hash = "b3:5dd7ae520756aec6", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Y1 adds crates/jstream-youtube/Cargo.toml: layer 2 and unsafe no match its existing row, the manifest summary is the row's text, and its only JStream dependency is jstream-platform (L1), strictly lower; no other row or edge changed" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
