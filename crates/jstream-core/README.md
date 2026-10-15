@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:159b653a7aae7653", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#197 B9 delete.plan): re-read; B9 changed no core README text; C5's Audio sources bullet and src/tests/audio.rs list hold beside main's; delete.plan is a query, not a mutation path" }
+verified = { hash = "b3:ac8f1f3b0be51a51", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via the render.rs module-doc wording only; re-read, main's text here makes no claim about which threads load the render snapshot" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -151,7 +151,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0b6a236efa7b9362", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#197 B9 delete.plan): re-read with protocol #design's blockers text; B9 changed no core design text; audio.sync still beside both live.sync calls (delete.plan mutates nothing); holds" }
+verified = { hash = "b3:d6aa0548fecf3306", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: only diff from main is the locking paragraph (render thread lock-free, video.snapshot under the collection lock); matches engine.rs video_snapshot" }
 -->
 
 ### Engine and sessions
@@ -884,7 +884,7 @@ history and idempotency keys are not saved.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:b3aa03c26ec8a3f6", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#196 B5, #226 A3, #207, #233, #229, #230): stamp-only conflicts, both sides kept; runtime text has C5's audio-inputs sentences; main's #207 stop wait is in Design; holds" }
+verified = { hash = "b3:2bb5703d71019843", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via the render.rs module-doc wording only; re-read, main's text here makes no claim about which threads load the render snapshot" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

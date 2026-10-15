@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:86096a54cb06d6e6", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: Audio bullet adds processes()/AudioProcess and input_format; Fakes bullet adds FakeAudioIo set_processes/input_targets and process loopback on listed processes; checked against audio.rs and fake.rs" }
+verified = { hash = "b3:7498201ed30d8beb", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading render-snapshot wording only; content identical to main's verified text, re-read, names no render-snapshot loader, holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

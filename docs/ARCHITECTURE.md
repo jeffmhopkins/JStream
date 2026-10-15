@@ -386,7 +386,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:7d2feead6f32e91a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: Collector row now says the program stage's collector is fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs) and the mixer's own frees input rings; matches launch_program, push_each and Program::drop (render, mixer, then collector); render-snapshot paragraph holds" }
+verified = { hash = "b3:21dcdc0759acbed5", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: the only diff from main's verified text is the render-snapshot paragraph; still matches Engine::video_snapshot (rev and snapshot read under the collection lock, worker gets the Arc) and RenderReader's lock-free load" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from

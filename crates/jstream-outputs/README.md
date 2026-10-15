@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:c1bf6f7d3b271685", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "#209: Transport bullet now says shutdown's close_notify is bounded by the write deadline; Tests paragraph lists the write-deadline and shutdown TLS tests; re-read the whole section against transport.rs; holds" }
+verified = { hash = "b3:0214dab2ae5f48c6", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading render-snapshot wording only; content identical to main's verified text, re-read, names no render-snapshot loader, holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
