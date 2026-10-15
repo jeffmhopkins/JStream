@@ -122,7 +122,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3ca7612494ac158c", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (#182): re-read Collection file subsection against engine.rs and collection.rs; unchanged" }
+verified = { hash = "b3:5c1605599100076e", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#protocol and protocol README#design, whose only change is the YouTube ADR link (0034 -> 0041, same commands restated); nothing here relies on it" }
 -->
 
 ### Engine and sessions

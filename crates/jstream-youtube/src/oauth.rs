@@ -33,7 +33,7 @@ pub const REVOCATION_ENDPOINT: &str = "https://oauth2.googleapis.com/revoke";
 /// never starts with a token about to expire.
 pub const REFRESH_MARGIN: Duration = Duration::from_secs(60);
 
-/// A YouTube OAuth scope (ADR-0034 §4).
+/// A YouTube OAuth scope (ADR-0041 §4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Scope {
     /// `youtube.readonly`: listing broadcasts and streams, and stream health.

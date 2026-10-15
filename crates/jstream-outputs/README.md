@@ -12,14 +12,14 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:7b413860b7751891", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main into ADR-0042 edit of ARCH#threading: the output-pipeline paragraph moved to core README#runtime and the audio 'In the engine' paragraph became a short link; the thread roster, clock, snapshot and parameter-channel text this section relies on is unchanged, so it holds" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
+verified = { hash = "b3:28b3e78c84d88d6b", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the generic RTMP/RTMPS output's ADR link and depends_on; ADR-0041 keeps that output and its reconnect-with-backoff unchanged" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
 first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, written in Rust
 as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) requires and needed for the
-generic RTMP/RTMPS output of [ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md). The
+generic RTMP/RTMPS output of [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md). The
 second is the **recording file sink** in the `record` module (below). The `Output` trait
 and the virtual-camera output come later. Its JStream dependencies are `jstream-media`
 (for `MediaTime` and `Packet`) and the layer-2 `jstream-mux`, whose public `amf0` codec

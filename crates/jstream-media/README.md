@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-media", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:7e74e8dcb7e1b8c4", by = "agent:claude@session_01M7dd6pdhEEieUbct9m5TkJ", note = "F5: Packets bullet now names Codec::Hevc and Codec::Av1 and their framing (HEVC Annex B, AV1 one temporal unit of low-overhead OBUs), matching packet.rs; Codec::kind maps both to video; the ARCH crate-map row and ADR-0031/0014 still hold" }
+verified = { hash = "b3:6aed7b76f653ef9e", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the enhanced-RTMP link; ADR-0041 keeps ADR-0009/0034's RTMP/RTMPS with enhanced RTMP for HEVC/AV1, so the text holds" }
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,
@@ -42,7 +42,7 @@ Contents:
 - **Packets:** `Packet` (codec, keyframe flag, pts, dts no later than pts, non-empty
   shared payload). `Codec` covers the [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)
   baseline, H.264 and AAC, plus HEVC and AV1, the video codecs enhanced RTMP carries
-  ([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)). Payload framing is a
+  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)). Payload framing is a
   convention this crate doesn't check: H.264 and HEVC payloads are Annex B (start codes,
   as OS encoders emit them), AV1 payloads are one temporal unit of low-overhead OBUs, and
   AAC payloads are raw access units without ADTS. Muxers convert to the container's

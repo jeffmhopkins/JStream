@@ -2,14 +2,14 @@
 id = "ADR-0041"
 title = "YouTube interaction scope v3: one sign-in"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0041: YouTube interaction scope v3: one sign-in
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0034](0034-youtube-interaction-scope-v2.md). It restates all of

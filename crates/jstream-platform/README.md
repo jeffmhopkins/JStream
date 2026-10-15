@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:119a92991fa79767", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042: covers gains Cargo.toml; 'depends only on jstream-media, thiserror and wgpu' matches the manifest; merge of main's text re-read, ARCH#threading edits don't touch the mailbox wording" }
+verified = { hash = "b3:36415ada19ed4ce5", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via media README#purpose, whose only change is the enhanced-RTMP ADR link (0034 -> 0041, same decision restated); platform codecs and OAuth tokens text unaffected" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -127,7 +127,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:c3d24539251a03a3", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: section is main's (WgcCapture::on_gpu delivers GPU frames); B3 changes nothing in platform; holds" }
+verified = { hash = "b3:00579a47d00ddea3", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#crate-map, whose only change is the youtube and sources rows' ADR link (0034 -> 0041); GPU frames text doesn't rely on either row" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
