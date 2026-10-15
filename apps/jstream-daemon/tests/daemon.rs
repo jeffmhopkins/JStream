@@ -290,7 +290,7 @@ async fn serves_the_engine_and_stops_on_a_signal() {
     }))))
     .await
     .expect("applied");
-    assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(applied.result, CallResult::batch(Rev(1)));
     match timely(events.next()).await {
         Some(Event::StateChanged {
             rev,

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f2f2278743d2e4c4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed: the item.move cycle golden now expects the mock's cycle path; error format (error: <message> (<code>)) and exit code 17 unchanged" }
+verified = { hash = "b3:5ff71fbfed0366fa", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: run.rs prints removed hotkeys and a hotkeys table; contents list (args/run/exit/block/mcp) unchanged; holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:d87d877168335337", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took B6-f's Edits bullet and added scene.create's optional role:group/role:scene; grouping batch now creates the scene as a group" }
+verified = { hash = "b3:5dca971323213251", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: added hotkey.set <chord> <action> <id> / hotkey.clear <chord> to Edits, the removed-hotkey line and the state get hotkeys table; matches args.rs/run.rs" }
 -->
 
 ```sh
@@ -121,7 +121,12 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   source, and moves the items into it. The placement edits'
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
   the item's own scene, which omitting it already means.
-  `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
+  `item.set_source <item-id> <source-id>` switches an item to another source.
+  `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
+  `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
+  output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
+  Applying a batch prints `removed hotkey <chord>` for each binding its deletes
+  removed. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -162,7 +167,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
   server URL, as `output.create` takes it). `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
-  (<name>):` by its role, then the outputs. `output status` prints
+  (<name>):` by its role, then the outputs, then a `hotkeys:` table (`CHORD`,
+  `ACTION`) when any are bound. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
@@ -235,7 +241,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1d68cead334d0f0c", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at b3e6be5 (#263 mock cycle reasons name the cycle path); re-read beside this PR's virtual_cam text (mock accepts virtual_cam, set_target refusal unchanged; protocol 0.18); jstream-control/graph/protocol tests pass; holds" }
+verified = { hash = "b3:7da5209bea1e7b7c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: hotkey edits are fixed arity (3 and 1), so the hand-rolled parser rationale holds; no new dependency" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

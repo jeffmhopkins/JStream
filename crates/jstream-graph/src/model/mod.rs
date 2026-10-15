@@ -26,14 +26,16 @@
 //!   credential store, outside the collection.
 //! - Every output's encoder profile exists, and every profile holds an encoding the
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
+//! - Every hotkey binding's chord is valid, its action can be bound, and every object
+//!   its action names exists (ADR-0024 §5, ADR-0040 §3).
 //!
 //! The structs have private fields so that later additions (source `filters[]`, item
 //! `effects[]`, the full 3D transform) don't break callers.
 
 use jstream_protocol::{
-    Canvas, Crop, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
-    KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole, Settings,
-    SourceId, SourceKind,
+    Action, Canvas, Chord, Crop, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId,
+    ItemTransform, KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole,
+    Settings, SourceId, SourceKind,
 };
 use std::collections::BTreeMap;
 
@@ -98,6 +100,7 @@ pub struct State {
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
     pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
+    pub(crate) hotkeys: BTreeMap<Chord, Action>,
 }
 
 impl State {
@@ -169,6 +172,16 @@ impl State {
             Some(id) => self.encoders.get(id)?.profile,
             None => EncoderProfile::DEFAULT,
         })
+    }
+
+    /// Every hotkey binding, ordered by chord: the chord and the action it runs.
+    pub fn hotkeys(&self) -> impl ExactSizeIterator<Item = (&Chord, &Action)> {
+        self.hotkeys.iter()
+    }
+
+    /// The action bound to this chord.
+    pub fn hotkey(&self, chord: &Chord) -> Option<&Action> {
+        self.hotkeys.get(chord)
     }
 
     pub(crate) fn scene_index(&self, id: &SceneId) -> Option<usize> {

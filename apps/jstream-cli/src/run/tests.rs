@@ -340,7 +340,7 @@ fn state_get_golden() {
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
-            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[]}}}"#,
+            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"hotkeys":[]}}}"#,
         ))
     );
     assert_eq!(

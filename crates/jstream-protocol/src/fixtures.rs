@@ -18,11 +18,11 @@ use crate::{
     AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
     EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,
 };
+use crate::{Chord, HistoryCall, HistoryDirection, HistoryOp, HotkeyBinding};
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
-use crate::{HistoryCall, HistoryDirection, HistoryOp};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
@@ -240,6 +240,33 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::EncoderDelete {
             profile_id: EncoderProfileId::new("enc_old"),
         },
+        Edit::HotkeySet {
+            chord: Chord::new("Ctrl+Digit1"),
+            action: Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+            },
+        },
+        Edit::HotkeyClear {
+            chord: Chord::new("Ctrl+Digit1"),
+        },
+    ]
+}
+
+/// The bindings the fixtures report: a scene switch and an output start.
+fn hotkey_bindings() -> Vec<HotkeyBinding> {
+    vec![
+        HotkeyBinding::new(
+            Chord::new("Ctrl+Digit1"),
+            &Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+            },
+        ),
+        HotkeyBinding::new(
+            Chord::new("F9"),
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
     ]
 }
 
@@ -612,6 +639,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             ],
             outputs: output_infos(),
             encoders: encoder_infos(),
+            hotkeys: hotkey_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -673,6 +701,12 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     scene_id: SceneId::new("scn_mask"),
                 },
             ],
+            hotkeys: vec![HotkeyBinding::new(
+                Chord::new("F5"),
+                &Action::SceneSwitch {
+                    scene_id: SceneId::new("scn_mask"),
+                },
+            )],
         },
     ]
 }
@@ -801,6 +835,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Source,
         EntityKind::Output,
         EntityKind::Encoder,
+        EntityKind::Hotkey,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -873,7 +908,17 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r0"),
-            result: CallResult::Batch { rev: Rev(13) },
+            result: CallResult::Batch {
+                rev: Rev(13),
+                removed_hotkeys: vec![],
+            },
+        }),
+        ServerMessage::Response(Response {
+            id: RequestId::new("r1"),
+            result: CallResult::Batch {
+                rev: Rev(14),
+                removed_hotkeys: hotkey_bindings(),
+            },
         }),
         ServerMessage::Response(Response {
             id: RequestId::new("r10"),

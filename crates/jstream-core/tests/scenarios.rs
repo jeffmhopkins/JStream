@@ -222,7 +222,7 @@ fn overload_drops_and_counts() {
         role: None,
     }))))
     .expect("batch");
-    assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(applied.result, CallResult::batch(Rev(1)));
     assert!(matches!(
         drain(&mut user_events).as_slice(),
         [
@@ -426,5 +426,5 @@ fn rt_panic_is_reported() {
         role: None,
     }))))
     .expect("batch");
-    assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(applied.result, CallResult::batch(Rev(1)));
 }

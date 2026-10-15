@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:c648e1b3e74a9eb0", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+verified = { hash = "b3:8ed0b3a4754cacd6", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: additions only (minor 0.19), collection gains an optional field with no schema_version bump; v1 fixture unchanged and loads; holds" }
 -->
 
 <a id="R-API-001"></a>

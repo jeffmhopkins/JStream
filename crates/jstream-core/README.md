@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:31c122b1b6d18d9c", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+verified = { hash = "b3:bc10f339aab40ada", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: engine passes Applied.removed_hotkeys into the batch result; purpose unchanged; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -162,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:976f16cf7c1baa87", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:b1ba088821a23159", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: Batches bullet now says the result lists removed_hotkeys; matches engine.rs" }
 -->
 
 ### Engine and sessions
@@ -240,7 +240,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `rev_conflict` for a stale `expected_rev`, checked before `empty_batch`; then the
   edits in order on a working copy, the first failure aborting with `not_found`,
   `already_exists` or `invalid_argument` (`edits.<n>.<field>`) and nothing applied; on
-  success `rev` goes up by exactly one. The engine adds the per-client **idempotency
+  success `rev` goes up by exactly one, and the batch result lists the hotkey bindings
+  the batch's deletes removed (`removed_hotkeys`). The engine adds the per-client **idempotency
   keys** ([R-API-004](../../docs/RULES.md#R-API-004)): a batch whose key this client
   already used is not applied again and gets the `rev` it produced, even after `rev`
   moved on (the key check comes first) and without an event. Only applied batches

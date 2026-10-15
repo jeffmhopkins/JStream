@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:bddcc7ef355104c7", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: Outputs list now includes VirtualCam (no settings, ignores its profile); Not-yet list drops VirtualCam, keeps YouTube; master/output chain note holds" }
+verified = { hash = "b3:7fcec809fcd681fb", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: re-read the hotkeys bullet (bound to an action, deletes remove bindings in the same undoable edit, delete.plan lists them, never a blocker); implementation matches" }
 -->
 
 ```
@@ -528,7 +528,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5e763b793debc8fe", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:1962d2b4dc35b76c", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: added hotkey edits bullet and delete.plan hotkeys; protocol 0.19" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -553,6 +553,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
+  `hotkey.set` and `hotkey.clear` bind a key chord to an action and unbind it
+  ([ADR-0024](adr/0024-scene-structure.md) §5, protocol 0.19). Deleting the scene or
+  output an action names removes its bindings in the same edit, the batch result lists
+  them as `removed_hotkeys`, and undo restores them
+  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -601,7 +606,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source with everything that refers to it, and the `rev`
-  it was planned at; later `audio.levels`).
+  it was planned at, plus the hotkey bindings it removes (protocol 0.19); later
+  `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)); the fields are in
@@ -655,11 +661,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:55a0e0a9c09649f1", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+verified = { hash = "b3:d268d68d7c711c8b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: noun list gains hotkey; tools snapshot about 170 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio` and `video` so far; `audio`, `youtube`
+  (`canvas`, `delete`, `encoder`, `history`, `hotkey`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio` and `video` so far; `audio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -669,7 +675,7 @@ verified = { hash = "b3:55a0e0a9c09649f1", by = "agent:claude@session_01Wfrx1wPt
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 145 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 170 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -856,11 +862,13 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:adc7282f515bad14", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: re-read; collection file saves a virtual_cam output as its bare kind (a_virtual_camera_round_trips); schema version unchanged; holds" }
+verified = { hash = "b3:91101ba63170e346", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: optional hotkeys field omitted when empty, no schema_version bump; matches persist/mod.rs" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
-  `jstream-graph`, which checks a loaded collection as it checks edits. `jstream-core`
+  `jstream-graph`, which checks a loaded collection as it checks edits. A field added
+  for new collection state (encoder profiles, hotkey bindings) is omitted when empty,
+  so a file without it is still valid at the same `schema_version`. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.

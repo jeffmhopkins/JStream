@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:a1f50d3313163f2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
+verified = { hash = "b3:87d8f76ae61dd329", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: only test constructor change to CallResult::batch; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a0912e1d9a6dd09d", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; server passes output kinds through untouched" }
+verified = { hash = "b3:83a32122039f4486", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: only test constructor change to CallResult::batch; holds" }
 -->
 
 ### Listening and admission

@@ -12,6 +12,7 @@
 mod apply;
 mod deps;
 mod encoder;
+mod hotkey;
 mod model;
 mod persist;
 mod plan;

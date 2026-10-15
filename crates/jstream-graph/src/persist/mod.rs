@@ -15,8 +15,9 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
-    OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneRole, Settings, SourceId, SourceKind,
+    Action, Canvas, Chord, Crop, Edit, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId,
+    ItemTransform, OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneRole, Settings,
+    SourceId, SourceKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -108,6 +109,10 @@ struct File {
     /// without profiles saves as it did before they existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     encoders: Vec<FileEncoder>,
+    /// Hotkey bindings (ADR-0024 §5), ordered by chord; omitted when there are none, so
+    /// a collection without hotkeys saves as it did before they existed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    hotkeys: Vec<FileHotkey>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -163,6 +168,15 @@ struct FileOutput {
     /// The output's encoder profile; omitted for the engine's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     encoder_profile: Option<EncoderProfileId>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileHotkey {
+    chord: Chord,
+    /// The action request, as `hotkey.set` takes it. A stream key is never bound, so
+    /// none is saved.
+    action: Action,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -242,6 +256,14 @@ impl Graph {
                     id: encoder.id.clone(),
                     name: encoder.name.clone(),
                     profile: encoder.profile,
+                })
+                .collect(),
+            hotkeys: state
+                .hotkeys
+                .iter()
+                .map(|(chord, action)| FileHotkey {
+                    chord: chord.clone(),
+                    action: action.clone(),
                 })
                 .collect(),
         };
@@ -335,8 +357,8 @@ fn migrate_with(value: &mut Value, migrations: &[Migration]) -> Result<(), LoadE
 /// The edits that build `file`'s collection from an empty one, each with the object it
 /// creates for the error message. The canvas comes first (when not the default), then
 /// scenes, empty, in display order and with their roles; then sources, each after the
-/// sources its settings refer to; then items, encoder profiles, and outputs, each with
-/// its profile.
+/// sources its settings refer to; then items, encoder profiles, outputs, each with its
+/// profile, and last the hotkey bindings, whose actions name scenes and outputs.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -432,6 +454,15 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 },
             ));
         }
+    }
+    for hotkey in &file.hotkeys {
+        edits.push((
+            format!("hotkey `{}`", hotkey.chord),
+            Edit::HotkeySet {
+                chord: hotkey.chord.clone(),
+                action: hotkey.action.clone(),
+            },
+        ));
     }
     Ok(edits)
 }

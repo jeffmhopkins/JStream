@@ -292,7 +292,7 @@ mod tests {
         let applied = timely(first.call(Call::Batch(batch)))
             .await
             .expect("applied");
-        assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
+        assert_eq!(applied.result, CallResult::batch(Rev(1)));
         match timely(events.next()).await {
             Some(Event::StateChanged { rev, client_id, .. }) => {
                 assert_eq!((rev, client_id), (Rev(1), one.client_id.clone()));

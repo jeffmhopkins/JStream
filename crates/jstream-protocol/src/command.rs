@@ -10,8 +10,10 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::encoder::EncoderProfile;
+use crate::error::EntityKind;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
+use crate::hotkey::Chord;
 use crate::id::{EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
@@ -64,9 +66,11 @@ pub enum Edit {
     /// Deletes a scene and its items; the sources they placed stay. Rejected with
     /// `invalid_argument` while a `scene` source shows it or any source's settings refer
     /// to it: delete those sources, or clear those references, first (in the same batch
-    /// if needed). Inverse: `scene.create` with its role (omitted for `scene`), then
-    /// `scene.reorder` to its old display position (unless it was last), then each
-    /// deleted item's `item.remove` inverse, from bottom to top.
+    /// if needed). Hotkey bindings whose action names the scene are not blockers: they
+    /// are removed with it (ADR-0040 §3). Inverse: `scene.create` with its role (omitted
+    /// for `scene`), then `scene.reorder` to its old display position (unless it was
+    /// last), then each deleted item's `item.remove` inverse, from bottom to top, then
+    /// `hotkey.set` for each removed binding.
     #[serde(rename = "scene.delete")]
     SceneDelete {
         /// The scene to delete.
@@ -268,8 +272,10 @@ pub enum Edit {
     /// Deletes a source. Rejected with `invalid_argument` while any item still places it,
     /// or any source's settings refer to it: remove those items, or clear those
     /// references, first (in the same batch if needed). Deleting a source that others were
-    /// copied from is allowed: their `duplicated_from` then reads as absent. Inverse:
-    /// `source.create` with its name, kind, settings and `duplicated_from`.
+    /// copied from is allowed: their `duplicated_from` then reads as absent. Hotkey
+    /// bindings whose action names the source are removed with it (ADR-0040 §3).
+    /// Inverse: `source.create` with its name, kind, settings and `duplicated_from`, then
+    /// `hotkey.set` for each removed binding.
     #[serde(rename = "source.delete")]
     SourceDelete {
         /// The source to delete.
@@ -319,8 +325,10 @@ pub enum Edit {
     },
     /// Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.
     /// Its stream key stays in the credential store, so undoing the delete restores a
-    /// working output; `output.clear_key` removes it. Inverse: `output.create` with its
-    /// kind.
+    /// working output; `output.clear_key` removes it. Hotkey bindings whose action names
+    /// the output are removed with it (ADR-0040 §3). Inverse: `output.create` with its
+    /// kind, `output.set_encoder` if it had a profile, then `hotkey.set` for each removed
+    /// binding.
     #[serde(rename = "output.delete")]
     OutputDelete {
         /// The output to delete.
@@ -369,6 +377,30 @@ pub enum Edit {
         /// The profile to delete.
         profile_id: EncoderProfileId,
     },
+    /// Binds a key chord to an action (ADR-0024 §5). A client that listens for keys
+    /// sends the action when the chord is pressed; the engine only stores the binding.
+    /// Only actions can be bound, so pressing a hotkey never adds to an undo history.
+    /// Rejected with `invalid_argument` for a chord that isn't valid (see [`Chord`]) or
+    /// an action that can't be bound (`output.set_key`, whose stream key is never stored
+    /// in the collection), with `already_exists` (entity `hotkey`) for a chord that is
+    /// already bound (rebinding is a batch of `hotkey.clear` then `hotkey.set`), and with
+    /// `not_found` for a scene or output the action names that doesn't exist. Deleting
+    /// that object later removes the binding with it (ADR-0040 §3). Inverse:
+    /// `hotkey.clear`.
+    #[serde(rename = "hotkey.set")]
+    HotkeySet {
+        /// The chord, such as `Ctrl+Digit1` or `F1`.
+        chord: Chord,
+        /// The action request it runs, checked as an `action` call is.
+        action: Action,
+    },
+    /// Removes a hotkey binding. Rejected with `not_found` (entity `hotkey`) for a chord
+    /// that isn't bound. Inverse: `hotkey.set` with its action.
+    #[serde(rename = "hotkey.clear")]
+    HotkeyClear {
+        /// The chord to unbind.
+        chord: Chord,
+    },
 }
 
 impl Edit {
@@ -402,6 +434,8 @@ impl Edit {
             Edit::EncoderUpdate { .. } => "encoder.update",
             Edit::EncoderDelete { .. } => "encoder.delete",
             Edit::CanvasSetSize { .. } => "canvas.set_size",
+            Edit::HotkeySet { .. } => "hotkey.set",
+            Edit::HotkeyClear { .. } => "hotkey.clear",
         }
     }
 }
@@ -474,6 +508,34 @@ impl Action {
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
             Action::SceneSwitch { .. } => "scene.switch",
+        }
+    }
+
+    /// The collection objects this action names, by kind and ID: what a hotkey binding
+    /// bound to it refers to (ADR-0040 §3). Deleting one of them removes the binding.
+    pub fn named_objects(&self) -> Vec<(EntityKind, &str)> {
+        match self {
+            Action::OutputStart { output_id }
+            | Action::OutputStop { output_id }
+            | Action::OutputSetKey { output_id, .. }
+            | Action::OutputClearKey { output_id } => {
+                vec![(EntityKind::Output, output_id.as_str())]
+            }
+            Action::SceneSwitch { scene_id } => vec![(EntityKind::Scene, scene_id.as_str())],
+        }
+    }
+
+    /// Why this action can't be bound to a hotkey, as the field within the action and the
+    /// reason, or `None` if it can. The engine rejects `hotkey.set` with it, so every
+    /// implementation gives the same one.
+    pub fn bind_problem(&self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Action::OutputSetKey { .. } => Some((
+                "type",
+                "`output.set_key` can't be bound: a stream key is never stored in the \
+                 collection (R-SEC-001)",
+            )),
+            _ => None,
         }
     }
 }

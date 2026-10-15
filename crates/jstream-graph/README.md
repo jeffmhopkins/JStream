@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:82526774ecb1ce02", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:8fedc8f3118e2ca4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: added State.hotkeys, the Hotkeys apply bullet (check order, inverses, delete removal, touched), state.get/delete.plan hotkeys, persistence (optional hotkeys, rebuilt last) and tests; matches hotkey.rs/apply.rs/plan.rs/persist" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -27,8 +27,10 @@ codes, so the engine passes them to clients unchanged.
   sources against. The engine supplies them (`Graph::with_kinds`); they are not
   collection state, and `Graph::new()` describes none.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
-  in display order, the `outputs`, keyed by ID, and the `encoders` (encoder profiles),
-  keyed by ID.
+  in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
+  keyed by ID, and the `hotkeys`: each `Chord` bound to the protocol `Action` it fires
+  ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
+  §3). A binding always names objects that exist.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -141,6 +143,16 @@ the batch **touched**.
   addressing. No keyframe overrides exist yet, so no edit drops any
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
   §1 applies once they do).
+- **Hotkeys** (`hotkey.rs`): `hotkey.set` binds a chord to an action and
+  `hotkey.clear` unbinds it, checked in this order: the chord's spelling
+  (`invalid_argument` on `chord`), whether it is already bound (`already_exists`) or
+  bound at all (`not_found`, entity `hotkey`), an action that can't be bound
+  (`output.set_key`, whose key is never stored), and the objects the action names
+  (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
+  `hotkey.set` in one batch. Deleting a scene, source, output or encoder profile removes
+  the bindings that name it, so none dangles: the result's `removed_hotkeys` lists them,
+  and the delete's inverse ends with a `hotkey.set` for each, after the object is back.
+  The touched set names the hotkey, and the objects a `hotkey.set` action names as used.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
   scenes and sources its settings refer to. Asset references are not edges. Every edit
@@ -151,7 +163,7 @@ the batch **touched**.
   (for example scene `a` -> source `sa` -> scene `a`).
 
 **Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
-collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list` and
+collection (`state.get`, which also carries the hotkey bindings ordered by chord, `scene.list`, `source.list`, `item.list`, `output.list` and
 `encoder.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
@@ -162,7 +174,7 @@ target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the 
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
 to `null` (one `source.set_settings` per source), and the target's own delete comes
-last. Sources come ordered by ID, scenes in
+last. The plan also lists the hotkey bindings those deletes remove. Sources come ordered by ID, scenes in
 display order, items bottom first, outputs and encoder profiles ordered by ID.
 `state.get` carries the
 canvas. A geometry item reads its `geometry`, and the deprecated `transform` view the
@@ -180,7 +192,8 @@ and `visible`), sources ordered by ID (with `kind_version`, the descriptor versi
 `builtin` source's settings follow, ADR-0025, and `duplicated_from` as stored, even
 when it names a deleted source), outputs ordered by ID (each with its
 `encoder_profile`, omitted for the default), and encoder profiles (`encoders`) ordered by
-ID, omitted when there are none. Kinds, undo history and runtime state are not in it, and
+ID, omitted when there are none, then the `hotkeys` ordered by chord, also omitted when
+there are none (so no `schema_version` bump: an older file has none). Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -193,7 +206,8 @@ the engine's; this crate does no I/O.
   rebuilds the state by applying the edits that create it, one at a time, to an empty
   graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
   sources its settings refer to), then items in their placement form with their crop
-  and visibility, then encoder profiles, then outputs with their profiles. A
+  and visibility, then encoder profiles, then outputs with their profiles, then hotkeys
+  (`` hotkey `F1` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
@@ -215,6 +229,7 @@ placement conversions and their inverses, geometry and canvas validation,
 delete rejection by references, roles, moves and the grouping and ungrouping batches,
 `scene_id` addressing, output URL checks and the refused delete of a running
 output, encoder edits and their inverses (a profile freed and deleted in one batch),
+hotkey checks, rebinds and the bindings deletes remove (and restore on undo),
 exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
@@ -236,13 +251,13 @@ works out itself. The
 seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
-scene `b` made a group, a clone and a `duplicated_from` naming a missing source, less the virtual camera the parity collection gained later) plus a source whose
+scene `b` made a group, a clone and a `duplicated_from` naming a missing source, less the virtual camera and the hotkeys the parity collection gained later) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none; a profile's
-round trip; a virtual camera's round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
+round trip; a virtual camera's round trip; hotkeys' round trip, and a file whose binding names a missing scene refused; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that

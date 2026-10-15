@@ -21,11 +21,11 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
+    Action, Batch, Call, CallResult, Canvas, Chord, ClientId, Crop, Edit, EncoderProfile,
     EncoderProfileId, EncoderProfileInfo, EntityKind, Event, GeometryError, Hello, HistoryCall,
-    HistoryDirection, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId,
-    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
+    HistoryDirection, HotkeyBinding, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform,
+    OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError,
+    Query, QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
     SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind,
     Welcome,
 };
@@ -393,6 +393,8 @@ struct Collection {
     output_encoders: BTreeMap<OutputId, EncoderProfileId>,
     /// The encoder profiles, ordered by ID: name and encoding.
     encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
+    /// The hotkey bindings, ordered by chord.
+    hotkeys: BTreeMap<Chord, Action>,
 }
 
 /// A source: its name, what it shows, and its settings. The mock describes no kinds, so
@@ -465,9 +467,12 @@ impl State {
         if batch.edits.is_empty() {
             return Err(ProtocolError::EmptyBatch);
         }
-        let (rev, inverse) = self.apply(batch.edits)?;
+        let (rev, inverse, removed_hotkeys) = self.apply(batch.edits)?;
         self.history.record_batch(client_id, rev, inverse);
-        let result = CallResult::Batch { rev };
+        let result = CallResult::Batch {
+            rev,
+            removed_hotkeys,
+        };
         if let Some(key) = batch.idempotency_key {
             self.applied
                 .insert((client_id.clone(), key), result.clone());
@@ -512,7 +517,7 @@ impl State {
         }
         // With no other client's change since, only a running output can be in the way
         // (undoing its `output.create`): keep the step for a retry once it stops.
-        let (rev, inverse) = match self.apply(step.edits.clone()) {
+        let (rev, inverse, _) = match self.apply(step.edits.clone()) {
             Ok(applied) => applied,
             Err(error) => {
                 self.history.put_back(client_id, direction, step);
@@ -535,14 +540,32 @@ impl State {
         Ok(result)
     }
 
-    /// Applies `edits` atomically as one `rev` bump, and returns that `rev` and the
-    /// edits that undo them.
-    fn apply(&mut self, edits: Vec<Edit>) -> Result<(Rev, Vec<Edit>), ProtocolError> {
+    /// Applies `edits` atomically as one `rev` bump, and returns that `rev`, the edits
+    /// that undo them, and the hotkey bindings their deletes removed (ADR-0040 §3).
+    fn apply(
+        &mut self,
+        edits: Vec<Edit>,
+    ) -> Result<(Rev, Vec<Edit>, Vec<HotkeyBinding>), ProtocolError> {
         let running = self.running();
         let mut next = self.collection.clone();
         let mut undo = Vec::with_capacity(edits.len());
+        let mut removed = Vec::new();
         for (at, edit) in edits.into_iter().enumerate() {
-            undo.push(next.apply(edit, at, &running)?);
+            let deleted = match &edit {
+                Edit::SceneDelete { scene_id } => Some((EntityKind::Scene, scene_id.to_string())),
+                Edit::SourceDelete { source_id } => {
+                    Some((EntityKind::Source, source_id.to_string()))
+                }
+                Edit::OutputDelete { output_id } => {
+                    Some((EntityKind::Output, output_id.to_string()))
+                }
+                _ => None,
+            };
+            let mut inverse = next.apply(edit, at, &running)?;
+            if let Some((entity, id)) = deleted {
+                inverse.extend(next.remove_hotkeys_naming(entity, &id, &mut removed));
+            }
+            undo.push(inverse);
         }
         next.rev = self
             .collection
@@ -553,7 +576,7 @@ impl State {
             })?;
         let rev = next.rev;
         self.collection = next;
-        Ok((rev, undo.into_iter().rev().flatten().collect()))
+        Ok((rev, undo.into_iter().rev().flatten().collect(), removed))
     }
 
     /// What follows every applied batch, undo and redo: the outputs follow the
@@ -740,6 +763,12 @@ impl State {
                     .collect(),
                 outputs: self.collection.output_infos(),
                 encoders: self.collection.encoder_infos(),
+                hotkeys: self
+                    .collection
+                    .hotkeys
+                    .iter()
+                    .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+                    .collect(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
@@ -1293,9 +1322,66 @@ impl Collection {
                     profile,
                 }]
             }
+            // The graph's checks, in its order: the chord, whether it is bound, whether
+            // the action can be bound, then the objects it names.
+            Edit::HotkeySet { chord, action } => {
+                if let Some(reason) = chord.problem() {
+                    return Err(invalid(at, "chord", reason));
+                }
+                if self.hotkeys.contains_key(&chord) {
+                    return Err(already_exists(EntityKind::Hotkey, chord.as_str()));
+                }
+                if let Some((field, reason)) = action.bind_problem() {
+                    return Err(invalid(at, &format!("action.{field}"), reason));
+                }
+                for (entity, id) in action.named_objects() {
+                    let exists = match entity {
+                        EntityKind::Scene => self.scenes.iter().any(|s| s.id.as_str() == id),
+                        EntityKind::Source => self.sources.keys().any(|s| s.as_str() == id),
+                        EntityKind::Output => self.outputs.keys().any(|o| o.as_str() == id),
+                        _ => false,
+                    };
+                    if !exists {
+                        return Err(not_found(entity, id));
+                    }
+                }
+                self.hotkeys.insert(chord.clone(), action);
+                vec![Edit::HotkeyClear { chord }]
+            }
+            Edit::HotkeyClear { chord } => {
+                let Some(action) = self.hotkeys.remove(&chord) else {
+                    return Err(not_found(EntityKind::Hotkey, chord.as_str()));
+                };
+                vec![Edit::HotkeySet { chord, action }]
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
+    }
+
+    /// Removes the hotkey bindings whose action names `entity` `id`, which a delete has
+    /// just removed, records them in `removed`, and returns the `hotkey.set` edits that
+    /// restore them, ordered by chord.
+    fn remove_hotkeys_naming(
+        &mut self,
+        entity: EntityKind,
+        id: &str,
+        removed: &mut Vec<HotkeyBinding>,
+    ) -> Vec<Edit> {
+        let chords: Vec<Chord> = self
+            .hotkeys
+            .iter()
+            .filter(|(_, action)| action.named_objects().contains(&(entity, id)))
+            .map(|(chord, _)| chord.clone())
+            .collect();
+        chords
+            .into_iter()
+            .filter_map(|chord| {
+                let action = self.hotkeys.remove(&chord)?;
+                removed.push(HotkeyBinding::new(chord.clone(), &action));
+                Some(Edit::HotkeySet { chord, action })
+            })
+            .collect()
     }
 
     /// Applies `item.move` with `jstream-graph`'s checks in its order: the item, the
@@ -2005,7 +2091,7 @@ mod tests {
 
     fn batch(control: &dyn Control, batch: Batch) -> Result<Rev, ControlError> {
         match block_on(control.call(Call::Batch(batch)))?.result {
-            CallResult::Batch { rev } => Ok(rev),
+            CallResult::Batch { rev, .. } => Ok(rev),
             other => panic!("not a batch result: {other:?}"),
         }
     }
@@ -2280,6 +2366,7 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                hotkeys,
                 ..
             } => QueryResult::StateGet {
                 rev: Rev(0),
@@ -2288,6 +2375,7 @@ mod tests {
                 scenes,
                 outputs,
                 encoders,
+                hotkeys,
             },
             other => panic!("not a state: {other:?}"),
         }
@@ -2297,7 +2385,7 @@ mod tests {
     /// inverse edits `jstream-graph` builds: a removed item comes back at its index with
     /// its placement (in its own form, transform or geometry), crop and visibility, a
     /// deleted scene with its items and its position, a source with its settings and its
-    /// `duplicated_from`, an item's source, an output with its encoder profile, the encoder profiles, and the canvas size. Its
+    /// `duplicated_from`, an item's source, an output with its encoder profile, the encoder profiles, the canvas size, and the hotkey bindings that the deletes of scene `a` and output `yt` removed. Its
     /// placement, crop and visibility edits name the item's own scene, and their
     /// inverses do too.
     #[test]
@@ -2413,6 +2501,7 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                hotkeys: vec![],
             }
         );
         drain(&mut events);
@@ -2809,6 +2898,39 @@ mod tests {
             let got = query(&*control, call.clone()).map_err(|error| error.protocol().cloned());
             assert_eq!(got, expected.map_err(Some), "{call:?}");
         }
+    }
+
+    /// ADR-0040 §3, as `jstream-graph` does it: deleting what a binding names removes the
+    /// binding, the batch result lists it, and undo brings it back.
+    #[test]
+    fn deletes_remove_the_hotkeys_naming_their_target() {
+        let (_engine, control) = parity_engine();
+        let delete = Batch::single(Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        });
+        let result = block_on(control.call(Call::Batch(delete)))
+            .expect("applies")
+            .result;
+        let CallResult::Batch {
+            removed_hotkeys, ..
+        } = result
+        else {
+            panic!("not a batch result: {result:?}");
+        };
+        let start_yt = parity::hotkeys()
+            .into_iter()
+            .find(|b| b.chord.as_str() == "Ctrl+Digit1");
+        assert_eq!(removed_hotkeys, start_yt.into_iter().collect::<Vec<_>>());
+        let QueryResult::StateGet { hotkeys, .. } = state(&*control) else {
+            panic!("not a state");
+        };
+        let chords: Vec<_> = hotkeys.iter().map(|b| b.chord.as_str()).collect();
+        assert_eq!(chords, ["F1"]);
+        assert!(undo(&*control).is_ok());
+        let QueryResult::StateGet { hotkeys, .. } = state(&*control) else {
+            panic!("not a state");
+        };
+        assert_eq!(hotkeys, parity::hotkeys());
     }
 
     #[test]

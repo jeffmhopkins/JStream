@@ -4,6 +4,7 @@ use crate::command::{Crop, Edit, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
+use crate::hotkey::HotkeyBinding;
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::output::OutputInfo;
@@ -40,7 +41,8 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (the canvas, every source, every scene with its
-    /// items, every output and every encoder profile) at one revision: what a client
+    /// items, every output, every encoder profile and every hotkey binding) at one
+    /// revision: what a client
     /// reads on connecting, after a `state.changed` it didn't cause, or before an edit it
     /// sends with `expected_rev`.
     #[serde(rename = "state.get")]
@@ -80,7 +82,8 @@ pub enum Query {
     /// lists those `blockers`). The plan removes the items that place a deleted source,
     /// deletes the `scene` sources that show a deleted scene (and their items), and sets
     /// settings references to the target to `null`, keeping the sources that hold them.
-    /// The client shows it, then sends its `edits` as an ordinary batch with
+    /// It also lists the hotkey bindings the delete removes with what they name
+    /// (ADR-0040 §3), which need no edit of their own. The client shows it, then sends its `edits` as an ordinary batch with
     /// `expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with
     /// `not_found` if the target doesn't exist.
     #[serde(rename = "delete.plan")]
@@ -206,6 +209,10 @@ pub enum QueryResult {
         /// 0.13) parses as empty.
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
+        /// Every hotkey binding, ordered by chord. Missing (from a server older than
+        /// 0.19) parses as empty.
+        #[serde(default)]
+        hotkeys: Vec<HotkeyBinding>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -268,6 +275,12 @@ pub enum QueryResult {
         /// `source.delete` for the `scene` sources that show a deleted scene, and last the
         /// delete of the target itself.
         edits: Vec<Edit>,
+        /// The hotkey bindings the batch removes because their action names an object it
+        /// deletes, ordered by chord, so the client can say "this also removes the hotkey
+        /// Ctrl+Digit1". The deletes remove them; undo restores them. Omitted when there
+        /// are none, and missing (from a server older than 0.19) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        hotkeys: Vec<HotkeyBinding>,
     },
 }
 

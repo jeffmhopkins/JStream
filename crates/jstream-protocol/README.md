@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:0911af485ca155fb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:0b4166cc36df27f4", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: command list and Hotkeys module bullet, PROTOCOL_VERSION 0.19, parity hotkey cases; matches hotkey.rs/command.rs/parity.rs" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -38,16 +38,20 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `item.set_visible`, `item.set_source`, `canvas.set_size`, `source.create`,
   `source.rename`, `source.set_settings`, `source.duplicate`, `source.delete`,
   `output.create`, `output.set_target`, `output.set_encoder`, `output.delete`,
-  `encoder.create`, `encoder.update`, `encoder.delete`), with `ItemTransform`
-  (deprecated), `Crop`, `SourceKind` and `SceneRole`;
+  `encoder.create`, `encoder.update`, `encoder.delete`, `hotkey.set`, `hotkey.clear`),
+  with `ItemTransform` (deprecated), `Crop`, `SourceKind` and `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch`);
+  `scene.switch`), with `Action::named_objects` and `Action::bind_problem`, which every
+  implementation uses to check and follow a hotkey's action;
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+- **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
+  `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
+  every implementation), and `HotkeyBinding`, a chord and its action as reads report it.
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
@@ -86,8 +90,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
-  the `virtual_cam` output kind; 0.17 added `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
+  hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
+  `hotkeys` and the batch result's `removed_hotkeys`); 0.18 added the `virtual_cam`
+  output kind, 0.17 `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
@@ -102,10 +108,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output and two
-  encoder profiles), the exact answer to every collection read of it (`output.list`
+  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output, two
+  encoder profiles and two hotkeys, one of them rebound), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path and encoder profile checks, and `item.set_source` and
+  URL, recording path, encoder profile and hotkey checks, and `item.set_source` and
   `duplicated_from`, included). The collection also holds a clone made with
   `source.duplicate` and `item.set_source`, and a `duplicated_from` naming a missing
   source.
@@ -121,7 +127,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:3185940baa7febfa", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:1076f3410737426d", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: new Hotkey bindings (0.19) block (chord syntax, set/clear errors, set_key refused, delete removal, read form as Value), batch removed_hotkeys, state.get/delete.plan hotkeys; matches code and snapshots" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -300,7 +306,9 @@ never a type per kind.
   target. The `invalid_argument` lists every blocker in `blockers`, each a `Blocker`
   `{entity, id, field}`: the item (`source_id`), the `scene` source (`kind.scene_id`)
   or the source whose setting refers to it (`settings.<param>`). `delete.plan` returns
-  the batch that removes them with the target (see [Queries](#design)).
+  the batch that removes them with the target (see [Queries](#design)). Hotkey
+  bindings are never blockers: a delete removes the bindings that name its target
+  (below).
 
 `SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
 parameters), so a reader of 0.7 messages sees no change for those.
@@ -358,6 +366,43 @@ no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe 
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
 
+Hotkey bindings (0.19) are collection state too
+([ADR-0024 §5](../../docs/adr/0024-scene-structure.md),
+[ADR-0040 §3](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)):
+a `Chord` bound to an `Action`, which a client that listens for keys sends when the
+chord is pressed. The engine only stores bindings; the desktop host (OS-global
+shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon none.
+- **Chords.** Zero or more of the modifiers `Ctrl`, `Alt`, `Shift` and `Meta`, each at
+  most once and in that order, then one key, joined by `+`: `F1`, `Ctrl+Digit1`,
+  `Ctrl+Shift+KeyM`. The key is a W3C UI Events
+  [`KeyboardEvent.code`](https://www.w3.org/TR/uievents-code/) value from
+  `Chord::KEYS` (letters, digits, punctuation, function keys F1–F24, editing and
+  arrow keys, the keypad and the media keys): the physical key, whatever the layout,
+  which is what browsers and Tauri's global-shortcut API report. A chord has exactly
+  one spelling, so two bindings are on the same keys exactly when their strings are
+  equal. Anything else is `invalid_argument` on `chord`, with `Chord::problem`'s reason.
+- **`hotkey.set {chord, action}`** binds a chord; its inverse is `hotkey.clear`. It is
+  refused with `already_exists` (entity `hotkey`, the chord as `id`) for a chord that
+  is bound: rebinding is a batch of `hotkey.clear` then `hotkey.set`. `action` is an
+  action request, checked as an `action` call is, and only actions can be bound, so a
+  hotkey never adds to an undo history. `output.set_key` can't be bound (its stream key
+  would be stored in the collection, [R-SEC-001](../../docs/RULES.md#R-SEC-001)):
+  `invalid_argument` on `action.type`. A scene or output the action names must exist,
+  else `not_found`.
+- **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
+  inverse is `hotkey.set` with the action.
+- **Deleting what a binding names removes the binding**, in the same edit:
+  `scene.delete`, `source.delete` and `output.delete` drop every binding whose action
+  names their target (`Action::named_objects`), and their inverses restore the
+  bindings after the target. If another client has bound one of those chords since,
+  that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
+  A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`
+  lists the ones its batch would (`hotkeys`), so a client can say "this also removes
+  the hotkey Ctrl+Digit1".
+- Reads report a binding as a `HotkeyBinding {chord, action}` whose `action` is plain
+  JSON, so a client older than an action type still reads the collection; it keeps the
+  binding and can't run it. `HotkeyBinding::action` parses it.
+
 ### Batches, revisions and `expected_rev`
 
 Edits are only sent inside a `Batch`; a single edit is a batch of one.
@@ -376,7 +421,8 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
   batch applied with a key. A retry with the same key is not applied again and gets the
   original result, even if `rev` has moved on since.
 - Results: a successful batch answers `{"kind":"batch","rev":N}`, the revision it
-  produced. Queries that read collection state report the `rev` they read.
+  produced, with `removed_hotkeys` when its deletes removed hotkey bindings (0.19;
+  omitted when there are none). Queries that read collection state report the `rev` they read.
 
 ### Queries
 
@@ -387,7 +433,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
-  missing from a pre-0.13 server, it parses as empty). A client reads it on connecting, and again after a
+  missing from a pre-0.13 server, it parses as empty) and every hotkey binding
+  (`hotkeys`, ordered by chord; missing from a pre-0.19 server, it parses as empty). A
+  client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
@@ -421,7 +469,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `source.set_settings` per source, which keeps the source), delete the `scene` sources
   that show a deleted scene, and last delete the target. Deleting a scene deletes the
   `scene` sources that show it, and the cascade stops there, since deleting a source
-  deletes no scene. A target nothing refers to plans just its own delete. The client
+  deletes no scene. A target nothing refers to plans just its own delete. `hotkeys`
+  lists the bindings the batch removes with what they name, ordered by chord (0.19;
+  omitted when there are none); they need no edit of their own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
   refused if the state moved on, and its undo is the batch's inverse.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard

@@ -10,12 +10,12 @@
 //! Docs: crates/jstream-protocol/README.md#purpose
 
 use crate::{
-    AudioCodec, AudioEncoding, Batch, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId,
-    EncoderProfileInfo, EntityKind, Finite32, FitMode, HardwarePreference, ItemGeometry, ItemId,
-    ItemInfo, ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind,
-    PlacementForm, ProtocolError, Query, QueryResult, RateControl, RecordContainer, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId, SourceInfo,
-    SourceKind, Vec2, VideoCodec, VideoEncoding,
+    Action, AudioCodec, AudioEncoding, Batch, Canvas, Chord, Crop, Edit, EncoderProfile,
+    EncoderProfileId, EncoderProfileInfo, EntityKind, Finite32, FitMode, HardwarePreference,
+    HotkeyBinding, ItemGeometry, ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor,
+    OutputId, OutputInfo, OutputKind, PlacementForm, ProtocolError, Query, QueryResult,
+    RateControl, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
+    Size, SourceId, SourceInfo, SourceKind, Vec2, VideoCodec, VideoEncoding,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
@@ -47,7 +47,9 @@ pub fn kinds() -> Vec<KindDescriptor> {
 /// used by `rec`) and `low` (used by `yt`, `tw` keeping the engine's default). Then the
 /// references and clones of ADR-0023: `cam` is duplicated as `cam_copy` and `i1` is
 /// switched to place the copy, keeping its ID and position; `aux` is created with a
-/// `duplicated_from` naming a source that doesn't exist, which reads as absent.
+/// `duplicated_from` naming a source that doesn't exist, which reads as absent. Last, the
+/// hotkeys of ADR-0024 §5: `F1` switches to scene `a`, and `Ctrl+Digit1`, bound first to
+/// `output.stop` and rebound by a clear and a set, starts output `yt`.
 ///
 /// Sources, outputs and encoder profiles are created in the opposite order of their IDs, so reads that
 /// order them by ID can't pass by echoing creation order.
@@ -184,6 +186,23 @@ pub fn collection() -> Batch {
                 duplicated_from: Some(SourceId::new("gone")),
                 ..aux()
             }),
+            Edit::HotkeySet {
+                chord: Chord::new("F1"),
+                action: switch_to_a(),
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("Ctrl+Digit1"),
+                action: Action::OutputStop {
+                    output_id: OutputId::new("yt"),
+                },
+            },
+            Edit::HotkeyClear {
+                chord: Chord::new("Ctrl+Digit1"),
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("Ctrl+Digit1"),
+                action: start_yt(),
+            },
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
@@ -275,6 +294,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 ],
                 outputs: outputs(),
                 encoders: encoders(),
+                hotkeys: hotkeys(),
             }),
         ),
         // Outputs by ID, whatever order they were created in.
@@ -763,6 +783,85 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 id: "ghost".into(),
             },
         ),
+        // Hotkeys (ADR-0024 §5): one spelling per chord, one binding per chord, and only
+        // actions that name objects that exist and keep no secret.
+        (
+            Batch::single(Edit::HotkeySet {
+                chord: Chord::new("Shift+Ctrl+KeyA"),
+                action: start_yt(),
+            }),
+            invalid(
+                "edits.0.chord",
+                "modifiers must each appear once, in the order Ctrl, Alt, Shift, Meta",
+            ),
+        ),
+        (
+            Batch::single(Edit::HotkeySet {
+                chord: Chord::new("F1"),
+                action: start_yt(),
+            }),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Hotkey,
+                id: "F1".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::HotkeySet {
+                chord: Chord::new("F2"),
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("ghost"),
+                },
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::HotkeySet {
+                chord: Chord::new("F2"),
+                action: Action::OutputSetKey {
+                    output_id: OutputId::new("yt"),
+                    key: crate::SecretString::new("live_secret"),
+                },
+            }),
+            invalid(
+                "edits.0.action.type",
+                "`output.set_key` can't be bound: a stream key is never stored in the \
+                 collection (R-SEC-001)",
+            ),
+        ),
+        (
+            Batch::single(Edit::HotkeyClear {
+                chord: Chord::new("F2"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Hotkey,
+                id: "F2".into(),
+            },
+        ),
+    ]
+}
+
+/// The action `F1` runs.
+fn switch_to_a() -> Action {
+    Action::SceneSwitch {
+        scene_id: SceneId::new("a"),
+    }
+}
+
+/// The action `Ctrl+Digit1` runs.
+fn start_yt() -> Action {
+    Action::OutputStart {
+        output_id: OutputId::new("yt"),
+    }
+}
+
+/// The collection's hotkey bindings, ordered by chord.
+pub fn hotkeys() -> Vec<HotkeyBinding> {
+    vec![
+        HotkeyBinding::new(Chord::new("Ctrl+Digit1"), &start_yt()),
+        HotkeyBinding::new(Chord::new("F1"), &switch_to_a()),
     ]
 }
 

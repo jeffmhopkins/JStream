@@ -357,7 +357,7 @@ fn a_batch_a_query_and_events_round_trip() {
 
     let response = ok(harness.run(control.call(create_scene("main"))));
     assert_eq!(response.id, RequestId::new("req_1"));
-    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(response.result, CallResult::batch(Rev(1)));
     assert_eq!(engine.rev(), Rev(1));
     // The event carries this client's request ID, as the client chose it.
     assert_eq!(
@@ -431,7 +431,7 @@ fn concurrent_calls_each_get_their_own_answer_and_event() {
     let mut by_request = Vec::new();
     for answer in answers {
         let response = ok(answer);
-        let CallResult::Batch { rev } = response.result else {
+        let CallResult::Batch { rev, .. } = response.result else {
             panic!("not a batch result: {:?}", response.result);
         };
         by_request.push((response.id, rev));
@@ -773,7 +773,7 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
     });
     // And its calls are answered.
     let response = ok(harness.run(control.call(create_scene("main"))));
-    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(response.result, CallResult::batch(Rev(1)));
     assert!(matches!(
         next_event(&harness, &mut events),
         Some(Event::StateChanged { rev: Rev(1), .. })
@@ -981,7 +981,7 @@ fn a_client_that_never_says_hello_is_closed() {
     // The client that said hello in time is still served after the deadline.
     harness.run(async { tokio::time::sleep(Duration::from_millis(400)).await });
     let response = ok(harness.run(control.call(create_scene("main"))));
-    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(response.result, CallResult::batch(Rev(1)));
 }
 
 /// At most `max_connections` (32 by default) WebSocket connections are open at once: one
@@ -1078,7 +1078,7 @@ fn a_client_that_sends_headers_too_slowly_is_dropped() {
     // The client whose request was accepted is still served after the deadline.
     harness.run(async { tokio::time::sleep(Duration::from_millis(400)).await });
     let response = ok(harness.run(control.call(create_scene("main"))));
-    assert_eq!(response.result, CallResult::Batch { rev: Rev(1) });
+    assert_eq!(response.result, CallResult::batch(Rev(1)));
 }
 
 // MCP's streamable-HTTP transport (`mcp.rs`), driven with raw HTTP/1.1 requests.

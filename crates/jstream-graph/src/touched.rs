@@ -3,7 +3,9 @@
 //! [`Graph::apply`](crate::Graph::apply) returns it with every batch. The engine's undo
 //! history logs it and checks a step's touched set against other clients' later ones.
 
-use jstream_protocol::{Edit, EncoderProfileId, ItemId, OutputId, SceneId, SourceId, SourceKind};
+use jstream_protocol::{
+    Chord, Edit, EncoderProfileId, EntityKind, ItemId, OutputId, SceneId, SourceId, SourceKind,
+};
 use std::collections::BTreeSet;
 
 /// An object of the collection, named by its ID.
@@ -14,6 +16,8 @@ enum Object {
     Source(SourceId),
     Output(OutputId),
     Encoder(EncoderProfileId),
+    /// A hotkey binding, by its chord.
+    Hotkey(Chord),
 }
 
 /// A property an edit sets, on its object.
@@ -171,6 +175,26 @@ impl Touched {
                 let encoder = Object::Encoder(profile_id.clone());
                 self.prop(encoder.clone(), Prop::Name);
                 self.prop(encoder, Prop::Encoding);
+            }
+            // A binding uses what its action names, so deleting that object (which
+            // removes the binding) and binding to it conflict.
+            Edit::HotkeySet { chord, action } => {
+                self.exists.insert(Object::Hotkey(chord.clone()));
+                for (entity, id) in action.named_objects() {
+                    let object = match entity {
+                        EntityKind::Scene => Object::Scene(SceneId::new(id)),
+                        EntityKind::Source => Object::Source(SourceId::new(id)),
+                        EntityKind::Output => Object::Output(OutputId::new(id)),
+                        _ => {
+                            self.unknown = true;
+                            continue;
+                        }
+                    };
+                    self.uses.insert(object);
+                }
+            }
+            Edit::HotkeyClear { chord } => {
+                self.exists.insert(Object::Hotkey(chord.clone()));
             }
             _ => self.unknown = true,
         }

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:d062616cd6fdcbc4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: only lib.rs's test module and style.css's header comment changed; contents list holds" }
+verified = { hash = "b3:e932fdf92a9fd0f7", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: one-line pattern change (DeletePlan ..) in canvas/model.rs; UI does not show hotkeys yet; holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:be814d81e88b36fd", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 8d080c0 (#269 daemon e2e test, #282 UI inline-style check, #276 README progress table, #270 ADR-0047 proposed); stamp-only conflicts; re-read main's text beside this PR's (no output-kind text changed); holds" }
+verified = { hash = "b3:2f973aa71a7a8951", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: one-line pattern change in canvas/model.rs; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -118,7 +118,7 @@ verified = { hash = "b3:be814d81e88b36fd", by = "agent:claude@session_01Wfrx1wPt
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:8120b6e7a0057203", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: Styles bullet now says the test refuses any style attribute, static or set at run time (style=move, attr:style), outside test modules; matches sets_style_attribute in lib.rs" }
+verified = { hash = "b3:9a839098ba71bc5b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: canvas delete-plan match now ignores the new hotkeys field with ..; canvas behaviour unchanged; holds" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)

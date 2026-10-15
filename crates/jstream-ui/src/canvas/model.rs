@@ -178,7 +178,7 @@ pub async fn commit(
         .await?
         .result
     {
-        CallResult::Batch { rev } => Ok(rev),
+        CallResult::Batch { rev, .. } => Ok(rev),
         _ => Err(CanvasError::UnexpectedAnswer {
             call: "item.set_geometry",
         }),

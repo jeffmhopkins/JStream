@@ -8,8 +8,8 @@
 
 use crate::model::{Encoder, Graph, Item, Output, Placement, Scene, Source, State};
 use jstream_protocol::{
-    EncoderProfileInfo, EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query,
-    QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
+    EncoderProfileInfo, EntityKind, HotkeyBinding, ItemInfo, KindDescriptor, OutputInfo,
+    ProtocolError, Query, QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
 };
 
 impl Graph {
@@ -121,7 +121,8 @@ impl Graph {
     }
 
     /// The `state.get` result: the canvas, every source by ID, every scene with its items
-    /// in display order, and every output and encoder profile by ID.
+    /// in display order, every output and encoder profile by ID, and every hotkey binding
+    /// by chord.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
@@ -134,6 +135,11 @@ impl Graph {
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
             encoders: self.state.encoders().map(Encoder::to_info).collect(),
+            hotkeys: self
+                .state
+                .hotkeys()
+                .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+                .collect(),
         }
     }
 }
@@ -290,6 +296,7 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                hotkeys: vec![],
             }
         );
         assert_eq!(

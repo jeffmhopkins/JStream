@@ -11,6 +11,7 @@ use crate::command::{Action, Batch};
 use crate::error::{ProtocolError, WireError};
 use crate::event::Event;
 use crate::history::HistoryCall;
+use crate::hotkey::HotkeyBinding;
 use crate::id::{ClientId, RequestId, Rev};
 use crate::query::{Query, QueryResult};
 use crate::version::ProtocolVersion;
@@ -130,6 +131,12 @@ pub enum CallResult {
     Batch {
         /// The revision the batch produced.
         rev: Rev,
+        /// The hotkey bindings the batch removed because their action named an object it
+        /// deleted (ADR-0040 §3), in the order it removed them. Undoing the batch restores
+        /// them. Omitted when there are none, and missing (from a server older than 0.19)
+        /// parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        removed_hotkeys: Vec<HotkeyBinding>,
     },
     /// The action was accepted. Its progress is reported by events.
     Action {},
@@ -150,6 +157,16 @@ pub enum CallResult {
         /// How many steps the client can redo.
         redo_depth: u32,
     },
+}
+
+impl CallResult {
+    /// A batch result at `rev` that removed no hotkey bindings.
+    pub fn batch(rev: Rev) -> Self {
+        CallResult::Batch {
+            rev,
+            removed_hotkeys: Vec::new(),
+        }
+    }
 }
 
 /// A failed request, a failed handshake, or a message that couldn't be parsed.

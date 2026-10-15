@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:0cee9228843ca676", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; shared-names bullet is main's; mock still accepts virtual_cam" }
+verified = { hash = "b3:b1aa150953a21491", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: mock gains hotkey bindings like the graph; purpose text unchanged and holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:dbd065bb673c1ddb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; set_target refusal for a virtual camera unchanged" }
+verified = { hash = "b3:6127103fe96f0543", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: added the mock's hotkey checks/order, removed_hotkeys on deletes, state.get hotkeys, and undo restoring removed bindings; matches mock.rs" }
 -->
 
 ### The trait
@@ -129,7 +129,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
-    naming a missing output, then a missing profile.
+    naming a missing output, then a missing profile;
+  - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, a refused
+    `output.set_key` action and a missing named scene or output, in that order, and
+    `hotkey.clear` of an unbound chord. Deleting a scene, source or output removes the
+    bindings naming it and lists them in the batch result's `removed_hotkeys`.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind, stores settings as sent without
@@ -144,7 +148,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   So it keeps everything an edit sets: the canvas, source names, kinds and settings,
   each item's placement (its transform, or its geometry and the transform view of it),
   crop and visibility, each scene's role and each item's scene after an `item.move`,
-  each output's kind, target and encoder profile, and each profile. `video.snapshot`
+  each output's kind, target and encoder profile, each profile, and the hotkey
+  bindings (in `state.get`, ordered by chord). `video.snapshot`
   is not one of those reads: the mock has no compositor and answers it with
   `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
@@ -171,7 +176,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   settings and `duplicated_from`, `item.set_source` back to the item's previous source,
   a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
-  back with its encoder profile, encoder profile edits undo to the profile as it was,
+  back with its encoder profile and the hotkeys its delete removed, hotkey edits undo
+  to the binding as it was, encoder profile edits undo to the profile as it was,
   and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with
