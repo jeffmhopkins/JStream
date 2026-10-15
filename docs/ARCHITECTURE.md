@@ -533,7 +533,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:de2fa87397bfc5b3", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): Studio mode and Transitions bullets now say protocol 0.18 (placeholder past main's 0.17); main's role text holds" }
+verified = { hash = "b3:b92a1ec0a3876b5e", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: re-stale only from cargo fmt rewrapping the stagger_ms description string; section text re-read, holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -667,7 +667,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:3cdb0e45e7413aa8", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; tool list holds" }
+verified = { hash = "b3:c2d1c44840dac4b3", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: tools.snap regenerated for doc strings; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -711,7 +711,7 @@ verified = { hash = "b3:3cdb0e45e7413aa8", by = "agent:claude@session_01StfvJc4T
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:17d14d8dfb453a64", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: Transitions paragraph as built: plan of Tracks in the shot, render thread samples at the frame time, retarget samples the running plan on the control thread with the same function (deviation from ADR-0029 7 wording noted in PR); perspective clamp >= 1" }
+verified = { hash = "b3:c7df4056dabfb8a3", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: B2: Transitions paragraph cites ADR-0049 for the stateless render thread and control-thread retarget sampling; text matches code" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -758,7 +758,8 @@ after the GPU has finished the last frame that used it (see
 thread (in `jstream-core`), NV12/P010 conversion (steps 4 and 5), 3D, effect packs, and
 the output path below.
 
-**Transitions** ([ADR-0029](adr/0029-transitions.md)). A Move is not a texture blend:
+**Transitions** ([ADR-0029](adr/0029-transitions.md), with
+[ADR-0049](adr/0049-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
 during it, the program mix is a synthetic item list whose transforms and opacity come
 from the transition state, drawn over both scenes' source images. The control thread
 pairs the items when the switch starts and publishes the plan in the shot, one

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:ac538970e7828985", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): scene.delete inverse now names scene.set_transitions beside main's role-carrying scene.create; main's proptest paragraph holds (transition edits not in its generator)" }
+verified = { hash = "b3:5222dc5435744efb", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: stale via protocol design (stagger wording); graph text unaffected; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

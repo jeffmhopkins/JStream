@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:b96b570ff36476fb", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: new Transitions bullet (Track, Endpoint, Timing, effects, clamping); dropped transitions from Not in this cut" }
+verified = { hash = "b3:fc3b982f3ee0e6af", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: B1: None effect waits for the item's delay (Timing::step, Track::end_ms at the delay); README says so" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -69,7 +69,8 @@ and calls this crate.
   a `Track` is one item's part in a transition: a `Pair` that interpolates between two
   `Endpoint`s (a geometry, a crop and an opacity), an `Appear` or a `Disappear` with
   its effect (`Fade`, `Scale` to 65 %, `Slide` to the nearest canvas edge, or `None`),
-  each with its `Timing` (delay, duration and easing). `Track::sample` gives the
+  each with its `Timing` (delay, duration and easing); `None` waits for the delay,
+  then shows or hides the item at once. `Track::sample` gives the
   endpoint at a time since the start, or nothing once the item is invisible; it is a
   pure function, so the render thread and the control thread that retargets a running
   transition get the same answer. Angles take the shortest way round, discrete fields
@@ -124,7 +125,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:14ba5bd7dcb55d25", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1: re-read; transition.rs adds pure sampling, no passes change and no per-item allocation; holds" }
+verified = { hash = "b3:7b0a4b149bf65d5d", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: B1 fix is pure arithmetic in Track::sample; passes unchanged; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:3e2270ad31d82a56", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): version line: 0.18 placeholder for T1 above main's 0.17 (scene.create role); contents hold" }
+verified = { hash = "b3:9577b592fc543155", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: re-stale only from cargo fmt rewrapping the stagger_ms description string; section text re-read, holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -132,7 +132,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:c0a2ce7939a360c6", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): Undo paragraph now names item.set_transition, scene.set_transitions and transition.delete's inverse beside main's role text; transitions subsection marked 0.18 placeholder" }
+verified = { hash = "b3:d8f94b10e348ed5b", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: re-stale only from cargo fmt rewrapping the stagger_ms description string; section text re-read, holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -371,7 +371,8 @@ the model (0.18). A transition preset is collection state:
 `{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
 kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
 `settings` are checked against its descriptor as a source's are (`unmatched`, the
-effect for items nothing pairs, and `stagger_ms` for `fade` and `move`).
+effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
+stacking order, for `fade` and `move`; [ADR-0049](../../docs/adr/0049-transition-mechanics-and-studio-preview.md)).
 
 - `transition.create` adds a preset, `transition.update` changes its fields or patches
   its settings (a new `kind` resets the settings to that kind's defaults, overlaid by

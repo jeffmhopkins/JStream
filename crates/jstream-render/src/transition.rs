@@ -84,6 +84,16 @@ impl Timing {
     pub fn end_ms(&self) -> f32 {
         self.delay_ms + self.duration_ms.max(0.0)
     }
+
+    /// 0 before the item's start and 1 from it on: the progress of an item with no
+    /// animation (`Effect::None`), which still waits for its delay.
+    pub fn step(&self, elapsed_ms: f32) -> f32 {
+        if elapsed_ms >= self.delay_ms {
+            1.0
+        } else {
+            0.0
+        }
+    }
 }
 
 /// One item's movement over a transition.
@@ -124,6 +134,16 @@ impl Track {
     /// When this track is done, in milliseconds from the start of the transition.
     pub fn end_ms(&self) -> f32 {
         match self {
+            Track::Appear {
+                effect: Effect::None,
+                timing,
+                ..
+            }
+            | Track::Disappear {
+                effect: Effect::None,
+                timing,
+                ..
+            } => timing.delay_ms,
             Track::Pair { timing, .. }
             | Track::Appear { timing, .. }
             | Track::Disappear { timing, .. } => timing.end_ms(),
@@ -150,7 +170,7 @@ impl Track {
             }
             Track::Appear { to, effect, timing } => {
                 let k = match effect {
-                    Effect::None => 1.0,
+                    Effect::None => timing.step(elapsed_ms),
                     _ => timing.progress(elapsed_ms).clamp(0.0, 1.0),
                 };
                 Endpoint {
@@ -165,7 +185,7 @@ impl Track {
                 timing,
             } => {
                 let k = match effect {
-                    Effect::None => 1.0,
+                    Effect::None => timing.step(elapsed_ms),
                     _ => timing.progress(elapsed_ms),
                 };
                 Endpoint {
@@ -413,12 +433,26 @@ mod tests {
         let almost = slide.sample(999.0, CANVAS).expect("drawn");
         assert!((centre(&almost).0 - (100.0 - 149.85)).abs() < 1e-2);
 
+        // `None` waits for the item's start, then shows (or hides) it at once.
+        let delayed = Timing {
+            delay_ms: 200.0,
+            ..linear(500.0)
+        };
         let none = Track::Appear {
             to: item,
             effect: Effect::None,
-            timing: linear(500.0),
+            timing: delayed,
         };
-        assert_eq!(none.sample(0.0, CANVAS).map(|e| e.opacity), Some(1.0));
+        assert_eq!(none.sample(199.0, CANVAS), None, "not before its delay");
+        assert_eq!(none.sample(200.0, CANVAS).map(|e| e.opacity), Some(1.0));
+        assert_eq!(none.end_ms(), 200.0);
+        let gone = Track::Disappear {
+            from: item,
+            effect: Effect::None,
+            timing: delayed,
+        };
+        assert_eq!(gone.sample(199.0, CANVAS).map(|e| e.opacity), Some(1.0));
+        assert_eq!(gone.sample(200.0, CANVAS), None, "gone from its delay");
     }
 
     #[test]

@@ -1244,7 +1244,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "delay_ms": {
                 "default": 0,
-                "description": "Milliseconds before the item starts moving, on top of the preset's\n`stagger_ms` × its stacking index. At most 60000.",
+                "description": "Milliseconds before the item starts moving. An item of the scene being switched\nto also waits the preset's `stagger_ms` × its stacking index; a leaving item\nwaits only its own delay (ADR-0049). At most 60000.",
                 "format": "uint32",
                 "minimum": 0,
                 "type": "integer"
@@ -2403,7 +2403,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               "delay_ms": {
                 "default": 0,
-                "description": "Milliseconds before the item starts moving, on top of the preset's\n`stagger_ms` × its stacking index. At most 60000.",
+                "description": "Milliseconds before the item starts moving. An item of the scene being switched\nto also waits the preset's `stagger_ms` × its stacking index; a leaving item\nwaits only its own delay (ADR-0049). At most 60000.",
                 "format": "uint32",
                 "minimum": 0,
                 "type": "integer"
