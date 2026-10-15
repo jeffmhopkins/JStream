@@ -61,6 +61,7 @@ jstream-mux = { path = "crates/jstream-mux" }
 jstream-outputs = { path = "crates/jstream-outputs" }
 jstream-platform = { path = "crates/jstream-platform" }
 jstream-platform-windows = { path = "crates/jstream-platform-windows" }
+jstream-plugin-proto = { path = "crates/jstream-plugin-proto" }
 jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }

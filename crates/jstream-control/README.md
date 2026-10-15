@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:a9973fec51b3aea6", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main (B6-f groups, B2-f3 undo in the mock): mock applies scene.create's role and returns its inverse; purpose holds" }
+verified = { hash = "b3:6cbe7266e0595b0d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 241 N2/N6: mock cycle reasons now name the path and apply's rustdoc names item.move; purpose's mock bullet unaffected; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:ea9e34acfc706302", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: took main's browser-client text (ws_web, ADR-0045) and replaced 'jstream-server doesn't accept the subprotocol yet' with a link saying it accepts both; open question 3 is main's; holds" }
+verified = { hash = "b3:d5e33f4c65df90a1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 241 N2/N6: Mock list already names nesting cycles from item.add, item.set_source and item.move with graph codes and paths; reason wording isn't described; holds" }
 -->
 
 ### The trait

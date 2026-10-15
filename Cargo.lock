@@ -2495,6 +2495,7 @@ dependencies = [
  "crossbeam-channel",
  "jstream-media",
  "jstream-platform",
+ "jstream-plugin-proto",
  "thiserror 2.0.21",
 ]
 
@@ -2690,6 +2691,10 @@ dependencies = [
  "windows",
  "windows-core",
 ]
+
+[[package]]
+name = "jstream-plugin-proto"
+version = "0.0.0"
 
 [[package]]
 name = "jstream-protocol"
