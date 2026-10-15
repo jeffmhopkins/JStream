@@ -36,7 +36,7 @@ verified = { hash = "b3:847c096affe4cfe0", by = "agent:claude@session_01PHLTrve4
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:41b49ce6a87d1c88", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "New: each step checked against daemon and CLI Usage and the MCP tool schema (output.create rtmp/generic target, set-key --key-file, events stats.tick line, video snapshot, Ctrl-C prints stopped, key target JStream/stream-key/<id>); output create/start/status/stop and MCP create exercised on Linux" }
+verified = { hash = "b3:17acf6cf9c88824b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#233, #203 mock undo, #234 runbook), protocol 0.15 still one past main's 0.14: stale through cli#usage; the steps use output create/start/set-key, which Y3 doesn't change" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:c67665f7bad0ce44", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "New: options, steps 1-11, exit codes and the non-Windows skips match scripts/smoke.ps1; ran it with pwsh 7.4 on Linux (all PASS, Windows-only steps SKIP)" }
+verified = { hash = "b3:8e47eecdceecb1bb", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#233, #203 mock undo, #234 runbook), protocol 0.15 still one past main's 0.14: stale through cli#usage; smoke script's CLI commands unchanged by Y3" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

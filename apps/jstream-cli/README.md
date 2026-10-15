@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:7d6895f2ac3f8f89", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#226 A3, #229, #230) into B2-f3: re-read; contents list holds, main changed only its stamp context" }
+verified = { hash = "b3:17c3b4370ab83746", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#233, #203, #234), protocol 0.15: re-read; contents hold, the CLI gains no YouTube commands" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:923151b966533522", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; B5's Edits text and the No undo or redo command bullet hold" }
+verified = { hash = "b3:1ae9db8065d2ded1", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#233, #203 mock undo, #234 runbook), protocol 0.15 still one past main's 0.14: re-read; #203's no-undo note beside Y3's no-YouTube-commands note; both hold" }
 -->
 
 ```sh
@@ -225,7 +225,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:237f2c2d77fddc0e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; holds" }
+verified = { hash = "b3:614ea05179407473", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#233, #203 mock undo, #234 runbook), protocol 0.15 still one past main's 0.14: re-read; Y3 changes only CallResult::Action { result: None } here" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:fb6654585c0e8adc", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; contents list holds" }
+verified = { hash = "b3:8969a83287f49a5a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#233, #203 mock undo, #234 runbook), protocol 0.15 still one past main's 0.14: re-read; mock now has undo (#203), YouTube variants still answer internal" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:c9db94df2b9b9a37", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read the merged Mock section; B5's item.set_source and duplicated_from text kept; undo bullet now says a deleted source comes back with its duplicated_from and item.set_source undoes to the previous source, as jstream-graph's inverses do" }
+verified = { hash = "b3:473a20d9318b071b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#233, #203 mock undo, #234 runbook), protocol 0.15 still one past main's 0.14: re-read; undo inverses and the youtube target (refused by the mock as unimplemented) don't interact; holds" }
 -->
 
 ### The trait

@@ -517,7 +517,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:231c7b6d2e48fbe8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; history and undo_conflict wording hold; the mock change is internal to jstream-control" }
+verified = { hash = "b3:b563a0892d15cc06", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (#233, #203 mock undo, #234 runbook), protocol 0.15 still one past main's 0.14: re-read; YouTube bullet (since 0.15) holds beside #203's text" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
