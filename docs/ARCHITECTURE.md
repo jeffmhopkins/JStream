@@ -833,7 +833,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:725834769c696156", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; Collections bullet holds with F3's optional encoder fields and B5's optional duplicated_from at schema 1" }
+verified = { hash = "b3:e8da9a7e3807bb8c", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9 CI fix: LoadError::Invalid now boxes its ProtocolError, a type-size change only; re-read, the Collections bullet (checks a loaded collection as it checks edits) holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

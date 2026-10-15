@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:c1258a3fbf9a4296", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; Reading keeps delete.plan with main's encoder.list ordering; Tests keep B9's plan property check and B1's persist tests; duplicated_from is a plain link, not a blocker, so deps::blockers is unchanged" }
+verified = { hash = "b3:a2d7e303e78f7968", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9 CI fix: LoadError::Invalid boxes its ProtocolError (blockers grew it past clippy's result_large_err threshold for CollectionFileError on Windows); re-read, text notes the box and otherwise holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -180,7 +180,8 @@ the engine's; this crate does no I/O.
   and visibility, then encoder profiles, then outputs with their profiles. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
-  (`` item `i1` ``) and the protocol error; nothing is partly loaded. Then `rev` is set
+  (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
+  `LoadError` stay small); nothing is partly loaded. Then `rev` is set
   to the file's, so revisions keep increasing across restarts. A source whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
