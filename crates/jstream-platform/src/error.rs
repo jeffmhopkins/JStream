@@ -51,6 +51,16 @@ pub enum PlatformError {
         /// Why, as the backend reports it.
         reason: String,
     },
+    /// An OS component the backend needs is not installed, such as Media Foundation on a
+    /// Windows N edition without the Media Feature Pack. Retrying won't help; the user has
+    /// to install it, as `remedy` says.
+    #[error("{component} is not installed: {remedy}")]
+    MissingComponent {
+        /// The component, such as "Media Foundation".
+        component: &'static str,
+        /// What the user can do about it, as a sentence.
+        remedy: String,
+    },
     /// An OS or driver call failed.
     #[error("{call} failed{}: {message}", .code.map(|c| format!(" (0x{c:08X})")).unwrap_or_default())]
     Os {
@@ -94,6 +104,14 @@ mod tests {
             id: "DISPLAY2".into(),
         };
         assert_eq!(e.to_string(), "no display with ID \"DISPLAY2\"");
+        let e = PlatformError::MissingComponent {
+            component: "Media Foundation",
+            remedy: "install the Media Feature Pack.".into(),
+        };
+        assert_eq!(
+            e.to_string(),
+            "Media Foundation is not installed: install the Media Feature Pack."
+        );
     }
 
     #[test]

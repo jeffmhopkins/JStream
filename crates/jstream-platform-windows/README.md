@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:ae8288cdee1bd783", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: platform-windows text is main's; E1 doesn't touch it" }
+verified = { hash = "b3:f3bac4bd838f397a", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (H7b ADR-0042 covers, #214, #217 and others) into H1: re-read the section; main's text and covers kept; H1's check_media_foundation bullet and its Tests entries (decision everywhere, probe and edition read on Windows) match n_edition.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -281,6 +281,22 @@ The code is ported from spikes S1 to S3. This first cut has:
     isn't UTF-8 is refused as `Unsupported`, without naming it. The copy Windows returns is zeroed before
     `CredFree`. Nothing here logs, and errors carry no secret or its length.
 
+- **`check_media_foundation`**, the Media Foundation check
+  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md#consequences)): Windows N and
+  KN editions ship without Media Foundation until the user installs the Media Feature
+  Pack, and Windows Server until it adds the Server Media Foundation feature. The check
+  loads `mfplat.dll` from System32 only and looks for `MFStartup`. If that fails, it
+  returns `PlatformError::MissingComponent`, and the registry's `EditionID` picks the
+  advice: the Media Feature Pack for an N edition (an ID ending in a capital `N`), the
+  server feature for an ID starting with `Server`, and both otherwise. The host must
+  call it before creating the backends; nothing calls it yet (the daemon's startup
+  will).
+  - **Delay-loading:** the `windows` crate imports `mfplat.dll` when the process
+    loads, so on such a machine Windows refuses to start a binary that links `MfCodecs`
+    before any check can run. That binary must delay-load the DLL (MSVC
+    `/DELAYLOAD:mfplat.dll` with `delayimp.lib`) for the check to report anything. The
+    check itself never imports Media Foundation.
+
 **Not yet:** Media Foundation video decoders, encoders and the virtual camera taking
 `VideoSurface::Gpu`, and
 a `Backends` constructor, which needs all of them.
@@ -289,17 +305,18 @@ a `Backends` constructor, which needs all of them.
 packet flags, positions across a device move), the capture helpers (BGRA to NV12 with
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the H.264
-helpers (configuration check, NV12 packing, `pts` mapping), the GPU capture ring's slot choice (reuse, drop when full,
-release on resize), the credential helpers
-(target names of both kinds, blob limits, zeroing) and the virtual camera's format and
-frame checks run on every platform. The QPC clock
-test, the start-race test (a destroyed message-only window maps to `NotFound`), the
-credential limits check, the credential round trip (a uniquely named credential
-written, replaced, read and deleted in the real store, a non-UTF-8 one refused on read,
-deleted again on failure), the same through `StreamKeyStore`, and a refresh token
-through `OAuthTokenStore` beside a stream key of the same ID run on Windows. Tests against real devices, the OS encoder, the GPU and a display are platform
-tests: behind the `hw-tests` feature and `#[ignore]`d, because CI machines may have no
-audio devices, no Media Foundation, no GPU and no display
+helpers (configuration check, NV12 packing, `pts` mapping), the GPU capture ring's slot
+choice (reuse, drop when full, release on resize), the credential helpers (target names
+of both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
+the Media Foundation check's decision (edition kinds and the advice for each) run on
+every platform. The QPC clock test, the start-race test (a destroyed message-only
+window maps to `NotFound`), the credential limits check, the credential round trip (a
+uniquely named credential written, replaced, read and deleted in the real store, a
+non-UTF-8 one refused on read, deleted again on failure), the same through
+`StreamKeyStore`, a refresh token through `OAuthTokenStore` beside a stream key of the
+same ID, and the Media Foundation probe and edition read run on Windows. Tests against real devices, the OS encoder, the GPU and a
+display are platform tests: behind the `hw-tests` feature and `#[ignore]`d, because CI
+machines may have no audio devices, no Media Foundation, no GPU and no display
 ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
 target, stages it and checks that the shared fence passes the staged value. The capture
 tests list the displays, capture the primary display for a second, checking the
