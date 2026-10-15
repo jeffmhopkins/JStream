@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:0cee9228843ca676", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; shared-names bullet is main's; mock still accepts virtual_cam" }
+verified = { hash = "b3:0c5323f5b45d4abd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305: re-read Purpose; contents list still accurate (ws_config.rs holds the pieces both clients share, now incl. end_reason); no API change" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:dbd065bb673c1ddb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; set_target refusal for a virtual camera unchanged" }
+verified = { hash = "b3:25aa54d1cb0035eb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305: re-read Design against the ws_web error-handler change; Failures bullet now says the browser client ends the session on error as well as close (CSP case) and the first sets the reason; test paragraph names the native end_reason tests in ws_config.rs" }
 -->
 
 ### The trait
@@ -258,7 +258,11 @@ pulls `web-sys`.
 - **Failures are `Disconnected`.** An invalid URL (or a `wss://` one, natively), an
   unreachable engine, or a refused upgrade fails `connect`. Natively the reason names
   HTTP 401 for the token and 403 for `Origin` or `Host`; a browser doesn't tell the page
-  why an upgrade failed, so there the reason covers all three. When the socket closes, pending and later calls fail with
+  why an upgrade failed, so there the reason covers all three, and a URL the page's
+  Content Security Policy blocks too. The browser client ends the session on the
+  socket's `error` event as well as on `close`, because `error` is not always followed
+  by `close` (Chromium sends none when CSP refuses the URL); the first of the two sets
+  the reason. When the socket closes, pending and later calls fail with
   `Disconnected` carrying the reason (the server's close reason when it gave one), and
   every event stream ends after what it buffered. Dropping the `WsControl` closes the
   socket. Reconnecting is the caller's choice (a new session, then re-read the state),
@@ -267,7 +271,8 @@ pulls `web-sys`.
 The native client's end-to-end tests live in `jstream-server`, which runs a
 `MockEngine` behind a real server on a loopback port and drives it with this client.
 The browser client has no automated test yet: it type-checks in CI's `wasm32` build,
-and the URL and token handling it shares are unit-tested natively (`ws_config.rs`).
+and the URL and token handling and the choice of the reason a session ended with,
+which it shares, are unit-tested natively (`ws_config.rs`).
 
 ### Open questions
 

@@ -528,7 +528,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5e763b793debc8fe", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:db5071d3c17da333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305: re-read Control protocol; browser WsControl now also handles the socket error event; no wire, transport or protocol-version change, section holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

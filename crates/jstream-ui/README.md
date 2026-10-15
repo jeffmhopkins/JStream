@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:be814d81e88b36fd", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 8d080c0 (#269 daemon e2e test, #282 UI inline-style check, #276 README progress table, #270 ADR-0047 proposed); stamp-only conflicts; re-read main's text beside this PR's (no output-kind text changed); holds" }
+verified = { hash = "b3:c34da5b3ed3c2b70", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305 (dependency CRATE-jstream-control#design changed): re-read Connecting/Session/Events; a failed connect still shows the transport's reason, now also when CSP blocks the URL (error-only socket); nothing here contradicts the change" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
