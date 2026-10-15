@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:a2fcb4a9e6ada1f4", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5 (with #283 merged): Tests bullet adds the browser page on the stage context test and the own-context snapshot test; C8's with_browser and page-audio text kept; holds" }
+verified = { hash = "b3:de801bc5855b5714", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286 differential groups/roles, #297): re-read main's purpose text incl. Tests bullet's differential run; this PR's live.rs set_clock fix and tests/sources.rs clock-swap test fit the Live sources and Tests bullets; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -176,7 +176,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5bc66358795955d5", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "C8b5: Live sources now says use_gpu lends the stage context to the browser, frames carry ContextKey, compose imports premultiplied only on that context, re-plan every 1/30 s while a context is set; Snapshots names the browser import; C8's text kept; matches live.rs, snapshot.rs, engine.rs" }
+verified = { hash = "b3:67ca169f728f9e96", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286, #297): re-read main's design text (differential script paragraph) beside this PR's clock-swap sentence in the live-sources paragraph; different paragraphs; swap sentence still matches LiveSources::set_clock; holds" }
 -->
 
 ### Engine and sessions
@@ -501,7 +501,9 @@ the source hands out a different one, so a still image is uploaded once. The pla
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image advances on the clock and a still one is
 never re-planned. Sources run on the media clock of the backends the host injects
-(`with_backends`), else on a monotonic clock of the engine's own. `collection` asset
+(`with_backends`), else on a monotonic clock of the engine's own. A clock swap
+restarts every running source's timing and drops the re-plan timed on the old clock:
+the thread re-plans at once on the new one. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
 for every `app` reference, the asset is unreadable and the source draws nothing.
 

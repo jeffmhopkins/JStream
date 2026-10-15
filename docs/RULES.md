@@ -619,6 +619,7 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `pr-title` | Conventional Commit title | yes | M0 |
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
+| `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
 
