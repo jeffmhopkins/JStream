@@ -16,7 +16,6 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:be8bab039bec8b0a", by = "agent:claude", note = "re-read after dropping the spent unused_imports allow on filter's re-export and adding the SDR note; Purpose states neither; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +112,6 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:3dfdd2c22d83fd79", by = "agent:claude", note = "re-read after the allow removal and a shader comment; no pass, thread or allocation changed; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +278,6 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:9e3bc630bc3f8409", by = "agent:claude", note = "N2: the V1a resampling sentence now records the SDR assumption of the [0, a] clamp, matching ratio.wgsl's resample; rest of the section re-read, unchanged, holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -351,7 +348,6 @@ Assets and references (V3): not yet.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:74b89963f404a5db", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Added the filter harness paragraph; the tests.rs helpers became pub(crate) for it, nothing else changed" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The

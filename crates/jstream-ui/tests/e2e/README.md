@@ -19,7 +19,6 @@ input on the canvas.
 ## Harness
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests/e2e/*.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:0d91f4584a8077aa", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge-only round: re-read; the seed's item.add only gains opacity and blend as None (defaults), so the seeded studio is unchanged; holds" }
 -->
 
 - **The mock daemon** (`mock-daemon/`, the test-only crate `jstream-ui-e2e`) puts
@@ -49,7 +48,6 @@ verified = { hash = "b3:0d91f4584a8077aa", by = "agent:claude@session_01BL6HM3DJ
 ## What the tests cover
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/specs/**"]
-verified = { hash = "b3:8c305e610d98ee84", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 -->
 
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
@@ -71,7 +69,6 @@ verified = { hash = "b3:8c305e610d98ee84", by = "agent:claude@session_016cfwAwen
 ## Running them
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/playwright.config.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:dbac1e8d9fa742df", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 -->
 
 ```sh
