@@ -2361,7 +2361,9 @@ dependencies = [
 name = "jstream-effects"
 version = "0.0.0"
 dependencies = [
+ "jstream-media",
  "jstream-protocol",
+ "jstream-render",
  "naga",
  "serde",
  "serde_json",

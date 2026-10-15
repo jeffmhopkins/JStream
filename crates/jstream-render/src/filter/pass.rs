@@ -15,8 +15,9 @@ use crate::filter::FilterClock;
 use crate::gpu::Gpu;
 use crate::image::{self, Alpha, Image, LAYER_FORMAT, Maker};
 
-/// The WGSL every filter shader starts with.
-const PRELUDE: &str = include_str!("prelude.wgsl");
+/// The WGSL every filter shader starts with: the vertex stage, the bindings and the colour
+/// helpers. Effect packs validate against it.
+pub const PRELUDE: &str = include_str!("prelude.wgsl");
 
 /// Bytes of the `Frame` uniform in `prelude.wgsl`.
 const FRAME_BYTES: u64 = 48;
@@ -59,6 +60,29 @@ pub(crate) struct Shader {
     pub blend: Blend,
 }
 
+/// A shader by reference: a built-in [`Shader`], or one whose WGSL arrives at run time
+/// (an effect pack, [`super::ExternalFilter`]).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ShaderRef<'a> {
+    /// The pipeline cache key. A later draw with the same label and different source
+    /// rebuilds the pipeline, so a reloaded pack replaces its old one.
+    pub label: &'a str,
+    /// As [`Shader::source`].
+    pub source: &'a str,
+    /// As [`Shader::blend`].
+    pub blend: Blend,
+}
+
+impl From<Shader> for ShaderRef<'static> {
+    fn from(shader: Shader) -> Self {
+        Self {
+            label: shader.label,
+            source: shader.source,
+            blend: shader.blend,
+        }
+    }
+}
+
 /// How a draw writes its target.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Blend {
@@ -86,7 +110,13 @@ pub(crate) struct Runtime {
     layout: wgpu::BindGroupLayout,
     pipeline_layout: wgpu::PipelineLayout,
     sampler: wgpu::Sampler,
-    pipelines: HashMap<&'static str, wgpu::RenderPipeline>,
+    pipelines: HashMap<String, Cached>,
+}
+
+/// A built pipeline and the source it was built from.
+struct Cached {
+    source: String,
+    pipeline: wgpu::RenderPipeline,
 }
 
 impl Runtime {
@@ -149,42 +179,88 @@ impl Runtime {
         }
     }
 
-    fn pipeline(&mut self, device: &wgpu::Device, shader: Shader) -> &wgpu::RenderPipeline {
-        self.pipelines.entry(shader.label).or_insert_with(|| {
-            let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some(shader.label),
-                source: wgpu::ShaderSource::Wgsl(format!("{PRELUDE}\n{}", shader.source).into()),
-            });
-            let blend = match shader.blend {
-                Blend::Replace => None,
-                Blend::Over => Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
-            };
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some(shader.label),
-                layout: Some(&self.pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &module,
-                    entry_point: Some("vs"),
-                    compilation_options: Default::default(),
-                    buffers: &[],
+    /// The pipeline for `shader`, built on first use or when its source changed. A
+    /// shader wgpu refuses is an error, not a panic: a pack's WGSL arrives at run time.
+    fn pipeline(
+        &mut self,
+        device: &wgpu::Device,
+        shader: ShaderRef<'_>,
+    ) -> Result<&wgpu::RenderPipeline, RenderError> {
+        let fresh = self
+            .pipelines
+            .get(shader.label)
+            .is_some_and(|c| c.source == shader.source);
+        if !fresh {
+            let scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
+            let pipeline = self.build(device, shader);
+            if let Some(error) = ready(scope.pop()) {
+                return Err(RenderError::Invalid {
+                    what: "filter shader",
+                    detail: format!("{}: {error}", shader.label),
+                });
+            }
+            self.pipelines.insert(
+                shader.label.to_owned(),
+                Cached {
+                    source: shader.source.to_owned(),
+                    pipeline,
                 },
-                fragment: Some(wgpu::FragmentState {
-                    module: &module,
-                    entry_point: Some("fs"),
-                    compilation_options: Default::default(),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: LAYER_FORMAT,
-                        blend,
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                }),
-                primitive: wgpu::PrimitiveState::default(),
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState::default(),
-                multiview_mask: None,
-                cache: None,
+            );
+        }
+        self.pipelines
+            .get(shader.label)
+            .map(|c| &c.pipeline)
+            .ok_or_else(|| RenderError::Invalid {
+                what: "filter shader",
+                detail: "invariant: the pipeline was just cached".into(),
             })
+    }
+
+    fn build(&self, device: &wgpu::Device, shader: ShaderRef<'_>) -> wgpu::RenderPipeline {
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some(shader.label),
+            source: wgpu::ShaderSource::Wgsl(format!("{PRELUDE}\n{}", shader.source).into()),
+        });
+        let blend = match shader.blend {
+            Blend::Replace => None,
+            Blend::Over => Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+        };
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some(shader.label),
+            layout: Some(&self.pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some("vs"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &module,
+                entry_point: Some("fs"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: LAYER_FORMAT,
+                    blend,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: None,
+            cache: None,
         })
+    }
+}
+
+/// The value of a future that native wgpu resolves at once (an error scope's pop).
+/// `None` if it is still pending, which native wgpu never leaves it.
+fn ready<T>(future: impl Future<Output = Option<T>>) -> Option<T> {
+    let mut future = std::pin::pin!(future);
+    let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
+    match future.as_mut().poll(&mut cx) {
+        std::task::Poll::Ready(value) => value,
+        std::task::Poll::Pending => None,
     }
 }
 
@@ -211,6 +287,30 @@ impl Ctx<'_> {
 
     /// Records one fullscreen draw of `draw.shader` into `draw.target`.
     pub(crate) fn draw(&mut self, draw: &Draw<'_>) -> Result<(), RenderError> {
+        self.draw_ref(
+            draw.shader.into(),
+            draw.input,
+            draw.aux,
+            draw.params,
+            draw.target,
+        )
+    }
+
+    /// [`Self::draw`] with a shader whose WGSL is not `'static`.
+    pub(crate) fn draw_ref(
+        &mut self,
+        shader: ShaderRef<'_>,
+        input: &Image,
+        aux: Option<&Image>,
+        params: &[u8],
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        let draw = Io {
+            input,
+            aux,
+            params,
+            target,
+        };
         let Some(target) = draw.target.target() else {
             return Err(RenderError::Invalid {
                 what: "filter target",
@@ -250,7 +350,7 @@ impl Ctx<'_> {
             .texture()
             .create_view(&wgpu::TextureViewDescriptor::default());
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some(draw.shader.label),
+            label: Some(shader.label),
             layout: &self.runtime.layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -275,13 +375,13 @@ impl Ctx<'_> {
                 },
             ],
         });
-        let load = match draw.shader.blend {
+        let load = match shader.blend {
             Blend::Replace => wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
             Blend::Over => wgpu::LoadOp::Load,
         };
-        let pipeline = self.runtime.pipeline(device, draw.shader);
+        let pipeline = self.runtime.pipeline(device, shader)?;
         let mut pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some(draw.shader.label),
+            label: Some(shader.label),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: target,
                 depth_slice: None,
@@ -301,6 +401,14 @@ impl Ctx<'_> {
         pass.draw(0..3, 0..1);
         Ok(())
     }
+}
+
+/// [`Draw`] without its shader.
+struct Io<'a> {
+    input: &'a Image,
+    aux: Option<&'a Image>,
+    params: &'a [u8],
+    target: &'a Image,
 }
 
 fn uniform_buffer(device: &wgpu::Device, label: &str, bytes: &[u8]) -> wgpu::Buffer {

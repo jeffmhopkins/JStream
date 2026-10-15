@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:f8fec75ecf0af180", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:51898578685d0469", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 cascade from filter/**: purpose text unchanged and holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -100,8 +100,8 @@ and calls this crate.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's. Also not here: NV12 or
-P010 conversion, encode-target export and the D3D12 `PRESENT` transition, WGSL effect
-packs, the video filter chain runtime (the built-in filters' passes are here, see
+P010 conversion, encode-target export and the D3D12 `PRESENT` transition, loading WGSL
+effect packs (`jstream-effects`; this crate only draws them), the video filter chain runtime (the built-in filters' passes are here, see
 [Filters](#filters)), 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
 stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
 fields stay neutral until M3. The GPU pipeline's encode
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c17ddc66af14c910", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:a8216c5d8d7c2549", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1: 'Not in this cut' now says pack loading is jstream-effects and render only draws them; re-read" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:70c4b4131cfd19bb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Group modules (pack, aspect, multipass, assets) and the descriptor test described as built" }
+verified = { hash = "b3:5d99d2a7915edabe", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1: added External kinds paragraph (ExternalFilter, VideoFilter::external, FILTER_PRELUDE) and the label-keyed rebuild plus error scope; re-read against pass.rs/external.rs" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -311,12 +311,21 @@ kinds.
   sizes and the time, an optional aux image, and the filter's `Params` uniform) and
   colour helpers. `src` and `aux` always return premultiplied linear colour; an
   imported input is premultiplied after sampling. A pipeline is built on first use and
-  kept for the compositor's life.
+  kept for the compositor's life, keyed by the shader's label; a later draw whose label
+  has different source rebuilds it. A shader wgpu refuses is a `RenderError`, not a
+  panic (an error scope around the build).
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
 - Each draw creates its two small uniform buffers, two views and a bind group, and each
   `apply_filter` its output layer. Pooling them is the chain runtime's job (V0); until
   then a filter costs those small allocations per frame.
+
+**External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
+whose WGSL arrives at run time: a label (the kind ID), WGSL appended to the prelude
+(exported as `FILTER_PRELUDE`, which packs validate against), and the `Params` bytes for
+a settings map. `VideoFilter::external(kind_id, filter, settings)` draws it as one
+replacing pass. [`jstream-effects`](../jstream-effects/README.md#purpose) implements it
+for each pack effect.
 
 **The kinds.** Each group documents its kinds here as it lands.
 

@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:928b559944b79c2d", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: re-read; jstream-plugin-proto row now matches its new manifest summary (layer 0, no unsafe); lint-deps passes; plugin-clap and plugin-host rows stay planned" }
+verified = { hash = "b3:b85224313800e0cb", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 stacked on V0: re-read; the jstream-effects row (layer 3) now also depends on jstream-render (L2) for drawing; lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -715,7 +715,7 @@ verified = { hash = "b3:2f74f99cfb552b17", by = "agent:claude@session_01BL6HM3DJ
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:9ba79b329d2ac3c8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:28bf57e1c4ad3598", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 cascade (render filter/pass.rs, external.rs): 'effect packs' still outside render's compositing; 'Effects are WGSL plus an effect.toml manifest' holds; render only draws packs" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

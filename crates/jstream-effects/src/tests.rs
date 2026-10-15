@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 
 use crate::{FieldType, KindChange, Pack, PackError, PackWatcher};
 
-const PRELUDE: &str = include_str!("../tests/fixtures/host-prelude.wgsl");
+const PRELUDE: &str = jstream_render::FILTER_PRELUDE;
 
 const MANIFEST: &str = r##"
 [pack]
@@ -516,4 +516,104 @@ fn the_watcher_hot_reloads_packs() {
         [KindChange::Removed("retro/scanlines".into())]
     );
     assert_eq!(watcher.packs().count(), 0);
+}
+
+/// The test compositor, or `None` (a skip) where no adapter exists outside CI.
+fn compositor() -> Option<jstream_render::Compositor> {
+    match jstream_render::Compositor::open(jstream_render::OpenOptions::headless()) {
+        Ok(compositor) => Some(compositor),
+        Err(err) if err.is_no_adapter() && std::env::var_os("CI").is_none() => None,
+        Err(err) => panic!("opening the compositor failed: {err}"),
+    }
+}
+
+/// `image` placed 1:1 on a transparent canvas of its size, read back as sRGB RGBA8.
+fn read(compositor: &mut jstream_render::Compositor, image: &jstream_render::Image) -> Vec<u8> {
+    use jstream_render::{Color, Crop, Item, Placement, Scene};
+    let items = [Item {
+        image,
+        placement: Placement::IDENTITY,
+        crop: Crop::NONE,
+        opacity: 1.0,
+        visible: true,
+    }];
+    let scene = Scene {
+        canvas: jstream_media::FrameSize::new(image.width(), image.height()).expect("non-zero"),
+        background: Color::TRANSPARENT,
+        items: &items,
+    };
+    let output = compositor.render(&scene, true).expect("render");
+    let snapshot = output.pixels().expect("readback requested");
+    (0..image.height())
+        .flat_map(|y| (0..image.width()).map(move |x| (x, y)))
+        .flat_map(|(x, y)| snapshot.pixel(x, y).expect("inside"))
+        .collect()
+}
+
+fn near(got: &[u8], expected: &[u8], tol: u8) {
+    assert_eq!(got.len(), expected.len());
+    for (g, e) in got.iter().zip(expected) {
+        assert!(g.abs_diff(*e) <= tol, "got {got:?}, expected {expected:?}");
+    }
+}
+
+#[test]
+fn an_effect_draws_through_the_render_harness_and_reloads() {
+    let Some(mut compositor) = compositor() else {
+        return;
+    };
+    let temp = Temp::new("draw");
+    retro(&temp.0, MANIFEST, SCANLINES);
+    let pack = Pack::load(&temp.0, PRELUDE).expect("pack loads");
+    let scan = pack.effect("retro/scanlines").expect("scanlines");
+    let input = compositor
+        .upload_rgba8(1, 2, &[255, 255, 255, 255, 255, 255, 255, 255])
+        .expect("upload");
+    let clock = jstream_render::FilterClock { seconds: 0.0 };
+
+    // One line, half strength, a white tint: linear 0.5 is sRGB 188.
+    let mut filter = scan.video_filter(&settings(&[
+        ("strength", json!(0.5)),
+        ("tint", json!("#ffffff")),
+        ("lines", json!(1)),
+    ]));
+    let out = compositor
+        .apply_filter(&mut filter, &input, clock)
+        .expect("apply");
+    near(
+        &read(&mut compositor, &out),
+        &[188, 188, 188, 255, 188, 188, 188, 255],
+        2,
+    );
+
+    // Settings change in place: the default red, half-transparent tint.
+    filter.set_settings(&settings(&[("strength", json!(0.0)), ("lines", json!(1))]));
+    let out = compositor
+        .apply_filter(&mut filter, &input, clock)
+        .expect("apply");
+    near(
+        &read(&mut compositor, &out),
+        &[255, 0, 0, 255, 255, 0, 0, 255],
+        2,
+    );
+
+    // A reload with new WGSL under the same kind ID draws the new shader.
+    write(
+        &temp.0.join("scanlines.wgsl"),
+        &SCANLINES.replace(
+            "return vec4<f32>(c.rgb * dark * p.tint.rgb, c.a);",
+            "return vec4<f32>(0.0, 0.0, c.a * dark, c.a);",
+        ),
+    );
+    let reloaded = Pack::load(&temp.0, PRELUDE).expect("pack reloads");
+    let mut filter = reloaded.effects()[0].video_filter(&Settings::default());
+    let out = compositor
+        .apply_filter(&mut filter, &input, clock)
+        .expect("apply");
+    // The defaults: 240 lines put both pixels on even (darkened) rows.
+    near(
+        &read(&mut compositor, &out),
+        &[0, 0, 188, 255, 0, 0, 188, 255],
+        2,
+    );
 }

@@ -188,6 +188,29 @@ impl Effect {
     }
 }
 
+impl jstream_render::ExternalFilter for Effect {
+    fn label(&self) -> &str {
+        self.kind_id()
+    }
+
+    fn wgsl(&self) -> &str {
+        &self.wgsl
+    }
+
+    fn uniforms(&self, settings: &Settings) -> Vec<u8> {
+        Effect::uniforms(self, settings)
+    }
+}
+
+impl Effect {
+    /// A render filter drawing this effect with `settings`, complete as the graph stores
+    /// them. A filter made after a reload draws the new WGSL: the render side rebuilds
+    /// the kind's pipeline when its source changes.
+    pub fn video_filter(&self, settings: &Settings) -> jstream_render::VideoFilter {
+        jstream_render::VideoFilter::external(self.kind_id(), Arc::new(self.clone()), settings)
+    }
+}
+
 /// Reads a whole file of at most `limit` bytes as UTF-8.
 fn read(path: &Path, limit: u64) -> Result<String, PackError> {
     let io = |source| PackError::Io {

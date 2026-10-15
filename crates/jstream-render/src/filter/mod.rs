@@ -15,6 +15,7 @@
 
 mod aspect;
 mod assets;
+mod external;
 mod multipass;
 mod pack;
 mod params;
@@ -22,6 +23,8 @@ mod pass;
 #[cfg(test)]
 pub(crate) mod testing;
 
+pub use external::ExternalFilter;
+pub use pass::PRELUDE;
 pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Shader};
 
 use jstream_protocol::{KindDescriptor, Settings};
@@ -68,6 +71,19 @@ impl VideoFilter {
             kind: kind_id.to_owned(),
             pass,
         })
+    }
+
+    /// A filter of a kind defined outside this crate (an effect pack), with `settings`
+    /// complete as the graph stores them.
+    pub fn external(
+        kind_id: &str,
+        filter: std::sync::Arc<dyn ExternalFilter>,
+        settings: &Settings,
+    ) -> Self {
+        Self {
+            kind: kind_id.to_owned(),
+            pass: Box::new(external::External::new(filter, settings)),
+        }
     }
 
     /// The filter's kind ID.
