@@ -539,6 +539,14 @@ prs = [235]
 note = "registration check with UAC"
 
 [[item]]
+id = "G3d"
+milestone = "M1c"
+title = "Virtual camera in the UI and the desktop app"
+status = "hardware"
+prs = [316]
+note = "a camera run from the desktop app"
+
+[[item]]
 id = "P1"
 milestone = "M1c"
 title = "Portable Windows zip"
