@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:30f47954e7490dc0", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (e1e2a94: #295 clock-swap replan, G3b daemon vcam #297, Q3 #309, #286, #237) into C9: Live bullet now lists MfMediaDecoders beside main's WindowsVcam sentence, delay-load list merges main's mfsensorgroup with C9's mfplat/mfreadwrite for MfMediaDecoders; serve.rs keeps media and Some(WindowsVcam); re-read" }
+verified = { hash = "b3:8284c3116fc3fc3f", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (94fb25d: D5 audio routing #240, #331) into C9: D5's daemon text kept with C9's MfMediaDecoders backend and DLL list; re-read, holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
