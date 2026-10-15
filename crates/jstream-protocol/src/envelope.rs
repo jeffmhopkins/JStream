@@ -174,7 +174,7 @@ impl ErrorResponse {
 }
 
 /// An event, as pushed to clients.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct EventMessage {
     /// The event.
     pub event: Event,

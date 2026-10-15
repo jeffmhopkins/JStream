@@ -20,10 +20,19 @@
 //! every protocol capability over MCP), and ticks take no sequence number, leave no
 //! gap and evict nothing.
 //!
+//! `live.changed` comes up to 30 times a second per gesture while someone drags
+//! (ADR-0032), so it would do the same. Each carries the newest values of what changed,
+//! so a newer one stands for an older one of the same gesture that only other
+//! `live.changed` events follow: the feed takes the older one out, merges its values
+//! under the newer ones, and buffers the result with the next number. A reader whose
+//! cursor is before it reads only the merged event; the number it leaves out is not a
+//! drop, since nothing it said is lost. A drag therefore holds one buffered event, and
+//! every other event keeps its order.
+//!
 //! Docs: crates/jstream-mcp/README.md#design, docs/adr/0036-mcp-events-polling-tool.md
 
 use jstream_control::EventStream;
-use jstream_protocol::Event;
+use jstream_protocol::{Edit, Event};
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -99,6 +108,7 @@ impl Buffer {
             self.stats = Some(event);
             return;
         }
+        let event = self.supersede(event);
         if self.events.len() == self.capacity {
             self.events.pop_front();
         }
@@ -107,6 +117,50 @@ impl Buffer {
             event,
         });
         self.next_seq += 1;
+    }
+
+    /// For a `live.changed`, takes out the newest buffered `live.changed` of the same
+    /// gesture if only `live.changed` events follow it, and returns `event` with that
+    /// one's values merged under its own (a parameter `event` sets keeps `event`'s value).
+    /// The oldest buffered event is never taken out, so `dropped` stays exact. Any other
+    /// event comes back unchanged.
+    fn supersede(&mut self, event: Event) -> Event {
+        let Event::LiveChanged {
+            gesture_id,
+            client_id,
+            values,
+        } = event
+        else {
+            return event;
+        };
+        let older = self
+            .events
+            .iter()
+            .enumerate()
+            .rev()
+            .take_while(|(_, e)| matches!(e.event, Event::LiveChanged { .. }))
+            .find(|(_, e)| {
+                matches!(&e.event, Event::LiveChanged { gesture_id: g, client_id: c, .. }
+                    if *g == gesture_id && *c == client_id)
+            })
+            .map(|(at, _)| at)
+            .filter(|at| *at > 0);
+        let mut merged = match older.and_then(|at| self.events.remove(at)) {
+            Some(Numbered {
+                event: Event::LiveChanged { values: old, .. },
+                ..
+            }) => old
+                .into_iter()
+                .filter(|o| param(o).is_none_or(|p| values.iter().all(|v| param(v) != Some(p))))
+                .collect(),
+            _ => Vec::new(),
+        };
+        merged.extend(values);
+        Event::LiveChanged {
+            gesture_id,
+            client_id,
+            values: merged,
+        }
     }
 
     /// The events after `after` (0 for all), at most `page` of them.
@@ -135,6 +189,18 @@ impl Buffer {
             ended: self.ended,
             stats: self.stats.clone(),
         })
+    }
+}
+
+/// The parameter a live value sets: its item, and whether it is the crop (else the
+/// placement, which `item.set_transform` and `item.set_geometry` both set).
+fn param(value: &Edit) -> Option<(&jstream_protocol::ItemId, bool)> {
+    match value {
+        Edit::ItemSetTransform { item_id, .. } | Edit::ItemSetGeometry { item_id, .. } => {
+            Some((item_id, false))
+        }
+        Edit::ItemSetCrop { item_id, .. } => Some((item_id, true)),
+        _ => None,
     }
 }
 
@@ -235,7 +301,7 @@ fn pump(shared: &Mutex<Shared>) {
 #[cfg(test)]
 mod tests {
     use super::{Buffer, CursorAhead, Numbered};
-    use jstream_protocol::{ClientId, Event, Rev};
+    use jstream_protocol::{ClientId, Crop, Edit, Event, GestureId, ItemId, Rev};
 
     fn changed(rev: u64) -> Event {
         Event::StateChanged {
@@ -284,6 +350,52 @@ mod tests {
         // A reader that kept up missed nothing.
         assert_eq!(buffer.read(4, 10).map(|p| p.dropped), Ok(0));
         assert_eq!(buffer.read(6, 10).map(|p| p.dropped), Ok(0));
+    }
+
+    fn live(gesture: &str, values: Vec<Edit>) -> Event {
+        Event::LiveChanged {
+            gesture_id: GestureId::new(gesture),
+            client_id: ClientId::new("c"),
+            values,
+        }
+    }
+
+    fn crop(item: &str, left: u32) -> Edit {
+        Edit::ItemSetCrop {
+            item_id: ItemId::new(item),
+            scene_id: None,
+            crop: Crop { left, ..Crop::NONE },
+        }
+    }
+
+    /// A drag holds one buffered `live.changed`, with the newest value of each parameter,
+    /// and every other event keeps its place.
+    #[test]
+    fn a_newer_live_changed_supersedes_an_older_one_of_its_gesture() {
+        let mut buffer = Buffer::new(10);
+        buffer.push(changed(1));
+        buffer.push(live("g", vec![crop("a", 1), crop("b", 1)]));
+        buffer.push(live("h", vec![crop("c", 1)]));
+        buffer.push(live("g", vec![crop("a", 2)]));
+        let page = buffer.read(0, 10).expect("a valid cursor");
+        assert_eq!(seqs(&page.events), [1, 3, 4]);
+        assert_eq!(page.dropped, 0, "a superseded event is not a drop");
+        assert_eq!(
+            page.events[2].event,
+            live("g", vec![crop("b", 1), crop("a", 2)])
+        );
+
+        // Not across another kind of event: its order relative to them matters.
+        buffer.push(changed(2));
+        buffer.push(live("g", vec![crop("a", 3)]));
+        let page = buffer.read(0, 10).expect("a valid cursor");
+        assert_eq!(seqs(&page.events), [1, 3, 4, 5, 6]);
+
+        // Nor the oldest buffered event, which `dropped` counts from.
+        let mut buffer = Buffer::new(10);
+        buffer.push(live("g", vec![crop("a", 1)]));
+        buffer.push(live("g", vec![crop("a", 2)]));
+        assert_eq!(seqs(&buffer.read(0, 10).expect("valid").events), [1, 2]);
     }
 
     #[test]

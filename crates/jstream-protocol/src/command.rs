@@ -11,7 +11,9 @@
 use crate::encoder::EncoderProfile;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
-use crate::id::{EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{
+    EncoderProfileId, GestureId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId,
+};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
 use schemars::JsonSchema;
@@ -408,7 +410,7 @@ impl Edit {
 /// Serialized with an internal `type` tag holding the command name. The response only
 /// says the action was accepted; how it goes is reported by events
 /// (`output.state_changed`).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum Action {
@@ -448,6 +450,32 @@ pub enum Action {
         /// The output whose key to remove.
         output_id: OutputId,
     },
+    /// Opens the gesture `gesture_id` if it is new, and sets its live values (ADR-0032):
+    /// each overrides one parameter of the collection on output, from the next render
+    /// tick, without changing `rev`. A value replaces the gesture's previous value for
+    /// the same parameter, and takes the parameter over from any other gesture that held
+    /// it. Values are validated as a batch's edits are (`not_found`, `invalid_argument`
+    /// with the field `values.<n>.<field>`); a value that is not a live-adjustable
+    /// setter (`item.set_transform`, `item.set_geometry`, `item.set_crop`), an empty or
+    /// over-256 list, and a 17th open gesture are `invalid_argument`. Nothing in a
+    /// rejected message is applied. The gesture ends with a batch carrying
+    /// `ends_gesture`, with `live.cancel`, or when its client's session ends.
+    #[serde(rename = "live.set")]
+    LiveSet {
+        /// The gesture, chosen by the client and unique among its open gestures.
+        gesture_id: GestureId,
+        /// The values, as setter edits: the same edits the committing batch carries.
+        #[schemars(length(min = 1, max = 256))]
+        values: Vec<Edit>,
+    },
+    /// Ends one of the client's gestures without a commit: its parameters show their
+    /// collection values again, and no edit is made. Succeeds when the client has no
+    /// such gesture open, so a retry is safe.
+    #[serde(rename = "live.cancel")]
+    LiveCancel {
+        /// The gesture to cancel.
+        gesture_id: GestureId,
+    },
 }
 
 impl Action {
@@ -458,6 +486,8 @@ impl Action {
             Action::OutputStop { .. } => "output.stop",
             Action::OutputSetKey { .. } => "output.set_key",
             Action::OutputClearKey { .. } => "output.clear_key",
+            Action::LiveSet { .. } => "live.set",
+            Action::LiveCancel { .. } => "live.cancel",
         }
     }
 }
@@ -481,16 +511,31 @@ pub struct Batch {
     /// client is not applied again, and gets the original result.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub idempotency_key: Option<IdempotencyKey>,
+    /// Commits one of the client's open gestures (ADR-0032): when the batch applies, the
+    /// gesture ends in the same step, and its live values give way to the committed
+    /// state. A gesture the client has not open is `invalid_argument` (field
+    /// `ends_gesture`), and nothing is applied. A batch that fails leaves the gesture
+    /// open.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ends_gesture: Option<GestureId>,
 }
 
 impl Batch {
-    /// A batch of one edit, with no `expected_rev` and no idempotency key.
+    /// A batch of one edit, with no `expected_rev`, no idempotency key and no gesture.
     pub fn single(edit: Edit) -> Self {
         Batch {
             edits: vec![edit],
             expected_rev: None,
             idempotency_key: None,
+            ends_gesture: None,
         }
+    }
+
+    /// Sets the gesture the batch commits.
+    #[must_use]
+    pub fn ending_gesture(mut self, gesture_id: GestureId) -> Self {
+        self.ends_gesture = Some(gesture_id);
+        self
     }
 
     /// Sets `expected_rev`.

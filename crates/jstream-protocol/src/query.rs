@@ -6,6 +6,7 @@ use crate::event::OutputState;
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
+use crate::live::GestureInfo;
 use crate::output::OutputInfo;
 use crate::settings::Settings;
 use schemars::JsonSchema;
@@ -71,6 +72,12 @@ pub enum Query {
     /// Lists the collection's encoder profiles, ordered by ID.
     #[serde(rename = "encoder.list")]
     EncoderList,
+    /// Lists the open live-value gestures (ADR-0032), every client's, ordered by client
+    /// and gesture ID, with the values each holds now: what a client that connects
+    /// during a drag reads to show it. Live values are runtime state, not collection
+    /// state, so the result carries no `rev`.
+    #[serde(rename = "live.list")]
+    LiveList,
 }
 
 impl Query {
@@ -87,6 +94,7 @@ impl Query {
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
             Query::EncoderList => "encoder.list",
+            Query::LiveList => "live.list",
         }
     }
 }
@@ -214,6 +222,12 @@ pub enum QueryResult {
         /// The profiles, ordered by ID.
         encoders: Vec<EncoderProfileInfo>,
     },
+    /// The result of `live.list`.
+    #[serde(rename = "live.list")]
+    LiveList {
+        /// The open gestures, ordered by client ID, then gesture ID.
+        gestures: Vec<GestureInfo>,
+    },
 }
 
 impl QueryResult {
@@ -230,6 +244,7 @@ impl QueryResult {
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
             QueryResult::EncoderList { .. } => "encoder.list",
+            QueryResult::LiveList { .. } => "live.list",
         }
     }
 }

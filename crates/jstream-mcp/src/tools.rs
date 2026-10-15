@@ -10,8 +10,8 @@
 
 use crate::events::{BUFFER_CAPACITY, PAGE_SIZE};
 use jstream_protocol::{
-    Action, Batch, Call, Edit, HistoryCall, HistoryOp, IdempotencyKey, ProtocolError, Query, Rev,
-    json_schema,
+    Action, Batch, Call, Edit, GestureId, HistoryCall, HistoryOp, IdempotencyKey, ProtocolError,
+    Query, Rev, json_schema,
 };
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -219,6 +219,7 @@ impl Tools {
                 edits: vec![from_value::<Edit>(args.op, "op")?],
                 expected_rev: args.expected_rev,
                 idempotency_key: args.idempotency_key,
+                ends_gesture: None,
             }),
             OpClass::Action => Call::Action {
                 action: from_value::<Action>(args.op, "op")?,
@@ -257,6 +258,8 @@ struct BatchArgs {
     expected_rev: Option<Rev>,
     #[serde(default)]
     idempotency_key: Option<IdempotencyKey>,
+    #[serde(default)]
+    ends_gesture: Option<GestureId>,
 }
 
 /// The `events` tool's arguments.
@@ -273,6 +276,7 @@ fn decode_batch(arguments: Value) -> Result<Invocation, ProtocolError> {
         edits: args.edits,
         expected_rev: args.expected_rev,
         idempotency_key: args.idempotency_key,
+        ends_gesture: args.ends_gesture,
     })))
 }
 
@@ -319,7 +323,8 @@ fn batch_tool(defs: &Map<String, Value>, groups: &BTreeMap<String, Vec<(Op, Valu
          or none does, and the state `rev` goes up by exactly one. The edits are those the \
          {} tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` \
          to apply only if nobody changed the state since you read it, and \
-         `idempotency_key` to make a retry safe. Failures come back as a tool error whose \
+         `idempotency_key` to make a retry safe, and `ends_gesture` to commit a gesture \
+         you opened with the `live` tool's `live.set`. Failures come back as a tool error whose \
          `error.code` is stable.",
         editing.join(", ")
     );
@@ -408,6 +413,16 @@ fn group_tool(defs: &Map<String, Value>, noun: &str, ops: &[(Op, Value)]) -> Too
              another client has since changed what the step touched (the step is then \
              dropped), or `history_empty` when there is nothing to undo or redo. They \
              accept `expected_rev` and `idempotency_key`.",
+        );
+    }
+    if ops.iter().any(|(op, _)| op.name == "live.set") {
+        description.push_str(
+            " Live values preview a change on output without changing the state: \
+             `live.set` overrides item placements and crops (as `item.set_transform`, \
+             `item.set_geometry` and `item.set_crop` edits) for a gesture you name, with no \
+             `rev` change and no undo step. End it with `batch` and `ends_gesture` to commit \
+             the final values as one undo step, or with `live.cancel` to put everything back. \
+             Gestures this session leaves open expire when it ends.",
         );
     }
     if has(OpClass::Edit) || has(OpClass::History) {
@@ -548,8 +563,8 @@ pub(crate) fn check_tool_names_are_valid() {
 mod tests {
     use super::{Invocation, Tools};
     use jstream_protocol::{
-        Action, Batch, Call, Edit, HistoryCall, HistoryOp, IdempotencyKey, OutputId, ProtocolError,
-        Query, Rev, SceneId,
+        Action, Batch, Call, Edit, GestureId, HistoryCall, HistoryOp, IdempotencyKey, OutputId,
+        ProtocolError, Query, Rev, SceneId,
     };
     use serde_json::{Value, json};
 
@@ -615,6 +630,27 @@ mod tests {
                 HistoryOp::Redo
             ))))
         );
+        let cancel = decode(
+            "live",
+            json!({"op": {"type": "live.cancel", "gesture_id": "drag"}}),
+        );
+        let expected = Call::Action {
+            action: Action::LiveCancel {
+                gesture_id: GestureId::new("drag"),
+            },
+        };
+        assert_eq!(cancel, Ok(Invocation::Call(expected)));
+        let commit = decode(
+            "batch",
+            json!({"edits": [{"type": "scene.create", "scene_id": "s", "name": "Main"}],
+                   "ends_gesture": "drag"}),
+        );
+        let expected = Batch::single(Edit::SceneCreate {
+            scene_id: SceneId::new("s"),
+            name: "Main".into(),
+        })
+        .ending_gesture(GestureId::new("drag"));
+        assert_eq!(commit, Ok(Invocation::Call(Call::Batch(expected))));
         assert_eq!(decode("describe_api", json!({})), Ok(Invocation::Describe));
         assert_eq!(
             decode("events", json!({})),

@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:7b4f96d085372f6b", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: stale via ARCH#threading's Collector row rewording only (program-stage collector fed by render and mixer; mixer's own for input rings); this section's text unchanged and consistent; holds" }
+verified = { hash = "b3:1edd3ad6b397a52d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values (cascade from ARCH#threading): re-read R-RT-001..006; the render thread reads live values through an arc-swap parameter channel and frees replaced ones on the collector, as R-RT-003 asks; text unchanged" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:3eb3cf79871277a7", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#214 ADR-0041): #214 only repoints ADR-0034 links to ADR-0041 here; re-read against F3's merged text (encoder profiles, protocol 0.13, shared program stage), both hold" }
+verified = { hash = "b3:bd0a03031d7ab70d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values (cascade from ARCH#protocol): re-read R-API-001..004; live values are additive (new actions, query, events, optional Batch.ends_gesture), so a minor bump at the slot; tool names stay valid (live)" }
 -->
 
 <a id="R-API-001"></a>

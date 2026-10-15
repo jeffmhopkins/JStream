@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:07769a38a8b6a334", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2 and #212: re-read; History bullet (log of what each change touched) and Tests list hold; the Touched unit tests moved to jstream-graph" }
+verified = { hash = "b3:c6f4eba93303b91d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read; Engine bullet names the open gestures under the collection lock, Audit bullet the live.set/cancel exclusion and per-gesture entries, new Gestures bullet, Session expiry via forget_client, and the live-values tests in src/tests/live_values.rs and snapshot.rs; Not here yet keeps audio faders" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -39,9 +39,10 @@ state machine. Contents:
   collection output's target. `output.set_key` and `output.clear_key` go to the
   injected `StreamKeyStore`, never under the collection lock. It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys, the undo
-  history and the subscribers behind one lock, and the drop ledger behind another, and executes
+  history, the open gestures and the subscribers behind one lock, and the drop ledger behind another, and executes
   batches, history calls, actions and queries. The pipeline threads do not take the collection lock.
-- **Audit log** (`audit.rs`): one `AuditEntry` per executed batch, undo, redo and action, sent to
+- **Audit log** (`audit.rs`): one `AuditEntry` per executed batch, undo, redo and action
+  (but `live.set` and `live.cancel`), and one per gesture that ends without a commit, sent to
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
   `audit.jsonl` from its own writer thread (see *Audit log* in [Design](#design)).
@@ -74,8 +75,13 @@ state machine. Contents:
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
   stacks, built from the inverse batches `Graph::apply` returns, and the log of what
   each recent change touched, which `undo_conflict` is checked against.
+- **Gestures** (`gesture.rs`): live values
+  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): every client's open
+  gestures, which one holds each parameter, the `live.changed` events each owes, and
+  the values of committed gestures the render thread has not caught up with (see *Live
+  values* in [Design](#design)).
 - **Session** (`session.rs`): `InProcessControl`, one client session. Its undo history
-  ends with it.
+  ends with it, and its open gestures expire.
 - **Events** (`events.rs`): the per-subscription queues behind `Control::events`.
 - **Outputs** (`outputs.rs`): the outputs' runtime state, following the collection's
   outputs after each batch and keeping the ones the host declared. The placeholder path steps
@@ -90,10 +96,15 @@ state machine. Contents:
   bus, and the packets the output thread drops (muxer rejects and what a stop's
   drain abandons) and the publish link's, and a sampler thread
   emits a tick about once a second until the last output stops.
-- **Tests** (`tests.rs`, `src/tests/history.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
+- **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
+  `tests/mcp.rs`, `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
-  end), the shared parity fixture, a differential run against
+  end), live values (no `rev` or collection change, a commit as one `rev` and one undo
+  step with its events in order, values held until a render reader adopts the
+  commit, a failed commit, cancel and expiry with their audit entries, validation and
+  limits, takeover, a deleted item, coalesced `live.changed`) and a live value drawn
+  over the shot in `snapshot.rs`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
@@ -128,7 +139,7 @@ state machine. Contents:
   leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
-Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
+Not here yet: live audio values (faders), the audio and outputs snapshots, a GPU encode target, and
 the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -141,7 +152,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c7f7481cca172259", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2 merge of main (#232 A6, #234 A4): re-read; A6's audit sink wording from main kept; Conflicts (graph's Touched set, encoder objects/props) and #212's collection-file wording hold" }
+verified = { hash = "b3:1231bd656ecbe1a1", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values, second pass: cascade from my later edits to ARCH#threading (collector frees replaced live values), protocol design (never-steps line, 0.11 note) and server design (EVENT_BUFFER sizing); re-read earlier this session, holds" }
 -->
 
 ### Engine and sessions
@@ -235,8 +246,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   (`not_found` for an unknown one) and fills `key_set` from the key store after the
   collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
-- **Actions**: `output.start` and `output.stop` (see *Outputs* below), and
-  `output.set_key` and `output.clear_key` (see *Stream keys* below).
+- **Actions**: `output.start` and `output.stop` (see *Outputs* below),
+  `output.set_key` and `output.clear_key` (see *Stream keys* below), and `live.set`
+  and `live.cancel` (see *Live values* below). `live.list` is a query answered from the
+  gesture table.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -291,8 +304,52 @@ collection lock:
   client's entry to blame, any other failure does too. The log is pruned to the oldest
   `since` of any kept step. Only when there is no conflict does the copy replace the
   graph.
-- **Not steps:** actions (outputs, stream keys), queries and history calls. Live
-  values are not built.
+- **Not steps:** actions (outputs, stream keys, live values), queries and history
+  calls. A gesture's step is its committing batch.
+
+### Live values
+
+Live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)) live in
+`gesture.rs`'s table, under the collection lock, and reach the render thread through
+the render parameter channel, never through the collection:
+- **`live.set`** checks the message's shape (1 to 256 values, each a live-adjustable
+  setter, room for a new gesture among the client's 16), then applies the values to a
+  copy of the graph exactly as a batch would, naming a failure `values.<n>.<field>`.
+  The copy is thrown away: `rev`, the undo history, the collection file and every
+  collection read stay as they were. The values go into the gesture, each taking its
+  parameter (an item's placement, set by `item.set_transform` or `item.set_geometry`,
+  or its crop) from any gesture that held it, and the table is published on the
+  channel (`RenderHub::publish_live`, a `LiveParams` of per-item overrides, swapped
+  with `arc-swap` only when it changed).
+- **The channel.** The render thread reads it after it adopts the snapshot on every
+  tick, with a pointer compare, and hands a replaced one to the collector
+  (`RenderReader::adopt`, R-RT-003). `compose` applies an item's live placement and
+  crop wherever the item is drawn, nested passes included, with no new snapshot and
+  no allocation. `video.snapshot` reads the channel with the snapshot under the lock,
+  so a snapshot shows an open gesture as the output does.
+- **`live.changed`** is coalesced per gesture: a gesture whose last event is at least
+  1/30 s old sends its unsent values at once; otherwise the `jstream-live` thread sends
+  the newest values when the interval is up. The thread starts when there is such work
+  and exits when there is none, and never holds the lock while it sleeps.
+- **Commit.** A batch with `ends_gesture` is refused with `invalid_argument` unless the
+  client has that gesture open; it is checked after the idempotency key, so a retried
+  commit gets its first answer. Once the batch applies, the gesture's unsent values go
+  out, then `state.changed`, then `live.ended` (`committed`, with `rev`). The gesture's
+  values move to the releasing list with the render generation current after the
+  commit (the generation of the snapshot that carries it), and leave the channel once
+  `RenderHub::caught_up` says the render thread holds that generation or is stopped.
+  That is checked at once and then every 4 ms by `jstream-live`, so the render thread
+  never waits and no frame shows the value from before the gesture in between
+  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading), "Live-value handover").
+- **Cancel and expiry.** `live.cancel` and a session's end (`InProcessControl`'s drop)
+  send the gesture's unsent values, then `live.ended` (`cancelled` or `expired`), and
+  drop its values from the channel at once. Cancelling a gesture that isn't open is a
+  no-op that succeeds. Each such gesture gets one audit entry (see *Audit log*); a
+  `live.set` never does.
+- **Deletes.** After every applied batch, undo and redo, live values on an item that is
+  gone are dropped from every gesture and from the releasing list.
+- **Not yet:** audio faders and sends, which need the mixer's own parameter channel and
+  its adopted generation in the same handover, and kind parameters marked `live`.
 
 ### Snapshots
 
@@ -413,8 +470,9 @@ event is dropped ([jstream-control open question 1](../jstream-control/README.md
 covers backpressure). `jstream-server` drains its connections' subscriptions as events
 arrive, however slowly a client reads, and bounds what it holds per connection itself
 ([jstream-server › Design](../jstream-server/README.md#design)). A batch emits
-`state.changed {rev, client_id, request_id}`, and an action emits one
-`output.state_changed` per step. Every subscription of every
+`state.changed {rev, client_id, request_id}`, and an output action emits one
+`output.state_changed` per step. A gesture emits `live.changed`, at most 30 a second,
+and `live.ended` when it ends (see *Live values*). Every subscription of every
 session receives every event emitted after it opened, in the engine's order;
 `state.changed` events therefore arrive in `rev` order with no gap. Subscribers are
 woken after the engine's lock is released. A stream ends, after what it buffered, when
@@ -617,7 +675,9 @@ capture when the mailbox is empty, and reads the composite back as RGBA8 because
 cut has no GPU encode target. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
-the snapshot it held to the program stage's `jstream-collector` thread. The GPU images the
+the snapshot it held to the program stage's `jstream-collector` thread. Then it does the
+same with the live values on the parameter channel, which the tick draws over the
+snapshot (see *Live values*); replaced ones go to the collector too. The GPU images the
 cache frees go there too, and so does the input of an encoder session that has
 finished (the session may already be gone, leaving that input the last reference to
 its shared state and channel), so nothing the render thread lets go of is freed on it
@@ -625,8 +685,7 @@ its shared state and channel), so nothing the render thread lets go of is freed 
 input to the same collector. The thread clears the stopped marker
 before its first load (`SeqCst`, then a fence), and publishes it again when it stops
 or a fatal error stops its drawing, so `RenderHub::caught_up` treats it as caught up
-([ARCH › Threads](../../docs/ARCHITECTURE.md#threading), "Live-value handover"; only
-tests poll it until live edits exist). The collector ends when the render and mixer
+([ARCH › Threads](../../docs/ARCHITECTURE.md#threading), "Live-value handover"). The collector ends when the render and mixer
 threads have dropped their senders, and the program stage (`Program`) joins it right
 after them. While the stage has no encoder session it draws nothing but still adopts
 each new snapshot, so it never holds a gesture up. The compositor
@@ -704,7 +763,9 @@ engine while that mutex is held. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The render snapshot is published under the collection
 lock (which makes the control side its one writer) and loaded by the render and
-snapshot threads with no lock at all. A stream's poll takes only its queue's lock. No lock
+snapshot threads with no lock at all; so are the live values on the parameter
+channel. The `jstream-live` thread takes the collection lock only to send due
+`live.changed` events and release committed values, and sleeps without it. A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
@@ -757,6 +818,15 @@ client the server maps its own wire ID to it, so the entry can't yet be matched 
 ID the client sent. The engine keeps each client's name for its lifetime, as it keeps
 the IDs.
 
+Live values are logged once per gesture, never per `live.set`
+([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): `live.set` and `live.cancel`
+get no entry of their own. A committed gesture's entry is its batch's. A gesture that
+ends without a commit gets one entry: `call` `live.cancel` with the cancelling
+request's `request_id`, or `live.ended` with no `request_id` when it expired with its
+session, plus `gesture_id`, `outcome` (`cancelled` or `expired`) and, in `edits`, the
+setters it held a value for, one per parameter, without the values. Its `rev` before
+and after are the same.
+
 `AuditSink` is a trait because the host chooses the sink (a file in the data
 directory, memory in tests, its own view in a UI), the same kind of host-injection
 seam as `DropSource`.
@@ -806,14 +876,13 @@ history and idempotency keys are not saved.
 
 ### Not yet
 
-- **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
-  [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
-  parameter channels.
+- **Live audio values** (faders and sends) and kind parameters marked `live`
+  (see *Live values*).
 - An `app` asset folder for live sources.
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
-- The audio and outputs snapshots, the parameter channels and gesture release of the
+- The audio and outputs snapshots, the mixer's parameter channel and its part in the
   live-value handover, and a GPU encode target. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one
   captured display, a CPU readback into the encoder, and the platform fakes in the
@@ -824,7 +893,7 @@ history and idempotency keys are not saved.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:b0f8eb4543a20caa", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3: publish.rs PublishError::new made public) into #207: took main's stamp; re-read; shared program stage and per-output thread text unaffected; holds" }
+verified = { hash = "b3:cbf70b4459419bca", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values, second pass: cascade from my later edits to ARCH#threading (collector frees replaced live values), protocol design (never-steps line, 0.11 note) and server design (EVENT_BUFFER sizing); re-read earlier this session, holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -856,8 +925,9 @@ program stage also starts `jstream-stats`, which is not a real-time thread: it e
 output stops. The render loop publishes capture mailbox skips, and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. None of those threads lock the collection: the render thread reads the
-render snapshot, and what the render and mixer threads let go of (replaced snapshots,
-GPU images, finished sessions' inputs) goes to the program stage's
+render snapshot and then the live values on the parameter channel, which it draws over
+it, and what the render and mixer threads let go of (replaced snapshots and live
+values, GPU images, finished sessions' inputs) goes to the program stage's
 `jstream-collector` thread. `output.stop` during `starting` cancels that start and
 emits `stopped` only after the start has dropped its threads. The render and mixer
 threads catch a panic at their boundary ([R-RT-006](../../docs/RULES.md#R-RT-006)); a

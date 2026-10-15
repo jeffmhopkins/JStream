@@ -384,7 +384,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:7d2feead6f32e91a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: Collector row now says the program stage's collector is fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs) and the mixer's own frees input rings; matches launch_program, push_each and Program::drop (render, mixer, then collector); render-snapshot paragraph holds" }
+verified = { hash = "b3:d6bdc0ec8335e72c", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read; handover status says built for the render thread (generation, reader slot, parameter channel, gesture release) and not the mixer, matching render.rs (caught_up, publish_live, adopt order) and gesture.rs release; Collector row and render-snapshot paragraph now list replaced live values" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -402,7 +402,7 @@ every mix runs at the base rate divided by an integer.
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release. |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release. |
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
 next to its code, which that section covers: the output pipeline in
@@ -472,14 +472,15 @@ the last one showed allocates no texture: an unchanged frame is not uploaded aga
 each nested scene is redrawn into the layer it had. An image no frame references is
 retired, then freed once the GPU has finished the last frame that used it (a
 `Queue::on_submitted_work_done` fence the cache polls without blocking). The render
-thread hands those images, and each render snapshot it replaces, to the program
-stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
+thread hands those images, and each render snapshot and set of live values it
+replaces, to the program stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
 reader slot as the handover below says. When a fatal error stops its drawing it
 publishes the stopped marker too: it adopts nothing more and only repeats the frame it
 last drew until teardown. The audio and outputs snapshots are not built.
 
-**Live-value handover** (decided; the render generation and its reader slot are built,
-the parameter channels and the gesture release are not): the engine learns that a real-time
+**Live-value handover** (decided; built for the render thread: its generation, its reader
+slot, its parameter channel and the gesture release. The mixer's channel and generation
+are not, so audio faders have no live values yet): the engine learns that a real-time
 thread holds a committed snapshot through a **generation counter per subsystem**. Each
 time the control side publishes a subsystem's snapshot it bumps that subsystem's
 generation and stores it in the snapshot. Each real-time thread that reads the snapshot
@@ -517,7 +518,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:231c7b6d2e48fbe8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; history and undo_conflict wording hold; the mock change is internal to jstream-control" }
+verified = { hash = "b3:c868b6c8ae2d124d", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read; Live values bullet (actions, live.list, live.changed/live.ended, ends_gesture commit, built for placements and crops, faders pending) matches the protocol crate; other bullets unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -553,10 +554,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
   and set a scene's `transition_in` and `transition_out` and an item's transition
   settings. The scene-switch action takes an optional preset.
-- **Live values** (`live.set`, `live.cancel`; events `live.changed`, `live.ended`):
-  actions that override live-adjustable parameters during a drag or a live dialog, with
-  no `rev` bump or undo step; one batch commits the gesture
-  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+- **Live values** (`live.set`, `live.cancel`; query `live.list`; events `live.changed`,
+  `live.ended`): actions that override live-adjustable parameters during a drag or a
+  live dialog, with no `rev` bump or undo step; one batch carrying `ends_gesture`
+  commits the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). Built for item
+  placements and crops; audio faders follow with the mixer's parameter channel.
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
   ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
@@ -627,22 +629,25 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:39a1787bc51a7934", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: tools.snap measured 143129 bytes after F3 and B5, so the text says about 145 KB" }
+verified = { hash = "b3:471babb058a60b13", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read; live tool listed, live.changed merging matches events.rs supersede, tools.snap measured after regenerating (about 205 KB with the live tool's edit schemas); audit line holds (live.set not logged per call, gestures once)" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `encoder`, `history`, `item`, `kind`, `live`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
   apart: each read returns the newest tick as `stats` (running totals), so it can't
-  evict the state and output events and its drop counts stay visible.
+  evict the state and output events and its drop counts stay visible. A drag's
+  `live.changed` events are merged into the newest buffered one of their gesture while
+  only `live.changed` events follow it, so a drag holds one buffered event.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 145 KB
-  of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 205 KB
+  of `tools/list` today, the `live` tool's share most of the edit schemas `item` and
+  `batch` carry, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in

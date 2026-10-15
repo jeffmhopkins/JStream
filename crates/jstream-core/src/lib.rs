@@ -25,6 +25,7 @@ mod collection;
 mod drops;
 mod engine;
 mod events;
+mod gesture;
 mod history;
 mod kinds;
 mod live;

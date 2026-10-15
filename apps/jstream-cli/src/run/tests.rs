@@ -5,8 +5,8 @@ use crate::args::Connection;
 use crate::block::block_on;
 use crate::exit::{self, CliError};
 use jstream_control::protocol::{
-    Batch, Call, ClientId, DropCounts, Edit, Event, Hello, ItemId, OutputId, OutputState,
-    PROTOCOL_VERSION, Response, Rev, SceneId, SourceId, SourceKind, Welcome,
+    Batch, Call, ClientId, Crop, DropCounts, Edit, Event, GestureId, Hello, ItemId, LiveOutcome,
+    OutputId, OutputState, PROTOCOL_VERSION, Response, Rev, SceneId, SourceId, SourceKind, Welcome,
 };
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
 use serde_json::{Value, json};
@@ -124,6 +124,7 @@ fn populated() -> MockEngine {
         ],
         expected_rev: None,
         idempotency_key: None,
+        ends_gesture: None,
     };
     block_on(setup.call(Call::Batch(batch))).expect("setup batch");
     engine
@@ -759,6 +760,30 @@ fn events_golden_dropped_notice() {
         String::from_utf8_lossy(&out),
         "stats.tick seq 2 capture_frames 1 audio_frames 0 render_ticks 0 \
          encode_frames 4 encode_blocks 0 output_packets 3\n"
+    );
+
+    let events = control.events();
+    engine.emit(Event::LiveChanged {
+        gesture_id: GestureId::new("drag"),
+        client_id: ClientId::new("mock_1"),
+        values: vec![Edit::ItemSetCrop {
+            item_id: ItemId::new("cam"),
+            scene_id: None,
+            crop: Crop::NONE,
+        }],
+    });
+    engine.emit(Event::LiveEnded {
+        gesture_id: GestureId::new("drag"),
+        client_id: ClientId::new("mock_1"),
+        outcome: LiveOutcome::Committed,
+        rev: Some(Rev(3)),
+    });
+    let mut out = Vec::new();
+    stream_events(events, Some(2), false, &mut out).expect("two events");
+    assert_eq!(
+        String::from_utf8_lossy(&out),
+        "live.changed drag by mock_1: item.set_crop\n\
+         live.ended drag by mock_1 committed rev 3\n"
     );
 
     let events = control.events();

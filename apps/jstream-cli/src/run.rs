@@ -10,8 +10,9 @@ use crate::block::{block_on, next_event};
 use crate::exit::{self, CliError};
 use crate::mcp;
 use jstream_control::protocol::{
-    Action, Call, CallResult, Event, Hello, ItemInfo, OutputInfo, OutputKind, PROTOCOL_VERSION,
-    QueryResult, Response, RtmpTarget, SecretString, SourceInfo, SourceKind, Welcome,
+    Action, Call, CallResult, Edit, Event, Hello, ItemInfo, OutputInfo, OutputKind,
+    PROTOCOL_VERSION, QueryResult, Response, RtmpTarget, SecretString, SourceInfo, SourceKind,
+    Welcome,
 };
 use jstream_control::{Control, ControlError, EventStream, WsConfig, WsControl};
 use serde_json::json;
@@ -550,6 +551,34 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
                 drops.encode_blocks,
                 drops.output_packets,
             )?;
+        }
+        Event::LiveChanged {
+            gesture_id,
+            client_id,
+            values,
+        } => {
+            let names: Vec<&str> = values.iter().map(Edit::name).collect();
+            writeln!(
+                out,
+                "live.changed {gesture_id} by {client_id}: {}",
+                names.join(", ")
+            )?;
+        }
+        Event::LiveEnded {
+            gesture_id,
+            client_id,
+            outcome,
+            rev,
+        } => {
+            write!(
+                out,
+                "live.ended {gesture_id} by {client_id} {}",
+                outcome.name()
+            )?;
+            if let Some(rev) = rev {
+                write!(out, " rev {rev}")?;
+            }
+            writeln!(out)?;
         }
         other => line(out, other)?,
     }

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:7d6895f2ac3f8f89", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#226 A3, #229, #230) into B2-f3: re-read; contents list holds, main changed only its stamp context" }
+verified = { hash = "b3:a552a33f795b9b1c", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read; contents list holds, run.rs only gains live.changed/live.ended lines" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:923151b966533522", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; B5's Edits text and the No undo or redo command bullet hold" }
+verified = { hash = "b3:6ed766deb3606816", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read; No live-value command bullet matches run.rs's live.changed/live.ended human lines; edit list unchanged (Batch gains ends_gesture, not exposed by the CLI)" }
 -->
 
 ```sh
@@ -125,6 +125,12 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   command is a new client, so a one-shot `undo` would always find nothing to undo.
   `mcp` is one client for its whole run: its `history` tool undoes and redoes the
   agent's own edits.
+- **No live-value command.** A gesture belongs to its client and expires when the
+  session ends ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), so a one-shot
+  `live.set` would be undone as the command exits. `mcp`'s `live` tool keeps one open
+  for the agent's run. `events` shows other clients' gestures: human output prints
+  `live.changed <gesture> by <client>: <setters>` and `live.ended <gesture> by
+  <client> <outcome> [rev N]`.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
@@ -223,7 +229,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:237f2c2d77fddc0e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; holds" }
+verified = { hash = "b3:7bf08d94aca49476", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read; parser, connector, writer and MCP-proxy design unchanged by the live-event printing and ends_gesture: None" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

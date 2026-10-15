@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:fb6654585c0e8adc", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; contents list holds" }
+verified = { hash = "b3:1455dd1badb1184a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read; contents list holds (mock.rs gains gestures, no new module)" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:c9db94df2b9b9a37", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read the merged Mock section; B5's item.set_source and duplicated_from text kept; undo bullet now says a deleted source comes back with its duplicated_from and item.set_source undoes to the previous source, as jstream-graph's inverses do" }
+verified = { hash = "b3:a2bd82e07c1e7d17", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read the new Mock live-values bullet against mock.rs (check order, takeover, cancel no-op, ends_gesture, pruning, Drop expiry, no coalescing) and the engine's end_gesture; trait, WS and open questions unchanged" }
 -->
 
 ### The trait
@@ -177,6 +177,17 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   the step is dropped, where the engine refuses only a change that touches what the
   step touches. So an undo that succeeds against the mock succeeds against the engine
   too, but not the other way round;
+- live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): `live.set` with
+  the engine's checks in its order (1 to 256 values, each `item.set_transform`,
+  `item.set_geometry` or `item.set_crop`, at most 16 open gestures per client, then each
+  value as a batch edit named `values.<n>`), takeover of a parameter another gesture
+  holds, `live.cancel` (a no-op for a gesture that isn't open), `live.list`, a batch's
+  `ends_gesture` (`invalid_argument` unless the client has it open), live values
+  dropped with their item, and a session's gestures expiring when its `MockControl` is
+  dropped. It emits `live.changed` with each `live.set`'s values and `live.ended` after
+  the commit's `state.changed`. With no render thread and no clock, it doesn't coalesce
+  `live.changed` (the engine sends at most as many) and lets go of a committed
+  gesture's values at once;
 - `state.changed` events carrying the request ID (and `cause` for an undo or redo), and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;

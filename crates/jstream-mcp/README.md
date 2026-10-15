@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:c624f38219bdcd15", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: re-read; contents hold" }
+verified = { hash = "b3:335d1a3561ab9645", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read; contents hold (events.rs gains live.changed superseding, tools.rs ends_gesture)" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:754ed060e6114bd8", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: cascade; re-read, tool table (with F3's encoder tool) holds; item tool gains set_source" }
+verified = { hash = "b3:04c22516ddc3fea2", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 live values: re-read; tool table lists live and batch's ends_gesture as tools.rs and tools.snap have them; live tool text and the events superseding paragraph match events.rs Buffer::supersede (newest same-gesture live.changed, only live.changed after it, oldest never taken)" }
 -->
 
 ### Tools
@@ -60,8 +60,8 @@ below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`canvas`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
-| `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
+| one per noun (`canvas`, `encoder`, `history`, `item`, `kind`, `live`, `output`, `scene`, `source`, `state`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
 
@@ -70,7 +70,10 @@ is the protocol's own object, tagged by `type`, and its schema is the protocol's
 schemas under `oneOf`. The two batch options apply to edits and history ops only
 ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): an action or query that
 carries them is rejected. The `history` tool undoes and redoes the session's own steps,
-never another client's. Unknown argument keys are rejected too, so a misspelt
+never another client's. The `live` tool (`live.set`, `live.cancel`, `live.list`) previews
+placements and crops without a `rev` change; the agent commits a gesture with `batch`
+and `ends_gesture` ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), and the
+gestures it leaves open expire when its session ends. Unknown argument keys are rejected too, so a misspelt
 `expected_rev` can't silently drop the concurrency check. Each tool's `inputSchema`
 carries, under `$defs`, every protocol definition it refers to, so it stands alone. Tool
 names follow [R-API-002](../../docs/RULES.md#R-API-002), checked by the crate-root test
@@ -185,7 +188,14 @@ the buffer nor the `Control`'s own stream grows while the agent is idle. It keep
 Consequences). A tick carries running totals, so the feed keeps only the newest one,
 outside the buffer, and every read returns it as `stats`; an agent still sees the drop
 counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
-counted in `dropped`. A read drains
+counted in `dropped`. `live.changed` arrives up to 30 times a second per gesture while
+someone drags, so it would push other events out too. Each carries the newest values
+of what changed, so a newer one stands for the newest buffered one of the same gesture
+when only `live.changed` events follow that one: the feed takes the older one out,
+merges its values under the newer ones, and buffers the result with the next `seq`. A
+drag holds one buffered event, every other event keeps its order, and the left-out
+`seq` is not counted in `dropped`, since nothing it said is lost. The oldest buffered
+event is never taken out, so `dropped` stays exact. A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 
