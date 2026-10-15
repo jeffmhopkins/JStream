@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:ff9b53ca959fa098", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp (E1's) and this branch's depends_on on ADR-0041; outputs text holds: the generic RTMP/RTMPS output is unchanged in ADR-0041" }
+verified = { hash = "b3:5cc7a93528292918", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ADR-0041, whose only change is text (review N2): the Context bullet is rewrapped and the follow-on list names jstream-media and ARCH's protocol section; the decision is unchanged, so this section holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

@@ -23,9 +23,10 @@ in a single sign-in instead of asking for it incrementally.
 broadcast control or turns chat sending on.
 
 Building `jstream-youtube` (roadmap Y1) found two things:
-- Google's [guide to OAuth 2.0 for installed apps](https://developers.google.com/identity/protocols/oauth2/native-app)
-  says incremental authorization is not supported for installed apps. "Incrementally" would therefore mean a second, complete sign-in later, not
-  Google's incremental flow.
+- Google's
+  [guide to OAuth 2.0 for installed apps](https://developers.google.com/identity/protocols/oauth2/native-app)
+  says incremental authorization is not supported for installed apps. "Incrementally"
+  would therefore mean a second, complete sign-in later, not Google's incremental flow.
 - JStream's main use is going live, which needs broadcast control, so almost every user
   would see that second consent screen soon after the first.
 
@@ -121,9 +122,9 @@ maintainer decision ([ADR-0043](0043-narrow-maintainer-tier.md)).
   - ADR-0034: `status = "superseded"`, `superseded_by` pointing here, then
     `cargo xtask docs generate`.
   - Re-point every reference to ADR-0034 here, since references to a superseded ADR fail
-    the docs check: the `Docs:` lines and READMEs of `jstream-mux`, `jstream-outputs` and
-    `jstream-youtube`, `crates/jstream-protocol/README.md`, `ROADMAP.md` and the
-    ARCHITECTURE crate map and integrations sections.
+    the docs check: the `Docs:` lines and READMEs of `jstream-media`, `jstream-mux`,
+    `jstream-outputs` and `jstream-youtube`, `crates/jstream-protocol/README.md`,
+    `ROADMAP.md` and the ARCHITECTURE crate map and protocol sections.
   - `crates/jstream-youtube/README.md`: the scopes bullet says JStream signs in once with
     `youtube`.
   - `docs/external.toml`: the `yt-live-api` entry's `relied_on` names `youtube` for every
