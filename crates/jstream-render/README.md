@@ -326,7 +326,37 @@ Aspect ratio (V1a): not yet.
 
 The multi-pass filters (V2): not yet.
 
-Assets and references (V3): not yet.
+Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
+`scene_mask`. Each reads one external image that the chain runtime hands over with
+`VideoFilter::set_reference(Option<Arc<Image>>)` (a defaulted `Pass::set_reference`
+underneath): render opens no files (R-RT-002), so V0 resolves the asset or scene
+reference and decodes it. A kind passes its input through unchanged until both its
+reference setting is non-`null` and an image is set, and refuses an image from another
+compositor.
+
+- `apply_lut` (`lut`: asset, `cube` or `png`; `amount` 0 to 1, default 1). The table
+  maps sRGB-encoded straight colour, the `.cube` convention: the shader unpremultiplies,
+  encodes, looks up, mixes with the input by `amount` in encoded values, then decodes
+  and premultiplies; alpha is kept. `Lut::parse_cube` is a pure-Rust `.cube` parser
+  (`LUT_3D_SIZE` 2 to 64, `DOMAIN_MIN`/`DOMAIN_MAX` or `LUT_3D_INPUT_RANGE`, comments,
+  `TITLE` and other keywords ignored; 1D tables, bad sizes, wrong row counts and bad
+  numbers are a `LutError`). A domain other than 0 to 1 is resampled onto it, so input
+  outside the domain clamps. `Lut::from_tiled_rgba8` reads the common PNG layout (a
+  square of `k * k` tiles of `k² x k²`, 512x512 for 64 points, blue choosing the tile)
+  from decoded RGBA8. `lut_image(compositor, lut)` makes the reference image: the blue
+  slices as near-square 2D tiles (512x512 for 64 points, so no adapter limit is near),
+  stored `Rgba16Float` through a one-function data upload in `image.rs`, values clamped to
+  0 to 1. The shader recovers the size from the image's dimensions and does the
+  trilinear lookup as two bilinear taps in adjacent slices at texel centres; an image
+  that is not such a layout passes the input through. `Lut`, `LutError` and
+  `lut_image` are crate-internal until V0 re-exports them.
+- `image_mask` (`image`: asset, png/jpg/jpeg/webp/gif/bmp; `mode` alpha or luma;
+  `invert`) and `scene_mask` (`scene`: scene reference, its composited layer; `mode`
+  alpha, luma or clip; `invert`). The mask is stretched over the frame and scales the
+  premultiplied input: by its alpha, by BT.709 luma of its sRGB-encoded colour times its
+  alpha (`#808080` keeps about half), or for `clip` by 1 where the scene's alpha is at
+  least one half and 0 elsewhere (a hard clip that ignores translucency). `invert` uses
+  one minus the coverage. OBS's colour blend modes for image masks are not offered.
 
 <a id="testing"></a>
 ## Testing

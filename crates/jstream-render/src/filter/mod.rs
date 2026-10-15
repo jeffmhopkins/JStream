@@ -87,6 +87,15 @@ impl VideoFilter {
         self.pass.output_size(width, height)
     }
 
+    /// Sets the image an asset or scene-reference filter reads (`apply_lut`'s table,
+    /// `image_mask`'s mask, `scene_mask`'s scene layer), or clears it with `None`. The
+    /// chain runtime resolves the reference and calls this whenever the image changes,
+    /// for a scene every frame. Without one those kinds pass their input through; other
+    /// kinds ignore it. The image must come from the compositor that draws the filter.
+    pub fn set_reference(&mut self, image: Option<std::sync::Arc<crate::Image>>) {
+        self.pass.set_reference(image);
+    }
+
     pub(crate) fn pass_mut(&mut self) -> &mut dyn Pass {
         self.pass.as_mut()
     }

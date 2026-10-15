@@ -7,6 +7,7 @@
 //! small allocations per frame.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use jstream_protocol::Settings;
 
@@ -33,6 +34,14 @@ pub(crate) trait Pass: Send {
     /// The size this filter draws for an input of `width` by `height`.
     fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
         (width, height)
+    }
+
+    /// Hands the filter its external image: a decoded asset (a LUT from
+    /// `assets::lut_image`, a mask image) or the referenced scene's composited layer,
+    /// set by the chain runtime whenever it changes; `None` clears it. Kinds that read no
+    /// external image ignore it.
+    fn set_reference(&mut self, image: Option<Arc<Image>>) {
+        let _ = image;
     }
 
     /// Records the filter into `ctx`: read `input`, fill all of `output`, a layer of
