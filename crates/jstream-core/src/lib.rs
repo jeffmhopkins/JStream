@@ -6,7 +6,8 @@
 //!
 //! Without platform backends, outputs are a placeholder state machine.
 //! [`Engine::with_backends`](engine::Engine::with_backends) and
-//! [`Engine::with_publish`](engine::Engine::with_publish) run the media pipeline on
+//! [`Engine::with_publish`](engine::Engine::with_publish) (or
+//! [`Engine::with_publish_opener`](engine::Engine::with_publish_opener)) run the media pipeline on
 //! `output.start` instead. That pipeline registers the drop sources a `stats.tick`
 //! sums and emits one about once a second while it runs. There is no undo, audit log
 //! or persistence yet.
@@ -32,7 +33,8 @@ pub use drops::{
 };
 pub use engine::Engine;
 pub use runtime::{
-    LinkState, LivePublish, OutputStats, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
+    LinkState, LivePublish, OpenPublish, OutputStats, PublishError, RecordingPublish, RtmpPublish,
+    connect_rtmp,
 };
 pub use session::InProcessControl;
 pub use snapshot::SourceFrameError;
