@@ -1,6 +1,7 @@
 //! Queries: reads with no effect on state, and their results.
 
 use crate::command::{Crop, ItemTransform, SourceKind};
+use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
@@ -38,7 +39,7 @@ pub enum Query {
         scene_id: SceneId,
     },
     /// Reads the whole collection state (every source, every scene with its items, and
-    /// every output) at one revision: what a client reads on connecting, after a `state.changed` it
+    /// every output and encoder profile) at one revision: what a client reads on connecting, after a `state.changed` it
     /// didn't cause, or before an edit it sends with `expected_rev`.
     #[serde(rename = "state.get")]
     StateGet,
@@ -65,6 +66,9 @@ pub enum Query {
     /// sends. Outputs have no display order of their own.
     #[serde(rename = "output.list")]
     OutputList,
+    /// Lists the collection's encoder profiles, ordered by ID.
+    #[serde(rename = "encoder.list")]
+    EncoderList,
 }
 
 impl Query {
@@ -80,6 +84,7 @@ impl Query {
             Query::KindList => "kind.list",
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
+            Query::EncoderList => "encoder.list",
         }
     }
 }
@@ -109,6 +114,20 @@ pub enum QueryResult {
         /// never reported. Missing (from a server older than 0.7) parses as `false`.
         #[serde(default)]
         key_set: bool,
+        /// The encoder session the output uses while it runs: which profile, and which
+        /// other running outputs share it. Absent while it isn't running, and from a
+        /// server older than 0.10.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        encoder: Option<EncoderSessionInfo>,
+        /// How many video encoder sessions the engine has open now, for every output,
+        /// and how many of them are hardware ones. Hardware encoders cap their
+        /// concurrent sessions per GPU vendor and driver, and the engine doesn't guess
+        /// the cap. Missing (from a server older than 0.10) parses as 0.
+        #[serde(default)]
+        encoder_sessions: u32,
+        /// Of `encoder_sessions`, the hardware ones. Missing parses as 0.
+        #[serde(default)]
+        hardware_sessions: u32,
     },
     /// The result of `source.list`.
     #[serde(rename = "source.list")]
@@ -141,6 +160,10 @@ pub enum QueryResult {
         /// as empty.
         #[serde(default)]
         outputs: Vec<OutputInfo>,
+        /// Every encoder profile, ordered by ID. Missing (from a server older than
+        /// 0.10) parses as empty.
+        #[serde(default)]
+        encoders: Vec<EncoderProfileInfo>,
     },
     /// The result of `video.snapshot`: the program mix encoded as a PNG.
     #[serde(rename = "video.snapshot")]
@@ -177,6 +200,14 @@ pub enum QueryResult {
         /// The outputs, ordered by ID.
         outputs: Vec<OutputInfo>,
     },
+    /// The result of `encoder.list`.
+    #[serde(rename = "encoder.list")]
+    EncoderList {
+        /// The revision the list was read at.
+        rev: Rev,
+        /// The profiles, ordered by ID.
+        encoders: Vec<EncoderProfileInfo>,
+    },
 }
 
 impl QueryResult {
@@ -192,6 +223,7 @@ impl QueryResult {
             QueryResult::KindList { .. } => "kind.list",
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
+            QueryResult::EncoderList { .. } => "encoder.list",
         }
     }
 }

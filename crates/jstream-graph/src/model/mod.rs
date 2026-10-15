@@ -1,5 +1,5 @@
-//! The collection state: sources, scenes and the items that place sources in scenes, and
-//! the outputs.
+//! The collection state: sources, scenes and the items that place sources in scenes, the
+//! outputs, and the encoder profiles they use.
 //!
 //! Docs: docs/ARCHITECTURE.md#data-model
 //!
@@ -18,13 +18,15 @@
 //! - Every RTMP output's URL is a valid `rtmp://` or `rtmps://` server URL that carries
 //!   no credential. Stream keys are never here (R-SEC-001): they live in the OS
 //!   credential store, outside the collection.
+//! - Every output's encoder profile exists, and every profile holds an encoding the
+//!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
 //!
 //! The structs have private fields so that later additions (source `filters[]`, item
 //! `effects[]`, the full 3D transform) don't break callers.
 
 use jstream_protocol::{
-    Crop, ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind, Rev, SceneId, Settings,
-    SourceId, SourceKind,
+    Crop, EncoderProfile, EncoderProfileId, ItemId, ItemTransform, KindDescriptor, OutputId,
+    OutputKind, Rev, SceneId, Settings, SourceId, SourceKind,
 };
 use std::collections::BTreeMap;
 
@@ -83,6 +85,7 @@ pub struct State {
     pub(crate) sources: BTreeMap<SourceId, Source>,
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
+    pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
 }
 
 impl State {
@@ -129,6 +132,26 @@ impl State {
     /// The output with this ID.
     pub fn output(&self, id: &OutputId) -> Option<&Output> {
         self.outputs.get(id)
+    }
+
+    /// Every encoder profile, ordered by ID.
+    pub fn encoders(&self) -> impl ExactSizeIterator<Item = &Encoder> {
+        self.encoders.values()
+    }
+
+    /// The encoder profile with this ID.
+    pub fn encoder(&self, id: &EncoderProfileId) -> Option<&Encoder> {
+        self.encoders.get(id)
+    }
+
+    /// The encoding `output` uses: its profile's, or the engine's default when it has
+    /// none. `None` for an output not in the collection.
+    pub fn encoding_of(&self, output: &OutputId) -> Option<EncoderProfile> {
+        let output = self.outputs.get(output)?;
+        Some(match &output.encoder_profile {
+            Some(id) => self.encoders.get(id)?.profile,
+            None => EncoderProfile::DEFAULT,
+        })
     }
 
     pub(crate) fn scene_index(&self, id: &SceneId) -> Option<usize> {
@@ -243,6 +266,7 @@ impl Item {
 pub struct Output {
     pub(crate) id: OutputId,
     pub(crate) kind: OutputKind,
+    pub(crate) encoder_profile: Option<EncoderProfileId>,
 }
 
 impl Output {
@@ -254,5 +278,35 @@ impl Output {
     /// What it is and where it sends.
     pub fn kind(&self) -> &OutputKind {
         &self.kind
+    }
+
+    /// The encoder profile it uses, or `None` for the engine's default.
+    pub fn encoder_profile(&self) -> Option<&EncoderProfileId> {
+        self.encoder_profile.as_ref()
+    }
+}
+
+/// One encoder profile: a named encoding outputs can share.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Encoder {
+    pub(crate) id: EncoderProfileId,
+    pub(crate) name: String,
+    pub(crate) profile: EncoderProfile,
+}
+
+impl Encoder {
+    /// Its ID.
+    pub fn id(&self) -> &EncoderProfileId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The encoding.
+    pub fn profile(&self) -> &EncoderProfile {
+        &self.profile
     }
 }

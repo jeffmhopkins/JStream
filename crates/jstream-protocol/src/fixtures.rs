@@ -14,6 +14,10 @@ use crate::{
     Settings, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
+    AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
+    EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,
+};
+use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
@@ -146,6 +150,63 @@ pub(crate) fn edits() -> Vec<Edit> {
                 container: RecordContainer::Mp4,
             },
         },
+        Edit::EncoderCreate {
+            profile_id: EncoderProfileId::new("enc_rec"),
+            name: "Recording".into(),
+            profile: recording_profile(),
+        },
+        Edit::EncoderUpdate {
+            profile_id: EncoderProfileId::new("enc_rec"),
+            name: "Recording (hardware)".into(),
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    hardware: HardwarePreference::Require,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
+        },
+        Edit::OutputSetEncoder {
+            output_id: OutputId::new("out_rec"),
+            profile_id: Some(EncoderProfileId::new("enc_rec")),
+        },
+        Edit::EncoderDelete {
+            profile_id: EncoderProfileId::new("enc_old"),
+        },
+    ]
+}
+
+/// A recording profile: 12000 kbit/s VBR peaking at 20000, hardware preferred.
+fn recording_profile() -> EncoderProfile {
+    EncoderProfile {
+        video: VideoEncoding {
+            codec: VideoCodec::H264,
+            rate_control: RateControl::Vbr {
+                kbps: 12000,
+                max_kbps: 20000,
+            },
+            keyframe_interval_s: 2,
+            hardware: HardwarePreference::Prefer,
+        },
+        audio: AudioEncoding {
+            codec: AudioCodec::Aac,
+            kbps: 320,
+        },
+    }
+}
+
+fn encoder_infos() -> Vec<EncoderProfileInfo> {
+    vec![
+        EncoderProfileInfo {
+            profile_id: EncoderProfileId::new("enc_rec"),
+            name: "Recording".into(),
+            profile: recording_profile(),
+        },
+        EncoderProfileInfo {
+            profile_id: EncoderProfileId::new("enc_stream"),
+            name: "Stream".into(),
+            profile: EncoderProfile::DEFAULT,
+        },
     ]
 }
 
@@ -157,10 +218,21 @@ fn rtmp(url: &str) -> OutputKind {
 }
 
 fn output_infos() -> Vec<OutputInfo> {
-    vec![OutputInfo {
-        output_id: OutputId::new("out_yt"),
-        kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
-    }]
+    vec![
+        OutputInfo {
+            output_id: OutputId::new("out_rec"),
+            kind: OutputKind::Record {
+                path: "/home/me/Videos/show.mp4".into(),
+                container: RecordContainer::Mp4,
+            },
+            encoder_profile: Some(EncoderProfileId::new("enc_rec")),
+        },
+        OutputInfo {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+            encoder_profile: None,
+        },
+    ]
 }
 
 pub(crate) fn actions() -> Vec<Action> {
@@ -198,6 +270,7 @@ pub(crate) fn queries() -> Vec<Query> {
             kind_id: "color".into(),
         },
         Query::OutputList,
+        Query::EncoderList,
     ]
 }
 
@@ -392,6 +465,13 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             output_id: OutputId::new("out_yt"),
             state: OutputState::Active,
             key_set: true,
+            encoder: Some(EncoderSessionInfo {
+                profile_id: None,
+                shared_with: vec![OutputId::new("out_tw")],
+                hardware: false,
+            }),
+            encoder_sessions: 2,
+            hardware_sessions: 1,
         },
         QueryResult::SourceList {
             rev: Rev(12),
@@ -418,6 +498,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             ],
             outputs: output_infos(),
+            encoders: encoder_infos(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -451,6 +532,10 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::OutputList {
             rev: Rev(12),
             outputs: output_infos(),
+        },
+        QueryResult::EncoderList {
+            rev: Rev(12),
+            encoders: encoder_infos(),
         },
     ]
 }
@@ -527,6 +612,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Item,
         EntityKind::Source,
         EntityKind::Output,
+        EntityKind::Encoder,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,

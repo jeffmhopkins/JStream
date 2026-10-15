@@ -1,5 +1,5 @@
 //! The JStream scene graph: sources, scenes and the items that place sources in scenes,
-//! and the outputs' configuration.
+//! and the outputs' configuration with the encoder profiles they use.
 //! [`Graph::apply`] applies a batch of protocol edits atomically, increments the revision
 //! by one, and returns the inverse batch that undoes it. Layer 2: plain data, no GPU, no
 //! I/O.
@@ -10,12 +10,13 @@
 
 mod apply;
 mod deps;
+mod encoder;
 mod model;
 mod read;
 mod target;
 
 pub use apply::Applied;
-pub use model::{Graph, Item, Output, Scene, Source, State};
+pub use model::{Encoder, Graph, Item, Output, Scene, Source, State};
 
 #[cfg(test)]
 mod tests;

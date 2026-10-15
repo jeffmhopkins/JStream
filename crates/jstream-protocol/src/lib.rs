@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod command;
+mod encoder;
 mod envelope;
 mod error;
 mod event;
@@ -26,6 +27,10 @@ mod version;
 pub use command::{
     Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SourceKind, Vec2,
 };
+pub use encoder::{
+    AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileInfo, EncoderSessionInfo,
+    HardwarePreference, RateControl, VideoCodec, VideoEncoding,
+};
 pub use envelope::{
     Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request, Response,
     ServerMessage, Welcome,
@@ -37,7 +42,9 @@ pub use geometry::{
     CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, Placed,
     ProjectedQuad, Size, legacy_quad,
 };
-pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};
+pub use id::{
+    ClientId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId,
+};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,

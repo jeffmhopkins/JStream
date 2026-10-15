@@ -2,7 +2,7 @@
 
 use crate::Graph;
 use jstream_protocol::{
-    Crop, Edit, EntityKind, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId,
+    Crop, Edit, EncoderProfile, EncoderProfileId, EntityKind, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId,
     OutputInfo, OutputKind, ParamDescriptor, ParamType, ProtocolError, QueryResult,
     RecordContainer, Rev, RtmpTarget, SceneId, Settings, SourceId, SourceKind, Vec2,
 };
@@ -586,6 +586,7 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
                 kind: OutputKind::Rtmp {
                     target: target("rtmps://a.rtmps.youtube.com:443/live2"),
                 },
+                encoder_profile: None,
             }],
         }
     );
@@ -640,6 +641,7 @@ fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
                     path: path.clone(),
                     container: RecordContainer::Mp4,
                 },
+                encoder_profile: None,
             }],
         }
     );
@@ -1562,5 +1564,101 @@ fn every_edge_adding_edit_is_cycle_checked() {
     apply_ok(
         &mut g,
         vec![set_settings("cam", &[("mask", scene_ref("c"))])],
+    );
+}
+
+fn encoder_create(id: &str) -> Edit {
+    Edit::EncoderCreate {
+        profile_id: EncoderProfileId::new(id),
+        name: format!("Profile {id}"),
+        profile: EncoderProfile::DEFAULT,
+    }
+}
+
+fn set_encoder(output: &str, profile: Option<&str>) -> Edit {
+    Edit::OutputSetEncoder {
+        output_id: OutputId::new(output),
+        profile_id: profile.map(EncoderProfileId::new),
+    }
+}
+
+/// Every encoder edit undoes exactly, and deleting an output that uses a profile
+/// restores its choice on undo.
+#[test]
+fn encoder_edits_invert() {
+    let mut graph = graph();
+    apply_ok(
+        &mut graph,
+        vec![
+            output_create("yt", "rtmp://a.rtmp.youtube.com/live2"),
+            encoder_create("hq"),
+        ],
+    );
+    apply_ok(&mut graph, vec![set_encoder("yt", Some("hq"))]);
+    assert_eq!(
+        graph
+            .state()
+            .output(&OutputId::new("yt"))
+            .and_then(|o| o.encoder_profile())
+            .map(EncoderProfileId::as_str),
+        Some("hq")
+    );
+    let mut faster = EncoderProfile::DEFAULT;
+    faster.video.keyframe_interval_s = 1;
+    apply_ok(
+        &mut graph,
+        vec![Edit::EncoderUpdate {
+            profile_id: EncoderProfileId::new("hq"),
+            name: "Fast keyframes".into(),
+            profile: faster,
+        }],
+    );
+    assert_eq!(graph.state().encoding_of(&OutputId::new("yt")), Some(faster));
+    let deleted = apply_ok(
+        &mut graph,
+        vec![Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        }],
+    );
+    assert_eq!(deleted.inverse.edits.len(), 2, "{:?}", deleted.inverse);
+    apply_ok(
+        &mut graph,
+        vec![Edit::EncoderDelete {
+            profile_id: EncoderProfileId::new("hq"),
+        }],
+    );
+}
+
+/// A profile in use can be deleted in the batch that moves its last user off it.
+#[test]
+fn a_profile_is_freed_within_one_batch() {
+    let mut graph = graph();
+    apply_ok(
+        &mut graph,
+        vec![
+            output_create("yt", "rtmp://a.rtmp.youtube.com/live2"),
+            encoder_create("hq"),
+            set_encoder("yt", Some("hq")),
+        ],
+    );
+    let (field, _) = invalid_reason(apply_err(
+        &mut graph,
+        vec![Edit::EncoderDelete {
+            profile_id: EncoderProfileId::new("hq"),
+        }],
+    ));
+    assert_eq!(field, "edits.0.profile_id");
+    apply_ok(
+        &mut graph,
+        vec![
+            set_encoder("yt", None),
+            Edit::EncoderDelete {
+                profile_id: EncoderProfileId::new("hq"),
+            },
+        ],
+    );
+    assert_eq!(
+        graph.state().encoding_of(&OutputId::new("yt")),
+        Some(EncoderProfile::DEFAULT)
     );
 }
