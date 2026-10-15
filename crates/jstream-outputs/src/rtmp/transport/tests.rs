@@ -224,16 +224,21 @@ fn a_write_deadline_bounds_a_large_write_over_tls() {
 #[test]
 fn shutdown_over_tls_honours_the_write_deadline() {
     let pki = TestPki::new(&["localhost"]);
-    let (port, server) = tls_server(pki.server_config(&[&TLS13]), |mut s| {
+    let (ready, server_ready) = std::sync::mpsc::channel();
+    let (port, server) = tls_server(pki.server_config(&[&TLS13]), move |mut s| {
         // A timeout, not a hang, if the client never shuts the socket down.
         s.sock
             .set_read_timeout(Some(Duration::from_secs(5)))
             .unwrap();
+        let _ = ready.send(());
         let mut rest = Vec::new();
         s.read_to_end(&mut rest).map_err(|e| e.kind())
     });
     let config = client_config(pki.roots.clone()).unwrap();
     let mut t = connect_tls(&url("rtmps", "localhost", port), TIMEOUT, config).unwrap();
+    // macOS refuses `setsockopt` with EINVAL once the peer has shut down, so the
+    // server's timeout must be set before the client shuts down.
+    server_ready.recv().unwrap();
     t.set_write_deadline(Some(std::time::Instant::now()));
     let err = t
         .shutdown()
