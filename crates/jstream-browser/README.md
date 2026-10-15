@@ -13,12 +13,12 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:7dab300ad8693389", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 round 1: seam paragraph keeps this PR's denied_requests and takes C8's use_device wording (a device the host opens, for now); RequestPolicy bullet unchanged" }
+verified = { hash = "b3:1b5eb3a918642972", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 2 N5: intro now says frames land on a GPU device the host hands the backend, matching the seam paragraph; use_device rustdoc and FakeBrowser::has_device say the same; rest re-read, holds" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
-web pages rendered off screen by CEF, each page's frames as textures on the engine's GPU
-device and its audio as a stream the engine records like a device's. Layer 3, its own
+web pages rendered off screen by CEF, each page's frames as textures on a GPU device the
+host hands it and its audio as a stream the engine records like a device's. Layer 3, its own
 crate rather than part of a platform crate, so that only builds that ask for CEF
 download and build it ([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.md)).
 

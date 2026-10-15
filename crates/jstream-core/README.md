@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:fd3370105f8c98a9", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge-only round: re-read with main's D6 when_shown Audio bullet and K2; Engine with_browser and Audio sources own-audio bullets still match engine.rs and audio_sources.rs; holds" }
+verified = { hash = "b3:716dfd4503f65f44", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 2 N7: new off/on test for a page's audio; Audio sources bullet already says a page's input exists only while its audio is on; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -184,7 +184,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:dccb1d721e66563c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 merge-only round: re-read; changed() now syncs audio sources with live.audio() and routes once after studio.reconcile as main does; a page's input opened on install is routed via Routed's changed flag on the next meters.tick, as the Audio routing text says; when_shown gain applies to a browser source like any; holds" }
+verified = { hash = "b3:33327d6822dfea01", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 2 N6: Audio sources lead sentence now names each running source's own audio beside audio-only sources' targets; module doc says a page's input closes while its audio is off; matches Target{recorded,on}; holds" }
 -->
 
 ### Engine and sessions
@@ -445,8 +445,8 @@ transparent. `LiveSources::audio` lists every running source's own audio
 (`Source::audio`) for *Audio sources*.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
-`jstream_sources::AudioTarget` of every audio-only source, or none while the source's
-audio is off (ADR-0028: off, the engine doesn't open its stream); `sync` runs beside the live
+`jstream_sources::AudioTarget` of every audio-only source, and each running source's own
+audio, or none while the source's audio is off (ADR-0028: off, the engine doesn't open its stream); `sync` runs beside the live
 sources' and wakes the program stage's thread when that set changes. When the program
 stage starts, its `AudioInputs` opens one mixer input per audio source that is on through
 `MixerControl` (D1's live API). A source's input opens muted and is listed in

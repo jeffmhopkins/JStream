@@ -17,7 +17,7 @@
 //!
 //! A source that makes audio of its own (a `browser` page) gets an input too, fed by
 //! the running source itself ([`jstream_sources::SourceAudio`]) from when it is built
-//! until it is deleted or built again.
+//! until it is deleted or built again, and not while its audio is turned off.
 //!
 //! While the collection has no audio source, the program records the default
 //! microphone and desktop audio, as it did before audio sources existed, so a
