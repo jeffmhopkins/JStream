@@ -42,7 +42,9 @@ depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
   stale one, and `docs merge-main`, which only keeps main's committed entries).
 - To bring `main` into your branch, run `cargo xtask docs merge-main`. It resolves
   conflicts between stamps and leaves every other conflict to you. Then re-read and
-  verify each section it lists as stale.
+  verify each section it lists as stale. A PR into a wave branch merges its wave instead:
+  `cargo xtask docs merge-main --from wave/<name>`. Which branch a PR targets, and how waves
+  land, is in [docs/runbooks/waves.md](docs/runbooks/waves.md).
 
 <a id="pr-loop"></a>
 ## The PR loop (you are a builder)
