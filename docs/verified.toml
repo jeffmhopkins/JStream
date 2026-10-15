@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:ac26fce01ad1c55f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#370) into #320: crate-map body unchanged from the reviewed head except main's own edits; jstream-outputs row (RTMP client, recording, vcam runs in jstream-core's runtime) holds" }
+stamp = { hash = "b3:82c3ecb0234bbf91", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -81,7 +81,7 @@ stamp = { hash = "b3:45a0daff6f397ade" }
 stamp = { hash = "b3:419939266a782736" }
 
 ["ARCH#crate-map"."file:crates/jstream-sources/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:52e89dfb02c9534f" }
+stamp = { hash = "b3:3baf4488e4a21b5d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["ARCH#crate-map"."file:crates/jstream-types/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e7dbb93ef26bf6b8" }
@@ -99,7 +99,7 @@ stamp = { hash = "b3:504280e9852eb46f" }
 stamp = { hash = "b3:24cef673281620f5" }
 
 ["ARCH#crate-map"."file:crates/jstream-youtube/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:dba3adb97afc2dd5" }
+stamp = { hash = "b3:87341bdb2fc70e6f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["ARCH#data-model"."body"]
 stamp = { hash = "b3:d72def29f6861e6d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio paragraph says protocol 0.19; not-yet list drops VirtualCam as main did; holds" }
@@ -279,7 +279,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:d638c6ca8019b15d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B5, filters join the audio edits once they are in the protocol, the mixer has chains since D7b; rest holds at 0.19" }
+stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -321,7 +321,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:69a83bcc7bc7abfe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:ed9f76ff08fab65c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
@@ -810,7 +810,7 @@ stamp = { hash = "b3:c7379cddeb275056" }
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Failures bullet matches ws_web.rs (onerror handler ends the session via end_reason, State::close keeps the first reason; connect reason mentions CSP); test paragraph matches connect.spec.js and ws_config.rs tests. Edited open question 3 so it no longer implies the browser client is untested (e2e via jstream-ui now covers it)." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -882,10 +882,10 @@ stamp = { hash = "b3:f8d3caba075c6078", by = "agent:claude@session_01PpGi5RaafND
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
+stamp = { hash = "b3:8435aa7720df2206", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1410,7 +1410,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:8435aa7720df2206", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1533,7 +1533,7 @@ stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
 
 ["CRATE-jstream-media#purpose"."body"]
-stamp = { hash = "b3:e204cadb57ccceae", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the enhanced-RTMP link; ADR-0041 keeps ADR-0009/0034's RTMP/RTMPS with enhanced RTMP for HEVC/AV1, so the text holds" }
+stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-media#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-media"]
 stamp = { hash = "b3:18137b74917731cc" }
@@ -1557,7 +1557,7 @@ stamp = { hash = "b3:1d2c5fbae960d299" }
 stamp = { hash = "b3:92a44864b9ef193c" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/packet.rs"]
-stamp = { hash = "b3:b08d0b0fd25d7ae1" }
+stamp = { hash = "b3:841d98d687ec8849", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/pixel.rs"]
 stamp = { hash = "b3:12eb4553ad7e5ab1" }
@@ -1569,10 +1569,10 @@ stamp = { hash = "b3:3969b618c2c6f598" }
 stamp = { hash = "b3:d6dfe064425156bb" }
 
 ["CRATE-jstream-mux#purpose"."body"]
-stamp = { hash = "b3:be26765b746b53d7", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ADR-0041, whose only change is text (review N2): the Context bullet is rewrapped and the follow-on list names jstream-media and ARCH's protocol section; the decision is unchanged, so this section holds" }
+stamp = { hash = "b3:d3a56f7eedf0de15", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-mux#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:e204cadb57ccceae" }
+stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-mux#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mux"]
 stamp = { hash = "b3:cc699c75167f9edd" }
@@ -1580,8 +1580,8 @@ stamp = { hash = "b3:cc699c75167f9edd" }
 ["CRATE-jstream-mux#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
 
-["CRATE-jstream-mux#purpose"."dep:docs/adr/0041-youtube-interaction-scope-v3.md"]
-stamp = { hash = "b3:acbf94ce5b03cce1" }
+["CRATE-jstream-mux#purpose"."dep:docs/adr/0051-youtube-without-a-required-oauth-client.md"]
+stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-mux#purpose"."file:crates/jstream-mux/Cargo.toml"]
 stamp = { hash = "b3:1474bbecc72bdf29" }
@@ -1614,10 +1614,10 @@ stamp = { hash = "b3:655a50861b8f8ac2" }
 stamp = { hash = "b3:db7b56b6ec192456" }
 
 ["CRATE-jstream-mux#purpose"."file:crates/jstream-mux/src/lib.rs"]
-stamp = { hash = "b3:20caa632a5d049a6" }
+stamp = { hash = "b3:6e5013d99f034114", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:593d770c1aad557d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#371 recorder no-replace move) into #320: re-read; main's recorder bullet (hard link then unlink, placeholder fallback) and Tests text beside this PR's line that the virtual-camera output runs in jstream-core's runtime; both hold" }
+stamp = { hash = "b3:627639de3ed7ec4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:230ac9edc35e19b9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main: rtmp and record modules as lib.rs says; Output trait still later; vcam output is in jstream-core runtime (runtime/vcam.rs), and the jstream-core README#runtime anchor exists; deps unchanged." }
@@ -1628,11 +1628,11 @@ stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1K
 ["CRATE-jstream-outputs#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
 
-["CRATE-jstream-outputs#purpose"."dep:docs/adr/0041-youtube-interaction-scope-v3.md"]
-stamp = { hash = "b3:acbf94ce5b03cce1" }
+["CRATE-jstream-outputs#purpose"."dep:docs/adr/0051-youtube-without-a-required-oauth-client.md"]
+stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/lib.rs"]
-stamp = { hash = "b3:ec7b0f2e7ed0db4a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main: rtmp and record modules as lib.rs says; Output trait still later; vcam output is in jstream-core runtime (runtime/vcam.rs), and the jstream-core README#runtime anchor exists; deps unchanged." }
+stamp = { hash = "b3:ac52af575c1b9c34", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/record/error.rs"]
 stamp = { hash = "b3:5576f34b8fef4acc" }
@@ -1686,7 +1686,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:ac26fce01ad1c55f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via ARCH#crate-map only; the jstream-platform row it relies on (GpuInterop with wgpu types) is unchanged; holds" }
+stamp = { hash = "b3:82c3ecb0234bbf91", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
@@ -1701,7 +1701,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:ac6493f8088539b9", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:e204cadb57ccceae" }
+stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform"]
 stamp = { hash = "b3:4179d522e3055d3d" }
@@ -1929,7 +1929,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:8435aa7720df2206", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2196,7 +2196,7 @@ stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client error-event handling, CSP wording, open question 3 edit): server-side checks, subprotocol token and CSP description unaffected, holds." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:9bcfb0336f6adad9" }
@@ -2271,7 +2271,7 @@ stamp = { hash = "b3:4a9ea9ae5014f95c" }
 stamp = { hash = "b3:ba182674aa6f4948", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 N1: Windows walk split out of open_inside into walk_below (takes the already-resolved path below the root); Assets paragraph's walk description unchanged and still holds; Tests sentence now says the Windows test refuses links both at resolve and in the walk on its own" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
-stamp = { hash = "b3:dfba6103702005f0" }
+stamp = { hash = "b3:2e3b05c6b81e422d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199" }
@@ -2613,13 +2613,13 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
 ["CRATE-jstream-youtube#purpose"."body"]
-stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via platform#purpose (Audio and FakeAudioIo lines); Secret and OAuthTokenStore text unchanged; holds" }
+stamp = { hash = "b3:887a004b8d38f003", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:ac6493f8088539b9" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
-stamp = { hash = "b3:e3b27ea549009815" }
+stamp = { hash = "b3:52b27d1ffa7b6a0b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/RULES.md#R-DEP-006"]
 stamp = { hash = "b3:8efb19c99c8be969" }
@@ -2627,8 +2627,8 @@ stamp = { hash = "b3:8efb19c99c8be969" }
 ["CRATE-jstream-youtube#purpose"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
 
-["CRATE-jstream-youtube#purpose"."dep:docs/adr/0041-youtube-interaction-scope-v3.md"]
-stamp = { hash = "b3:acbf94ce5b03cce1" }
+["CRATE-jstream-youtube#purpose"."dep:docs/adr/0051-youtube-without-a-required-oauth-client.md"]
+stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/broadcast_bind.json"]
 stamp = { hash = "b3:8da9c74a2b289be3" }
@@ -2670,7 +2670,7 @@ stamp = { hash = "b3:d388d0682e80ff41" }
 stamp = { hash = "b3:8b26b2ef26103774" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/error.rs"]
-stamp = { hash = "b3:a175ce9c54120d89" }
+stamp = { hash = "b3:7070dec4a775093f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/fake.rs"]
 stamp = { hash = "b3:072de4248097ea45" }
@@ -2685,7 +2685,7 @@ stamp = { hash = "b3:a1b77e31232697af" }
 stamp = { hash = "b3:2a7db87174f1fd6d" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/lib.rs"]
-stamp = { hash = "b3:b597181b25e55fbd" }
+stamp = { hash = "b3:c0f36ba10d5d19df", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/live.rs"]
 stamp = { hash = "b3:37cfb6646affdb72" }
@@ -2700,7 +2700,7 @@ stamp = { hash = "b3:49badb1e6e8761a0" }
 stamp = { hash = "b3:a9e8a37ad1f0f16f" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/oauth.rs"]
-stamp = { hash = "b3:f2c643e2a1704b86" }
+stamp = { hash = "b3:4a59346b1a818179", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/oauth/tests.rs"]
 stamp = { hash = "b3:b593d1da7528ba61" }
@@ -2880,7 +2880,7 @@ stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:7ab4accbf98f6662" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of wave/m1: re-read; against the wave this branch differs only by ADR-0041 links re-pointed to ADR-0051 (section citations marked kept by ADR-0051); the wave's own text (e.g. the vcam output row) is kept as merged; holds" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
