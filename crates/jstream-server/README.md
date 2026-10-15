@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:314257ada7701e51", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: main's studio.changed mapping kept; open question 2 now cites ADR-0045 (on main) for the subprotocol; UI, Basic and subprotocol text match gate.rs/ui.rs; holds" }
+verified = { hash = "b3:83ee56d2ea651e19", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (#246 landed) into ADR-0044 PR: open question 2 now links ADR-0044 as decided and not built; rest is #246's text as merged; holds" }
 -->
 
 ### Listening and admission
@@ -347,8 +347,8 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    a subprotocol*): a page load presents the token as `Basic` credentials, and the
    UI's upgrade either carries the same credentials (checked in Chromium) or offers
    `jstream.token.<token>` ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
-   Pairing a remote browser with a short code instead of pasting the token is a
-   maintainer-tier decision of its own (ADR-0044, proposed).
+   Pairing a remote browser with a short code instead of pasting the token is decided
+   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) and not built yet.
 3. **UI assets.** Settled and built (see *The web UI*). Open: caching with `ETag`s
    instead of `no-cache`, and compressed variants, if the bundle grows enough to
    matter. MCP over streamable HTTP is settled and built (see *MCP over streamable
