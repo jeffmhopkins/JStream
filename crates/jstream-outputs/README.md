@@ -88,7 +88,9 @@ muxing, AVCC conversion, `onMetaData`) is `jstream-mux`'s job.
   application name and the stream key separate. `StreamKey` prints as `***`, and no error
   carries the key or the URL ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The server's
   status code and description are untrusted text, so `RtmpError::Rejected` replaces any
-  echo of the key in them with `***`.
+  echo of the key in them with `***`, then cuts each to 512 characters and replaces
+  control characters with spaces, so a server can't forge log lines or flood the
+  errors an agent reads.
 - **Reconnect** (`reconnect`): `ReconnectingPublisher` wraps a published session and a
   `Connector`, the function that opens and publishes a replacement (`rtmp_connector`
   for TCP and TLS, built on `connect_publisher`). A send or `poll` that fails because

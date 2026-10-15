@@ -277,17 +277,31 @@ fn status_info(values: &[Amf0Value]) -> (&str, &str, &str) {
     (field("level"), field("code"), field("description"))
 }
 
-/// A [`RtmpError::Rejected`] from a status reply. The server's text is untrusted and may
+/// The most characters of server-supplied status text a [`RtmpError::Rejected`] keeps.
+const MAX_REMOTE_TEXT: usize = 512;
+
+/// A [`RtmpError::Rejected`] from a status reply. The server's text is untrusted: it may
 /// echo the stream key, so every occurrence of `key` is replaced with `***`
-/// (docs/RULES.md#R-SEC-001).
+/// (docs/RULES.md#R-SEC-001), and it ends up in logs and agent-facing errors, so it is
+/// then cut to [`MAX_REMOTE_TEXT`] characters with control characters replaced.
 fn rejected(command: &'static str, values: &[Amf0Value], key: &StreamKey) -> RtmpError {
     let (_, code, description) = status_info(values);
-    let redact = |text: &str| text.replace(key.expose(), "***");
+    // Redact before cutting, so a cut can't leave part of the key behind.
+    let clean = |text: &str| remote_text(&text.replace(key.expose(), "***"));
     RtmpError::Rejected {
         command,
-        code: redact(code),
-        description: redact(description),
+        code: clean(code),
+        description: clean(description),
     }
+}
+
+/// `text` cut to [`MAX_REMOTE_TEXT`] characters, with control characters replaced by
+/// spaces, so untrusted server text can't forge log lines.
+fn remote_text(text: &str) -> String {
+    text.chars()
+        .take(MAX_REMOTE_TEXT)
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect()
 }
 
 /// A live RTMP publish session over the byte stream `S`.
