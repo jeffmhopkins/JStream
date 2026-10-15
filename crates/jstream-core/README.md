@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5248ce9c9c185f8d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 0.14, item.set_source history) into A3: Outputs paragraph keeps A3's daemon opener line and main's Record sentence; Pipeline keeps the PublishError::new line; history paragraph is main's" }
+verified = { hash = "b3:fa6327d5aa258721", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6: audit log and collection file subsections now say jstream-daemon injects an AuditFile in its log directory and turns on the collection file with --collection; Not yet keeps only the app asset folder" }
 -->
 
 ### Engine and sessions
@@ -761,8 +761,8 @@ twice the limit. A write error is logged at `warn` and loses the entry; it never
 the call. Dropping the `AuditFile` writes what is queued and joins the thread. Times
 are UTC, RFC 3339 to the millisecond, formatted without a date crate.
 
-No host injects a sink yet: the daemon's wiring, in its data directory, is a later
-item.
+`jstream-daemon` injects an `AuditFile` in its log directory
+([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 
 ### Collection file
 
@@ -788,15 +788,15 @@ Unix the directory flushed too; on Unix it is mode `0600`. A failed save is logg
 result as it is: the change stays applied and the next change saves again. Undo
 history and idempotency keys are not saved.
 
-The daemon's `--collection` option, which turns this on, is a later item.
+`jstream-daemon`'s `--collection` option turns this on
+([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 
 ### Not yet
 
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- The daemon's `--collection` option and audit file, and an `app` asset folder for
-  live sources.
+- An `app` asset folder for live sources.
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.

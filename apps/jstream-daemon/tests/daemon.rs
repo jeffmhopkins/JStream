@@ -364,8 +364,8 @@ async fn serves_the_engine_and_stops_on_a_signal() {
         !file.contains(WRONG_TOKEN),
         "the wrong token was logged: {file}"
     );
-    // The audit log, next to the log files, has the batch and the MCP query's client,
-    // and no token.
+    // The audit log, next to the log files, has the batch and the WebSocket client's
+    // name, and no token.
     let audit = std::fs::read_to_string(logs.join("audit.jsonl")).expect("the audit log");
     assert!(
         audit.contains("\"call\":\"batch\",\"edits\":[\"scene.create\"]"),

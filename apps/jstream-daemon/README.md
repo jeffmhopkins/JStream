@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f54f9250c6e4e944", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6: Startup bullet opens the audit log, Serving bullet builds the engine with the audit log and --collection file; Not here yet drops --collection, adds YouTube sign-in (waits on Engine::with_youtube) and a default collection file" }
+verified = { hash = "b3:114e5dd09be607f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 1: only serve.rs and daemon.rs comments changed; Purpose text (startup opens the audit log, serving builds the engine with it and --collection) still holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -68,7 +68,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:711902c00330a688", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6: --collection row and Collection file bullet match args.rs and Engine::with_collection_file (created if missing, atomic save per change, load errors exit 1, file left as is); Audit log bullet matches AuditFile (audit.jsonl in the log dir, 8 MiB rotation to audit.1.jsonl, no arguments); exit 1 row and Stopping updated" }
+verified = { hash = "b3:1d557b6b55d4a1f2", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 1 N4: Collection file bullet now says two daemons on one file overwrite each other's saves (save_collection skips only by its own saved rev); rest re-read and holds" }
 -->
 
 ```sh
@@ -146,7 +146,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   collection the engine can load, or can't be created is a startup failure (exit 1)
   naming the file and what is wrong, and the file is left as it is. A save that fails
   later is logged at `error` and retried with the next change; the call still
-  succeeds. Undo history is not saved.
+  succeeds. Undo history is not saved. Nothing stops two daemons from using the same
+  file: each saves over the other's changes, so give each its own.
 - **Audit log.** Every batch, undo, redo and action, by any client, is one JSON line
   in `audit.jsonl` in the log directory: the time, the client's ID and `hello` name,
   the call and its edits by name, the output an action names, the `rev` before and
@@ -167,7 +168,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:c9fd76a2843d14e0", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6: new Collection file and audit log bullet matches serve::engine (with_audit, then with_collection_file before the --output placeholders) and main.rs (AuditFile::open in the log dir); open question 6 on a default collection file" }
+verified = { hash = "b3:ec93b12dfa496fb9", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 1 B1/N3: placeholders are declared outputs that Outputs::sync keeps, so adding them after the load is only reading order; log directory is user-only on Unix only" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -215,11 +216,11 @@ verified = { hash = "b3:c9fd76a2843d14e0", by = "agent:claude@session_01YKRrREb5
   them to the engine: `Engine::with_collection_file` loads and saves the collection,
   and `with_audit` takes a `jstream_core::AuditFile`, whose writer thread appends
   entries off the engine's locks, so a slow disk never delays a call
-  ([jstream-core › Design](../../crates/jstream-core/README.md#design)). The collection
-  is opened before the `--output` placeholders are added, because loading it replaces
-  the outputs. The audit log lives in the log directory, which the daemon already
-  creates user-only and which `--log-dir` moves, rather than in a directory of its own.
-  Its entries are written as they come; on a graceful stop the writer finishes the
+  ([jstream-core › Design](../../crates/jstream-core/README.md#design)). The `--output`
+  placeholders are declared outputs, which a loaded collection never removes, so they
+  are added after the load only for reading order. The audit log lives in the log
+  directory, which the daemon already creates (user-only on Unix) and which `--log-dir`
+  moves, rather than in a directory of its own. Its entries are written as they come; on a graceful stop the writer finishes the
   queue when the engine is dropped. Without `--collection` nothing is saved, as before
   ([Open questions](#open-questions), 6).
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server

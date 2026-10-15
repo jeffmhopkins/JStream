@@ -44,7 +44,7 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
             .with_collection_file(path)
             .context("could not open the collection")?;
     }
-    // After the collection: loading it replaces the outputs it doesn't hold.
+    // Declared outputs survive a load, so this order is only for reading.
     let engine = options
         .outputs
         .iter()
