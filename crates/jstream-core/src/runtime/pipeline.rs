@@ -824,6 +824,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let audio = AudioInputs::start(
         mixer.control(),
         Arc::clone(&parts.audio),
+        Arc::clone(&parts.clock),
         Arc::clone(&parts.audio_sources),
         engine.drop_ledger(),
     )?;

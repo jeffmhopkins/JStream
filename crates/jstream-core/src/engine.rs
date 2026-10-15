@@ -1182,6 +1182,12 @@ impl Engine {
         lock(&self.shared.state).audio.status(source_id)
     }
 
+    /// The packets the mixer input of `source_id` has received, for tests.
+    #[cfg(test)]
+    pub(crate) fn audio_packets(&self, source_id: &SourceId) -> Option<u64> {
+        lock(&self.shared.state).audio.packets(source_id)
+    }
+
     /// Waits until the live sources have built everything asked of them, for tests.
     #[cfg(test)]
     pub(crate) fn settle_sources(&self) -> bool {
@@ -1909,6 +1915,7 @@ impl State {
             frames,
             frame_versions,
             live,
+            audio,
             render,
             studio,
             ..
@@ -1920,6 +1927,10 @@ impl State {
                 Some(frame) => Some((frame.clone(), None)),
                 None => live.frame(id, now, frame_versions),
             });
+        live.end_plan();
+        if let Some(sound) = live.take_audio() {
+            audio.sync_live(sound);
+        }
         render.publish(shot);
         live.wake_at(wake);
     }

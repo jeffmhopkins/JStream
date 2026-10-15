@@ -8,7 +8,9 @@ use jstream_media::{
     PixelFormat, SampleFormat, Timebase, VideoFrame, VideoFrameInfo,
 };
 
-use crate::fake::{self, FakeAudioIo, FakeClip, FakeClock, FakeMediaDecoders, FakeVcamSink};
+use crate::fake::{
+    self, FakeAudio, FakeAudioIo, FakeClip, FakeClock, FakeMediaDecoders, FakeVcamSink,
+};
 use crate::{
     AudioEncoder, AudioEncoderConfig, AudioInputHandler, AudioInputTarget, AudioIo,
     AudioOutputHandler, AudioOutputTarget, AudioPacket, AudioProcess, AudioRenderBuffer,
@@ -555,13 +557,24 @@ fn clip() -> FakeClip {
         frame_period: Timebase::new(1, 25).unwrap(),
         frames: 10,
         key_every: 4,
-        audio: true,
+        audio: Some(FakeAudio {
+            format: AudioFormat::new(48_000, ChannelLayout::Stereo, SampleFormat::F32Interleaved)
+                .unwrap(),
+            block_frames: 960,
+            blocks: 20,
+        }),
     }
 }
 
 const RGBA: MediaDecoderConfig = MediaDecoderConfig {
     video_format: PixelFormat::Rgba8,
     hardware: HardwarePreference::Prefer,
+    audio: false,
+};
+
+const WITH_AUDIO: MediaDecoderConfig = MediaDecoderConfig {
+    audio: true,
+    ..RGBA
 };
 
 #[test]
@@ -575,7 +588,8 @@ fn media_files_play_their_clip_in_order_and_end() {
     let info = *file.info();
     let video = info.video.expect("a video stream");
     assert_eq!(video.size, FrameSize::new(4, 2).unwrap());
-    assert!(info.audio);
+    assert_eq!(info.audio, None, "audio wasn't asked for");
+    assert_eq!(file.next_audio().unwrap(), None);
     assert_eq!(info.duration, Some(MediaTime::new(400, Timebase::MILLIS)));
 
     for index in 0..10 {
@@ -638,4 +652,33 @@ fn media_files_refuse_unknown_paths_and_other_formats() {
         .unwrap();
     assert_eq!(audio.info().video, None);
     assert_eq!(audio.next_video().unwrap(), None);
+}
+
+#[test]
+fn media_files_decode_audio_in_order_and_seek_it_with_the_video() {
+    let fake = FakeMediaDecoders::new();
+    fake.add("/media/clip.mp4", clip());
+    let mut file = fake
+        .open(std::path::Path::new("/media/clip.mp4"), &WITH_AUDIO)
+        .unwrap();
+    let format = file.info().audio.expect("an audio stream").format;
+    assert_eq!(format.sample_rate(), 48_000);
+    for index in 0..20 {
+        let block = file.next_audio().unwrap().expect("a block");
+        assert_eq!(block.format(), format);
+        assert_eq!(block.frames(), 960);
+        assert_eq!(
+            block.pts(),
+            MediaTime::new(i64::from(index) * 960, format.timebase())
+        );
+        assert_eq!(block.sample(0, 1), Some(FakeAudio::level(index)));
+    }
+    assert_eq!(file.next_audio().unwrap(), None, "the end of the stream");
+    // 270 ms is in block 13 (260 to 280 ms); the video goes to its key frame, frame 4.
+    file.seek(MediaTime::new(270, Timebase::MILLIS)).unwrap();
+    let block = file.next_audio().unwrap().expect("a block after the seek");
+    assert_eq!(block.pts(), MediaTime::new(13 * 960, format.timebase()));
+    let frame = file.next_video().unwrap().expect("a frame after the seek");
+    assert_eq!(frame.info().pts, MediaTime::new(160, Timebase::MILLIS));
+    assert_eq!(fake.stats().audio_blocks, 21);
 }

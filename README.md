@@ -195,7 +195,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | E2 | Video mixes | 🔍 in review | #259 |
 | D8 | Master and output audio chains | ✅ merged | #249 |
 | D8p | Audio chain protocol fields | ⏳ planned |  |
-| C9 | Media file source | 🔍 in review | #245 |
+| C9 | Media file source | 🔍 in review | #245, #322 |
 | W1 | Audio waveform and spectrum sources | ⏳ planned |  |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys | ⏳ planned |  |
 | K2 | Keyframe scenes: model and evaluator | 🔍 in review | #350 |

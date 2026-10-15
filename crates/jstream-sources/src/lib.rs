@@ -33,6 +33,7 @@ mod text;
 
 pub use audio::AudioTarget;
 pub use error::SourceError;
+pub use media::MediaAudio;
 pub use registry::Registry;
 pub use scope::AudioScope;
 pub use source::{AssetRoots, Context, Limits, Painter, Source, SourceKind, needs_restart};

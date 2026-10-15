@@ -14,14 +14,14 @@ mod reader;
 pub use reader::MfMediaDecoders;
 
 /// Platform tests against Media Foundation (R-TEST-004): behind `hw-tests` and
-/// `#[ignore]`d. They play the video file `JSTREAM_TEST_MEDIA` names, any file Windows'
-/// Films & TV app plays:
+/// `#[ignore]`d. They play the video file `JSTREAM_TEST_MEDIA` names, any file with
+/// sound that Windows' Films & TV app plays:
 /// `$env:JSTREAM_TEST_MEDIA = "C:\path\to\clip.mp4"; cargo test -p jstream-platform-windows --features hw-tests -- --ignored media_file`.
 #[cfg(all(test, windows, feature = "hw-tests"))]
 mod device_tests {
     use std::path::{Path, PathBuf};
 
-    use jstream_platform::media::{MediaTime, PixelFormat, Timebase};
+    use jstream_platform::media::{MediaTime, PixelFormat, SampleFormat, Timebase};
     use jstream_platform::{HardwarePreference, MediaDecoderConfig, MediaDecoders, PlatformError};
 
     use super::MfMediaDecoders;
@@ -29,6 +29,7 @@ mod device_tests {
     const RGBA: MediaDecoderConfig = MediaDecoderConfig {
         video_format: PixelFormat::Rgba8,
         hardware: HardwarePreference::Prefer,
+        audio: false,
     };
 
     fn clip() -> PathBuf {
@@ -81,6 +82,58 @@ mod device_tests {
             extra += 1;
             assert!(extra < 600, "the stream ends");
         }
+    }
+
+    #[test]
+    #[ignore = "needs Media Foundation and a video file"]
+    fn media_file_decodes_audio_in_order_and_seeks_it() {
+        let config = MediaDecoderConfig {
+            audio: true,
+            ..RGBA
+        };
+        let mut file = MfMediaDecoders::new().open(&clip(), &config).expect("open");
+        let format = file.info().audio.expect("an audio stream").format;
+        assert_eq!(format.sample_format(), SampleFormat::F32Interleaved);
+        let mut end = None;
+        let mut frames = 0;
+        while frames < usize::try_from(format.sample_rate()).expect("a rate") {
+            let block = file.next_audio().expect("decode").expect("a block");
+            assert_eq!(block.format(), format);
+            assert!(
+                block.samples().iter().all(|s| s.is_finite()),
+                "finite samples"
+            );
+            // Each block starts where the last ended, give or take a millisecond.
+            let pts = ms(block.pts());
+            assert!(
+                end.is_none_or(|end: i64| (pts - end).abs() <= 1),
+                "{pts} ms after {end:?}"
+            );
+            end = Some(
+                ms(block.pts())
+                    + i64::try_from(block.frames()).expect("frames") * 1000
+                        / i64::from(format.sample_rate()),
+            );
+            frames += block.frames();
+            // Video interleaves with it, as the source reads both.
+            let _ = file.next_video().expect("decode");
+        }
+        let middle = ms(file.info().duration.expect("a duration")) / 2;
+        file.seek(MediaTime::new(middle, Timebase::MILLIS))
+            .expect("seek");
+        let block = file
+            .next_audio()
+            .expect("decode")
+            .expect("a block after the seek");
+        let pts = ms(block.pts());
+        assert!(
+            pts <= middle + 100 && pts + 10_000 >= middle,
+            "{pts} ms for {middle}"
+        );
+        // Without asking, there is no audio.
+        let mut silent = MfMediaDecoders::new().open(&clip(), &RGBA).expect("open");
+        assert_eq!(silent.info().audio, None);
+        assert_eq!(silent.next_audio().expect("no error"), None);
     }
 
     #[test]

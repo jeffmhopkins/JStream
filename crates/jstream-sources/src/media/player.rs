@@ -1,23 +1,34 @@
-//! Playing one media file: a decode thread that reads frames ahead into a short queue,
-//! and the timeline the source maps them onto.
+//! Playing one media file: a decode thread that reads video frames and audio blocks
+//! ahead into short queues, and the timeline the source maps them onto.
 //!
 //! Times here are microseconds on the **timeline**: the file's own times plus one file
 //! length for each loop already played, so a looping file's timeline keeps rising. The
-//! source turns its clock time into a timeline position (see `MediaSource`); the thread
-//! decodes in timeline order and the source takes each frame once its position is
-//! reached.
+//! source turns its clock time into a timeline position ([`Timing`]); the thread decodes
+//! in timeline order, the source takes each frame once its position is reached, and the
+//! audio feeder ([`audio`](super::audio)) hands each block on to the mixer shortly
+//! before it is due.
+//!
+//! The thread reads the two streams in step: audio while it is behind the video, and
+//! video while its queue has room. So neither stream runs far ahead of the other in the
+//! file, and the platform never holds much of one while the other is read. While no
+//! feeder takes the audio, the thread still reads it in step, keeping only the latest
+//! second, so a feeder that opens later starts with what is due now.
 
 use std::collections::VecDeque;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use jstream_media::{FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_media::{
+    AudioBuffer, AudioFormat, FrameSize, MediaTime, Rounding, Timebase, VideoFrame,
+};
 use jstream_platform::{MediaDecoder, PlatformError};
 
 /// The frame length assumed when a file declares no frame rate, until two frames show
 /// the real one: 1/30 s.
 const DEFAULT_PERIOD_US: i64 = 33_333;
+/// How much audio to decode ahead at most while a feeder takes it, in microseconds.
+const AUDIO_AHEAD_US: i64 = 1_000_000;
 
 /// A decoded frame and where it sits on the timeline.
 pub(super) struct Decoded {
@@ -25,53 +36,129 @@ pub(super) struct Decoded {
     pub(super) frame: Arc<VideoFrame>,
 }
 
-/// What the source and the decode thread share, under one lock.
+/// A decoded block of audio and where its first frame sits on the timeline.
+pub(super) struct Sound {
+    pub(super) at: i64,
+    /// Interleaved `f32` in the file's audio format.
+    pub(super) samples: Vec<f32>,
+    /// Its length in microseconds.
+    pub(super) length: i64,
+}
+
+impl Sound {
+    /// Where it ends on the timeline.
+    pub(super) fn end(&self) -> i64 {
+        self.at + self.length
+    }
+}
+
+/// How the source's clock maps onto the timeline: from `clock` (microseconds since the
+/// source started), the timeline runs on from `timeline` at `speed`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Timing {
+    pub(super) clock: i64,
+    pub(super) timeline: i64,
+    pub(super) speed: f64,
+}
+
+impl Timing {
+    /// The timeline position at clock time `at`.
+    pub(super) fn position(&self, at: i64) -> i64 {
+        let elapsed = (at - self.clock).max(0) as f64 * self.speed;
+        self.timeline.saturating_add(elapsed as i64)
+    }
+
+    /// The first clock time at which the timeline reaches `to`.
+    pub(super) fn clock_at(&self, to: i64) -> i64 {
+        let ahead = (to - self.timeline).max(0) as f64 / self.speed;
+        self.clock.saturating_add(ahead.ceil() as i64)
+    }
+}
+
+/// What the source, the decode thread and the audio feeder share, under one lock.
 pub(super) struct State {
     /// Frames decoded ahead, in timeline order.
     pub(super) queue: VecDeque<Decoded>,
     /// Frames to keep ahead at most.
     capacity: usize,
+    /// Audio decoded ahead, in timeline order.
+    pub(super) audio: VecDeque<Sound>,
+    /// Whether a feeder takes the audio. Without one, the thread keeps only the latest
+    /// [`AUDIO_AHEAD_US`] of what it reads.
+    pub(super) audio_open: bool,
+    /// Whether the program shows the source, so its audio is heard.
+    pub(super) audible: bool,
+    /// The source's clock mapping, which the feeder plays the audio by.
+    pub(super) timing: Timing,
     /// Numbers the seeks, so a frame decoded before one is never queued after it.
     generation: u64,
     /// A seek the thread hasn't started: the timeline position to go to.
     seek: Option<i64>,
-    /// Set by a seek, cleared by the first frame queued after it.
+    /// Set by a seek, cleared by the first frame or block queued after it.
     pub(super) seeking: bool,
     /// Whether the file plays again from the start after its end.
     looping: bool,
     /// The decoder has nothing more to give until a seek: the file ended and isn't
     /// looping, or it failed.
     pub(super) ended: bool,
+    /// The video ended in this play while its audio plays on: the last frame stays
+    /// up, and the source isn't behind. Cleared by a seek and by the next play's first
+    /// frame.
+    pub(super) video_over: bool,
     /// Why the decoder stopped, when it failed.
     pub(super) failure: Option<String>,
-    /// Set when the source goes away; the thread stops at its next check.
-    stop: bool,
+    /// Set when the source goes away; the thread and the feeder stop at their next
+    /// check.
+    pub(super) stop: bool,
 }
 
-/// The decode thread's handle: the shared state and the condition both sides wait on.
+impl State {
+    /// How much audio is queued, in microseconds.
+    fn audio_queued(&self) -> i64 {
+        match (self.audio.front(), self.audio.back()) {
+            (Some(first), Some(last)) => last.end() - first.at,
+            _ => 0,
+        }
+    }
+}
+
+/// The state and the condition the source, the thread and the feeder wait on.
+pub(super) type Shared = Arc<(Mutex<State>, Condvar)>;
+
+/// The decode thread's handle.
 pub(super) struct Player {
-    shared: Arc<(Mutex<State>, Condvar)>,
+    shared: Shared,
+}
+
+/// What the decode thread starts with.
+pub(super) struct Start {
+    /// The decoder, which has already given up the first frame if the file has video.
+    pub(super) decoder: Box<dyn MediaDecoder>,
+    /// That frame's position on the timeline, and the size every later frame must
+    /// have, which the limits were checked against. `None` for a file with no video.
+    pub(super) first: Option<(i64, FrameSize)>,
+    /// Frames to keep ahead at most.
+    pub(super) capacity: usize,
+    pub(super) looping: bool,
+    pub(super) timing: Timing,
 }
 
 impl Player {
-    /// Starts the decode thread on `decoder`, which has already given up its first
-    /// frame, at `first` on the timeline and of `size`. Every later frame must have that
-    /// size, which the limits were checked against.
-    pub(super) fn start(
-        decoder: Box<dyn MediaDecoder>,
-        first: i64,
-        size: FrameSize,
-        capacity: usize,
-        looping: bool,
-    ) -> std::io::Result<Self> {
+    /// Starts the decode thread.
+    pub(super) fn start(start: Start) -> std::io::Result<Self> {
         let shared = Arc::new((
             Mutex::new(State {
-                queue: VecDeque::with_capacity(capacity),
-                capacity,
+                queue: VecDeque::with_capacity(start.capacity),
+                capacity: start.capacity,
+                audio: VecDeque::new(),
+                audio_open: false,
+                audible: false,
+                timing: start.timing,
                 generation: 0,
                 seek: None,
                 seeking: false,
-                looping,
+                video_over: false,
+                looping: start.looping,
                 ended: false,
                 failure: None,
                 stop: false,
@@ -79,11 +166,11 @@ impl Player {
             Condvar::new(),
         ));
         let thread_shared = Arc::clone(&shared);
+        let Start { decoder, first, .. } = start;
         thread::Builder::new()
             .name("jstream-media-file".into())
             .spawn(move || {
-                let run =
-                    AssertUnwindSafe(|| Decode::new(decoder, first, size).run(&thread_shared));
+                let run = AssertUnwindSafe(|| Decode::new(decoder, first).run(&thread_shared));
                 if catch_unwind(run).is_err() {
                     let mut state = lock(&thread_shared.0);
                     state.failure = Some("the decode thread panicked".into());
@@ -98,22 +185,26 @@ impl Player {
         lock(&self.shared.0)
     }
 
+    /// The state, for the audio feeder.
+    pub(super) fn shared(&self) -> &Shared {
+        &self.shared
+    }
+
     /// Tells the thread a frame was taken from the queue, so there is room again.
     pub(super) fn taken(&self) {
         self.shared.1.notify_all();
     }
 
-    /// Asks the thread to go to timeline position `to`. Frames queued before it are
-    /// dropped; the frame shown keeps showing until the first one after it arrives.
+    /// Asks the thread to go to timeline position `to`. Frames and audio queued before
+    /// it are dropped; the frame shown keeps showing until the first one after it
+    /// arrives.
     pub(super) fn seek(&self, to: i64) {
-        let mut state = self.state();
-        state.generation += 1;
-        state.seek = Some(to);
-        state.seeking = true;
-        state.queue.clear();
-        state.ended = state.failure.is_some();
-        drop(state);
-        self.shared.1.notify_all();
+        seek(&self.shared, to);
+    }
+
+    /// Sets how the source's clock maps onto the timeline, for the audio feeder.
+    pub(super) fn set_timing(&self, timing: Timing) {
+        self.state().timing = timing;
     }
 
     /// Sets whether the file loops. Turning it on after the end starts the next play at
@@ -134,6 +225,24 @@ impl Player {
     }
 }
 
+/// Asks the decode thread to go to timeline position `to`, as [`Player::seek`].
+fn seek(shared: &Shared, to: i64) {
+    seek_locked(&mut lock(&shared.0), to);
+    shared.1.notify_all();
+}
+
+/// [`seek`], with the state already locked. The caller notifies the condition once it
+/// lets go of the lock.
+pub(super) fn seek_locked(state: &mut State, to: i64) {
+    state.generation += 1;
+    state.seek = Some(to);
+    state.seeking = true;
+    state.queue.clear();
+    state.audio.clear();
+    state.video_over = false;
+    state.ended = state.failure.is_some();
+}
+
 impl Drop for Player {
     /// Stops the thread without waiting for it: a read in progress finishes first, and
     /// the decoder is dropped on the thread.
@@ -143,7 +252,7 @@ impl Drop for Player {
     }
 }
 
-fn lock(mutex: &Mutex<State>) -> MutexGuard<'_, State> {
+pub(super) fn lock(mutex: &Mutex<State>) -> MutexGuard<'_, State> {
     // The state stays consistent at every unlock, so a panic elsewhere doesn't spoil it.
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -155,7 +264,10 @@ enum Step {
         generation: u64,
         looping: bool,
     },
-    Decode {
+    Video {
+        looping: bool,
+    },
+    Audio {
         looping: bool,
     },
     Stop,
@@ -168,21 +280,29 @@ struct Decode {
     generation: u64,
     /// Where the current play of the file starts on the timeline.
     base: i64,
-    /// One play's length, once known: from the container, then from the frames.
+    /// One play's length, once known: from the container, then from the streams.
     length: Option<i64>,
     /// The last frame decoded in this play, in file time, and the gap before it.
     last: Option<i64>,
     period: i64,
     /// After a seek: frames shown before this position are skipped, apart from the last
-    /// of them, `held`, which is shown at the position itself.
+    /// of them, `held`, which is shown at the position itself. Audio before it is
+    /// skipped too.
     skip_to: Option<i64>,
     held: Option<Decoded>,
-    /// The first frame's size, which every frame must have.
-    size: FrameSize,
+    /// The first frame's size, which every frame must have; `None` with no video.
+    size: Option<FrameSize>,
+    /// The audio format every block must have; `None` with no audio.
+    audio: Option<AudioFormat>,
+    /// Where the last audio block decoded in this play ends, in file time.
+    audio_end: Option<i64>,
+    /// The streams that have ended in this play.
+    video_done: bool,
+    audio_done: bool,
 }
 
 impl Decode {
-    fn new(decoder: Box<dyn MediaDecoder>, first: i64, size: FrameSize) -> Self {
+    fn new(decoder: Box<dyn MediaDecoder>, first: Option<(i64, FrameSize)>) -> Self {
         let info = *decoder.info();
         let period = info
             .video
@@ -195,11 +315,65 @@ impl Decode {
             decoder,
             generation: 0,
             base: 0,
-            last: Some(first),
+            last: first.map(|(at, _)| at),
             period,
             skip_to: None,
             held: None,
-            size,
+            size: first.map(|(_, size)| size),
+            audio: info.audio.map(|a| a.format),
+            audio_end: None,
+            video_done: false,
+            audio_done: false,
+        }
+    }
+
+    /// Whether this play still has video to read.
+    fn video_live(&self) -> bool {
+        self.size.is_some() && !self.video_done
+    }
+
+    /// Whether this play still has audio to read.
+    fn audio_live(&self) -> bool {
+        self.audio.is_some() && !self.audio_done
+    }
+
+    /// The next step, with the state locked: a seek first, then whichever stream is
+    /// behind and has room, or nothing yet.
+    fn next(&self, state: &State) -> Option<Step> {
+        if state.stop {
+            return Some(Step::Stop);
+        }
+        if let Some(to) = state.seek {
+            return Some(Step::Seek {
+                to,
+                generation: state.generation,
+                looping: state.looping,
+            });
+        }
+        if state.ended {
+            return None;
+        }
+        let looping = state.looping;
+        let (video, audio) = (self.video_live(), self.audio_live());
+        let audio_room = !state.audio_open || state.audio_queued() < AUDIO_AHEAD_US;
+        let behind = self.audio_end.unwrap_or(i64::MIN) <= self.last.unwrap_or(i64::MIN);
+        if video && audio && behind && audio_room {
+            Some(Step::Audio { looping })
+        } else if video && state.queue.len() < state.capacity {
+            Some(Step::Video { looping })
+        } else if audio
+            && !video
+            && (if state.audio_open {
+                audio_room
+            } else {
+                self.size.is_some()
+            })
+        {
+            // Audio past the end of the video. With no feeder, an audio-only file waits
+            // for one rather than racing through the file.
+            Some(Step::Audio { looping })
+        } else {
+            None
         }
     }
 
@@ -208,20 +382,11 @@ impl Decode {
             let step = {
                 let mut state = lock(&shared.0);
                 loop {
-                    if state.stop {
-                        break Step::Stop;
-                    }
-                    if let Some(to) = state.seek.take() {
-                        break Step::Seek {
-                            to,
-                            generation: state.generation,
-                            looping: state.looping,
-                        };
-                    }
-                    if !state.ended && state.queue.len() < state.capacity {
-                        break Step::Decode {
-                            looping: state.looping,
-                        };
+                    if let Some(step) = self.next(&state) {
+                        if matches!(step, Step::Seek { .. }) {
+                            state.seek = None;
+                        }
+                        break step;
                     }
                     state = shared.1.wait(state).unwrap_or_else(PoisonError::into_inner);
                 }
@@ -238,7 +403,8 @@ impl Decode {
                     self.generation = generation;
                     self.seek(to, looping)
                 }
-                Step::Decode { looping } => self.decode(shared, looping),
+                Step::Video { looping } => self.video(shared, looping),
+                Step::Audio { looping } => self.audio(shared, looping),
             };
             if let Err(e) = result {
                 let mut state = lock(&shared.0);
@@ -262,30 +428,42 @@ impl Decode {
             None => (0, to),
         };
         self.base = base;
-        self.last = None;
-        self.held = None;
+        self.new_play();
         self.skip_to = Some(base + time);
         self.decoder.seek(MediaTime::new(time, Timebase::MICROS))
     }
 
-    /// Decodes the next frame and queues it, or handles the end of the file.
-    fn decode(
+    /// Forgets what this play decoded, for a seek or the next loop.
+    fn new_play(&mut self) {
+        self.last = None;
+        self.held = None;
+        self.audio_end = None;
+        self.video_done = false;
+        self.audio_done = false;
+    }
+
+    /// Decodes the next frame and queues it, or handles the end of the video.
+    fn video(
         &mut self,
         shared: &(Mutex<State>, Condvar),
         looping: bool,
     ) -> Result<(), PlatformError> {
         let Some(frame) = self.decoder.next_video()? else {
-            return self.end(shared, looping);
+            self.video_done = true;
+            if self.audio_live() {
+                self.video_over(shared);
+            }
+            return self.ended(shared, looping);
         };
         let size = frame.info().size;
-        if size != self.size {
+        if let Some(first) = self.size.filter(|&first| first != size) {
             // A stream whose shape changes partway: the queue and the limits were sized
             // for the first frame.
             return Err(PlatformError::Unsupported {
                 what: format!(
                     "a picture size change partway through, from {}x{} to {}x{}",
-                    self.size.width(),
-                    self.size.height(),
+                    first.width(),
+                    first.height(),
                     size.width(),
                     size.height()
                 ),
@@ -314,6 +492,88 @@ impl Decode {
         Ok(())
     }
 
+    /// Decodes the next block of audio and queues it, or handles the end of the audio.
+    fn audio(
+        &mut self,
+        shared: &(Mutex<State>, Condvar),
+        looping: bool,
+    ) -> Result<(), PlatformError> {
+        let Some(format) = self.audio else {
+            return Ok(());
+        };
+        let Some(block) = self.decoder.next_audio()? else {
+            self.audio_done = true;
+            return self.ended(shared, looping);
+        };
+        if block.format() != format {
+            // The mixer input was made for the first format.
+            return Err(PlatformError::Unsupported {
+                what: format!(
+                    "an audio format change partway through, from {format:?} to {:?}",
+                    block.format()
+                ),
+            });
+        }
+        let Some(sound) = self.sound(block) else {
+            return Ok(());
+        };
+        let mut state = lock(&shared.0);
+        if state.generation == self.generation && state.seek.is_none() {
+            state.audio.push_back(sound);
+            while !state.audio_open && state.audio_queued() > AUDIO_AHEAD_US {
+                state.audio.pop_front();
+            }
+            // With video, a seek is over once a frame comes: the source waits for one
+            // rather than seeking again.
+            if self.size.is_none() {
+                state.seeking = false;
+            }
+        }
+        Ok(())
+    }
+
+    /// A block on the timeline, cut to start at a seek's target; `None` when it ends
+    /// before it.
+    fn sound(&mut self, block: AudioBuffer) -> Option<Sound> {
+        let rate = i64::from(block.format().sample_rate());
+        let channels = block.format().channels();
+        let start = micros(block.pts()).unwrap_or(0);
+        let frames = i64::try_from(block.frames()).unwrap_or(i64::MAX);
+        let end = start.saturating_add(frames.saturating_mul(1_000_000) / rate);
+        self.audio_end = Some(end);
+        let mut at = self.base + start;
+        let mut samples = block.samples().to_vec();
+        if let Some(skip_to) = self.skip_to.filter(|&skip_to| at < skip_to) {
+            if self.base + end <= skip_to {
+                return None;
+            }
+            let cut = ((skip_to - at) * rate)
+                .div_euclid(1_000_000)
+                .clamp(0, frames);
+            let cut = usize::try_from(cut).unwrap_or(0);
+            samples.drain(..cut * channels);
+            at = skip_to;
+        }
+        let left = i64::try_from(samples.len() / channels.max(1)).unwrap_or(0);
+        Some(Sound {
+            at,
+            samples,
+            length: left * 1_000_000 / rate,
+        })
+    }
+
+    /// One stream ended: once every stream has, the play has.
+    fn ended(
+        &mut self,
+        shared: &(Mutex<State>, Condvar),
+        looping: bool,
+    ) -> Result<(), PlatformError> {
+        if self.video_live() || self.audio_live() {
+            return Ok(());
+        }
+        self.end(shared, looping)
+    }
+
     /// The file ended: queue what a seek held back, learn the play's length, and start
     /// the next play or stop.
     fn end(
@@ -325,23 +585,25 @@ impl Decode {
             self.queue(shared, held);
         }
         let target = self.skip_to.take();
-        let Some(last) = self.last else {
+        let video_end = self.last.map(|last| last + self.period);
+        let Some(last) = video_end.max(self.audio_end) else {
             if let Some(target) = target.filter(|_| looping) {
                 // A seek past the end before the length was known (the container
                 // didn't say): play from the start at the target instead.
                 self.base = target;
+                self.new_play();
                 return self.decoder.seek(MediaTime::zero(Timebase::MICROS));
             }
-            // Nothing in this play: a file with no frames left to show.
+            // Nothing in this play: a file with nothing left to play.
             return self.stop(shared);
         };
-        let length = (last + self.period).max(1);
+        let length = last.max(1);
         self.length = Some(length);
         if !looping {
             return self.stop(shared);
         }
         self.base += length;
-        self.last = None;
+        self.new_play();
         self.decoder.seek(MediaTime::zero(Timebase::MICROS))
     }
 
@@ -359,6 +621,20 @@ impl Decode {
         let mut state = lock(&shared.0);
         if state.generation == self.generation && state.seek.is_none() {
             state.queue.push_back(decoded);
+            state.seeking = false;
+            state.video_over = false;
+        }
+    }
+
+    /// The video ended before the audio: shows the frame a seek held back, since no
+    /// later one comes, and tells the source its picture is over rather than behind.
+    fn video_over(&mut self, shared: &(Mutex<State>, Condvar)) {
+        if let Some(held) = self.held.take() {
+            self.queue(shared, held);
+        }
+        let mut state = lock(&shared.0);
+        if state.generation == self.generation && state.seek.is_none() {
+            state.video_over = true;
             state.seeking = false;
         }
     }
@@ -404,7 +680,7 @@ mod tests {
                         size: size(sizes(0)),
                         frame_period: None,
                     }),
-                    audio: false,
+                    audio: None,
                     duration: duration
                         .then(|| MediaTime::new(frames * PERIOD_US, Timebase::MICROS)),
                 },
@@ -433,6 +709,10 @@ mod tests {
             Ok(Some(frame))
         }
 
+        fn next_audio(&mut self) -> Result<Option<AudioBuffer>, PlatformError> {
+            Ok(None)
+        }
+
         fn seek(&mut self, to: MediaTime) -> Result<(), PlatformError> {
             if let Some((started, go)) = &self.gate {
                 let _ = started.send(());
@@ -441,6 +721,22 @@ mod tests {
             self.next = micros(to).unwrap_or(0).div_euclid(PERIOD_US).max(0);
             Ok(())
         }
+    }
+
+    /// Starts a player on `clip`, whose first frame (at 0, 2x2) has been taken.
+    fn start(clip: Clip, capacity: usize, looping: bool) -> Player {
+        Player::start(Start {
+            decoder: Box::new(clip),
+            first: Some((0, size(2))),
+            capacity,
+            looping,
+            timing: Timing {
+                clock: 0,
+                timeline: 0,
+                speed: 1.0,
+            },
+        })
+        .expect("a thread")
     }
 
     /// Waits until `done` holds of the state, or fails after five seconds.
@@ -461,7 +757,7 @@ mod tests {
         let (go, go_rx) = channel();
         clip.gate = Some((started_tx, go_rx));
         clip.next = 1;
-        let player = Player::start(Box::new(clip), 0, size(2), 4, true).expect("a thread");
+        let player = start(clip, 4, true);
         player.seek(200_000);
         started
             .recv_timeout(Duration::from_secs(5))
@@ -479,7 +775,7 @@ mod tests {
     fn a_size_change_partway_is_an_error() {
         let mut clip = Clip::new(10, true, |i| if i < 3 { 2 } else { 4 });
         clip.next = 1;
-        let player = Player::start(Box::new(clip), 0, size(2), 8, false).expect("a thread");
+        let player = start(clip, 8, false);
         wait(&player, "the failure", |s| s.failure.is_some());
         let state = player.state();
         assert_eq!(
@@ -503,7 +799,7 @@ mod tests {
     fn a_seek_past_an_unknown_end_plays_on_when_looping() {
         let mut clip = Clip::new(5, false, |_| 2);
         clip.next = 1;
-        let player = Player::start(Box::new(clip), 0, size(2), 4, true).expect("a thread");
+        let player = start(clip, 4, true);
         wait(&player, "the queue to fill", |s| s.queue.len() == 4);
         player.seek(1_000_000);
         wait(&player, "a frame after the seek", |s| !s.queue.is_empty());

@@ -35,7 +35,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   hands out the one painted last. `next_change(at)` says when that frame is next
   replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
   says the program mix shows the source again after plans that didn't reach it; a kind
-  may restart there, and the default does nothing. `update(settings)` applies a change
+  may restart there, and the default does nothing. `audio()` gives a kind's own sound
+  (`MediaAudio`, a `media` file's), for the engine to mix; the default is `None`.
+  `update(settings)` applies a change
   to `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
   needs a new source instead. `painter()` (default `None`) returns the source's
   `Painter`.
@@ -49,6 +51,13 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `jstream-sources` thread, never under its collection lock or on the render thread,
   and its program mix asks each source for `frame` and `next_change`, and calls `show`
   (see `jstream-core`'s *Live sources*).
+- `MediaAudio`: a `media` file's sound as the engine sees it. `format()` is the file's
+  rate and layout, interleaved `f32`. `open(handler, clock, start)` starts a
+  `jstream-media-audio` thread that hands the audio to `handler` (a mixer input's
+  producer, `jstream-platform`'s `AudioInputHandler`) as device packets, and returns
+  the `AudioStream` whose drop stops it; `start` is the source's time zero on `clock`.
+  `set_audible` says whether the program shows the source; until it does, nothing is
+  handed on.
 - `Context`: the folders behind the `collection` and `app` asset roots
   (`AssetRoots`), the platform's media files (`media`, an
   `Option<Arc<dyn MediaDecoders>>` from `jstream-platform`, `None` until the host
@@ -123,13 +132,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`.
-- `media`: the `file` asset, a local video file demuxed and decoded by the platform's
+- `media`: the `file` asset, a local video or audio file demuxed and decoded by the platform's
   `MediaDecoders` (the Media Foundation Source Reader on Windows,
   [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), so it plays the
   containers and codecs the OS does. `create` opens the file through
   `AssetRoots::open` and decodes its first frame, so a file the platform can't play,
-  one with no video, or one without a media backend (`SourceError::NoBackend`) fails
-  there. A decode thread (`jstream-media-file`) then reads frames ahead, up to 8, or
+  one with neither video nor audio, or one without a media backend
+  (`SourceError::NoBackend`) fails there. A decode thread (`jstream-media-file`) then
+  reads frames ahead, up to 8, or
   fewer when they, the frame shown and two more held elsewhere would pass
   `max_decoded_bytes`; the frame's sides must be within `max_side`, and every later
   frame must have the first one's size. The source maps its
@@ -148,9 +158,26 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   waits to take a queued frame. Until the decoder
   catches up, `next_change` asks again 10 ms later. Every setting but `file` is live.
   A decode error, or a frame of another size, stops the source: `frame` then fails
-  with `SourceError::Decode`. The
-  file's audio isn't played yet, and an audio-only file fails to create. With no file,
-  the source shows one transparent pixel.
+  with `SourceError::Decode`. With no file, or a file with only audio, the source
+  shows one transparent pixel, and `next_change` is `None`.
+
+  The decode thread reads the file's audio in step with its video: audio while it is
+  behind the video and less than a second is queued, video while its queue has room,
+  so neither stream gets far ahead in the file. While no `MediaAudio` stream is open it
+  keeps only the latest second, so a stream opened later starts with what is due. An
+  open stream's thread wakes every 10 ms and hands on, in packets of 10 ms at most,
+  each block the timeline reaches within the next 100 ms, stamped with the clock time
+  the timeline reaches it; the device position counts the frames handed on. Audio more
+  than 20 ms behind the timeline is dropped, and a jump (a restart, a seek, the source
+  shown again) flags the next packet as a discontinuity, so the mixer re-anchors
+  there. It is heard only while the program shows the source and at `speed` 1: at any
+  other speed it is silent, since the mixer steers an input's rate by 0.5 % at most.
+  An audio-only file has no frames to catch the timeline up, so the audio thread
+  seeks when what it drops is more than a second behind. Audio that outlasts the video
+  plays on under the last frame: the source isn't behind then, so it doesn't seek, and
+  `next_change` is `None`, or for a looping file the time the queued audio runs out,
+  when the next play's first frame is due. An audio block of another
+  format stops the source, as a frame of another size does.
 - `waveform` and `spectrum` (C10) draw the latest 2048 samples (43 ms at 48 kHz) of
   the `Context`'s `AudioScope`, which in the engine is the program mix. `create`
   paints the first frame; after that their `Painter` draws a new one each 1/30 s tick
@@ -259,4 +286,9 @@ once the pool has filled. `tests/media.rs` plays
 `jstream-platform`'s fake media files (`FakeMediaDecoders`, frames told apart by
 colour): frames on the clock, the last frame held, looping and the seek after a gap,
 speed and a speed change, restarting when shown, turning `loop` on after the end, no
-file, and the errors and limits.
+file, and the errors and limits; and its audio (fake blocks told apart by level),
+handed to a recording handler: nothing until heard, stamps 100 ms ahead of the
+timeline with continuous positions, a restart as a discontinuity, silence at another
+speed, an audio-only file looping without a seam and seeking after a long gap, and
+audio that outlasts the video playing on without a seek, then looping to the first
+frame.

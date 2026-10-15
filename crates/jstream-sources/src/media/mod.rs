@@ -2,20 +2,25 @@
 //! (ADR-0031: OS media APIs, the Media Foundation Source Reader on Windows), played on
 //! the media clock.
 //!
-//! A decode thread reads frames ahead ([`player`]); the source maps its clock time onto
-//! the file's timeline, by `speed` and from where it last started, and shows the latest
-//! frame the timeline has reached. Audio comes later, through the engine's mixer.
+//! A decode thread reads frames and audio ahead ([`player`]); the source maps its clock
+//! time onto the file's timeline, by `speed` and from where it last started, and shows
+//! the latest frame the timeline has reached. Its audio goes to the engine's mixer
+//! ([`audio`]), on the same timeline. A file with no video shows nothing and plays its
+//! audio.
 
+mod audio;
 mod player;
+
+pub use audio::MediaAudio;
 
 use crate::color::rgba_frame;
 use crate::describe::{asset, kind, param};
 use crate::source::{self, changed_non_live, setting};
 use crate::{Context, Limits, Source, SourceError, SourceKind};
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Timebase, VideoFrame};
-use jstream_platform::{HardwarePreference, MediaDecoderConfig, PlatformError};
+use jstream_platform::{HardwarePreference, MediaDecoder, MediaDecoderConfig, PlatformError};
 use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings};
-use player::{Player, micros};
+use player::{Player, Start, Timing, micros};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -41,7 +46,9 @@ impl MediaKind {
             params: vec![
                 ParamDescriptor {
                     description: Some(
-                        "A video file the platform can play. Its audio isn't played yet.".into(),
+                        "A video or audio file the platform can play. Its sound plays while the \
+                         program shows it, at speed 1."
+                            .into(),
                     ),
                     ..param(
                         "file",
@@ -91,7 +98,12 @@ impl SourceKind for MediaKind {
     /// then starts the decode thread.
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
         let play = Play::from(settings)?;
-        let (current, player) = match source::asset(settings, "file")? {
+        let timing = Timing {
+            clock: 0,
+            timeline: 0,
+            speed: play.speed,
+        };
+        let (current, player, audio) = match source::asset(settings, "file")? {
             Some((root, path)) => {
                 let media = ctx.media.as_ref().ok_or(SourceError::NoBackend {
                     backend: "media file",
@@ -100,43 +112,70 @@ impl SourceKind for MediaKind {
                 let config = MediaDecoderConfig {
                     video_format: PixelFormat::Rgba8,
                     hardware: HardwarePreference::Prefer,
+                    audio: true,
                 };
                 let decoder = media
                     .open(&host, &config)
                     .map_err(|e| platform_error(&path, e))?;
                 // The decoder has the file open now.
                 drop(hold);
-                let (first, at, decoder) = first_frame(decoder, &path, &ctx.limits)?;
-                let capacity = queue_capacity(first.info().size, &path, &ctx.limits)?;
-                let size = first.info().size;
-                let player =
-                    Player::start(decoder, at, size, capacity, play.looping).map_err(|e| {
-                        SourceError::Decode {
-                            path: path.clone(),
-                            format: FORMAT,
-                            reason: format!("the decode thread could not start: {e}"),
-                        }
-                    })?;
-                (Arc::new(first), Some(player))
+                let sound = decoder.info().audio.map(|a| a.format);
+                let (current, first, decoder) = match first_frame(decoder, &path, &ctx.limits)? {
+                    (Some((frame, at)), decoder) => {
+                        let size = frame.info().size;
+                        (Arc::new(frame), Some((at, size)), decoder)
+                    }
+                    // Audio only: nothing to see.
+                    (None, decoder) => (blank()?, None, decoder),
+                };
+                let capacity = match first {
+                    Some((_, size)) => queue_capacity(size, &path, &ctx.limits)?,
+                    None => 0,
+                };
+                let player = Player::start(Start {
+                    decoder,
+                    first,
+                    capacity,
+                    looping: play.looping,
+                    timing,
+                })
+                .map_err(|e| SourceError::Decode {
+                    path: path.clone(),
+                    format: FORMAT,
+                    reason: format!("the decode thread could not start: {e}"),
+                })?;
+                let audio = sound.map(|format| {
+                    MediaAudio::new(Arc::clone(player.shared()), format, first.is_some())
+                });
+                (current, Some((player, first.is_some())), audio)
             }
             // No file: one transparent pixel, as the image kind shows.
-            None => {
-                let size = FrameSize::new(1, 1)?;
-                let frame = rgba_frame(size, vec![0; 4], MediaTime::zero(Timebase::MICROS))?;
-                (Arc::new(frame), None)
-            }
+            None => (blank()?, None, None),
+        };
+        let (player, video) = match player {
+            Some((player, video)) => (Some(player), video),
+            None => (None, false),
         };
         Ok(Box::new(MediaSource {
             descriptor: self.0.clone(),
             settings: settings.clone(),
             play,
             player,
+            video,
+            audio,
             current,
             current_at: 0,
-            clock: Anchor::default(),
+            timing,
             last: 0,
         }))
     }
+}
+
+/// One transparent pixel: what a source with nothing to see shows.
+fn blank() -> Result<Arc<VideoFrame>, SourceError> {
+    let size = FrameSize::new(1, 1)?;
+    let frame = rgba_frame(size, vec![0; 4], MediaTime::zero(Timebase::MICROS))?;
+    Ok(Arc::new(frame))
 }
 
 /// What the error names the file as.
@@ -156,18 +195,20 @@ fn platform_error(path: &str, e: PlatformError) -> SourceError {
     }
 }
 
-/// The file's first frame and its time, checked against the limits.
+/// A file's first frame and its time in microseconds.
+type FirstFrame = (VideoFrame, i64);
+
+/// The file's first frame and its time, checked against the limits; no frame for a
+/// file with only audio.
 fn first_frame(
-    mut decoder: Box<dyn jstream_platform::MediaDecoder>,
+    mut decoder: Box<dyn MediaDecoder>,
     path: &str,
     limits: &Limits,
-) -> Result<(VideoFrame, i64, Box<dyn jstream_platform::MediaDecoder>), SourceError> {
-    let no_video = || SourceError::Decode {
+) -> Result<(Option<FirstFrame>, Box<dyn MediaDecoder>), SourceError> {
+    let nothing = || SourceError::Decode {
         path: path.to_owned(),
         format: FORMAT,
-        reason: "it has no video to show (audio-only files play once the audio path is \
-                 built)"
-            .into(),
+        reason: "it has no video or audio the platform can play".into(),
     };
     let too_large = |size: FrameSize| {
         let (w, h) = (size.width(), size.height());
@@ -176,7 +217,12 @@ fn first_frame(
             what: format!("{w}x{h} is over {} px a side", limits.max_side),
         })
     };
-    let video = decoder.info().video.ok_or_else(no_video)?;
+    let Some(video) = decoder.info().video else {
+        return match decoder.info().audio {
+            Some(_) => Ok((None, decoder)),
+            None => Err(nothing()),
+        };
+    };
     // Checked before decoding anything, and again on the frame itself: every later
     // frame must have its size (`Player`).
     if let Some(err) = too_large(video.size) {
@@ -185,7 +231,7 @@ fn first_frame(
     let frame = decoder
         .next_video()
         .map_err(|e| platform_error(path, e))?
-        .ok_or_else(no_video)?;
+        .ok_or_else(nothing)?;
     if let Some(err) = too_large(frame.info().size) {
         return Err(err);
     }
@@ -197,7 +243,7 @@ fn first_frame(
         });
     }
     let at = micros(frame.info().pts).unwrap_or(0);
-    Ok((frame, at, decoder))
+    Ok((Some((frame, at)), decoder))
 }
 
 /// How many frames to decode ahead: [`QUEUE`], or fewer when the frames queued, the one
@@ -262,14 +308,6 @@ fn bad(param: &str, reason: &str) -> SourceError {
     }
 }
 
-/// Where the timeline was at a clock time: the timeline runs on from there at `speed`.
-/// Both in microseconds; the clock is the source's, from when it started.
-#[derive(Clone, Copy, Debug, Default)]
-struct Anchor {
-    clock: i64,
-    timeline: i64,
-}
-
 /// A running `media` source.
 struct MediaSource {
     descriptor: KindDescriptor,
@@ -277,10 +315,15 @@ struct MediaSource {
     play: Play,
     /// `None` with no file.
     player: Option<Player>,
+    /// Whether the file has video.
+    video: bool,
+    /// The file's audio, when it has some.
+    audio: Option<MediaAudio>,
     /// The frame shown and its timeline position.
     current: Arc<VideoFrame>,
     current_at: i64,
-    clock: Anchor,
+    /// How the source's clock maps onto the timeline.
+    timing: Timing,
     /// The latest clock time asked about, so a speed change keeps the position.
     last: i64,
 }
@@ -288,22 +331,24 @@ struct MediaSource {
 impl MediaSource {
     /// The timeline position at clock time `at`, in microseconds.
     fn position(&self, at: i64) -> i64 {
-        let elapsed = (at - self.clock.clock).max(0) as f64 * self.play.speed;
-        self.clock.timeline.saturating_add(elapsed as i64)
+        self.timing.position(at)
     }
 
-    /// The first clock time at which the timeline reaches `to`.
-    fn clock_at(&self, to: i64) -> i64 {
-        let ahead = (to - self.clock.timeline).max(0) as f64 / self.play.speed;
-        self.clock.clock.saturating_add(ahead.ceil() as i64)
+    /// Maps the clock onto the timeline from now on, for the frames and the audio.
+    fn set_timing(&mut self, timing: Timing) {
+        self.timing = timing;
+        if let Some(player) = &self.player {
+            player.set_timing(timing);
+        }
     }
 
     /// Starts the timeline again from `timeline` at clock time `at`.
     fn restart(&mut self, at: i64, timeline: i64) {
-        self.clock = Anchor {
+        self.set_timing(Timing {
             clock: at,
             timeline,
-        };
+            speed: self.play.speed,
+        });
         self.current_at = timeline;
         if let Some(player) = &self.player {
             player.seek(timeline);
@@ -335,9 +380,12 @@ impl Source for MediaSource {
             }
             taken = true;
         }
-        let behind = state.queue.is_empty()
+        // With no video, the audio feeder catches the timeline up instead.
+        let behind = self.video
+            && state.queue.is_empty()
             && !state.ended
             && !state.seeking
+            && !state.video_over
             && position - self.current_at > CATCH_UP_US;
         drop(state);
         if taken {
@@ -350,15 +398,24 @@ impl Source for MediaSource {
     }
 
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
-        let player = self.player.as_ref()?;
+        let player = self.player.as_ref().filter(|_| self.video)?;
         let at = micros(at).unwrap_or(0).max(0);
         let state = player.state();
         let next = match state.queue.front() {
-            Some(next) => self.clock_at(next.at).max(at + 1),
-            None if state.ended => return None,
-            None => at + RETRY_US,
+            Some(next) => self.timing.clock_at(next.at).max(at + 1),
+            None if state.ended || (state.video_over && !self.play.looping) => return None,
+            // The picture is over but the audio plays on: a looping file's next frame
+            // comes once the queued audio has played out.
+            None => match state.audio.back().filter(|_| state.video_over) {
+                Some(last) => self.timing.clock_at(last.end()).max(at + RETRY_US),
+                None => at + RETRY_US,
+            },
         };
         Some(MediaTime::new(next, Timebase::MICROS))
+    }
+
+    fn audio(&self) -> Option<MediaAudio> {
+        self.audio.clone()
     }
 
     fn show(&mut self, at: MediaTime) {
@@ -377,10 +434,11 @@ impl Source for MediaSource {
         if play.speed != self.play.speed {
             // Keep the position: the new speed applies from the latest time asked about.
             let timeline = self.position(self.last);
-            self.clock = Anchor {
+            self.set_timing(Timing {
                 clock: self.last,
                 timeline,
-            };
+                speed: play.speed,
+            });
         }
         if let Some(player) = &self.player {
             player.set_looping(play.looping, self.position(self.last));

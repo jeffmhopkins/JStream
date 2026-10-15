@@ -4,13 +4,19 @@
 //! plays are the containers and codecs the OS supports.
 //!
 //! Unlike [`VideoDecoder`](crate::VideoDecoder), which takes packets, a [`MediaDecoder`]
-//! owns the whole file: it reads, demuxes and decodes, and hands out frames in
-//! presentation order. Reading blocks while a frame decodes, so a source calls it on a
-//! thread of its own, never on a real-time thread.
+//! owns the whole file: it reads, demuxes and decodes, and hands out video frames and
+//! audio blocks, each stream in presentation order. Reading blocks while a frame
+//! decodes, so a source calls it on a thread of its own, never on a real-time thread.
+//!
+//! Video and audio come from one file, so a caller reads both streams in step, by
+//! time: a backend may hold what one stream has demuxed while the other is read, and
+//! reading one stream far ahead of the other makes it hold more.
 
 use std::path::Path;
 
-use jstream_media::{FrameSize, MediaTime, PixelFormat, Timebase, VideoFrame};
+use jstream_media::{
+    AudioBuffer, AudioFormat, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrame,
+};
 
 use crate::{HardwarePreference, PlatformError};
 
@@ -22,6 +28,9 @@ pub struct MediaDecoderConfig {
     pub video_format: PixelFormat,
     /// Hardware or software decoding.
     pub hardware: HardwarePreference,
+    /// Whether to decode the first audio stream too. Without it the backend leaves
+    /// audio unread, and [`MediaInfo::audio`] is `None`.
+    pub audio: bool,
 }
 
 /// What an opened file holds.
@@ -29,8 +38,10 @@ pub struct MediaDecoderConfig {
 pub struct MediaInfo {
     /// The first video stream, or `None` for a file with no video.
     pub video: Option<MediaVideoInfo>,
-    /// Whether the file has an audio stream.
-    pub audio: bool,
+    /// The audio stream a [`MediaDecoder`] decodes: `None` for a file with no audio,
+    /// one opened without [`MediaDecoderConfig::audio`], or one whose audio the
+    /// platform can't decode (the video still plays).
+    pub audio: Option<MediaAudioInfo>,
     /// How long the file plays, when the container says.
     pub duration: Option<MediaTime>,
 }
@@ -43,6 +54,15 @@ pub struct MediaVideoInfo {
     /// The nominal duration of one frame, when the stream declares a frame rate. Frame
     /// times come from the frames themselves; this is a hint.
     pub frame_period: Option<Timebase>,
+}
+
+/// The audio stream a [`MediaDecoder`] decodes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MediaAudioInfo {
+    /// The format of every decoded block: the stream's own sample rate and a channel
+    /// layout the platform mixed it down to where it had to, always interleaved `f32`.
+    /// The backend never resamples; that is the engine's job (ADR-0014).
+    pub format: AudioFormat,
 }
 
 /// The media-file backend: opens local files for decoding.
@@ -83,10 +103,20 @@ pub trait MediaDecoder: Send {
     /// retried; a decoder that can't go on keeps failing.
     fn next_video(&mut self) -> Result<Option<VideoFrame>, PlatformError>;
 
-    /// Moves to `to` on the file's timeline. The next frame read is the one shown at
-    /// `to`, or an earlier one: decoding restarts at a key frame, and the backend may
-    /// return the frames from it up to `to`. A time past the end gives the end of the
-    /// stream.
+    /// The next block of audio in presentation order, in [`MediaAudioInfo::format`].
+    /// Blocks while it is read and decoded. `Ok(None)` at the end of the stream, and
+    /// for a file with no decoded audio; after the end, only
+    /// [`seek`](MediaDecoder::seek) brings more. A block's `pts` is on the file's
+    /// timeline, like a frame's.
+    ///
+    /// # Errors
+    /// As for [`next_video`](MediaDecoder::next_video).
+    fn next_audio(&mut self) -> Result<Option<AudioBuffer>, PlatformError>;
+
+    /// Moves both streams to `to` on the file's timeline. The next frame read is the
+    /// one shown at `to`, or an earlier one: decoding restarts at a key frame, and the
+    /// backend may return the frames from it up to `to`. Audio likewise restarts at or
+    /// before `to`. A time past the end gives the end of the stream.
     ///
     /// # Errors
     /// [`PlatformError::Unsupported`] when the file can't seek (a live stream), and
