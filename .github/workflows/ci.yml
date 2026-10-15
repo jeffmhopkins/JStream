@@ -157,6 +157,7 @@ jobs:
   # The portable Windows zip (ADR-0020): `cargo xtask dist` with the wasm job's UI. The zip
   # is uploaded as is (`archive: false`), so the download is the zip a user unzips.
   dist:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     needs: wasm
     runs-on: windows-latest
     steps:
