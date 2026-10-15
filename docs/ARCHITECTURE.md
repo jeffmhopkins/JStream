@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:2b244546dfef74f8", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Crate-map daemon row (N3) now says the daemon registers and publishes the virtual camera via a virtual_cam output, matching serve.rs windows_backends" }
+verified = { hash = "b3:f0fdef228364d1e6", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge-only round: main e1e2a94 (G3b VirtualCam #213/#297, #295 clock swap, Q3, #237): main's shape text; diagram line binary frames: preview, later meters; holds" }
 -->
 
 ```
@@ -530,7 +530,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:5e763b793debc8fe", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:7c8cad7ceae05795", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge-only round: main e1e2a94 (G3b VirtualCam #213/#297, #295 clock swap, Q3, #237): Binary streams bullet now protocol 0.19; main's VirtualCam text kept; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -665,7 +665,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:55a0e0a9c09649f1", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+verified = { hash = "b3:a52ddb2899baf138", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge-only round: main e1e2a94 (G3b VirtualCam #213/#297, #295 clock swap, Q3, #237): tool list with studio and preview; preview bullet holds; tools.snap 156461 bytes, text says about 155 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

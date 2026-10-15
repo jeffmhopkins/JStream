@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:1851d03558773cf6", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (#213, #292 and others) into #237: took main's stamp; stale only via ARCH#threading, whose CLAP-host paragraph now says the shared block and mixer side are built; this section names no CLAP hosts; re-read; Transport shutdown text (#209, #236) and main's text hold" }
+verified = { hash = "b3:ba73fb7db98b469c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge-only round: main e1e2a94 (G3b VirtualCam #213/#297, #295 clock swap, Q3, #237): stale only through cascades from main's VirtualCam text and this PR's protocol/threading sections; text is main's; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

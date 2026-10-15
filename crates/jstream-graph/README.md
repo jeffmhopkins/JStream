@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:82526774ecb1ce02", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:093d0556a6bfe181", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge-only round: main e1e2a94 (G3b VirtualCam #213/#297, #295 clock swap, Q3, #237): stale only through cascades from main's VirtualCam text and this PR's protocol/threading sections; text is main's; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

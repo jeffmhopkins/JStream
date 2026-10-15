@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:0cee9228843ca676", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; shared-names bullet is main's; mock still accepts virtual_cam" }
+verified = { hash = "b3:df0658d30fccf819", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge-only round: main e1e2a94 (G3b VirtualCam #213/#297, #295 clock swap, Q3, #237): main's text plus binary()/BinaryStream; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -47,7 +47,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:dbd065bb673c1ddb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; set_target refusal for a virtual camera unchanged" }
+verified = { hash = "b3:b70de6b78767da73", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge-only round: main e1e2a94 (G3b VirtualCam #213/#297, #295 clock swap, Q3, #237): binary() bullet now protocol 0.19; main's virtual_cam/set_target text kept; WebSocket binary sentence holds for both clients" }
 -->
 
 ### The trait
