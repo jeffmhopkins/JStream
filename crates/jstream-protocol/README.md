@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:9577b592fc543155", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: re-stale only from cargo fmt rewrapping the stagger_ms description string; section text re-read, holds" }
+verified = { hash = "b3:0c1aa5fa3efb4d56", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -46,7 +46,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `scene.switch` with its optional `preset_id`, `studio.set_preview`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
@@ -97,9 +97,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
-  transition presets and studio mode's preview; 0.17 added `scene.create`'s optional
-  `role`, 0.16 `scene.switch`, `studio.get` and `studio.changed`, 0.15 `delete.plan` and the
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
+  transition presets and studio mode's preview; 0.18 added the `virtual_cam` output
+  kind, 0.17 `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
+  `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
@@ -113,7 +114,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a recording output and two
+  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output and two
   encoder profiles), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
   URL, recording path and encoder profile checks, and `item.set_source` and
@@ -132,7 +133,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:d8f94b10e348ed5b", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 review round 1: re-stale only from cargo fmt rewrapping the stagger_ms description string; section text re-read, holds" }
+verified = { hash = "b3:eab367ee041ab28d", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (G3b virtual_cam #297, Q3 UI e2e #309, #295 clock-swap re-plan, #236): re-read main's added text beside T1's transition/preview text; independent paragraphs; protocol line now 0.19 since G3b took 0.18; e2e mock-daemon only gained preset_id: None; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -340,7 +341,13 @@ no `..` segment and end in a file name, and
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
 so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
-record elsewhere. The
+record elsewhere. A `virtual_cam` output (0.18) has no fields: it offers the program
+video to other apps on the engine's machine as a webcam, with no audio, at the canvas
+size it has when it starts and 30 fps. `output.start` fails with `action_failed` when
+the engine has no virtual camera, the camera isn't registered on the machine, or it
+can't offer that size. It has no target either, so `output.set_target` refuses it too,
+and it encodes nothing, so its encoder profile is stored but unused. A 0.9 to 0.17
+client reads it as `Unknown`. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
@@ -367,7 +374,7 @@ share one encoder session, and `output.status` reports the sharing.
 
 [ADR-0029](../../docs/adr/0029-transitions.md) and
 [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
-the model (0.18). A transition preset is collection state:
+the model (0.19). A transition preset is collection state:
 `{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
 kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
 `settings` are checked against its descriptor as a source's are (`unmatched`, the
@@ -426,7 +433,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty) and the transition presets with
-  the default (`transitions`; missing from a pre-0.18 server, it parses as the one
+  the default (`transitions`; missing from a pre-0.19 server, it parses as the one
   initial `cut`). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
@@ -450,7 +457,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
 - `studio.get`: the scene on program (`program_scene`) and on preview
-  (`preview_scene`, 0.18), each omitted only while the collection has no scene. Runtime
+  (`preview_scene`, 0.19), each omitted only while the collection has no scene. Runtime
   state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
@@ -583,7 +590,7 @@ After `welcome`, the server pushes every event to every client.
   transition lasts in milliseconds (`duration_ms`, 0 for a cut), so a client can show
   progress; no event marks the end. Program and preview are runtime state, so it
   carries no `rev` ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
-  Added in 0.16; `preview_scene` and `transition` in 0.18.
+  Added in 0.16; `preview_scene` and `transition` in 0.19.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

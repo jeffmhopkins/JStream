@@ -208,7 +208,7 @@ pub enum QueryResult {
         #[serde(default)]
         encoders: Vec<EncoderProfileInfo>,
         /// The transition presets and which one is the default (ADR-0029). Missing
-        /// (from a server older than 0.18) parses as the one `cut` preset every
+        /// (from a server older than 0.19) parses as the one `cut` preset every
         /// collection starts with.
         #[serde(default)]
         transitions: TransitionsInfo,
@@ -255,7 +255,7 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
         /// The scene on preview, which `studio.set_preview` sets. Omitted only while the
-        /// collection has no scene, and by a server older than 0.18.
+        /// collection has no scene, and by a server older than 0.19.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preview_scene: Option<SceneId>,
     },

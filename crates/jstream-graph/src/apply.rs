@@ -644,6 +644,7 @@ fn apply_edit(
                 OutputKind::Record { path, container } => {
                     check_record(path, *container, at)?;
                 }
+                OutputKind::VirtualCam => {}
                 OutputKind::Unknown => {
                     return Err(invalid(
                         at,

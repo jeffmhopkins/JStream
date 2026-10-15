@@ -9,7 +9,10 @@
 //! stage's `jstream-collector` thread (R-RT-003), and so does a finished session's
 //! input the mixer thread lets go of. The mixer thread polls the engine clock. Encode threads live inside the encoder sessions. The output thread muxes
 //! FLV and publishes it, or muxes fragmented MP4 and writes it to a recording file
-//! ([`Sink`]). None of those threads lock the engine's collection.
+//! ([`Sink`]). A virtual camera has no encoder session: the render thread sends the
+//! program frames to its camera thread through a [`VcamTap`], over bounded channels,
+//! and the camera thread publishes them. None of those threads lock the engine's
+//! collection.
 //!
 //! The render and mixer threads catch a panic at their thread boundary, and every
 //! fatal error on the render, mixer and output threads goes to the same channel, so
@@ -44,7 +47,7 @@ use jstream_media::{
 };
 use jstream_platform::{
     AudioEncoderConfig, AudioIo, Backends, Capture, CaptureStream, Codecs, HardwarePreference,
-    MediaClock, RateControl, VideoEncoderConfig, VideoSurface,
+    MediaClock, RateControl, VcamFormat, VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId,
@@ -60,6 +63,7 @@ use crate::drops::{
 use crate::engine::Engine;
 use crate::lock;
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
+use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
 use crate::runtime::{
     Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
 };
@@ -185,6 +189,12 @@ pub(crate) struct MediaHost {
     pub(crate) publish: Mutex<Option<Box<dyn LivePublish>>>,
     /// Opens a target for a start when `publish` holds none.
     pub(crate) open_publish: Mutex<Option<OpenPublish>>,
+    /// The virtual-camera sink, taken out of the backends. Empty when the platform has
+    /// none, or while a virtual-camera output runs.
+    pub(crate) vcam: VcamSlot,
+    /// Whether the backends had a virtual-camera sink, so an empty `vcam` slot means it
+    /// is in use.
+    pub(crate) has_vcam: AtomicBool,
     pub(crate) starts: Mutex<()>,
     pub(crate) gate: Mutex<Gate>,
     pub(crate) gate_cv: Condvar,
@@ -248,6 +258,8 @@ impl MediaHost {
             open_timeout: Mutex::new(OPEN_TIMEOUT),
             publish: Mutex::new(None),
             open_publish: Mutex::new(None),
+            vcam: Arc::new(Mutex::new(None)),
+            has_vcam: AtomicBool::new(false),
             starts: Mutex::new(()),
             gate: Mutex::new(Gate {
                 program: Weak::new(),
@@ -311,6 +323,8 @@ pub(crate) struct Program {
     latency: MediaTime,
     video_taps: Sender<VideoInput>,
     audio_taps: Sender<AudioInput>,
+    /// Virtual cameras for the render thread to publish to.
+    vcam_taps: Sender<VcamTap>,
     failures: Arc<Failures>,
     /// Open encoder sessions by key, held weakly: each lives while an output holds it.
     sessions: Mutex<SessionRegistry<EncodeKey, Encoders>>,
@@ -755,10 +769,10 @@ fn report(fail: &Sender<PipelineEvent>, reason: String) {
 /// thread the stop has left behind must not hold one (#138). The lock is taken only
 /// to send or close, never across a call into the publish target.
 #[derive(Clone)]
-struct FailLine(Arc<Mutex<Option<Sender<PipelineEvent>>>>);
+pub(crate) struct FailLine(Arc<Mutex<Option<Sender<PipelineEvent>>>>);
 
 impl FailLine {
-    fn new(fail: Sender<PipelineEvent>) -> Self {
+    pub(crate) fn new(fail: Sender<PipelineEvent>) -> Self {
         Self(Arc::new(Mutex::new(Some(fail))))
     }
 
@@ -771,7 +785,7 @@ impl FailLine {
     }
 
     /// [`report`] on this line.
-    fn report(&self, reason: String) {
+    pub(crate) fn report(&self, reason: String) {
         tracing::error!(error = %reason, "pipeline failed");
         self.send(PipelineEvent::Failed(reason));
     }
@@ -822,6 +836,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let (ready_tx, ready_rx) = mpsc::channel();
     let (video_taps, video_inputs) = mpsc::channel();
     let (audio_taps, audio_inputs) = mpsc::channel();
+    let (vcam_taps, vcam_inputs) = mpsc::channel();
     let (fail_tx, fail_rx) = mpsc::channel();
 
     let forward = spawn("jstream-program-watch", {
@@ -845,6 +860,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             open: Arc::clone(&parts.draw),
             clock: Arc::clone(&parts.clock),
             inputs: video_inputs,
+            cams: vcam_inputs,
             size,
             period,
             stop: Arc::clone(&stop),
@@ -893,6 +909,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         latency,
         video_taps,
         audio_taps,
+        vcam_taps,
         failures,
         sessions: Mutex::new(SessionRegistry::new()),
         readbacks,
@@ -1015,6 +1032,66 @@ pub(crate) fn launch(
     running.arm_stats(engine);
     keep.store(true, Ordering::Release);
     Ok(running)
+}
+
+/// Starts a virtual-camera output on `program`: starts the camera at `canvas`, as BGRA8
+/// at the base frame rate, hands the render thread a tap that sends it every program
+/// frame, and starts the camera thread that publishes them. No encoder session opens.
+/// On failure `vcam` drops, which stops the camera and returns its sink to the engine.
+/// The stop sets the output's stop flag and waits for the camera thread to stop the
+/// camera, as long as it waits for any output thread.
+pub(crate) fn launch_vcam(
+    program: Arc<Program>,
+    mut vcam: VcamOut,
+    canvas: FrameSize,
+    output_id: OutputId,
+    generation: u64,
+    fail_tx: Sender<PipelineEvent>,
+) -> Result<Running, String> {
+    let registration = program
+        .failures
+        .add(output_id.clone(), generation, fail_tx.clone());
+    vcam.start(VcamFormat {
+        size: canvas,
+        pixel_format: PixelFormat::Bgra8,
+        frame_period: Timebase::new(FRAME_NUM, FRAME_DEN)
+            .map_err(|err| format!("frame period: {err}"))?,
+    })?;
+    let stop = Arc::new(AtomicBool::new(false));
+    let output_drops = Arc::new(AtomicU64::new(0));
+    let (tap, frames, spare) = camera_channels(Arc::clone(&stop), Arc::clone(&output_drops));
+    // The tap goes first: a tap the render thread can't take drops here, with `vcam`
+    // still on this thread. A camera thread that fails to start drops its channel
+    // ends, and the tap leaves.
+    program
+        .vcam_taps
+        .send(tap)
+        .map_err(|_| "the render thread has stopped".to_string())?;
+    let fail = FailLine::new(fail_tx);
+    let (done_tx, done_rx) = mpsc::channel();
+    let output = {
+        let (stop, fail) = (Arc::clone(&stop), fail.clone());
+        spawn("jstream-vcam", move || {
+            run_camera(vcam, canvas, frames, spare, stop, fail, done_tx);
+        })?
+    };
+    Ok(Running {
+        output_id,
+        generation,
+        stop,
+        drain_by: Arc::new(OnceLock::new()),
+        cut: Arc::new(AtomicBool::new(false)),
+        output: Some(output),
+        output_done: Some(done_rx),
+        output_fail: fail,
+        encoders: None,
+        stats: PipelineStats::new(),
+        output_drops,
+        link_drops: Arc::new(AtomicU64::new(0)),
+        drop_guard: None,
+        registration: Some(registration),
+        program: Some(program),
+    })
 }
 
 fn spawn(name: &str, body: impl FnOnce() + Send + 'static) -> Result<JoinHandle<()>, String> {
@@ -1157,6 +1234,8 @@ struct RenderJob {
     clock: Arc<dyn MediaClock>,
     /// The sessions to push frames into, as they are opened.
     inputs: Receiver<VideoInput>,
+    /// The virtual cameras to publish frames to, as their outputs start.
+    cams: Receiver<VcamTap>,
     size: FrameSize,
     period: MediaTime,
     stop: Arc<AtomicBool>,
@@ -1257,9 +1336,10 @@ impl Frames {
 /// and counts the ticks it skipped in `render_ticks` (R-RT-004), so video pts stay on
 /// the clock that stamps audio.
 ///
-/// Each frame goes to every encoder session the program has handed it. A session that
-/// refuses input because it has finished is let go of; the thread runs until the
-/// program stops. While it has no session it draws nothing.
+/// Each frame goes to every encoder session the program has handed it, and to every
+/// virtual camera's tap. A session that refuses input because it has finished is let go
+/// of, and so is a tap whose output is stopping or whose camera thread has ended, both
+/// to the collector; the thread runs until the program stops. While it has no session and no camera it draws nothing.
 fn render_loop(job: RenderJob) {
     let RenderJob {
         mut capture,
@@ -1268,6 +1348,7 @@ fn render_loop(job: RenderJob) {
         open,
         clock,
         inputs,
+        cams: cam_inputs,
         size,
         period,
         stop,
@@ -1277,6 +1358,7 @@ fn render_loop(job: RenderJob) {
         fail,
     } = job;
     let mut targets: Vec<VideoInput> = Vec::new();
+    let mut cams: Vec<VcamTap> = Vec::new();
     let mut draw = match open() {
         Ok(draw) => draw,
         Err(err) => {
@@ -1304,7 +1386,8 @@ fn render_loop(job: RenderJob) {
     let mut broken = false;
     while !stop.load(Ordering::Relaxed) {
         targets.extend(inputs.try_iter());
-        if targets.is_empty() {
+        cams.extend(cam_inputs.try_iter());
+        if targets.is_empty() && cams.is_empty() {
             // No session to draw for, so no tick is due and none counts as skipped;
             // the first tick after a session arrives is drawn at the clock. It still
             // adopts the latest snapshot, so a gesture never waits on it.
@@ -1375,6 +1458,22 @@ fn render_loop(job: RenderJob) {
                 |input| push_frame(input, size, due, &frames.shown),
                 |input| collector.free(Garbage::Video(input)),
             );
+        }
+        // A camera whose output is stopping, or whose thread has ended, goes to the
+        // collector.
+        let mut at = 0;
+        while at < cams.len() {
+            let cam = &mut cams[at];
+            let stays = if frames.shown.is_empty() {
+                cam.stay()
+            } else {
+                cam.push(size, due, &frames.shown)
+            };
+            if stays {
+                at += 1;
+            } else {
+                collector.free(Garbage::Vcam(cams.swap_remove(at)));
+            }
         }
         next = match due.checked_add(period) {
             Ok(next) => Some(next),
