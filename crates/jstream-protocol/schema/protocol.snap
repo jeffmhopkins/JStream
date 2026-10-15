@@ -2099,7 +2099,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The scene now on preview. Omitted when the collection has no scene left, and\nby a server older than 0.20."
+              "description": "The scene now on preview. Omitted when the collection has no scene left, and\nby a server older than 0.28."
             },
             "program_scene": {
               "anyOf": [
@@ -3604,7 +3604,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   }
                 ]
               },
-              "description": "The transition presets and which one is the default (ADR-0029). Missing\n(from a server older than 0.20) parses as the one `cut` preset every\ncollection starts with."
+              "description": "The transition presets and which one is the default (ADR-0029). Missing\n(from a server older than 0.28) parses as the one `cut` preset every\ncollection starts with."
             },
             "type": {
               "const": "state.get",
@@ -3737,7 +3737,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The scene on preview, which `studio.set_preview` sets. Omitted only while the\ncollection has no scene, and by a server older than 0.20."
+              "description": "The scene on preview, which `studio.set_preview` sets. Omitted only while the\ncollection has no scene, and by a server older than 0.28."
             },
             "program_scene": {
               "anyOf": [
@@ -4831,5 +4831,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.19"
+  "title": "JStream protocol 0.28"
 }

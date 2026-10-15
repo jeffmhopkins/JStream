@@ -103,7 +103,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.20 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.28 because of
   transition presets and studio mode's preview; 0.19 added audio (sources' audio,
   buses, sends, `bus.list`, `meters.tick` and `audio.reset_loudness`), 0.18 the
   `virtual_cam` output kind, 0.17 `scene.create`'s optional `role`, 0.16
@@ -430,7 +430,7 @@ share one encoder session, and `output.status` reports the sharing.
 
 [ADR-0029](../../docs/adr/0029-transitions.md) and
 [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
-the model (0.20). A transition preset is collection state:
+the model (0.28). A transition preset is collection state:
 `{preset_id, name, kind, duration_ms, easing, settings}`, where `kind` is a transition
 kind `kind.list` reports (category `transition`: `cut`, `fade` and `move` so far) and
 `settings` are checked against its descriptor as a source's are (`unmatched`, the
@@ -490,7 +490,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty), the `buses` and `sends` (as
   `bus.list`; missing from a pre-0.19 server, both parse as empty), and the transition
-  presets with the default (`transitions`; missing from a pre-0.20 server, it parses as
+  presets with the default (`transitions`; missing from a pre-0.28 server, it parses as
   the one initial `cut`). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
@@ -516,7 +516,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
 - `studio.get`: the scene on program (`program_scene`) and on preview
-  (`preview_scene`, 0.20), each omitted only while the collection has no scene. Runtime
+  (`preview_scene`, 0.28), each omitted only while the collection has no scene. Runtime
   state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
   Added in 0.16.
@@ -656,7 +656,7 @@ After `welcome`, the server pushes every event to every client.
   transition lasts in milliseconds (`duration_ms`, 0 for a cut), so a client can show
   progress; no event marks the end. Program and preview are runtime state, so it
   carries no `rev` ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
-  Added in 0.16; `preview_scene` and `transition` in 0.20.
+  Added in 0.16; `preview_scene` and `transition` in 0.28.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -748,10 +748,10 @@ after 1.0:
   exists (the whole response fails, and `WsControl` ends the session). Whether that
   counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
   `encoder`, which only an error answering an encoder edit names, so a client older
-  than 0.13, which sends none, never reads it. 0.20 adds the `EntityKind` value
+  than 0.13, which sends none, never reads it. 0.28 adds the `EntityKind` value
   `transition` in the same way, but also the `KindCategory` value `transition`, which
-  `kind.list` reports for every transition kind, so a client older than 0.20 can't
-  parse `kind.list` from a 0.20 server. The encoder enums (`VideoCodec`,
+  `kind.list` reports for every transition kind, so a client older than 0.28 can't
+  parse `kind.list` from a 0.28 server. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or

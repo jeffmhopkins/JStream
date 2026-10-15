@@ -50,7 +50,7 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         program_scene: Option<SceneId>,
         /// The scene now on preview. Omitted when the collection has no scene left, and
-        /// by a server older than 0.20.
+        /// by a server older than 0.28.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preview_scene: Option<SceneId>,
         /// The transition a `scene.switch` started: the preset the engine chose and how

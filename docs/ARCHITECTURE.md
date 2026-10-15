@@ -584,10 +584,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
-- **Studio mode** (protocol 0.20): the action `studio.set_preview { scene_id }` puts a
+- **Studio mode** (protocol 0.28): the action `studio.set_preview { scene_id }` puts a
   scene on preview, also with no `rev` change; `studio.get` and `studio.changed` carry
   `preview_scene` beside `program_scene`.
-- **Transitions** (protocol 0.20, [ADR-0029](adr/0029-transitions.md)): the edits
+- **Transitions** (protocol 0.28, [ADR-0029](adr/0029-transitions.md)): the edits
   `transition.create`, `transition.update` and `transition.delete` manage presets (each
   with a kind and a settings map or patch,
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)),
