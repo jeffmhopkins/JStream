@@ -606,6 +606,8 @@ On a draft PR every `ci` job is skipped; they run when the PR is marked ready fo
 `ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e` and `macos` are in
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)).
+A PR into a `wave/*` branch runs only `fmt`, Linux `clippy`, `docs`, `lint-deps`, `gate-test`,
+`pr-title` and `review-gate`. The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md)).
 
 | Check | Runs | Required | From |
 |---|---|---|---|

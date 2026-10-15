@@ -59,6 +59,10 @@ depends_on = ["docs/adr/0019-review-gate-v2.md"]
    the PR re-verified, with their notes.
 4. Read enough of the surrounding code to understand callers and invariants. The diff
    alone is not enough.
+5. **A wave PR** (head `wave/*`, base `main`; [ADR-0055](docs/adr/0055-wave-branches.md))
+   carries PRs you already passed into the wave. Review what they didn't see: the merge
+   commits between them, conflict resolutions, and anything committed to the wave branch
+   directly. The full CI on the wave PR covers the rest.
 
 <a id="checks"></a>
 ## Step 2: Review
@@ -171,7 +175,8 @@ The marker must be on its own line, exactly in this format.
 
 A `success` on the head SHA also makes `review-gate` dispatch the Windows, macOS and
 end-to-end CI jobs for that SHA ([ADR-0054](docs/adr/0054-platform-ci-after-review.md)). The PR
-merges once the required Windows checks pass.
+merges once the required Windows checks pass. A PR into a `wave/*` branch gets no such run; the
+wave's PR into `main` does ([ADR-0055](docs/adr/0055-wave-branches.md)).
 
 <a id="rounds"></a>
 ## Re-review rounds and disputes
