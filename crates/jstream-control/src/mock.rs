@@ -821,7 +821,11 @@ impl Collection {
         running: &BTreeSet<OutputId>,
     ) -> Result<Vec<Edit>, ProtocolError> {
         let inverse = match edit {
-            Edit::SceneCreate { scene_id, name } => {
+            Edit::SceneCreate {
+                scene_id,
+                name,
+                role,
+            } => {
                 check_id(scene_id.as_str(), at, "scene_id")?;
                 check_name(&name, at)?;
                 if self.scene_index(&scene_id).is_some() {
@@ -830,7 +834,7 @@ impl Collection {
                 self.scenes.push(Scene {
                     id: scene_id.clone(),
                     name,
-                    role: SceneRole::Scene,
+                    role: role.unwrap_or_default(),
                     items: Vec::new(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
@@ -877,18 +881,13 @@ impl Collection {
                 let mut inverse = vec![Edit::SceneCreate {
                     scene_id: scene.id.clone(),
                     name: scene.name,
+                    role: (!scene.role.is_scene()).then_some(scene.role),
                 }];
                 // Re-created scenes are appended, so only a scene that wasn't last moves back.
                 if index != self.scenes.len() {
                     inverse.push(Edit::SceneReorder {
                         scene_id: scene.id.clone(),
                         index: wire_index(index)?,
-                    });
-                }
-                if scene.role != SceneRole::Scene {
-                    inverse.push(Edit::SceneSetRole {
-                        scene_id: scene.id.clone(),
-                        role: scene.role,
                     });
                 }
                 // Re-adding bottom to top puts each item back at its own index.
@@ -1950,6 +1949,7 @@ mod tests {
         Edit::SceneCreate {
             scene_id: SceneId::new(scene),
             name: scene.to_uppercase(),
+            role: None,
         }
     }
 
@@ -2730,6 +2730,7 @@ mod tests {
             rejected(Edit::SceneCreate {
                 scene_id: SceneId::new(""),
                 name: "x".into(),
+                role: None,
             }),
             Some(ProtocolError::invalid_argument(
                 "edits.0.scene_id",

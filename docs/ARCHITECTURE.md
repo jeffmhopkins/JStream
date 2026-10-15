@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:ceeba392ba295c97", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "ADR-0030 dependency changed (What follows program now says the render thread follows it): re-read; Program bullet and Built so far hold" }
+verified = { hash = "b3:19704361cfc23bd4", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took main's Built-so-far (encoder profiles, sources), dropped scene.create's role from Not yet; role set by scene.create or scene.set_role" }
 -->
 
 ```
@@ -349,7 +349,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   a placement, `crop` and `visible`. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
   its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Scenes have
-  a `role` (`scene` or `group`, set by `scene.set_role`), and `item.move` moves an item
+  a `role` (`scene` or `group`, set by `scene.create` or `scene.set_role`), and `item.move` moves an item
   to another scene keeping its id, under the same cycle check. The placement edits take
   an optional `scene_id`, accepted only when it names the item's own scene until
   variants exist (protocol 0.12). Items refer to sources; they never copy them, and
@@ -376,7 +376,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, the transition fields, 3D
-  geometry, `scene.create`'s optional `role`, variants and overrides (so no edit drops
+  geometry, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
@@ -523,7 +523,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:d5e25ccd1e21a596", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:c6b0ec0be9c4d0fb", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r at 0.17: Edits bullet says scene.create's optional role is from protocol 0.17" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -536,7 +536,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
-  id, `scene.set_role` marks a scene as a group, and placement edits take an optional
+  id, `scene.set_role` (or, from protocol 0.17, `scene.create`'s optional `role`) marks a scene as a group, and placement edits take an optional
   `scene_id` so they can write a keyframe scene's override
   ([ADR-0024](adr/0024-scene-structure.md), protocol 0.12). Until keyframe scenes are
   built, `scene_id` may name only the item's own scene.
@@ -646,7 +646,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:89b4f7228ad5ed37", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: re-read; studio moved into the built tool list beside delete and encoder" }
+verified = { hash = "b3:f7e74f3d761a34da", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r at 0.17 after merging main: tools.snap gains scene.create's optional role; studio/delete/encoder tool list from main holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -847,7 +847,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:e8da9a7e3807bb8c", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9 CI fix: LoadError::Invalid now boxes its ProtocolError, a type-size change only; re-read, the Collections bullet (checks a loaded collection as it checks edits) holds" }
+verified = { hash = "b3:042c342d215b5bc4", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: rebuild passes the role on scene.create; Collections bullet holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
