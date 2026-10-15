@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:2dd67cd1963ab6cb", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: re-read; trait, errors, mock and ws bullets hold for mock.rs with settings (B4) and outputs/keys (A5)" }
+verified = { hash = "b3:e64e024557ae14a1", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: trait, errors, mock and ws bullets hold; the mock now also accepts record outputs with graph's path rule" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:ecf7953de5ff37ad", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (I1 #153 /mcp) into A5: only the verified line conflicted; prose is A5's merged Mock section (outputs, stream keys, B4 settings) and I1 changed none of it; re-read the WebSocket client part: /mcp makes no claim on WsControl" }
+verified = { hash = "b3:12bb0846138edf20", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: added recording-path, set_target-on-recording and unknown kind/target/container checks to the mock's edit list, and recording paths to the parity sentence; matches mock.rs check_record/record_path_problem" }
 -->
 
 ### The trait
@@ -113,7 +113,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - nesting cycles;
   - RTMP server URLs in `output.create` and `output.set_target` (`jstream-graph`'s
     checks and reasons, which never repeat the URL), and deleting an output while it
-    runs, which the engine refuses through `Graph::apply_with_running`.
+    runs, which the engine refuses through `Graph::apply_with_running`;
+  - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
+    reasons), `output.set_target` on a recording output, and an `unknown` output kind,
+    RTMP target or container.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind, stores settings as sent without
@@ -158,7 +161,7 @@ for dev-dependencies, so the dependency would need a layering change. The duplic
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
 its outputs, the exact answer to every read of it, and the exact error for batches
-rejected against it, RTMP URL rejections included.
+rejected against it, RTMP URL and recording path rejections included.
 If the mock and the graph drift apart on any of those, one of the two tests fails. The
 mock's own tests pin the remaining shared error paths.
 
