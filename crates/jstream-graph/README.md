@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:5de498de12175cfb", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Model list has Source's duplicated_from, Item's set_source and F3's Encoder/Output; collection-file paragraph lists duplicated_from and encoders; tests paragraph names both fixtures' additions and both round-trip tests" }
+verified = { hash = "b3:b74fda7a4f49d158", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 cascade from ARCH data-model: re-read; model and audio bullets agree with the updated data model" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -27,8 +27,9 @@ codes, so the engine passes them to clients unchanged.
   sources against. The engine supplies them (`Graph::with_kinds`); they are not
   collection state, and `Graph::new()` describes none.
 - `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
-  in display order, the `outputs`, keyed by ID, and the `encoders` (encoder profiles),
-  keyed by ID.
+  in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
+  keyed by ID, the `buses`, keyed by ID and always holding the master, and the `sends`,
+  keyed by bus and source.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -36,7 +37,8 @@ codes, so the engine passes them to clients unchanged.
   capture. `source.duplicate` makes a separate copy under a new ID and records the
   original in the copy's `duplicated_from`, a plain link that is no dependency edge:
   the original may be deleted, and reads then omit the link. Removing an item never
-  deletes its source.
+  deletes its source. An audio source (its kind has audio, or a `scene` source) also
+  has its `SourceAudio` ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
   here) and its items in stacking order, bottom first.
 - `Item`: the source it places, a `Placement`, a `crop` and `visible`. `Placement` is
@@ -46,6 +48,9 @@ codes, so the engine passes them to clients unchanged.
   `item.set_source` changes the source and keeps the rest, the item's ID and its
   stacking position, so it converts the item between a reference and a clone
   ([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)).
+- `Bus`: an ID, a name and a fader (`gain_db`, `muted`). The master bus (`master`,
+  `MASTER_NAME`) is in every state; at most `MAX_BUSES` (16) buses in all. A send is a
+  gain in dB from a source into a bus.
 - `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
   `State::encoding_of` gives the encoding an output starts with.
 - `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, or a recording
@@ -112,6 +117,22 @@ goes up by exactly one, and the result carries the **inverse batch**.
   then the profile (`not_found`), and needs no running check: it applies from the
   output's next start. Each is undone by its opposite (`encoder.delete` by
   `encoder.create`, `encoder.update` and `output.set_encoder` by the previous value).
+- **Audio** (`audio.rs`, ADR-0028): a new source takes its kind's audio defaults
+  (`follow` `always` for a kind with audio and no video, `when_shown` for every other
+  audio source, `scene` sources included), and a new source with a channel of its own
+  (an audio source that is not a `scene` source) sends to the master at 0 dB.
+  `source.duplicate` copies the audio and the sends. `source.delete` removes the
+  source's sends, and its inverse adds `source.set_audio`, `send.set` and a
+  `send.remove` of the default master send for whatever differs from the defaults.
+  `source.set_audio` needs an audio source and at least one field, and refuses a
+  `scene` source's `gain_db` or `muted`. `bus.create` checks the ID, the name and the
+  bus limit; `bus.delete` refuses the master and removes the bus's sends, and its
+  inverse is `bus.create`, `bus.set_fader` if the fader differed, and the sends.
+  `send.set` and `send.remove` check the source, then the bus (`not_found`), then that
+  the source has a channel (a `scene` source sends nothing of its own). Every gain is
+  checked with the protocol's `gain_db_problem` (−100 to +24 dB). A send always runs
+  from a source to a bus, so buses can't form a cycle (buses never feed buses); a
+  routing check comes with filters.
 - **Groups and moves** ([ADR-0024](../../docs/adr/0024-scene-structure.md) §1):
   `scene.set_role` changes a scene's role and is undone by the previous role.
   `item.move` moves an item to an index in another scene (up to one past its top) or
@@ -133,15 +154,15 @@ goes up by exactly one, and the result carries the **inverse batch**.
   (for example scene `a` -> source `sa` -> scene `a`).
 
 **Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
-collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list` and
-`encoder.list`)
+collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list`,
+`encoder.list` and `bus.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
 unknown kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
 `not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
-display order, items bottom first, outputs and encoder profiles ordered by ID.
-`state.get` carries the
-canvas. A geometry item reads its `geometry`, and the deprecated `transform` view the
+display order, items bottom first, outputs, encoder profiles and buses ordered by
+ID, and sends by bus and then source. `state.get` carries the canvas, the buses and
+the sends, and an audio source's info its `audio`. A geometry item reads its `geometry`, and the deprecated `transform` view the
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
 stored transform and no geometry. `Source::to_info` (given the `State`, to omit a
 `duplicated_from` whose source is gone),
@@ -155,8 +176,10 @@ its own form, a legacy `transform` or a `geometry`, exactly one of them, then it
 and `visible`), sources ordered by ID (with `kind_version`, the descriptor version a
 `builtin` source's settings follow, ADR-0025, and `duplicated_from` as stored, even
 when it names a deleted source), outputs ordered by ID (each with its
-`encoder_profile`, omitted for the default), and encoder profiles (`encoders`) ordered by
-ID, omitted when there are none. Kinds, undo history and runtime state are not in it, and
+`encoder_profile`, omitted for the default), encoder profiles (`encoders`) ordered by
+ID, omitted when there are none, `buses` (omitted while the master is the only one and
+at its defaults) and `sends`, omitted when there are none. A source's `audio` is saved
+only where it differs from its kind's defaults. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
 carry one ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Reading and writing the file is
 the engine's; this crate does no I/O.
@@ -169,7 +192,9 @@ the engine's; this crate does no I/O.
   rebuilds the state by applying the edits that create it, one at a time, to an empty
   graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
   sources its settings refer to), then items in their placement form with their crop
-  and visibility, then encoder profiles, then outputs with their profiles. A
+  and visibility, then encoder profiles, then outputs with their profiles, then the
+  buses (the master renamed or faded as saved), each source's audio and the sends
+  (with a `send.remove` of a default master send the file doesn't have). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error; nothing is partly loaded. Then `rev` is set
@@ -188,18 +213,21 @@ case per edge-adding edit), settings checks and defaults,
 placement conversions and their inverses, geometry and canvas validation,
 delete rejection by references, roles, moves and the grouping and ungrouping batches,
 `scene_id` addressing, output URL checks and the refused delete of a running
-output, encoder edits and their inverses (a profile freed and deleted in one batch),
-exact inverses,
+output, encoder edits and their inverses (a profile freed and deleted in one batch), audio
+defaults by kind, a duplicate's audio and a delete's restore, a bus deleted with its
+sends and undone exactly, exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
-batches of every edit, including moves, role changes, source switches and addressed placement edits. After each successful one, the state must hold no cycle, applying its
+batches of every edit, including moves, role changes, source switches, addressed
+placement edits and the audio edits. After each successful one, the state must hold no cycle, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
-scene `b` made a group, a clone and a `duplicated_from` naming a missing source) plus a source whose
+scene `b` made a group, a clone, a `duplicated_from` naming a missing source, and the
+fixture's buses, sends and source audio) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema

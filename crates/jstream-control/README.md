@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:2625f47b7e5a9809", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; mock contents hold" }
+verified = { hash = "b3:c7bad83c9a21b1ee", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; trait, errors, mock and ws contents unchanged by the mock's audio module" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:3e1ca5f158d1ed96", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: mock bullet keeps nesting cycles from item.add/item.set_source and the duplicated_from rules beside F3's encoder checks, matching mock.rs" }
+verified = { hash = "b3:35745b1124db400b", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 cascade from ARCH protocol: re-read; my mock audio text and the rest of the design hold against the updated ARCH protocol section" }
 -->
 
 ### The trait
@@ -94,7 +94,8 @@ its own, and is used with default features off.
 ### Mock
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
-`dev-dependencies`) keeps scenes, items, sources, outputs and encoder profiles in memory, with an
+`dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, buses and
+sends in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys. A
@@ -126,21 +127,30 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
-    naming a missing output, then a missing profile.
+    naming a missing output, then a missing profile;
+  - audio (`mock/audio.rs`, ADR-0028): each audio source's `SourceAudio` with its kind's
+    defaults and the master send at 0 dB, copied by `source.duplicate` and dropped by
+    `source.delete`; `source.set_audio` on a source with no audio, with nothing to set,
+    or setting a `scene` source's fader or mute; the bus ID, name and 16-bus limit,
+    deleting the master, an empty `bus.set_fader`, sends from a `scene` source or a
+    source with no audio, removing a missing send, and gains outside −100 to +24 dB.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
-  kinds, so it accepts any non-empty builtin kind, stores settings as sent without
+  kinds, so it accepts any non-empty builtin kind; `MockEngine::with_kinds` only tells
+  it which kinds have audio, and whether video too, for their audio defaults (a kind it
+  wasn't told about has no audio). It stores settings as sent without
   checking them or filling in defaults (a `null` in a `source.set_settings` patch
   removes the entry), and doesn't follow settings references when it looks for cycles.
   `kind.list` and `kind.describe` answer `internal`;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
-  scene), `output.list` and `encoder.list` (ordered by ID), each at the current `rev`.
+  scene), `output.list`, `encoder.list` and `bus.list` (ordered by ID), each at the
+  current `rev`.
   So it keeps everything an edit sets: the canvas, source names, kinds and settings,
   each item's placement (its transform, or its geometry and the transform view of it),
-  crop and visibility, each output's kind, target and encoder profile, and each
-  profile. `video.snapshot` is not one of those reads: the mock has no compositor and
+  crop and visibility, each output's kind, target and encoder profile, each profile,
+  each source's audio, and the buses and sends. `video.snapshot` is not one of those reads: the mock has no compositor and
   answers it with `internal`, as it does for any protocol variant it does not
   implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
@@ -157,6 +167,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `MockEngine::stream_key` lets a client test check what was stored. Unlike an
   `Engine` built without `with_key_store`, which answers `action_failed`, the mock
   always has a store, so clients can test the whole flow;
+- `audio.reset_loudness`, which succeeds and does nothing: the mock has no mixer, so it
+  emits no `meters.tick` either (`MockEngine::emit` can inject one);
 - `state.changed` events carrying the request ID, and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
@@ -174,7 +186,7 @@ for dev-dependencies, so the dependency would need a layering change. The duplic
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
 its outputs, the exact answer to every read of it, and the exact error for batches
-rejected against it, RTMP URL and recording path rejections included.
+rejected against it, RTMP URL, recording path and audio rejections included.
 If the mock and the graph drift apart on any of those, one of the two tests fails. The
 mock's own tests pin the remaining shared error paths.
 

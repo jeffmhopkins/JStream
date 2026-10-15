@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:16b874071b55a63f", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; contents hold; CLI adds only item.set_source" }
+verified = { hash = "b3:b8cb1a8e90eb7cce", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; contents hold; only the JSON goldens gained the audio fields" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:755df2de125dafe1", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Edits bullet merges F3's encoder edits and B5's duplicated_from as not in the CLI, with B5's item.set_source form" }
+verified = { hash = "b3:538478f1e39b5759", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read the whole usage section; added that the audio edits, bus.list and audio.reset_loudness are not in the CLI, that only --json shows audio, buses and sends, and that meters.tick prints as JSON (run.rs generic arm)" }
 -->
 
 ```sh
@@ -110,7 +110,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `item.set_geometry` and `item.add`'s `geometry`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
   yet; `item.add` sends neither placement, so its item is a legacy one. Protocol 0.12's `scene.set_role`, `item.move` and
-  the placement edits' optional `scene_id` are not in the CLI either.
+  the placement edits' optional `scene_id` are not in the CLI either, nor are protocol
+  0.21's audio edits (`source.set_audio`, `bus.*`, `send.*`), `bus.list` or
+  `audio.reset_loudness`.
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
@@ -145,7 +147,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   protocol's deprecated transform view of it, and only `--json` shows its `geometry`
   and the canvas. Outputs are listed with their `KIND` (`rtmp`) and `TARGET` (the
   server URL, as `output.create` takes it). `state get` prints the sources, then each
-  scene in display order with its items, then the outputs. `output status` prints
+  scene in display order with its items, then the outputs; only `--json` shows the
+  sources' audio, the buses and the sends. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
@@ -162,6 +165,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   When the server dropped events because the CLI read too slowly, it prints
   `events.dropped <count>`. A pipeline drop sample prints
   `stats.tick seq <n> capture_frames <n> audio_frames <n> render_ticks <n> encode_frames <n> encode_blocks <n> output_packets <n>`.
+  Any other event, `meters.tick` among them, prints as its JSON.
 
 **MCP.** `jstream-cli mcp` is the stdio MCP proxy for an agent's MCP client to launch,
 for example:
@@ -218,7 +222,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5e47f224376d60e5", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; parser has item.set_source beside F3's output status encoder suffix" }
+verified = { hash = "b3:12a399fc31d39a2e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; parser, connector and output design unchanged; tests compare exact JSON, now with audio, buses and sends" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
