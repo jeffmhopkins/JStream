@@ -1,6 +1,7 @@
-//! The audio scope's push and read, and a waveform or spectrum frame, do not allocate
-//! (R-RT-001 for the push, which runs on the mixer thread; the frames run on the
-//! `jstream-sources` thread, but drawing 30 a second stays allocation-free too).
+//! The audio scope's push and read, and painting and taking a waveform or spectrum
+//! frame, do not allocate once the frame pool has filled (R-RT-001 for the push, which
+//! runs on the mixer thread; painting runs on the `jstream-sources` thread, but drawing
+//! 30 frames a second stays allocation-free too).
 //!
 //! This test binary installs `assert_no_alloc`'s allocator as its global allocator, so
 //! it is its own binary: no other test runs under it.
@@ -42,17 +43,25 @@ fn scope_pushes_reads_and_frames_do_not_allocate() {
     for tick in 0..4 {
         scope.push(48_000, &block);
         for source in &mut sources {
+            if let Some(painter) = source.painter() {
+                painter.paint(at(tick));
+            }
             drop(source.frame(at(tick)).expect("a frame"));
         }
     }
 
+    // The painters, taken outside the check: `painter()` hands out a new `Arc` handle.
+    let painters: Vec<_> = sources
+        .iter()
+        .map(|s| s.painter().expect("a scope source paints"))
+        .collect();
     reset_violation_count();
     for tick in 4..100 {
         assert_no_alloc(|| {
             scope.push(48_000, &block);
             scope.latest(&mut window);
-            for source in &mut sources {
-                // The frame handed out last stays held, as the program mix holds it.
+            for (source, painter) in sources.iter_mut().zip(&painters) {
+                painter.paint(at(tick));
                 let frame = source.frame(at(tick)).expect("a frame");
                 drop(frame);
             }

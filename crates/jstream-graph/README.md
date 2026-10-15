@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:82526774ecb1ce02", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+verified = { hash = "b3:d1de2a1c5fd2f345", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Stale only via ARCH#data-model's built-kinds list (C10 adds waveform and spectrum); re-read the Model bullets: kinds come from the engine via Graph::with_kinds, no list of built kinds here; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

@@ -1,14 +1,10 @@
 //! The `spectrum` source: the latest audio's frequency spectrum as bars.
 
 use super::waveform::{enum_type, live, smoothing_type};
-use super::{
-    Canvas, Feed, Frames, WINDOW, bad, color, ease, frame_size, next_tick, smoothing, string, tick,
-    tick_start,
-};
+use super::{Scope, WINDOW, bad, color, create, ease, smoothing, string};
 use crate::describe::{kind, param, size};
-use crate::source::{changed_non_live, millis, setting};
+use crate::source::setting;
 use crate::{Context, Source, SourceError, SourceKind};
-use jstream_media::{MediaTime, VideoFrame};
 use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings};
 use realfft::num_complex::Complex;
 use realfft::{RealFftPlanner, RealToComplex};
@@ -87,8 +83,7 @@ impl SourceKind for SpectrumKind {
     }
 
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
-        let size = frame_size(settings, &ctx.limits)?;
-        let style = Style::read(settings)?;
+        let style = Spectrum::style(settings)?;
         let fft = RealFftPlanner::<f32>::new().plan_fft_forward(WINDOW);
         // The Hann window: it keeps a tone from smearing across the whole spectrum.
         let hann = (0..WINDOW)
@@ -97,21 +92,16 @@ impl SourceKind for SpectrumKind {
                 0.5 - 0.5 * phase.cos()
             })
             .collect();
-        Ok(Box::new(SpectrumSource {
-            descriptor: self.0.clone(),
-            settings: settings.clone(),
+        let scope = Spectrum {
             bars: vec![0.0; style.bars],
             style,
-            feed: Feed::new(ctx.audio.clone()),
-            frames: Frames::new(size)?,
-            window: vec![0.0; WINDOW],
             hann,
             input: fft.make_input_vec(),
             output: fft.make_output_vec(),
             scratch: fft.make_scratch_vec(),
             fft,
-            drawn: None,
-        }))
+        };
+        create(&self.0, settings, ctx, scope)
     }
 }
 
@@ -125,8 +115,23 @@ struct Style {
     log: bool,
 }
 
-impl Style {
-    fn read(settings: &Settings) -> Result<Self, SourceError> {
+/// What a `spectrum` source measures. The FFT is planned and its buffers made on create;
+/// the bars are made again only by an update that changes their count.
+struct Spectrum {
+    style: Style,
+    hann: Vec<f32>,
+    fft: Arc<dyn RealToComplex<f32>>,
+    input: Vec<f32>,
+    output: Vec<Complex<f32>>,
+    scratch: Vec<Complex<f32>>,
+    /// Each bar's height, 0 to 1, as drawn last.
+    bars: Vec<f32>,
+}
+
+impl Scope for Spectrum {
+    type Style = Style;
+
+    fn style(settings: &Settings) -> Result<Style, SourceError> {
         let bars = setting(settings, "bars")?
             .as_u64()
             .filter(|b| (1..=u64::from(MAX_BARS)).contains(b))
@@ -141,7 +146,7 @@ impl Style {
             "linear" => false,
             _ => return Err(bad("scale", "must be `log` or `linear`")),
         };
-        Ok(Self {
+        Ok(Style {
             color: color(settings, "color")?,
             background: color(settings, "background")?,
             // At most MAX_BARS.
@@ -150,74 +155,23 @@ impl Style {
             log,
         })
     }
-}
 
-/// A running `spectrum` source. The FFT is planned and every buffer it and the drawing
-/// use is made on create (or, for the bars, on an update that changes their count), so
-/// a frame allocates only when every pooled frame is still held.
-struct SpectrumSource {
-    descriptor: KindDescriptor,
-    settings: Settings,
-    style: Style,
-    feed: Feed,
-    frames: Frames,
-    window: Vec<f32>,
-    hann: Vec<f32>,
-    fft: Arc<dyn RealToComplex<f32>>,
-    input: Vec<f32>,
-    output: Vec<Complex<f32>>,
-    scratch: Vec<Complex<f32>>,
-    /// Each bar's height, 0 to 1, as drawn last.
-    bars: Vec<f32>,
-    /// The frame tick drawn last.
-    drawn: Option<u64>,
-}
-
-impl Source for SpectrumSource {
-    fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        let now = tick(at);
-        if self.drawn == Some(now) {
-            return Ok(self.frames.current());
-        }
-        let ticks = self
-            .drawn
-            .map_or(1, |drawn| now.saturating_sub(drawn).max(1));
-        self.drawn = Some(now);
-        let rate = self.feed.read(millis(at), &mut self.window);
-        self.measure(rate, ticks);
-        let (style, bars) = (self.style, &self.bars);
-        self.frames
-            .draw(tick_start(now), |canvas| draw(canvas, style, bars))
-    }
-
-    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
-        self.feed.scope.as_ref().map(|_| next_tick(at))
-    }
-
-    fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
-        if let Some(param) = changed_non_live(&self.descriptor, &self.settings, settings) {
-            return Err(SourceError::NotLive {
-                param: param.to_owned(),
-            });
-        }
-        let style = Style::read(settings)?;
+    fn restyle(&mut self, style: Style) {
         if style.bars != self.bars.len() {
             self.bars = vec![0.0; style.bars];
         }
         self.style = style;
-        self.settings = settings.clone();
-        // Redraw in the new style at the next frame.
-        self.drawn = None;
-        Ok(())
     }
-}
 
-impl SpectrumSource {
-    /// Each bar's level from the window's spectrum at `rate` hertz (`None`: silence),
-    /// eased from the last frame's.
-    fn measure(&mut self, rate: Option<u32>, ticks: u64) {
+    fn colors(&self) -> ([u8; 4], [u8; 4]) {
+        (self.style.color, self.style.background)
+    }
+
+    /// Each bar's level from the window's spectrum (`None`: silence), eased from the
+    /// last frame's.
+    fn measure(&mut self, window: &[f32], rate: Option<u32>, ticks: u64) {
         let style = self.style;
-        let Some(rate) = rate.filter(|_| self.transform()) else {
+        let Some(rate) = rate.filter(|_| self.transform(window)) else {
             for bar in &mut self.bars {
                 *bar = ease(*bar, 0.0, style.smoothing, ticks);
             }
@@ -255,9 +209,33 @@ impl SpectrumSource {
         }
     }
 
+    fn spans(&self, height: u32, spans: &mut [(u32, u32)]) {
+        let width = spans.len() as u64;
+        let count = self.bars.len() as u64;
+        for (x, span) in (0u64..).zip(spans.iter_mut()) {
+            // The bar this column belongs to, and where that bar starts and ends.
+            let bar = x * count / width;
+            let start = (bar * width).div_ceil(count);
+            let end = ((bar + 1) * width).div_ceil(count);
+            // A one-pixel gap after every bar at least three pixels wide.
+            *span = if end - start >= 3 && x + 1 == end {
+                (0, 0)
+            } else {
+                let level = self.bars[bar as usize];
+                (((1.0 - level) * height as f32).round() as u32, height)
+            };
+        }
+    }
+
+    fn settled(&self) -> bool {
+        self.bars.iter().all(|&bar| bar == 0.0)
+    }
+}
+
+impl Spectrum {
     /// Windows the samples and runs the FFT into `output`; false if it failed.
-    fn transform(&mut self) -> bool {
-        for ((x, &s), &w) in self.input.iter_mut().zip(&self.window).zip(&self.hann) {
+    fn transform(&mut self, window: &[f32]) -> bool {
+        for ((x, &s), &w) in self.input.iter_mut().zip(window).zip(&self.hann) {
             *x = s * w;
         }
         self.fft
@@ -273,23 +251,4 @@ fn height(norm_sqr: f32) -> f32 {
     let full = (WINDOW / 4) as f32;
     let db = 10.0 * (norm_sqr / (full * full)).max(1e-12).log10();
     ((db - FLOOR_DB) / -FLOOR_DB).clamp(0.0, 1.0)
-}
-
-fn draw(canvas: &mut Canvas<'_>, style: Style, bars: &[f32]) {
-    canvas.fill(style.background);
-    let (width, height) = (canvas.width(), canvas.height());
-    let count = bars.len() as u64;
-    for x in 0..width {
-        // The bar this column belongs to, and where that bar starts and ends.
-        let bar = u64::from(x) * count / u64::from(width);
-        let start = (bar * u64::from(width)).div_ceil(count);
-        let end = ((bar + 1) * u64::from(width)).div_ceil(count);
-        // A one-pixel gap after every bar at least three pixels wide.
-        if end - start >= 3 && u64::from(x) + 1 == end {
-            continue;
-        }
-        let level = bars[bar as usize];
-        let top = ((1.0 - level) * height as f32).round() as u32;
-        canvas.column(x, top, height, style.color);
-    }
 }

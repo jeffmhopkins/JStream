@@ -349,3 +349,41 @@ fn the_sources_thread_advances_an_animation_by_itself() {
     );
     let _ = fs::remove_dir_all(dir);
 }
+
+#[test]
+fn a_waveform_source_is_painted_by_the_sources_thread() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    // One column, three rows: silence lights the middle row, full scale the top one.
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "wave",
+                "waveform",
+                settings(&[
+                    ("width", json!(1)),
+                    ("height", json!(3)),
+                    ("color", json!("#ff0000")),
+                    ("background", json!("#0000ff")),
+                ]),
+            ),
+            add("a", "i1", "wave"),
+        ]),
+    )
+    .expect("created");
+    assert_eq!(shown(&engine, "wave"), Some([0, 0, 0xff, 0xff]), "silence");
+    // The program mix's audio arrives: the thread paints it on its own, off the lock.
+    let scope = engine.audio_scope();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline && shown(&engine, "wave") != Some([0xff, 0, 0, 0xff]) {
+        scope.push(48_000, &[1.0; 960]);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        shown(&engine, "wave"),
+        Some([0xff, 0, 0, 0xff]),
+        "full scale"
+    );
+}

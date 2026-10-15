@@ -1,16 +1,14 @@
 //! The `waveform` source: the latest audio as an oscilloscope trace.
 
-use super::{
-    Canvas, Feed, Frames, WINDOW, bad, color, ease, frame_size, next_tick, smoothing, string, tick,
-    tick_start,
-};
+use super::{Scope, bad, color, create, ease, smoothing, string};
 use crate::describe::{kind, param, size};
-use crate::source::{changed_non_live, millis};
+use crate::source::setting;
 use crate::{Context, Source, SourceError, SourceKind};
-use jstream_media::{MediaTime, VideoFrame};
 use jstream_protocol::{EnumOption, KindDescriptor, ParamDescriptor, ParamType, Settings};
 use serde_json::json;
-use std::sync::Arc;
+
+/// The widest frame a source may have (`describe::size`'s maximum).
+const MAX_SIDE: usize = 16384;
 
 /// The quietest level the `db` scale draws, in dBFS; quieter draws on the centre line.
 const FLOOR_DB: f32 = -60.0;
@@ -66,18 +64,13 @@ impl SourceKind for WaveformKind {
     }
 
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
-        let size = frame_size(settings, &ctx.limits)?;
-        let style = Style::read(settings)?;
-        Ok(Box::new(WaveformSource {
-            descriptor: self.0.clone(),
-            settings: settings.clone(),
-            style,
-            feed: Feed::new(ctx.audio.clone()),
-            frames: Frames::new(size)?,
-            window: vec![0.0; WINDOW],
-            columns: vec![(0.0, 0.0); size.width() as usize],
-            drawn: None,
-        }))
+        let width = setting(settings, "width")?.as_u64().unwrap_or(1);
+        let scope = Waveform {
+            style: Waveform::style(settings)?,
+            // `create` checks the size before it allocates a frame; a column per pixel.
+            columns: vec![(0.0, 0.0); usize::try_from(width).unwrap_or(1).min(MAX_SIDE)],
+        };
+        create(&self.0, settings, ctx, scope)
     }
 }
 
@@ -118,82 +111,47 @@ struct Style {
     db: bool,
 }
 
-impl Style {
-    fn read(settings: &Settings) -> Result<Self, SourceError> {
+/// What a `waveform` source measures: each pixel column's lowest and highest level,
+/// -1 to 1, as drawn last.
+struct Waveform {
+    style: Style,
+    columns: Vec<(f32, f32)>,
+}
+
+impl Scope for Waveform {
+    type Style = Style;
+
+    fn style(settings: &Settings) -> Result<Style, SourceError> {
         let db = match string(settings, "scale")? {
             "linear" => false,
             "db" => true,
             _ => return Err(bad("scale", "must be `linear` or `db`")),
         };
-        Ok(Self {
+        Ok(Style {
             color: color(settings, "color")?,
             background: color(settings, "background")?,
             smoothing: smoothing(settings)?,
             db,
         })
     }
-}
 
-/// A running `waveform` source. Every buffer it draws with is made on create, so a frame
-/// allocates only when every pooled frame is still held.
-struct WaveformSource {
-    descriptor: KindDescriptor,
-    settings: Settings,
-    style: Style,
-    feed: Feed,
-    frames: Frames,
-    window: Vec<f32>,
-    /// Each pixel column's lowest and highest level, -1 to 1, as drawn last.
-    columns: Vec<(f32, f32)>,
-    /// The frame tick drawn last.
-    drawn: Option<u64>,
-}
-
-impl Source for WaveformSource {
-    fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        let now = tick(at);
-        if self.drawn == Some(now) {
-            return Ok(self.frames.current());
-        }
-        let ticks = self
-            .drawn
-            .map_or(1, |drawn| now.saturating_sub(drawn).max(1));
-        self.drawn = Some(now);
-        self.feed.read(millis(at), &mut self.window);
-        self.measure(ticks);
-        let (style, columns) = (self.style, &self.columns);
-        self.frames
-            .draw(tick_start(now), |canvas| draw(canvas, style, columns))
+    fn restyle(&mut self, style: Style) {
+        self.style = style;
     }
 
-    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
-        self.feed.scope.as_ref().map(|_| next_tick(at))
+    fn colors(&self) -> ([u8; 4], [u8; 4]) {
+        (self.style.color, self.style.background)
     }
 
-    fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
-        if let Some(param) = changed_non_live(&self.descriptor, &self.settings, settings) {
-            return Err(SourceError::NotLive {
-                param: param.to_owned(),
-            });
-        }
-        self.style = Style::read(settings)?;
-        self.settings = settings.clone();
-        // Redraw in the new style at the next frame.
-        self.drawn = None;
-        Ok(())
-    }
-}
-
-impl WaveformSource {
     /// Each column's range over its share of the window, eased from the last frame's.
-    fn measure(&mut self, ticks: u64) {
+    fn measure(&mut self, window: &[f32], _: Option<u32>, ticks: u64) {
         let width = self.columns.len();
         let style = self.style;
         for (x, column) in self.columns.iter_mut().enumerate() {
-            let from = x * WINDOW / width;
+            let from = x * window.len() / width;
             // A column narrower than a sample shows the one it starts at.
-            let to = ((x + 1) * WINDOW / width).max(from + 1);
-            let (low, high) = self.window[from..to]
+            let to = ((x + 1) * window.len() / width).max(from + 1);
+            let (low, high) = window[from..to]
                 .iter()
                 .fold((f32::MAX, f32::MIN), |(lo, hi), &s| (lo.min(s), hi.max(s)));
             let (low, high) = (level(low, style.db), level(high, style.db));
@@ -202,6 +160,21 @@ impl WaveformSource {
                 ease(column.1, high, style.smoothing, ticks),
             );
         }
+    }
+
+    fn spans(&self, height: u32, spans: &mut [(u32, u32)]) {
+        // Level 1 is the top row and -1 the bottom one.
+        let half = (height - 1) as f32 / 2.0;
+        let row = |level: f32| ((1.0 - level) * half).round() as u32;
+        for (span, &(low, high)) in spans.iter_mut().zip(&self.columns) {
+            *span = (row(high), row(low) + 1);
+        }
+    }
+
+    fn settled(&self) -> bool {
+        self.columns
+            .iter()
+            .all(|&(low, high)| low == 0.0 && high == 0.0)
     }
 }
 
@@ -213,15 +186,4 @@ fn level(sample: f32, db: bool) -> f32 {
     }
     let height = ((20.0 * sample.abs().log10() - FLOOR_DB) / -FLOOR_DB).max(0.0);
     height.copysign(sample)
-}
-
-fn draw(canvas: &mut Canvas<'_>, style: Style, columns: &[(f32, f32)]) {
-    canvas.fill(style.background);
-    let height = canvas.height();
-    // Level 1 is the top row and -1 the bottom one.
-    let half = (height - 1) as f32 / 2.0;
-    let row = |level: f32| ((1.0 - level) * half).round() as u32;
-    for (x, &(low, high)) in (0..canvas.width()).zip(columns) {
-        canvas.column(x, row(high), row(low) + 1, style.color);
-    }
 }

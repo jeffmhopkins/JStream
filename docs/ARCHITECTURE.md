@@ -167,7 +167,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:bddcc7ef355104c7", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: Outputs list now includes VirtualCam (no settings, ignores its profile); Not-yet list drops VirtualCam, keeps YouTube; master/output chain note holds" }
+verified = { hash = "b3:dfa6ae0d6e81b330", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 (review B3): the built kinds the engine runs now list waveform and spectrum, matching Registry::builtin and LiveSources; rest of the section unchanged" }
 -->
 
 ```
@@ -361,7 +361,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
   built-in kinds come from `jstream-sources`. The engine runs a source of each one
-  whose kind is built (`color`, `image` and `text`), rebuilt when its settings change,
+  whose kind is built (`color`, `image`, `text`, `waveform` and `spectrum`), rebuilt when its settings change,
   and the program mix shows its frames, animations advancing on the media clock. The
   audio-only kinds (`audio_input`, `desktop_audio`, `app_audio`) have no `Source`:
   while an output runs, the engine records each as a mixer input sent to master.

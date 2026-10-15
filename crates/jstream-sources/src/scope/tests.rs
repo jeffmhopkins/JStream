@@ -50,7 +50,8 @@ fn a_reader_never_sees_a_window_a_push_overwrote() {
         let scope = Arc::clone(&scope);
         thread::spawn(move || {
             let mut n = 0u32;
-            // f32 holds whole numbers exactly up to 2^24.
+            // f32 holds whole numbers exactly up to 2^24. The reader also checks once after the
+            // writer ends, so the test always checks at least one window.
             while n < (1 << 22) {
                 scope.push(RATE, &stereo((n..n + 256).map(|s| s as f32)));
                 n += 256;
@@ -58,26 +59,30 @@ fn a_reader_never_sees_a_window_a_push_overwrote() {
         })
     };
     let mut window = vec![0.0; WINDOW];
-    let mut checked = 0;
-    while !writer.is_finished() {
+    let mut check = |last: bool| {
         let (written, rate) = scope.latest(&mut window);
         if rate == 0 || written < WINDOW as u64 {
-            continue;
+            assert!(!last, "the writer ended without a full window");
+            return;
         }
         let first = window[0];
         for (i, &s) in window.iter().enumerate() {
             assert_eq!(s, first + i as f32, "a torn window at {i}: {window:?}");
         }
-        checked += 1;
+    };
+    while !writer.is_finished() {
+        check(false);
     }
     writer.join().expect("the writer");
-    assert!(checked > 0, "no window was checked");
+    check(true);
 }
 
 #[test]
 fn falls_ease_and_rises_are_immediate() {
     assert_eq!(ease(0.2, 0.8, 0.9, 1), 0.8);
     assert_eq!(ease(1.0, 0.0, 0.0, 1), 0.0);
+    // Within a thousandth, a fall has arrived.
+    assert_eq!(ease(0.001, 0.0, 0.5, 1), 0.0);
     assert!((ease(1.0, 0.0, 0.5, 1) - 0.5).abs() < 1e-6);
     assert!((ease(1.0, 0.0, 0.5, 3) - 0.125).abs() < 1e-6);
 }
@@ -116,6 +121,14 @@ fn source(kind: &str, scope: Option<Arc<AudioScope>>, overrides: Value) -> Box<d
         .expect("a scope source")
 }
 
+/// Paints `source`'s frame for `at`, as a host does off its locks, and takes it.
+fn draw(source: &mut Box<dyn Source>, at: MediaTime) -> Arc<VideoFrame> {
+    if let Some(painter) = source.painter() {
+        painter.paint(at);
+    }
+    source.frame(at).expect("a frame")
+}
+
 fn pixel(frame: &VideoFrame, x: u32, y: u32) -> [u8; 4] {
     let at = x as usize * 4;
     let row = frame.row(0, y).expect("a row");
@@ -139,7 +152,7 @@ fn the_waveform_draws_each_column_from_its_lowest_to_its_highest_sample() {
         Some(Arc::clone(&scope)),
         json!({"width": 8, "height": 9, "color": "#ff0000", "background": "#0000ff"}),
     );
-    let frame = waveform.frame(ms(0)).expect("a frame");
+    let frame = draw(&mut waveform, ms(0));
     // Level 1 is row 0, 0 is row 4 and -1 is row 8.
     for x in 0..8 {
         let lit = if x < 4 { 2 } else { 6 };
@@ -149,10 +162,7 @@ fn the_waveform_draws_each_column_from_its_lowest_to_its_highest_sample() {
         }
     }
     // Within the same frame tick, the same frame.
-    assert!(Arc::ptr_eq(
-        &frame,
-        &waveform.frame(ms(20)).expect("a frame")
-    ));
+    assert!(Arc::ptr_eq(&frame, &draw(&mut waveform, ms(20))));
     assert_eq!(waveform.next_change(ms(20)), Some(ms(34)));
 }
 
@@ -167,7 +177,7 @@ fn the_db_scale_lifts_quiet_audio() {
             Some(Arc::clone(&scope)),
             json!({"width": 1, "height": 13, "color": "#ff0000", "background": "#0000ff", "scale": scale}),
         );
-        let frame = waveform.frame(ms(0)).expect("a frame");
+        let frame = draw(&mut waveform, ms(0));
         (0..13).position(|y| pixel(&frame, 0, y) == RED)
     };
     // Rows run 0 (level 1) to 12 (level -1); 0.1 rounds to row 5 and 2/3 to row 2.
@@ -192,7 +202,7 @@ fn the_spectrum_lights_the_bar_holding_a_tone() {
         json!({"width": 40, "height": 100, "bars": 40, "scale": "linear",
                "color": "#ff0000", "background": "#0000ff", "smoothing": 0.0}),
     );
-    let frame = spectrum.frame(ms(0)).expect("a frame");
+    let frame = draw(&mut spectrum, ms(0));
     let bar = |x: u32| (0..100).filter(|&y| pixel(&frame, x, y) == RED).count();
     assert!(
         bar(3) >= 98,
@@ -223,7 +233,7 @@ fn every_log_bar_shows_even_below_a_bins_width() {
         json!({"width": 128, "height": 50, "bars": 128, "color": "#ff0000",
                "background": "#0000ff"}),
     );
-    let frame = spectrum.frame(ms(0)).expect("a frame");
+    let frame = draw(&mut spectrum, ms(0));
     for x in 0..128 {
         assert_eq!(pixel(&frame, x, 49), RED, "bar {x} is empty");
     }
@@ -241,15 +251,15 @@ fn bars_fall_back_at_the_smoothing_rate_and_a_still_ring_reads_as_silence() {
                "smoothing": 0.5}),
     );
     let lit = |frame: &VideoFrame| (0..101).filter(|&y| pixel(frame, 0, y) == RED).count();
-    assert_eq!(lit(&waveform.frame(ms(0)).expect("a frame")), 101);
+    assert_eq!(lit(&draw(&mut waveform, ms(0))), 101);
     // The ring hasn't moved for 250 ms: silence, eased by half a tick at a time.
-    let held = waveform.frame(ms(250)).expect("a frame");
+    let held = draw(&mut waveform, ms(250));
     // 7 ticks later the peak is at 0.5^7 of full scale: within a row of the centre.
     assert!(lit(&held) <= 3, "{} rows lit", lit(&held));
     // A frame handed out stays as it was when the next is drawn.
     let before: Vec<u8> = held.row(0, 0).expect("a row").to_vec();
     scope.push(RATE, &loud);
-    let after = waveform.frame(ms(300)).expect("a frame");
+    let after = draw(&mut waveform, ms(300));
     assert_eq!(lit(&after), 101);
     assert!(!Arc::ptr_eq(&held, &after));
     assert_eq!(held.row(0, 0).expect("a row"), before.as_slice());
@@ -264,7 +274,7 @@ fn without_a_scope_the_sources_draw_silence_once() {
             None,
             json!({"width": 4, "height": 4, "color": "#ff0000", "background": "#0000ff"}),
         );
-        let frame = s.frame(ms(0)).expect("a frame");
+        let frame = draw(&mut s, ms(0));
         for (x, y) in (0..4).flat_map(|x| (0..4).map(move |y| (x, y))) {
             let want = if Some(y) == line { RED } else { BLUE };
             assert_eq!(pixel(&frame, x, y), want, "{kind} {x},{y}");
@@ -330,4 +340,45 @@ fn a_frame_size_must_fit_four_frames_in_the_decode_limit() {
         registry.create("spectrum", &settings, &ctx),
         Err(SourceError::Setting { param, .. }) if param == "width"
     ));
+}
+
+#[test]
+fn a_silent_scope_settles_on_one_frame_and_polls_slowly() {
+    let scope = Arc::new(AudioScope::new());
+    scope.push(RATE, &stereo((0..WINDOW).map(|_| 0.5)));
+    let mut waveform = source(
+        "waveform",
+        Some(Arc::clone(&scope)),
+        json!({"width": 2, "height": 5, "smoothing": 0.0}),
+    );
+    draw(&mut waveform, ms(0));
+    assert_eq!(
+        waveform.next_change(ms(0)),
+        Some(ms(34)),
+        "playing: every tick"
+    );
+    // The ring stands still: the next frame falls to silence...
+    let silent = draw(&mut waveform, ms(300));
+    assert_eq!(waveform.next_change(ms(300)), Some(ms(334)));
+    // ...and after that nothing changes: the same frame, polled every 250 ms.
+    let again = draw(&mut waveform, ms(334));
+    assert!(Arc::ptr_eq(&silent, &again));
+    assert_eq!(waveform.next_change(ms(334)), Some(ms(584)));
+    // A live change redraws at the next tick.
+    let mut settings: Settings = Registry::builtin()
+        .descriptor("waveform")
+        .expect("a kind")
+        .params
+        .iter()
+        .map(|p| (p.id.clone(), p.default.clone()))
+        .collect();
+    settings.insert("width", json!(2));
+    settings.insert("height", json!(5));
+    settings.insert("smoothing", json!(0.0));
+    settings.insert("color", json!("#ff0000"));
+    waveform.update(&settings).expect("a live update");
+    assert_eq!(waveform.next_change(ms(334)), Some(ms(367)));
+    let restyled = draw(&mut waveform, ms(367));
+    assert!(!Arc::ptr_eq(&silent, &restyled));
+    assert_eq!(pixel(&restyled, 0, 2), RED);
 }

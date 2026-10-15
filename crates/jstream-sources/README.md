@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:cc08e81ab6d3b669", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 N1: Windows walk split out of open_inside into walk_below (takes the already-resolved path below the root); Assets paragraph's walk description unchanged and still holds; Tests sentence now says the Windows test refuses links both at resolve and in the walk on its own" }
+verified = { hash = "b3:8981893f98104c7a", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 round 2: Seams restate the Source contract (most kinds make frames on create/update; waveform and spectrum paint in a Painter, frame hands out the last painted) and add the Painter seam; AudioScope bullet says analysis runs in the painter; Kinds say create paints the first frame, row-by-row pool drawing, settled silence polls every 250 ms; Tests add the settling test; main's #224 Assets/Tests text kept; checked against src/scope and source.rs" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -29,12 +29,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   reading and decoding a file, so it never runs on a real-time thread.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
-  `Arc<VideoFrame>`. The built-in kinds make their frames when created or updated, so
-  `frame` neither blocks nor allocates, and a frame handed out stays valid after an
-  update. `next_change(at)` says when that frame is next replaced (`None`: never), so
+  `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks nor allocates, and
+  a frame handed out stays valid after an update. Most make their frames when created
+  or updated; the `waveform` and `spectrum` kinds draw theirs in a `Painter` instead,
+  and `frame` hands out the one painted last. `next_change(at)` says when that frame is next replaced (`None`: never), so
   a renderer can skip re-uploading a still. `update(settings)` applies a change to
   `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
-  needs a new source instead.
+  needs a new source instead. `painter()` (default `None`) returns the source's
+  `Painter`.
+- `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
+  whose frames follow something live. Drawing can take milliseconds, so a host that
+  asks for frames under a lock paints before taking it, when `next_change` said a
+  frame is due (the engine's `jstream-sources` thread does). Painting allocates only
+  while the source's frame pool grows, or when every pooled frame is still held.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
@@ -64,7 +71,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   seqlock: a push claims the slots it is about to overwrite before it writes them, and
   a read retries when a claim reached a slot it copied, so it never returns a window
   mixed from two passes of the ring. The analysis (the FFT included) runs in the
-  source's `frame`, on the thread that asks for frames, never on the mixer thread
+  source's `Painter`, on the thread that paints, never on the mixer thread
   ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)'s audio → render
   path).
 
@@ -113,12 +120,15 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`.
 - `waveform` and `spectrum` (C10) draw the latest 2048 samples (43 ms at 48 kHz) of
-  the `Context`'s `AudioScope`, which in the engine is the program mix. Both draw a
-  new frame each 1/30 s tick of `at` (`next_change` is the next tick; with no scope,
-  `None`), drawing into a pool of up to four frames reused once no one holds them, so
-  a frame handed out never changes and drawing doesn't allocate. When the scope's
-  ring hasn't moved for 250 ms (no output runs, so the program mix doesn't), they
-  draw silence. `width` and `height` need a new source, and four frames of that size
+  the `Context`'s `AudioScope`, which in the engine is the program mix. `create`
+  paints the first frame; after that their `Painter` draws a new one each 1/30 s tick
+  of `at` (`next_change` is the next tick; with no scope, `None`), row by row into a
+  pool of up to four frames reused once no one holds them, so a frame handed out
+  never changes and, once the pool has filled, painting doesn't allocate. `frame`
+  only hands out the frame painted last, and a live change is drawn by the next
+  paint. When the scope's ring hasn't moved for 250 ms (no output runs, so the
+  program mix doesn't), they draw silence; once every level has fallen to it, they
+  keep their frame and `next_change` checks every 250 ms instead of every tick. `width` and `height` need a new source, and four frames of that size
   must fit `max_decoded_bytes`; `color`, `background`, `smoothing` and `scale` are
   live. `smoothing` (0 to 0.99) is how slowly a level falls: a rise shows at once,
   and each tick keeps that share of the gap. The `waveform` (640x160 by default)
@@ -202,6 +212,8 @@ alignment, padding, outline, live updates, font assets and limits, plus golden P
 ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
 window), the frame ticks and easing, and draw both kinds from known audio: each
 waveform column's range, the dB scale, a tone lighting its own spectrum bar, every
-log bar showing, smoothing and a still ring falling to silence, and which settings are
-live. `tests/scope_no_alloc.rs`, its own binary under `assert_no_alloc`'s allocator,
-checks that a push, a read and both kinds' frames don't allocate once warm.
+log bar showing, smoothing and a still ring falling to silence, a silent source
+settling on one frame and polling slowly until a live change redraws it, and which
+settings are live. `tests/scope_no_alloc.rs`, its own binary under `assert_no_alloc`'s allocator,
+checks that a push, a read, and painting and taking both kinds' frames don't allocate
+once the pool has filled.

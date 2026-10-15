@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:de801bc5855b5714", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286 differential groups/roles, #297): re-read main's purpose text incl. Tests bullet's differential run; this PR's live.rs set_clock fix and tests/sources.rs clock-swap test fit the Live sources and Tests bullets; holds" }
+verified = { hash = "b3:9ed95d3811df7d1c", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 round 2 after merging main (#295 clock-swap re-plan): Live sources bullet (waveform/spectrum draw the engine's AudioScope) and Tests list hold; main's text kept" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -164,7 +164,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:67ca169f728f9e96", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286, #297): re-read main's design text (differential script paragraph) beside this PR's clock-swap sentence in the live-sources paragraph; different paragraphs; swap sentence still matches LiveSources::set_clock; holds" }
+verified = { hash = "b3:ac46c4d0f3339921", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 round 2: Live sources says painted sources are painted by the jstream-sources thread before each re-plan with no engine lock, so frame under the collection lock never draws, and install/sync/clock swap share the painters; settled silence polls every 250 ms; Locking says the same; checked live.rs run/share_painters; main's #295 clock-swap text kept" }
 -->
 
 ### Engine and sessions
@@ -417,7 +417,8 @@ is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 the engine's one `jstream_sources::AudioScope` in its `Context`: the mixer thread
 pushes each program block into it, and the `waveform` and `spectrum` sources draw its
 latest 2048 samples. The program mix runs only while the program stage does, so with
-no output running they draw silence.
+no output running they draw silence, and once settled on it they are checked every
+250 ms rather than every frame.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source; `sync` runs beside the live
@@ -462,7 +463,13 @@ the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version onl
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image advances on the clock and a still one is
-never re-planned. Sources run on the media clock of the backends the host injects
+never re-planned. A source with a `jstream_sources::Painter` (the `waveform` and
+`spectrum` kinds, which draw a whole frame and, for the spectrum, an FFT each 1/30 s)
+is painted by that thread just before each re-plan, holding no engine lock, so under
+the collection lock the plan only takes the frame painted last; `install`, `sync`
+and a clock swap hand the thread the running painters and their time zeros. Every
+other built kind makes its frames when built, so the plan's `frame` calls under the
+lock never draw. Sources run on the media clock of the backends the host injects
 (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
 the thread re-plans at once on the new one. `collection` asset
@@ -822,7 +829,10 @@ thread takes it alone, and otherwise only its own inputs mutex and, under that, 
 drop ledger's, never the collection lock (see *Audio sources*).
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
-engine while that mutex is held. The snapshot compositor belongs to the snapshot
+engine while that mutex is held. The `jstream-sources` thread builds sources and
+paints the painted ones (*Live sources*) holding no engine lock, then takes the
+collection lock only to install a build or re-plan, which asks each live source for a
+frame it already has. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The render snapshot is published under the collection
 lock (which makes the control side its one writer) and loaded by the render thread

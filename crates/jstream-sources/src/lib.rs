@@ -31,4 +31,4 @@ pub use audio::AudioTarget;
 pub use error::SourceError;
 pub use registry::Registry;
 pub use scope::AudioScope;
-pub use source::{AssetRoots, Context, Limits, Source, SourceKind, needs_restart};
+pub use source::{AssetRoots, Context, Limits, Painter, Source, SourceKind, needs_restart};
