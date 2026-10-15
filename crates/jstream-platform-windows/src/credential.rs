@@ -1,11 +1,12 @@
-//! Secrets in Windows Credential Manager (R-SEC-001): stream keys stay in the OS
-//! credential store, never in collection files, settings or logs.
+//! Secrets in Windows Credential Manager (R-SEC-001): stream keys and OAuth refresh
+//! tokens stay in the OS credential store, never in collection files, settings or logs.
 //!
 //! `WindowsCredentials` stores, reads and deletes generic credentials of the current
-//! user. Each one is named by a [`CredentialTarget`], `JStream/stream-key/<output id>`,
-//! and a value read back is a [`jstream_platform::Secret`], which zeroes its bytes when
+//! user. Each one is named by a [`CredentialTarget`], `JStream/stream-key/<output id>` or
+//! `JStream/oauth-token/<account>`, and a value read back is a [`jstream_platform::Secret`], which zeroes its bytes when
 //! dropped and never prints them. It implements [`jstream_platform::StreamKeyStore`], the
-//! seam the engine reads stream keys through. Nothing here logs, and no error carries a
+//! seam the engine reads stream keys through, and [`jstream_platform::OAuthTokenStore`],
+//! the one the YouTube client keeps refresh tokens in. Nothing here logs, and no error carries a
 //! secret.
 //!
 //! The target names and size checks are platform-independent and tested everywhere; the
@@ -28,6 +29,9 @@ const TARGET_PREFIX: &str = "JStream/";
 /// The kind segment of a stream key's target. A kind per secret type (OAuth tokens get
 /// their own) keeps two kinds of secret for one output from ever sharing a name.
 const STREAM_KEY_KIND: &str = "stream-key/";
+
+/// The kind segment of an OAuth refresh token's target, apart from stream keys.
+const OAUTH_TOKEN_KIND: &str = "oauth-token/";
 
 /// The longest generic target name, in UTF-16 code units, without its terminator:
 /// `CRED_MAX_GENERIC_TARGET_NAME_LENGTH`. Copied so the checks build and are tested on
@@ -53,6 +57,12 @@ impl CredentialTarget {
     /// than Windows allows. Those are `Unsupported`.
     pub fn stream_key(output_id: &str) -> Result<Self, PlatformError> {
         Self::new(STREAM_KEY_KIND, output_id)
+    }
+
+    /// The target that holds the OAuth refresh token of this account:
+    /// `JStream/oauth-token/<account>`. Account IDs are checked as output IDs are.
+    pub fn oauth_token(account: &str) -> Result<Self, PlatformError> {
+        Self::new(OAUTH_TOKEN_KIND, account)
     }
 
     /// `JStream/<kind><id>`, after checking `id` and the length of the whole name.
@@ -127,7 +137,7 @@ pub use store::WindowsCredentials;
 
 #[cfg(windows)]
 mod store {
-    use jstream_platform::{PlatformError, Secret, StreamKeyStore};
+    use jstream_platform::{OAuthTokenStore, PlatformError, Secret, StreamKeyStore};
     use windows::Win32::Foundation::ERROR_NOT_FOUND;
     use windows::Win32::Security::Credentials::{
         CRED_FLAGS, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW, CredDeleteW,
@@ -231,6 +241,30 @@ mod store {
         }
     }
 
+    /// OAuth refresh tokens, one credential per account: `JStream/oauth-token/<account>`.
+    /// An account ID the target name can't hold, or an empty token, is `Unsupported`.
+    impl OAuthTokenStore for WindowsCredentials {
+        fn set(&self, account: &str, token: &Secret) -> Result<(), PlatformError> {
+            Self::set(
+                self,
+                &CredentialTarget::oauth_token(account)?,
+                token.expose().as_bytes(),
+            )
+        }
+
+        fn get(&self, account: &str) -> Result<Option<Secret>, PlatformError> {
+            Self::get(self, &CredentialTarget::oauth_token(account)?)
+        }
+
+        fn clear(&self, account: &str) -> Result<(), PlatformError> {
+            Self::delete(self, &CredentialTarget::oauth_token(account)?).map(drop)
+        }
+
+        fn is_set(&self, account: &str) -> Result<bool, PlatformError> {
+            self.exists(&CredentialTarget::oauth_token(account)?)
+        }
+    }
+
     /// A credential CredReadW returned (R-UNSAFE-003): its blob is zeroed and the whole
     /// allocation is given back with CredFree on drop.
     struct Read(*mut CREDENTIALW);
@@ -305,6 +339,22 @@ mod tests {
         // Opaque IDs keep their characters, slashes and non-ASCII included.
         let t = CredentialTarget::stream_key("a/b é").expect("printable IDs are valid");
         assert_eq!(t.as_str(), "JStream/stream-key/a/b é");
+    }
+
+    #[test]
+    fn oauth_token_targets_are_their_own_kind() {
+        let t = CredentialTarget::oauth_token("user@example.com").expect("valid");
+        assert_eq!(t.as_str(), "JStream/oauth-token/user@example.com");
+        assert_ne!(
+            CredentialTarget::oauth_token("same").ok(),
+            CredentialTarget::stream_key("same").ok()
+        );
+        for id in ["", "a\0b", "tab\there"] {
+            assert!(
+                CredentialTarget::oauth_token(id).is_err(),
+                "{id:?} must be refused"
+            );
+        }
     }
 
     #[test]
@@ -459,5 +509,41 @@ mod tests {
         store.clear(&id).expect("clearing nothing succeeds");
         assert!(!store.is_set(&id).expect("is_set"));
         assert!(store.set("", &Secret::new("k")).is_err());
+    }
+
+    /// A refresh token through the `OAuthTokenStore` seam, in its own namespace: a stream
+    /// key for the same ID is left alone.
+    #[cfg(windows)]
+    #[test]
+    fn serves_as_the_oauth_token_store() {
+        use super::WindowsCredentials;
+        use jstream_platform::{OAuthTokenStore, Secret, StreamKeyStore};
+
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let id = format!("test-oauth-{}-{nanos}", std::process::id());
+        let tokens: &dyn OAuthTokenStore = &WindowsCredentials;
+        let keys: &dyn StreamKeyStore = &WindowsCredentials;
+        struct Cleanup<'a>(&'a dyn OAuthTokenStore, &'a dyn StreamKeyStore, &'a str);
+        impl Drop for Cleanup<'_> {
+            fn drop(&mut self) {
+                let _ = self.0.clear(self.2);
+                let _ = self.1.clear(self.2);
+            }
+        }
+        let _guard = Cleanup(tokens, keys, &id);
+
+        assert!(!tokens.is_set(&id).expect("is_set"));
+        tokens.set(&id, &Secret::new("1//refresh")).expect("set");
+        keys.set(&id, &Secret::new("live_key")).expect("set key");
+        assert!(tokens.is_set(&id).expect("is_set"));
+        let token = tokens.get(&id).expect("get").expect("stored");
+        assert_eq!(token.expose(), "1//refresh");
+        tokens.clear(&id).expect("clear");
+        tokens.clear(&id).expect("clearing nothing succeeds");
+        assert!(!tokens.is_set(&id).expect("is_set"));
+        assert!(keys.is_set(&id).expect("the stream key stays"));
+        assert!(tokens.set("", &Secret::new("t")).is_err());
     }
 }

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:f6c8c4929c171800", by = "agent:claude@session_017dgMHhk9KuuwXxpbutfCzi", note = "Merge of main (#142 Stream keys bullet, MemoryKeyStore in Fakes) into C4a: re-read both; main's keys bullet and fake are unchanged; C4a's Video capture devices bullet (VideoDevices, paired audio, VideoDeviceFormat, CaptureEncoding Raw/Yuy2/Mjpeg, CaptureDecoder hook, rejected frames dropped), FakeVideoDevices/FakeCaptureDecoder and the Not yet line (C4b, Backends wiring, MJPEG Codec variant) match video_device.rs and fake.rs" }
+verified = { hash = "b3:5d5148d1cf21bd10", by = "agent:claude@session_01CinhSCRTBiaJNaiD4w6CUq", note = "Y2: re-read the purpose section; new OAuth tokens bullet (OAuthTokenStore set/get/clear/is_set per account, Secret only, separate from StreamKeyStore, refresh tokens only, no token in errors) and MemoryTokenStore in Fakes match keys.rs and fake.rs; the rest is unchanged" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -92,6 +92,12 @@ Contents:
   read only through `expose`, and its bytes are zeroed on drop (best effort).
   `Secret::from_utf8` takes a store's bytes and refuses non-UTF-8 without naming them.
   The engine holds the store apart from `Backends`, through `Engine::with_key_store`.
+- **OAuth tokens** (`keys.rs`): `OAuthTokenStore` (`Send + Sync`), the same seam for
+  OAuth refresh tokens ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `clear`
+  and `is_set`, one token per caller-chosen account ID, each carried as a `Secret`. It is
+  a separate trait from `StreamKeyStore`, so a token and a stream key never share a name.
+  Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
+  contain a token. `jstream-youtube` keeps its Google refresh token here.
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, audio,
   codec and GPU-interop backends and its optional virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
@@ -106,7 +112,8 @@ Contents:
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
   MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
-  `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail) and
+  `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
+  `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
