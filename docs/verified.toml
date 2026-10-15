@@ -1551,7 +1551,7 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:20caa632a5d049a6" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:7c902ba9d37e539b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#243: re-read the whole section against Transport::shutdown now shutting down only the write side; edited the Transport bullet (FIN, reply readable, drop closes the rest, Windows abort with Both) and the Tests paragraph (new shutdown_leaves_the_server_s_reply_readable); #209/#236 text still holds" }
+stamp = { hash = "b3:7c902ba9d37e539b", by = "agent:claude", note = "re-read the Tests paragraph against the shutdown_over_tls test now waiting for the server's read timeout before the client shuts down (a test-only ordering fix for macOS EINVAL); the test list and every Transport claim still hold" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:2ef270bb1b4e0cc6" }
@@ -1611,7 +1611,7 @@ stamp = { hash = "b3:1b537bb60e282a9b" }
 stamp = { hash = "b3:9b9bc2743314c44c" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/transport/tests.rs"]
-stamp = { hash = "b3:8605cea76ee8a909" }
+stamp = { hash = "b3:4a6d6e6f01f968f4" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/rtmp/url.rs"]
 stamp = { hash = "b3:19a6b6cb7ecef9fe" }
