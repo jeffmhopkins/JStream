@@ -390,6 +390,7 @@ fn an_animated_gif_composites_its_frames_and_loops() {
 
 #[test]
 fn unreadable_and_oversized_images_are_errors() {
+    // `wide.png` takes 27 bytes of scanlines while decoding and 36 bytes as RGBA.
     let dir = folder("errors");
     std::fs::write(dir.join("text.png"), b"not an image").expect("written");
     std::fs::write(dir.join("cut.png"), &b"\x89PNG\r\n\x1a\n\0\0"[..]).expect("written");
@@ -428,7 +429,7 @@ fn unreadable_and_oversized_images_are_errors() {
     ));
     assert!(matches!(
         small(Limits {
-            max_decoded_bytes: 35,
+            max_decoded_bytes: 62,
             ..defaults
         }),
         Err(SourceError::TooLarge { .. })
@@ -442,7 +443,7 @@ fn unreadable_and_oversized_images_are_errors() {
     ));
     assert!(
         small(Limits {
-            max_decoded_bytes: 36,
+            max_decoded_bytes: 63,
             ..defaults
         })
         .is_ok()
@@ -517,4 +518,26 @@ fn assets_resolve_inside_their_root_only() {
             "errors never name a host path: {err}"
         );
     }
+}
+
+/// The decoded-memory cap counts a GIF's working canvas and its "restore to previous"
+/// copy, not only the frames kept: the 2x2 file above keeps 3 frames of 16 bytes, holds
+/// a 16-byte canvas throughout, and a 16-byte copy while frame 2 is drawn.
+#[test]
+fn a_gif_working_canvas_counts_against_the_cap() {
+    let dir = folder("gif-cap");
+    write_gif(&dir.join("anim.gif"), gif::Repeat::Infinite);
+    let open_with = |max_decoded_bytes| {
+        let limits = Limits {
+            max_decoded_bytes,
+            ..Limits::default()
+        };
+        let ctx = Context {
+            limits,
+            ..ctx(&dir)
+        };
+        Registry::builtin().create("image", &image_settings("anim.gif"), &ctx)
+    };
+    assert!(matches!(open_with(63), Err(SourceError::TooLarge { .. })));
+    assert!(open_with(64).is_ok());
 }

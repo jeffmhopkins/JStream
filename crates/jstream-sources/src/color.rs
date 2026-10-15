@@ -96,8 +96,9 @@ fn frame_size(settings: &Settings, limits: &Limits) -> Result<FrameSize, SourceE
     let (width, height) = (side("width")?, side("height")?);
     let bytes = u64::from(width) * u64::from(height) * 4;
     if bytes > limits.max_decoded_bytes {
+        // Named after the larger side, the one a client would most likely shrink.
         return Err(SourceError::Setting {
-            param: "width".into(),
+            param: if width >= height { "width" } else { "height" }.into(),
             reason: format!(
                 "{width}x{height} is over {} bytes",
                 limits.max_decoded_bytes

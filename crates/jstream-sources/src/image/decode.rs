@@ -55,9 +55,9 @@ impl Format {
     }
 }
 
-/// A frame shorter than this shows for [`SHORT_FRAME_MS`] instead. Browsers do the same,
+/// A frame of this or less shows for [`SHORT_FRAME_MS`] instead. Browsers do the same,
 /// because many files store 0 or 10 ms and were made to be shown at 100 ms.
-const MIN_FRAME_MS: u32 = 20;
+const MAX_SHORT_FRAME_MS: u32 = 10;
 const SHORT_FRAME_MS: u32 = 100;
 
 /// Decodes `bytes`, which were read from the asset at `path` (named in errors).
@@ -127,6 +127,16 @@ impl Decoder<'_> {
         Ok(())
     }
 
+    /// Counts a working buffer the decoder keeps until it returns (a canvas, a
+    /// scanline buffer) against the decoded-size limit, so peak memory is bounded and
+    /// not only the frames kept.
+    fn working(&mut self, bytes: usize) -> Result<(), SourceError> {
+        let bytes = u64::try_from(bytes).unwrap_or(u64::MAX);
+        self.room(bytes)?;
+        self.decoded_bytes += bytes;
+        Ok(())
+    }
+
     /// Keeps one RGBA frame, counting it against the decoded-size limit.
     fn keep(
         &mut self,
@@ -137,7 +147,7 @@ impl Decoder<'_> {
         let len = u64::try_from(rgba.len()).unwrap_or(u64::MAX);
         self.room(len)?;
         self.decoded_bytes += len;
-        let delay_ms = if delay_ms < MIN_FRAME_MS {
+        let delay_ms = if delay_ms <= MAX_SHORT_FRAME_MS {
             SHORT_FRAME_MS
         } else {
             delay_ms
@@ -171,6 +181,7 @@ impl Decoder<'_> {
         let mut reader = decoder.read_info().map_err(|e| self.err(e))?;
         let (width, height) = (reader.info().width, reader.info().height);
         let out_len = self.canvas(width, height)?;
+        self.working(reader.output_buffer_size())?;
         let mut buf = vec![0; reader.output_buffer_size()];
         let info = reader.next_frame(&mut buf).map_err(|e| self.err(e))?;
         let channels = match info.color_type {
@@ -225,14 +236,9 @@ impl Decoder<'_> {
         let mut decoder =
             image_webp::WebPDecoder::new(Cursor::new(bytes)).map_err(|e| self.err(e))?;
         let (width, height) = decoder.dimensions();
-        let frame_len = self.canvas(width, height)?;
-        // The decoder's working buffers scale with the canvas; the frames we keep are
-        // counted separately in `keep`.
-        decoder.set_memory_limit(
-            usize::try_from(self.limits.max_decoded_bytes)
-                .unwrap_or(usize::MAX)
-                .max(frame_len.saturating_mul(4)),
-        );
+        self.canvas(width, height)?;
+        decoder
+            .set_memory_limit(usize::try_from(self.limits.max_decoded_bytes).unwrap_or(usize::MAX));
         let alpha = decoder.has_alpha();
         let buf_len = decoder
             .output_buffer_size()
@@ -246,6 +252,7 @@ impl Decoder<'_> {
                     .collect()
             }
         };
+        self.working(buf_len)?;
         let mut buf = vec![0; buf_len];
         if !decoder.is_animated() {
             decoder.read_image(&mut buf).map_err(|e| self.err(e))?;
@@ -292,11 +299,18 @@ impl Decoder<'_> {
             gif::Repeat::Infinite => None,
             gif::Repeat::Finite(n) => Some(u32::from(n) + 1),
         };
+        self.working(canvas_len)?;
         let mut canvas = vec![0u8; canvas_len];
         let mut frames = Vec::new();
+        let canvas_bytes = canvas_len as u64;
         while let Some(frame) = decoder.read_next_frame().map_err(|e| self.err(e))? {
             let rect = Rect::clip(frame, width, height);
-            let saved = (frame.dispose == gif::DisposalMethod::Previous).then(|| canvas.clone());
+            // "Restore to previous" needs a copy of the canvas until the frame is kept;
+            // the copy and the kept frame are both checked before they are allocated.
+            let restore = frame.dispose == gif::DisposalMethod::Previous;
+            let copies = if restore { 2 } else { 1 };
+            self.room(canvas_bytes * copies)?;
+            let saved = restore.then(|| canvas.clone());
             draw(&mut canvas, width, frame, rect);
             self.keep(&mut frames, canvas.clone(), u32::from(frame.delay) * 10)?;
             match frame.dispose {

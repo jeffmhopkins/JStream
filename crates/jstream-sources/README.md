@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:e3f4d43a894fb9b8", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "New crate (C1a): re-read against source.rs, registry.rs, color.rs, image/ and describe.rs after the WebP decoder-limit change; seams, limits, kinds, timing rules, asset resolution, deps and tests match the code" }
+verified = { hash = "b3:75adfc559251accd", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review round 1 (N1-N3): re-read Context/Limits (decoded-memory cap now counts GIF canvas and restore copy, PNG/WebP buffers; WebP decoder capped at the same figure), color size cap wording (16384^2 RGBA is exactly 1 GiB), and the <=10 ms frame rule against decode.rs/color.rs" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -41,20 +41,25 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   the frames over.
 - `Context`: the folders behind the `collection` and `app` asset roots
   (`AssetRoots`), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
-  sides and 1 GiB of decoded frames by default, checked before the decoder allocates,
-  so a small file can't decode into a huge image.
+  sides and 1 GiB of decoded memory by default. The image's size is checked before
+  anything is allocated for it, and the decoded-memory cap counts the frames kept plus
+  the working buffers held while decoding (a GIF's canvas and its "restore to
+  previous" copy, the PNG and WebP output buffers), so a small file can't decode into
+  a huge image. The WebP decoder's own allocations are capped at the same figure.
 
 **Kinds.**
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
   alpha), `width` by `height` pixels. The colour is live; a size change needs a new
-  source.
+  source. The frame must also fit the decoded-memory cap: 16384x16384 RGBA is exactly
+  1 GiB, so the default cap allows every size the descriptor does, and a lower cap
+  makes `create` fail naming the larger side.
 - `image`: the `file` asset, decoded whole when the source is created. The format is
   told from the file's first bytes, not its extension. PNG (first image only; an APNG
   plays as its still) through `png`, JPEG through `zune-jpeg`, WebP (still or
   animated, lossy or lossless) through `image-webp`, and GIF (still or animated)
   through `gif`. GIF frames are composited onto the logical screen with their disposal
-  methods; "restore to background" clears to transparent, as browsers do. A frame
-  shorter than 20 ms shows for 100 ms, as in browsers. A GIF plays once plus its
+  methods; "restore to background" clears to transparent, as browsers do. A frame of
+  10 ms or less shows for 100 ms, as in browsers. A GIF plays once plus its
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.

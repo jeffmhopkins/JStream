@@ -97,7 +97,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5fce32d91d370e82", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#147 C6) into C1a: took main's line; C6's Snapshots nested-scene paragraph and C1a's Dependencies (jstream-sources, serde_json dev-only) and Not yet bullets both hold" }
+verified = { hash = "b3:ed0b0f5d6d5f5e8b", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review round 1 N4: Dependencies now says serde_json is for settings values in src/tests.rs and tests/mcp.rs, matching Cargo.toml; rest unchanged" }
 -->
 
 ### Engine and sessions
@@ -145,7 +145,7 @@ the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. D
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
-maps in the kind tests). All of them
+values in `src/tests.rs` and `tests/mcp.rs`). All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.

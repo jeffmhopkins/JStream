@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:a4f46dee49d7f120", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#153 MCP over HTTP, #163, #134) into C1a: took main's line; re-read the map: main's mcp/server/daemon rows (no longer not built) and C1a's jstream-sources L4 edge from core both hold" }
+verified = { hash = "b3:a912ab0399e396df", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review round 1: only core's Cargo.toml dev-dependency comment changed; map rows and layer edges unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

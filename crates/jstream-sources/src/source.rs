@@ -151,13 +151,14 @@ pub struct Limits {
     pub max_file_bytes: u64,
     /// The largest width or height, in pixels.
     pub max_side: u32,
-    /// The most bytes all of one image's decoded frames may take together.
+    /// The most bytes decoding one image may hold: the frames kept plus the decoder's
+    /// working buffers.
     pub max_decoded_bytes: u64,
 }
 
 impl Default for Limits {
     /// 256 MiB files, 16384 px sides (the largest a source's `width` and `height` may
-    /// be) and 1 GiB of decoded frames.
+    /// be) and 1 GiB of decoded memory.
     fn default() -> Self {
         Self {
             max_file_bytes: 256 << 20,
