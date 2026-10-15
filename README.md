@@ -48,7 +48,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 32% | 6 | 7 | 6 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 13% | 1 | 0 | 7 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 13% | 1 | 1 | 6 |
 
 74 of 106 items are merged; 7 of those still wait on a run on Windows hardware.
 
@@ -204,7 +204,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | ID | Item | Status | PRs |
 |---|---|---|---|
 | F5 | Enhanced RTMP (HEVC/AV1) | ✅ merged | #163 |
-| E3c | Encode from GPU frames | ⏳ planned |  |
+| E3c | Encode from GPU frames | 🔍 in review | #325 |
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned |  |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned |  |
 | CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
