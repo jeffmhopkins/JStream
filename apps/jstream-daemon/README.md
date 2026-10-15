@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:fe6c01ebd0f4cee6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2 N6: Serving bullet rewrapped; main.rs crate doc now says the audit log records batches, undos, redos and actions (not queries); purpose text holds" }
+verified = { hash = "b3:cdb5b6ff72945cbd", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6 #232) into G3c: A6's collection/audit text kept; Virtual camera registration bullet kept; both match main.rs/register.rs" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -71,7 +71,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:694a71b7535885d9", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2: only main.rs/serve.rs doc comments changed (audit wording); Usage options, Collection file and Audit log bullets re-read and hold" }
+verified = { hash = "b3:69ea1dafaab72e0f", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6): Collection file and Audit log bullets are main's; Virtual camera bullet and --register-vcam row kept; exit-1 row merges both lists; the stale --collection-refused line dropped (A6 implemented it)" }
 -->
 
 ```sh
@@ -182,7 +182,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:18a55818b0bf0ddf", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2 N6: collection/audit bullet rewrapped, text unchanged; engine() doc now says audit records batches, undos, redos and actions; rest re-read and holds" }
+verified = { hash = "b3:7c963edc656ba636", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6): Collection file and audit log bullet is main's; Virtual camera registration bullet kept; register::log_status runs after the MF check, before the audit log opens" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

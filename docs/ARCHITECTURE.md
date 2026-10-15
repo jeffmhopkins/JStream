@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:32198d880d34be9b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2: only daemon doc comments changed; daemon host row (loads and saves --collection, not the UI yet) re-read and holds" }
+verified = { hash = "b3:fd2f10fecf76c5ac", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6): daemon row is main's (loads and saves --collection) plus registering the virtual camera (--register-vcam); diagram unchanged" }
 -->
 
 ```
