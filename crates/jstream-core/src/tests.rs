@@ -3,6 +3,7 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod collection;
 mod history;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};

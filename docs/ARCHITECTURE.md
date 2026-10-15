@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:e07f3c8ed49ca530", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; depends_on keeps ADR-0030 beside main's list; studio gone from the tree, program runtime state; B6 Built so far holds" }
+verified = { hash = "b3:a5f1e8d4a8ab6f61", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#205 B1 collection file) into B10 at 0.13: re-read; Built so far no longer says nothing is persisted (points at Persistence) and says the file doesn't hold program; ADR-0030 dependency re-read" }
 -->
 
 ```
@@ -364,8 +364,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
-  and `outputs`. Nothing is persisted yet. The program scene is built in
-  `jstream-core` (runtime state; no preview scene yet).
+  and `outputs`. The collection file saves what is built ([Persistence](#persistence)).
+  The program scene is built in `jstream-core` as runtime state, so the file doesn't
+  hold it (no preview scene yet).
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -793,15 +794,17 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:fe28871dd73ab140", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read against R-API-003 (schema_version and forward migrations in jstream-graph) and R-SEC-001 (secrets only in the OS credential store); both bullets hold" }
+verified = { hash = "b3:333fc86c8cb74fff", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6): persist/ now also stores scene roles; Collections and Asset files bullets hold" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
-  `jstream-graph`.
+  `jstream-graph`, which checks a loaded collection as it checks edits. `jstream-core`
+  loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source and filter records its kind's descriptor version, migrated on load
-  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)).
+  like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until
+  kinds ship settings migrations, a source saved at another version is refused on load.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
 - **Control token:** a random token in a user-only file in the config directory

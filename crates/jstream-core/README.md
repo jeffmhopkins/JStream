@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:c4e51c50a2cae44a", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; Studio and Runtime bullets hold beside main's runtime section" }
+verified = { hash = "b3:f3d6e5eff08c1ef8", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#205 B1 collection file) into B10 at 0.13: re-read; Tests bullet keeps #205's collection-file tests and B10's program/switch coverage; Studio bullet holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -31,7 +31,8 @@ The control plane is the scene graph, the sessions and `video.snapshot`.
 state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
-  `with_publish_opener`, `with_key_store`, `with_audit` and `with_history_limit`;
+  `with_publish_opener`, `with_key_store`, `with_audit`, `with_history_limit` and
+  `with_collection_file`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads the running pipeline; `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
@@ -43,6 +44,9 @@ state machine. Contents:
   the `AuditSink` the host injects with `with_audit` (none by default). `AuditMemory`
   keeps entries in memory; `AuditFile` writes them as JSON lines to a size-capped
   `audit.jsonl` from its own writer thread (see *Audit log* in [Design](#design)).
+- **Collection file** (`collection.rs`): loads the collection from the file the host
+  names with `with_collection_file` (or creates it), and saves it atomically after every
+  change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
   They are stubs: `color`, `image`, `media` and `text` take a first set of parameters,
@@ -101,12 +105,17 @@ state machine. Contents:
   actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
-  rotation (`audit.rs`), and of undo and redo (`undo_and_redo_are_audited`), and an MCP agent (`jstream-mcp`, a
-  dev-dependency) driving the engine in-process, `scene.switch` and the program
-  scene's rules (in `tests.rs`, the differential script and `studio.rs`), and a
-  snapshot that follows program.
+  rotation (`audit.rs`), and of undo and redo (`undo_and_redo_are_audited`), the
+  collection file (`src/tests/collection.rs`: created when missing, batches, an undo
+  and a redo each saved, a saved collection loaded by a new engine with its `rev` and
+  outputs, refused files left
+  as they were, a failed save that the next change recovers, and concurrent sessions
+  leaving the latest collection and no temporary file), `scene.switch` and the program
+  scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
+  that follows program, and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
+  engine in-process.
 
-Not here yet: live values, persistence, real source kinds, arc-swap
+Not here yet: live values, real source kinds, arc-swap
 snapshots, a GPU encode target, and the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -119,7 +128,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fcdadd7b6613e735", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#184 B6 groups 0.12, #206, #199, #194) into B10, now protocol 0.13: re-read; Program scene now says role changes nothing (a group can go on program); Snapshots and Audit log hold" }
+verified = { hash = "b3:d0746ee2c026a2da", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#205 B1 collection file) into B10 at 0.13: re-read; Program scene says the collection file doesn't hold program, so a load puts its first scene on program (engine reconciles in with_collection_file); Collection file subsection holds" }
 -->
 
 ### Engine and sessions
@@ -282,7 +291,8 @@ first scene left (or none), and a reorder never moves it. A scene's `role` chang
 of this: a group is a scene here, and can go on program. A batch, undo or redo that moves
 program emits `studio.changed` right after its `state.changed`, naming the same request. The
 mock applies the same rules, and the differential script holds the two to each other.
-Nothing is persisted, so a restart starts with the first scene on program. Only a cut
+Program is not saved in the collection file, so an engine that loads one (a restart) starts
+with its first scene on program. Only a cut
 exists; transitions and the preview scene come later.
 
 ### Snapshots
@@ -651,12 +661,38 @@ are UTC, RFC 3339 to the millisecond, formatted without a date crate.
 No host injects a sink yet: the daemon's wiring, in its data directory, is a later
 item.
 
+### Collection file
+
+`Engine::with_collection_file(path)` loads the collection from `path`
+(`jstream-graph`'s `Graph::with_collection_json`, checked against the engine's kinds)
+and replaces the engine's collection and `rev` with it; the outputs' runtime state
+follows, so a loaded output is `stopped`. With no file at `path` it saves the current,
+empty, collection there at once, so an unwritable path fails at startup rather than at
+the first change. A file that doesn't read or load is refused with
+`CollectionFileError` (`Read`, `Load` or `Create`, each naming the path but never the
+contents) and left as it is. It is configured before `connect`, like the other
+builders.
+
+After each applied batch, undo or redo, `Engine::execute` saves the collection before
+the call returns, so a client that has its `rev` knows the file holds it. The save
+takes the collection file's mutex, then the collection lock only long enough to
+serialize the graph, and writes with only the file's mutex held: saves happen one at a
+time, never under the collection lock, and one whose `rev` the file already has (or
+passed, because a later change saved first) writes nothing. The write is atomic: a
+temporary `.<name>.<pid>.tmp` beside the file, flushed to disk, renamed over it, and on
+Unix the directory flushed too; on Unix it is mode `0600`. A failed save is logged at
+`error` with the path and `rev`, removes the temporary file, and leaves the call's
+result as it is: the change stays applied and the next change saves again. Undo
+history and idempotency keys are not saved.
+
+The daemon's `--collection` option, which turns this on, is a later item.
+
 ### Not yet
 
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- Persistence (the collection file), the daemon's audit file, and real source kinds with
+- The daemon's `--collection` option and audit file, and real source kinds with
   settings that change what renders (`jstream-sources`).
 - Arc-swap snapshots, the collector thread, live-value handover, and a GPU encode
   target. `output.start` is the first cut of

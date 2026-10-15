@@ -68,7 +68,7 @@ every output that renders a scene once the render thread composites scenes (E1, 
 `VideoMix` with input `Program` (ARCH › Data model) follows it when mixes are built.
 
 **Not decided here:** the preview scene and `studio.set_preview` (studio mode, M2); where
-the last program scene is saved for a restart, which comes with persistence; and
+the last program scene is saved for a restart (the collection file does not hold it); and
 transitions, which [ADR-0029](0029-transitions.md) specifies.
 
 This settles protocol open question 5: switching is an action that changes runtime state,
@@ -80,7 +80,8 @@ and no action changes collection state.
   intended: a switch is not an edit.
 - A client learns about program from `studio.changed` and `studio.get`, not from the
   collection. A client that missed events (`events.dropped`) re-reads both.
-- A restart puts the first scene on program until the last program scene is persisted.
+- A restart, which loads the collection file, puts its first scene on program until the
+  last program scene is saved somewhere.
 - Every implementation of the protocol (engine and mock) applies the same rules for the
   first scene and for a deleted program scene, and the engine's differential test holds
   them to each other.
