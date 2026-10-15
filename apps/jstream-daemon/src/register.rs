@@ -81,8 +81,8 @@ mod os {
     }
 
     /// Logs where the virtual camera's registration points: a warning when it names
-    /// another folder or nothing, so a moved install is noticed before the camera is
-    /// used. Never fails the daemon.
+    /// another folder, so a moved install is noticed before the camera is used, and an
+    /// `info` line when there is none. Never fails the daemon.
     pub fn log_status() {
         let Ok(dll) = shipped_dll() else { return };
         if !dll.is_file() {

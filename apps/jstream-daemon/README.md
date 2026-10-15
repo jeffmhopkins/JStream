@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:cdb5b6ff72945cbd", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6 #232) into G3c: A6's collection/audit text kept; Virtual camera registration bullet kept; both match main.rs/register.rs" }
+verified = { hash = "b3:3114ad1e18d827f8", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 N2: register.rs log_status doc now says warn for Moved, info for Missing; purpose bullets unchanged and hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -71,7 +71,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:69ea1dafaab72e0f", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6): Collection file and Audit log bullets are main's; Virtual camera bullet and --register-vcam row kept; exit-1 row merges both lists; the stale --collection-refused line dropped (A6 implemented it)" }
+verified = { hash = "b3:71f39c73730f3eae", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 B2: exit-code 0 row now includes a successful --register-vcam; N1: Virtual camera bullet says an already-current registration keeps the file's ACL as it is" }
 -->
 
 ```sh
@@ -149,7 +149,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   camera Frame Server requires. From a normal prompt it shows one UAC prompt and runs
   itself elevated, without a window. It prints `virtual camera: registered <dll>`, adding
   the old path when the registration named another folder, or `virtual camera: already
-  registered (<dll>)` without asking for elevation. A missing DLL, a declined prompt or a
+  registered (<dll>)` without asking for elevation, leaving the registration and the
+  file's ACL as they are (a DLL registered with `regsvr32`, or rebuilt in place, keeps
+  whatever ACL it has). A missing DLL, a declined prompt or a
   failed registration exits 1; from an administrator prompt the error says what failed.
   At startup the daemon logs a warning when the registration names another folder (a
   moved install), and an `info` line when there is none. Elsewhere `--register-vcam`
@@ -172,7 +174,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 
 | Exit code | Meaning |
 |---|---|
-| 0 | Stopped by a signal, or printed the help or version |
+| 0 | Stopped by a signal, printed the help or version, or registered the virtual camera (`--register-vcam`) |
 | 1 | Failed: `--register-vcam` could not register the virtual camera (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
@@ -182,7 +184,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:7c963edc656ba636", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6): Collection file and audit log bullet is main's; Virtual camera registration bullet kept; register::log_status runs after the MF check, before the audit log opens" }
+verified = { hash = "b3:2c1f3bfa055b7e39", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 N2: only register.rs's log_status doc comment changed; Virtual camera registration bullet holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

@@ -17,7 +17,7 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:b3cb5bf0a3c4bf6c", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c (daemon Usage gained --register-vcam): prerequisites unaffected, going live never needs the virtual camera; holds" }
+verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +36,7 @@ verified = { hash = "b3:b3cb5bf0a3c4bf6c", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:f53869615285f85b", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c (daemon Usage gained --register-vcam): steps 1-8 re-read, none uses the camera; startup may add an info/warn line about the camera registration, which no step checks; holds" }
+verified = { hash = "b3:9b0ece85473d1a65", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; step 7's exit 0 after Ctrl-C unaffected; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:644a0a2945081973", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c (daemon Usage gained --register-vcam): script steps and exit codes unaffected; holds" }
+verified = { hash = "b3:398610ab5da52a07", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; script steps and exit codes unaffected; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
