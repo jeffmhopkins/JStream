@@ -978,7 +978,7 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
+stamp = { hash = "b3:a5306e2a436cef37", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "merge of main at #371/#324: tests/sources.rs gained main's #324 edit beside C10's waveform test; Live sources painter text (painted off-lock before re-plan) still matches what that test checks; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
 stamp = { hash = "b3:fcde4323e9d405da", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 round 5 (B5): Tests bullet now lists src/tests/sources.rs and its live-source tests by behaviour, ending with a_waveform_source_is_painted_by_the_sources_thread, checked against that file's nine tests; Live sources bullet says waveform/spectrum draw the AudioScope; src/tests/audio.rs's scope test and D5/D6 tests are listed" }
@@ -1068,7 +1068,7 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: PR changes only src/tests/sources.rs, moving the animation-by-itself test onto FakeClock via set_source_clock (#293); the Tests list and engine description still hold." }
+stamp = { hash = "b3:a5306e2a436cef37", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "merge of main at #371/#324: tests/sources.rs now has main's #324 edit plus C10's waveform test; the Tests bullet's live-sources list still matches its nine tests, ending with a_waveform_source_is_painted_by_the_sources_thread; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/tests/mcp.rs"]
 stamp = { hash = "b3:91ec8bf59df583dd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: tests/mcp.rs change is only block_on's doc comment (hello wait's timer never starts when hello is ready); crate purpose unaffected" }
