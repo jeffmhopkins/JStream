@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:f93d77c61243e82a", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against H3: .github line now lists the new sweep workflow alongside ci, governance and review-gate; xtask main.rs entries and the rest of the tree unchanged" }
+verified = { hash = "b3:ae45fe9d9e867a96", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against .github/: the line now also names the workflow tests and the issue template next to the four workflows, Dependabot config and PR template; xtask and docs lines unchanged" }
 -->
 
 ```
@@ -107,7 +107,8 @@ JStream/
 │   ├── facts.toml          # pinned facts, one source each
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md, generated README.md index)
 │   └── guides/
-└── .github/                # workflows (CI, governance, review-gate, sweep), Dependabot config, PR template
+└── .github/                # workflows (CI, governance, review-gate, sweep), their tests, Dependabot config,
+                            # issue and PR templates
 ```
 
 <a id="crate-map"></a>
