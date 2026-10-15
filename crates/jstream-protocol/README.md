@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:f993972fe229495f", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: Commands list adds opacity, blend and filter edits and BlendMode; Filters bullet for filter.rs; parity bullet names desktop_audio and gain kinds, opacities and the gain chain" }
+verified = { hash = "b3:34a4937a99c6c3ea", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Commands list has B7's edits plus main's scene.switch action; Filters bullet; parity bullet; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -42,7 +42,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `output.set_target`, `output.set_encoder`, `output.delete`, `encoder.create`,
   `encoder.update`, `encoder.delete`), with `ItemTransform` (deprecated), `Crop`,
   `SourceKind`, `SceneRole` and `BlendMode`;
-  `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
+  `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
+  `scene.switch`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
@@ -59,8 +60,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   and `EncoderSessionInfo`, the per-output sharing `output.status` reports
   ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `encoder.list`, `video.snapshot`, `kind.list`, `kind.describe` and
-  `delete.plan` (with its `DeleteTarget`), with `QueryResult` and the `SceneSummary`,
+  `output.list`, `output.status`, `encoder.list`, `video.snapshot`, `kind.list`, `kind.describe`,
+  `delete.plan` (with its `DeleteTarget`) and `studio.get`, with `QueryResult` and the `SceneSummary`,
   `SceneInfo`, `SourceInfo` and `ItemInfo`
   shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
@@ -73,8 +74,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No kind is defined here.
-- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `events.dropped` and
-  `stats.tick`.
+- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
+  `events.dropped` and `stats.tick`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
@@ -91,8 +92,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.15 because of
-  `delete.plan` and the `blockers` detail on `invalid_argument`; 0.14 added references
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.17 because of
+  `scene.create`'s optional `role`; 0.16 added `scene.switch`, `studio.get` and
+  `studio.changed`, 0.15 `delete.plan` and the
+  `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
   `item.move`, a scene's `role` and the placement edits' `scene_id`), 0.11 the canvas
@@ -127,7 +130,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:03d71899bd1a02fa", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: re-read whole section; new Opacity, blend and filters subsection; dependency edges and blockers include filter settings; delete.plan has filter.set_settings; reads, undo closure, source.list, Finite32 list and placement addressing updated; EntityKind filter compat note; FilterChain exhaustive exception documented" }
+verified = { hash = "b3:554547a53e61d7f1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Opacity, blend and filters subsection, edges, blockers, plans, reads, undo, compat notes merged with main's f64 number text; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -192,8 +195,8 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
 - **Edit** (`Edit`): changes the collection state, the data that is saved in the
   collection file and that `rev` counts. Undoable, batchable, atomic.
 - **Action** (`Action`): has effects outside the collection state, such as network,
-  devices, files, secrets or time (starting an output, going live, storing a stream
-  key, OAuth). Never undoable or
+  devices, files, secrets, time or runtime state (starting an output, going live,
+  storing a stream key, OAuth, switching the program scene). Never undoable or
   batchable. The response only says the action was accepted; progress arrives as
   events (`output.state_changed`).
 
@@ -235,18 +238,18 @@ order with 0 at the bottom.
 ### Groups and placement addressing
 
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
-`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`, and
-`scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
+`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`. `scene.create` takes
+an optional `role` (omitted means `scene`; protocol 0.17), and `scene.set_role { scene_id, role }`
+changes it; the role changes no engine behaviour.
 `scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.11 reader sees
 no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
 to a position in another scene, keeping its ID and every placement property, under the
 same cycle check as `item.add` (field `scene_id`). `index` is the item's position after
 the move: up to the number of items already there for another scene, and below it for
 the item's own scene, where the move is a reorder. Grouping is a client-built batch:
-`scene.create`, `scene.set_role` to `group`, `source.create` of a `scene` source,
+`scene.create` with `role: group`, `source.create` of a `scene` source,
 `item.add` of it with `item.move` to the lowest selected index, then an `item.move` of
-each selected item into the group, bottom first. `scene.create` doesn't take a `role`
-yet.
+each selected item into the group, bottom first.
 
 The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
 `item.set_visible`, `item.set_opacity`) take an
@@ -342,7 +345,9 @@ then serializes as `null` and no longer parses. So a
 non-finite or out-of-`f32`-range number fails deserialization, and
 `ClientMessage::parse` rejects the whole message as `malformed`. In-process clients
 can't build a non-finite value either: `Finite32::new` and `Vec2::new` return `None`
-for one.
+for one. Settings values keep non-integer JSON numbers as `f64`, parsed to the nearest
+one (serde_json's `float_roundtrip`), so a message with a long number still serializes
+and parses back to itself.
 
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next
@@ -431,6 +436,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
   so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
+- `studio.get`: the scene on program (`program_scene`, omitted only while the collection
+  has no scene). Runtime state, not collection state
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
+  Added in 0.16.
 - `delete.plan {target}`: the batch that deletes a scene or source (`target` is
   `{"type":"scene","scene_id":…}` or `{"type":"source","source_id":…}`) with
   everything that refers to it, as `edits` and the `rev` it was planned at, or
@@ -484,9 +493,9 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop` and
-`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
-`scene.reorder` unless it was last, `scene.set_role` for a group, and each item's
-restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+`item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`
+with the scene's `role` (omitted for `scene`), `scene.reorder` unless it was last, and
+each item's restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
 edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings and its
 `duplicated_from`, then a `filter.add` per filter, undoing a filter edit is its
@@ -553,6 +562,14 @@ After `welcome`, the server pushes every event to every client.
   to `rev`, a gap shows that an event was missed.
 - `output.state_changed {output_id, state}` reports runtime state, which is not part of
   the collection, so it carries no `rev`.
+- `studio.changed {program_scene?, client_id, request_id?}` reports a new scene on
+  program, with the request that caused it: a `scene.switch`, or a batch, undo or redo
+  that created
+  the collection's first scene (it goes on program) or deleted the program scene
+  (program moves to the first scene left, or to none). For edits it follows their
+  `state.changed`. A switch to the scene already on program emits nothing.
+  Program is runtime state, so it carries no `rev`
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). Added in 0.16.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -753,9 +770,10 @@ described above.
    R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
    (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are not
    built yet.
-5. **Actions that change collection state.** `studio.transition` changes the program
-   scene, which is saved in the collection. Is it an action that also bumps `rev`, or an
-   edit plus a separate "run transition" action?
+5. **Actions that change collection state.** Settled by
+   [ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md): the program
+   scene is runtime state, not collection state, so `scene.switch` is an action that
+   changes no `rev`, and no action changes collection state.
 6. **Idempotency.** How long the engine remembers keys (count or time), and whether a
    reused key with a different batch is an error (`idempotency_key_reused`).
 7. **Event subscriptions.** Every client gets every event in this cut, including

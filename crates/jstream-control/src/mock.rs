@@ -6,7 +6,8 @@
 //! the outputs' runtime state and an in-memory stand-in for the stream-key store, and
 //! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
-//! stream-key actions, `state.changed` and `output.state_changed` events, and per-client
+//! stream-key actions, `scene.switch` and the program scene it sets (`studio.get`),
+//! `state.changed`, `studio.changed` and `output.state_changed` events, and per-client
 //! undo and redo. Each [`MockEngine::connect`] opens one client session. It does no
 //! persistence or real output work.
 //!
@@ -221,6 +222,10 @@ struct State {
     /// How many sessions have completed `hello`; numbers the client IDs.
     clients: u64,
     subscribers: Vec<Weak<Mutex<Queue>>>,
+    /// The scene on program: runtime state, not counted by `rev`. Follows the engine's
+    /// rules (ADR-0030): the first scene created goes on program, and a deleted program
+    /// scene gives way to the first scene left.
+    program: Option<SceneId>,
 }
 
 /// How many undo steps each client keeps unless [`MockEngine::with_history_limit`]
@@ -443,7 +448,7 @@ impl State {
         match call {
             Call::Batch(batch) => self.batch(client_id, request_id, batch),
             Call::History(call) => self.history(client_id, request_id, &call),
-            Call::Action { action } => self.action(action),
+            Call::Action { action } => self.action(client_id, request_id, action),
             Call::Query { query } => self.query(query),
             _ => Err(unimplemented_by_mock("this kind of call")),
         }
@@ -562,7 +567,7 @@ impl State {
     }
 
     /// What follows every applied batch, undo and redo: the outputs follow the
-    /// collection, and `state.changed` is emitted.
+    /// collection, `state.changed` is emitted, and the program scene is reconciled.
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -576,6 +581,27 @@ impl State {
             client_id: client_id.clone(),
             request_id: Some(request_id.clone()),
             cause,
+        });
+        // Edits that deleted the program scene, or created the first scene, move
+        // program; that event follows their `state.changed` (ADR-0030).
+        let kept = self
+            .program
+            .as_ref()
+            .is_some_and(|id| self.collection.scene_index(id).is_some());
+        if !kept {
+            let first = self.collection.scenes.first().map(|scene| scene.id.clone());
+            if first != self.program {
+                self.program = first;
+                self.emit_program(client_id, request_id);
+            }
+        }
+    }
+
+    fn emit_program(&mut self, client_id: &ClientId, request_id: &RequestId) {
+        self.emit(Event::StudioChanged {
+            program_scene: self.program.clone(),
+            client_id: client_id.clone(),
+            request_id: Some(request_id.clone()),
         });
     }
 
@@ -604,8 +630,21 @@ impl State {
         });
     }
 
-    fn action(&mut self, action: Action) -> Result<CallResult, ProtocolError> {
+    fn action(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        action: Action,
+    ) -> Result<CallResult, ProtocolError> {
         let (output_id, start) = match action {
+            Action::SceneSwitch { scene_id } => {
+                self.collection.existing_scene(&scene_id)?;
+                if self.program.as_ref() != Some(&scene_id) {
+                    self.program = Some(scene_id);
+                    self.emit_program(client_id, request_id);
+                }
+                return Ok(CallResult::Action {});
+            }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
             Action::OutputSetKey { output_id, key } => {
@@ -719,6 +758,9 @@ impl State {
                 rev: self.collection.rev,
                 outputs: self.collection.output_infos(),
             },
+            Query::StudioGet => QueryResult::StudioGet {
+                program_scene: self.program.clone(),
+            },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,
                 encoders: self.collection.encoder_infos(),
@@ -780,7 +822,7 @@ impl Collection {
     ///
     /// It follows the rules `jstream-graph` enforces for the same edits (existence,
     /// unique IDs, no deleting what is still referenced, index bounds, no nesting
-    /// cycles from `item.add` or `item.set_source`, `duplicated_from` never naming the
+    /// cycles from `item.add`, `item.move` or `item.set_source`, `duplicated_from` never naming the
     /// source itself, no deleting a running output, RTMP server URLs), with the same error
     /// codes and `edits.<at>.<field>` paths. It describes no kinds, so it doesn't check
     /// settings, fill in defaults, or follow settings references when it looks for
@@ -792,7 +834,11 @@ impl Collection {
         running: &BTreeSet<OutputId>,
     ) -> Result<Vec<Edit>, ProtocolError> {
         let inverse = match edit {
-            Edit::SceneCreate { scene_id, name } => {
+            Edit::SceneCreate {
+                scene_id,
+                name,
+                role,
+            } => {
                 check_id(scene_id.as_str(), at, "scene_id")?;
                 check_name(&name, at)?;
                 if self.scene_index(&scene_id).is_some() {
@@ -801,7 +847,7 @@ impl Collection {
                 self.scenes.push(Scene {
                     id: scene_id.clone(),
                     name,
-                    role: SceneRole::Scene,
+                    role: role.unwrap_or_default(),
                     items: Vec::new(),
                 });
                 vec![Edit::SceneDelete { scene_id }]
@@ -848,18 +894,13 @@ impl Collection {
                 let mut inverse = vec![Edit::SceneCreate {
                     scene_id: scene.id.clone(),
                     name: scene.name,
+                    role: (!scene.role.is_scene()).then_some(scene.role),
                 }];
                 // Re-created scenes are appended, so only a scene that wasn't last moves back.
                 if index != self.scenes.len() {
                     inverse.push(Edit::SceneReorder {
                         scene_id: scene.id.clone(),
                         index: wire_index(index)?,
-                    });
-                }
-                if scene.role != SceneRole::Scene {
-                    inverse.push(Edit::SceneSetRole {
-                        scene_id: scene.id.clone(),
-                        role: scene.role,
                     });
                 }
                 // Re-adding bottom to top puts each item back at its own index.
@@ -891,13 +932,13 @@ impl Collection {
             } => {
                 check_id(item_id.as_str(), at, "item_id")?;
                 let index = self.existing_scene(&scene_id)?;
-                let Some(Source { kind, .. }) = self.sources.get(&source_id) else {
+                if !self.sources.contains_key(&source_id) {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
-                };
+                }
                 if self.items.contains_key(&item_id) {
                     return Err(already_exists(EntityKind::Item, item_id.as_str()));
                 }
-                self.check_nesting(&scene_id, kind, at)?;
+                self.check_nesting(&scene_id, &source_id, at)?;
                 let transform = match (transform, geometry) {
                     (Some(_), Some(_)) => {
                         return Err(invalid(
@@ -1006,10 +1047,10 @@ impl Collection {
             }
             Edit::ItemSetSource { item_id, source_id } => {
                 let scene_id = self.existing_item(&item_id)?.scene_id.clone();
-                let Some(Source { kind, .. }) = self.sources.get(&source_id) else {
+                if !self.sources.contains_key(&source_id) {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
-                };
-                self.check_nesting(&scene_id, kind, at)?;
+                }
+                self.check_nesting(&scene_id, &source_id, at)?;
                 let item = self.existing_item(&item_id)?;
                 let old = std::mem::replace(&mut item.source_id, source_id);
                 vec![Edit::ItemSetSource {
@@ -1341,18 +1382,13 @@ impl Collection {
         let to = self.existing_scene(&scene_id)?;
         let slots = self.scenes[to].items.len() + usize::from(to != from);
         let to_index = check_index(index, slots, at, "positions in the scene")?;
-        if let Some(Source {
-            kind: SourceKind::Scene { scene_id: nested },
-            ..
-        }) = self.sources.get(&source_id)
-            && self.contains(nested, &scene_id)
-        {
+        if let Some(cycle) = self.nesting_cycle(&scene_id, &source_id) {
             return Err(invalid(
                 at,
                 "scene_id",
                 format!(
                     "moving item `{item_id}` (source `{source_id}`) into scene `{scene_id}` \
-                     would create a cycle"
+                     would create a cycle: {cycle}"
                 ),
             ));
         }
@@ -1483,43 +1519,75 @@ impl Collection {
             .collect()
     }
 
-    /// Rejects placing a source of `kind` in scene `scene_id` (`item.add`,
-    /// `item.set_source`) if the scene would then contain itself.
+    /// Rejects placing `source_id` in scene `scene_id` (`item.add`, `item.set_source`)
+    /// if the scene would then contain itself, naming the cycle as `jstream-graph` does.
     fn check_nesting(
         &self,
         scene_id: &SceneId,
-        kind: &SourceKind,
+        source_id: &SourceId,
         at: usize,
     ) -> Result<(), ProtocolError> {
-        match kind {
-            SourceKind::Scene { scene_id: nested } if self.contains(nested, scene_id) => {
-                Err(invalid(
-                    at,
-                    "source_id",
-                    format!("placing scene `{nested}` in scene `{scene_id}` would create a cycle"),
-                ))
-            }
-            _ => Ok(()),
+        match self.nesting_cycle(scene_id, source_id) {
+            Some(cycle) => Err(invalid(
+                at,
+                "source_id",
+                format!(
+                    "placing source `{source_id}` in scene `{scene_id}` would create a cycle: {cycle}"
+                ),
+            )),
+            None => Ok(()),
         }
     }
 
-    /// Whether scene `outer` is `inner` or shows it, directly or through nested scene
-    /// sources. The collection never holds a cycle, so the walk terminates.
-    fn contains(&self, outer: &SceneId, inner: &SceneId) -> bool {
+    /// If placing `source_id` in scene `scene_id` would make the scene contain itself,
+    /// the cycle as `jstream-graph` names it (`scene `a` -> source `sb` -> scene `b` ->
+    /// source `sa` -> scene `a``), else `None`. Like `jstream-graph`, it takes the first
+    /// path a depth-first walk finds, items in stacking order; it follows only `scene`
+    /// sources, not settings references.
+    fn nesting_cycle(&self, scene_id: &SceneId, source_id: &SourceId) -> Option<String> {
+        let Some(Source {
+            kind: SourceKind::Scene { scene_id: nested },
+            ..
+        }) = self.sources.get(source_id)
+        else {
+            return None;
+        };
+        let mut path = vec![
+            format!("scene `{scene_id}`"),
+            format!("source `{source_id}`"),
+        ];
+        self.scene_path(nested, scene_id, &mut path)
+            .then(|| path.join(" -> "))
+    }
+
+    /// Pushes the chain from scene `outer` to scene `inner` (both included) onto `path`
+    /// if `outer` is `inner` or shows it, directly or through nested scene sources. The
+    /// collection never holds a cycle, so the walk terminates.
+    fn scene_path(&self, outer: &SceneId, inner: &SceneId, path: &mut Vec<String>) -> bool {
+        path.push(format!("scene `{outer}`"));
         if outer == inner {
             return true;
         }
-        let Some(index) = self.scene_index(outer) else {
-            return false;
-        };
-        self.scenes[index].items.iter().any(|item_id| {
-            self.items
-                .get(item_id)
-                .and_then(|item| self.sources.get(&item.source_id))
-                .is_some_and(|source| {
-                    matches!(&source.kind, SourceKind::Scene { scene_id } if self.contains(scene_id, inner))
-                })
-        })
+        if let Some(index) = self.scene_index(outer) {
+            for item_id in &self.scenes[index].items {
+                let Some(item) = self.items.get(item_id) else {
+                    continue;
+                };
+                if let Some(Source {
+                    kind: SourceKind::Scene { scene_id },
+                    ..
+                }) = self.sources.get(&item.source_id)
+                {
+                    path.push(format!("source `{}`", item.source_id));
+                    if self.scene_path(scene_id, inner, path) {
+                        return true;
+                    }
+                    path.pop();
+                }
+            }
+        }
+        path.pop();
+        false
     }
 
     fn scene_index(&self, scene_id: &SceneId) -> Option<usize> {
@@ -2010,6 +2078,7 @@ mod tests {
         Edit::SceneCreate {
             scene_id: SceneId::new(scene),
             name: scene.to_uppercase(),
+            role: None,
         }
     }
 
@@ -2478,10 +2547,16 @@ mod tests {
                 direction: HistoryDirection::Undo
             })
         );
+        let mut programs = Vec::new();
         let causes: Vec<_> = drain(&mut events)
             .into_iter()
-            .map(|event| match event {
-                Event::StateChanged { rev, cause, .. } => (rev, cause),
+            .filter_map(|event| match event {
+                Event::StateChanged { rev, cause, .. } => Some((rev, cause)),
+                // Program follows undo and redo too (ADR-0030).
+                Event::StudioChanged { program_scene, .. } => {
+                    programs.push(program_scene);
+                    None
+                }
                 other => panic!("unexpected event: {other:?}"),
             })
             .collect();
@@ -2494,6 +2569,8 @@ mod tests {
                 (Rev(6), Some(HistoryDirection::Undo)),
             ]
         );
+        let b = Some(SceneId::new("b"));
+        assert_eq!(programs, [b.clone(), None, b, None]);
     }
 
     /// Each client undoes only its own steps, a new batch clears what it could redo, and
@@ -2702,6 +2779,74 @@ mod tests {
         assert!(sources.iter().all(|s| s.duplicated_from.is_none()));
     }
 
+    /// Cycle reasons name the cycle path in `jstream-graph`'s words, for `item.add` and
+    /// `item.move` alike (the cases of its `three_cycles_are_rejected_even_within_one_batch`
+    /// and `move_is_cycle_checked`).
+    #[test]
+    fn cycle_reasons_name_the_path_like_the_graph() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let scene_source = |source: &str, scene: &str| Edit::SourceCreate {
+            source_id: SourceId::new(source),
+            name: source.to_uppercase(),
+            kind: SourceKind::Scene {
+                scene_id: SceneId::new(scene),
+            },
+            settings: Default::default(),
+            duplicated_from: None,
+        };
+        let edits = |edits: Vec<Edit>| Batch {
+            edits,
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        let setup = edits(vec![
+            create("a"),
+            create("b"),
+            create("c"),
+            scene_source("sa", "a"),
+            scene_source("sb", "b"),
+            scene_source("sc", "c"),
+        ]);
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let rejected = |rejected: Batch| match batch(&*control, rejected) {
+            Err(ControlError::Protocol(wire)) => match wire.error {
+                ProtocolError::InvalidArgument { field, reason, .. } => (field, reason),
+                other => panic!("expected invalid_argument, got {other:?}"),
+            },
+            other => panic!("expected an error, got {other:?}"),
+        };
+        assert_eq!(
+            rejected(edits(vec![
+                add("a", "ab", "sb"),
+                add("b", "bc", "sc"),
+                add("c", "ca", "sa"),
+            ])),
+            (
+                "edits.2.source_id".to_owned(),
+                "placing source `sa` in scene `c` would create a cycle: scene `c` -> source `sa` \
+                 -> scene `a` -> source `sb` -> scene `b` -> source `sc` -> scene `c`"
+                    .to_owned()
+            )
+        );
+        let setup = edits(vec![add("a", "ab", "sb"), add("c", "ca", "sa")]);
+        assert_eq!(batch(&*control, setup), Ok(Rev(2)));
+        let mv = Edit::ItemMove {
+            item_id: ItemId::new("ca"),
+            scene_id: SceneId::new("b"),
+            index: 0,
+        };
+        assert_eq!(
+            rejected(edits(vec![mv])),
+            (
+                "edits.0.scene_id".to_owned(),
+                "moving item `ca` (source `sa`) into scene `b` would create a cycle: scene `b` \
+                 -> source `sa` -> scene `a` -> source `sb` -> scene `b`"
+                    .to_owned()
+            )
+        );
+    }
+
     /// `item.set_source` keeps the item and is cycle checked like `item.add`.
     #[test]
     fn set_source_retargets_an_item_without_a_cycle() {
@@ -2803,6 +2948,7 @@ mod tests {
             rejected(Edit::SceneCreate {
                 scene_id: SceneId::new(""),
                 name: "x".into(),
+                role: None,
             }),
             Some(ProtocolError::invalid_argument(
                 "edits.0.scene_id",
@@ -3149,7 +3295,8 @@ mod tests {
             poll_event(&mut leaving_events, Waker::noop()),
             Poll::Ready(None)
         );
-        assert_eq!(drain(&mut staying_events).len(), 2);
+        // The unknown event, `state.changed`, and `studio.changed` for the first scene.
+        assert_eq!(drain(&mut staying_events).len(), 3);
     }
 
     #[test]
@@ -3219,7 +3366,8 @@ mod tests {
         assert_eq!(batch(&*control, Batch::single(create("b"))), Ok(Rev(2)));
         assert_eq!(batch(&*control, keyed.clone()), Ok(Rev(1)));
         assert_eq!(engine.rev(), Rev(2));
-        assert_eq!(drain(&mut events).len(), 2, "a retry emits nothing");
+        // Two `state.changed`, and `studio.changed` for the first scene.
+        assert_eq!(drain(&mut events).len(), 3, "a retry emits nothing");
         // Keys are per client: another client's identical key is a new batch.
         let other = connected(&engine);
         let error = batch(&*other, keyed).expect_err("scene a exists");
@@ -3277,8 +3425,13 @@ mod tests {
             Event::StateChanged {
                 rev: Rev(1),
                 client_id: ClientId::new("mock_2"),
-                request_id: Some(response.id),
+                request_id: Some(response.id.clone()),
                 cause: None,
+            },
+            Event::StudioChanged {
+                program_scene: Some(SceneId::new("a")),
+                client_id: ClientId::new("mock_2"),
+                request_id: Some(response.id),
             },
             changed(OutputState::Starting),
             changed(OutputState::Active),

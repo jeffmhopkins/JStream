@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:09aba095c77b4b2f", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review N6: Tests paragraph rewrapped, no wording change; rest re-read, holds" }
+verified = { hash = "b3:ac15a26828d08135", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Assets paragraph now states hard links inside the root are part of the trusted-root assumption (issue 220); checked against AssetRoots::read's dev/ino check in source.rs, which can't distinguish a hard link from its target" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -136,7 +136,11 @@ is walked from the root and each folder on it is held open without delete sharin
 which stops it being renamed or replaced until the file is open; one that has become a
 link (a symlink, junction or other name-surrogate reparse point) is refused, while a
 OneDrive placeholder or dedup file, also a reparse point, is read. The root folder
-itself is the host's configuration and is trusted.
+itself is the host's configuration and is trusted, and so is what is in it: a hard link
+inside the root to a file outside is read, because the link and its target are the same
+file and neither check can tell them apart. Making one needs write access inside the
+root, and refusing every file with more than one link would also refuse deduplicated
+files.
 Errors name an asset by the root and path its setting holds, never by the host path
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). A missing or
 undecodable file is an error from `create`, never from the edit that set it.

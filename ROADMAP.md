@@ -102,11 +102,11 @@ virtual camera, then goes live on YouTube, all without a GUI.
 <a id="m2"></a>
 ## M2: UI
 <!-- @section
-depends_on = ["docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:b0200407002e63d1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Transitions bullet now says Cut, Fade and Move are the first transition kinds with descriptors and settings (ADR-0037); M2 scope otherwise unchanged and still consistent with ADR-0002's web UI" }
+depends_on = ["docs/adr/0045-leptos-web-ui.md"]
+verified = { hash = "b3:86e4c1f1ce342936", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: M2's first bullet now says Leptos is confirmed by ADR-0045 (which supersedes ADR-0002 and keeps its web-UI decision); depends_on moved to ADR-0045; rest of M2 unchanged" }
 -->
 
-- Confirm Leptos, or supersede [ADR-0002](docs/adr/0002-web-ui-everywhere.md).
+- Leptos confirmed ([ADR-0045](docs/adr/0045-leptos-web-ui.md)).
 - `jstream-ui`: scenes, sources, properties, mixer, outputs.
 - Canvas editing: **drag to place**, resize, rotate and **crop by dragging** handles
   (Alt-drag crop, OBS style), snapping, multi-select, and **add existing** versus
