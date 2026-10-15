@@ -4,6 +4,7 @@
 //! `jstream-control`'s mock engine.
 
 mod audio;
+mod audio_routing;
 mod collection;
 mod gpu_capture;
 mod history;
@@ -16,7 +17,8 @@ use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, Hello,
     IdempotencyKey, ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError,
-    ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SourceId, SourceKind, parity,
+    ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole, SourceId, SourceKind,
+    parity,
 };
 use std::future::Future;
 use std::pin::pin;
@@ -134,6 +136,21 @@ fn switch_call(scene: &str) -> Call {
     }
 }
 
+fn move_call(item: &str, scene: &str) -> Call {
+    Call::Batch(Batch::single(Edit::ItemMove {
+        item_id: ItemId::new(item),
+        scene_id: SceneId::new(scene),
+        index: 0,
+    }))
+}
+
+fn role_call(scene: &str, role: SceneRole) -> Call {
+    Call::Batch(Batch::single(Edit::SceneSetRole {
+        scene_id: SceneId::new(scene),
+        role,
+    }))
+}
+
 fn code(error: &ControlError) -> Option<&'static str> {
     error.protocol().map(ProtocolError::code)
 }
@@ -146,6 +163,12 @@ fn scene_ids(control: &dyn Control) -> (Rev, Vec<String>) {
         ),
         other => panic!("not a scene list: {other:?}"),
     }
+}
+
+/// An engine that describes every kind of the parity fixture: the built-in ones, and
+/// `mic`, the fixture's audio kind, which is not a built-in kind.
+fn parity_engine() -> Engine {
+    Engine::new().with_extra_kinds(parity::kinds())
 }
 
 pub(crate) fn check_stale_expected_rev_is_rejected() {
@@ -412,7 +435,7 @@ fn kinds_are_described_and_settings_checked() {
 /// expects, the answers `jstream-graph` and the mock are held to.
 #[test]
 fn queries_match_the_parity_fixture() {
-    let engine = Engine::new().with_output(OutputId::new("rec"));
+    let engine = parity_engine().with_output(OutputId::new("rec"));
     let control = connected(&engine);
     assert_eq!(
         batch(&control, parity::collection()),
@@ -889,6 +912,29 @@ fn the_engine_answers_like_the_mock() {
         Call::Batch(Batch::single(webcam())),
         Call::Batch(Batch::single(create("a")).expecting(Rev(1))),
         Call::Batch(Batch::single(add("a", "i9", "webcam")).expecting(Rev(2))),
+        // Groups: `b` is a group placed in `a` through `i2`. Moving `i1` into it is
+        // undoable and redoable, moving `i2` into it would nest `b` in itself, a role is
+        // only a listing hint so `b` turns into a plain scene and back, and a missing
+        // item or scene is refused.
+        move_call("i1", "b"),
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Undo,
+        )),
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Redo,
+        )),
+        // After the redo, `i1` is in `b`.
+        Call::Query {
+            query: Query::ItemList {
+                scene_id: SceneId::new("b"),
+            },
+        },
+        move_call("i2", "b"),
+        move_call("ghost", "b"),
+        move_call("i3", "ghost"),
+        role_call("b", SceneRole::Scene),
+        role_call("b", SceneRole::Group),
+        role_call("ghost", SceneRole::Group),
         // The parity collection reorders `b` first, so `b` goes on program: switching to
         // `a` moves it, a second switch is a no-op, and deleting `a` below (`b` can't go
         // while `a` nests it) moves it back to `b`.
@@ -944,10 +990,12 @@ fn the_engine_answers_like_the_mock() {
         },
     ];
 
-    let engine = Engine::new().with_output(OutputId::new("yt"));
+    let engine = parity_engine().with_output(OutputId::new("yt"));
     let real = connected(&engine);
     let mut real_events = real.events();
-    let mock_engine = MockEngine::new().with_output(OutputId::new("yt"));
+    let mock_engine = MockEngine::new()
+        .with_kinds(parity::kinds())
+        .with_output(OutputId::new("yt"));
     let mock = mock_engine.connect();
     block_on(mock.hello(hello())).expect("mock handshake");
     let mut mock_events = mock.events();
@@ -1694,14 +1742,14 @@ pub(crate) fn one_gpu_test_at_a_time() -> MutexGuard<'static, ()> {
         .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
-/// The output states among the buffered events. `stats.tick` is skipped: the
-/// pipeline emits one about once a second and a final one when it stops.
+/// The output states among the buffered events. `stats.tick` and `meters.tick` are
+/// skipped: the pipeline emits them while it runs, and a final `stats.tick` when it stops.
 fn output_steps(events: &mut EventStream) -> Vec<OutputState> {
     drain(events)
         .into_iter()
         .filter_map(|event| match event {
             Event::OutputStateChanged { state, .. } => Some(state),
-            Event::StatsTick { .. } => None,
+            Event::StatsTick { .. } | Event::MetersTick { .. } => None,
             other => panic!("unexpected event {other:?}"),
         })
         .collect()
