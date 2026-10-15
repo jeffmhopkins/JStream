@@ -1,14 +1,15 @@
 //! `docs log`: a doc's or section's history, derived from git (docs/DOCS.md#history).
 //! Nothing about history is stored in the files: revisions are the first-parent commits
-//! that changed the normalized body, verifications and reviews are the commits that
-//! changed the `verified` or `reviewed` line.
+//! that changed the normalized body, verifications are the commits that changed the
+//! section's ledger entries (or, before ADR-0050, its inline `verified` line), and reviews
+//! are the commits that changed the `reviewed` line.
 
 use std::path::Path;
 use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
-use super::{hash, parse};
+use super::{hash, ledger, parse};
 
 /// A commit as `docs log` shows it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,9 +44,11 @@ pub(crate) struct Stamp {
 pub(crate) enum Change {
     /// The n-th change to the normalized body (the first is the target's creation).
     Revision(usize),
-    /// The `verified` (section) or `reviewed` (doc) line changed to this stamp.
+    /// The section was verified (its ledger entries or inline `verified` line), or the doc
+    /// reviewed (its `reviewed` line), with this stamp.
     Stamped(Stamp),
-    /// Only the stored hash changed, by and note kept (as `docs rehash` does).
+    /// The stamp changed without a new verification: only hashes changed, by and note
+    /// kept, as when `docs migrate` moved it to the ledger or a merge took main's entry.
     Restamped,
     /// The target no longer exists after this commit.
     Removed,
@@ -80,7 +83,10 @@ pub(crate) struct Log {
 #[derive(Debug, PartialEq, Eq)]
 struct State {
     body: Option<String>,
+    /// The inline `verified` (before ADR-0050) or `reviewed` stamp.
     stamp: Option<Stamp>,
+    /// The section's ledger entries (ADR-0050).
+    entries: Option<ledger::Stamp>,
 }
 
 fn git(root: &Path, args: &[&str]) -> Result<std::process::Output> {
@@ -117,7 +123,23 @@ fn state(path: &str, text: &str, anchor: Option<&str>) -> State {
     State {
         body: hash::body(&doc, anchor),
         stamp,
+        entries: None,
     }
+}
+
+/// What changed between two ledger stamps of a section: the `by` and `note` of the first
+/// changed or added entry that has them (`body` first, then by key), or `None` when no
+/// entry carries a new verification.
+fn ledger_stamp(prev: Option<&ledger::Stamp>, now: &ledger::Stamp) -> Option<Stamp> {
+    now.iter()
+        .filter(|(k, e)| prev.and_then(|p| p.get(*k)) != Some(*e))
+        .find_map(|(_, e)| {
+            Some(Stamp {
+                by: e.by.clone()?,
+                note: e.note.clone()?,
+                hash: None,
+            })
+        })
 }
 
 /// Folds successive states of the target into events. `states` is oldest first; `None`
@@ -128,11 +150,13 @@ fn events(states: Vec<(Commit, Option<State>)>) -> Vec<Event> {
     let mut prev = State {
         body: None,
         stamp: None,
+        entries: None,
     };
     for (commit, st) in states {
         let st = st.unwrap_or(State {
             body: None,
             stamp: None,
+            entries: None,
         });
         let mut push = |change| {
             out.push(Event {
@@ -156,6 +180,22 @@ fn events(states: Vec<(Commit, Option<State>)>) -> Vec<Event> {
                 _ => push(Change::Stamped(s.clone())),
             }
         }
+        if st.entries != prev.entries
+            && let Some(now) = &st.entries
+        {
+            // An entry carrying the inline stamp it replaced is a move, not a verification.
+            match ledger_stamp(prev.entries.as_ref(), now) {
+                Some(s)
+                    if !prev
+                        .stamp
+                        .as_ref()
+                        .is_some_and(|p| p.by == s.by && p.note == s.note) =>
+                {
+                    push(Change::Stamped(s));
+                }
+                _ => push(Change::Restamped),
+            }
+        }
         prev = st;
     }
     out
@@ -176,18 +216,19 @@ pub(crate) fn log(root: &Path, docs: &[parse::Doc], target: &str, rev: &str) -> 
     let id = doc.meta_str("id").unwrap_or(&doc.path);
     let name = anchor.map_or_else(|| id.to_owned(), |a| format!("{id}#{a}"));
 
-    let out = git(
-        root,
-        &[
-            "log",
-            "--first-parent",
-            "--reverse",
-            "--format=%H%x1f%ct%x1f%an%x1f%s%x1e",
-            rev,
-            "--",
-            &doc.path,
-        ],
-    )?;
+    let mut args = vec![
+        "log",
+        "--first-parent",
+        "--reverse",
+        "--format=%H%x1f%ct%x1f%an%x1f%s%x1e",
+        rev,
+        "--",
+        &doc.path,
+    ];
+    if anchor.is_some() {
+        args.push(ledger::PATH);
+    }
+    let out = git(root, &args)?;
     if !out.status.success() {
         bail!("`git log` failed: {}", String::from_utf8_lossy(&out.stderr));
     }
@@ -206,13 +247,23 @@ pub(crate) fn log(root: &Path, docs: &[parse::Doc], target: &str, rev: &str) -> 
             subject: subject.to_owned(),
         };
         let show = git(root, &["show", &format!("{sha}:{}", doc.path)])?;
-        let st = show.status.success().then(|| {
+        let mut st = show.status.success().then(|| {
             state(
                 &doc.path,
                 &String::from_utf8_lossy(&show.stdout).replace("\r\n", "\n"),
                 anchor,
             )
         });
+        if let (Some(st), Some(a)) = (&mut st, anchor) {
+            let show = git(root, &["show", &format!("{sha}:{}", ledger::PATH)])?;
+            // A ledger that doesn't parse at some commit shows no stamp there.
+            st.entries = show
+                .status
+                .success()
+                .then(|| ledger::Ledger::parse(&String::from_utf8_lossy(&show.stdout)).ok())
+                .flatten()
+                .and_then(|mut l| l.sections.remove(&format!("{id}#{a}")));
+        }
         states.push((commit, st));
     }
     let events = events(states);
@@ -286,7 +337,7 @@ pub(crate) fn render(log: &Log, now: i64) -> String {
                 last_ttl = Some(c.time);
                 format!("{stamp:<10}by {}: {}", st.by, st.note)
             }
-            Change::Restamped => "restamped hash only, by and note kept".to_owned(),
+            Change::Restamped => "restamped, no new verification".to_owned(),
             Change::Removed => format!("removed   {}: {}", c.author, c.subject),
         };
         let sha = c.sha.get(..9).unwrap_or(&c.sha);
@@ -341,6 +392,7 @@ mod tests {
                 note: note.into(),
                 hash: Some(h.into()),
             }),
+            entries: None,
         })
     }
 
@@ -414,6 +466,77 @@ mod tests {
                 (6, stamp("agent:y", "n2", "h3")),
                 (7, Change::Removed),
                 (9, Change::Revision(4)),
+            ]
+        );
+    }
+
+    /// ADR-0050: moving an inline stamp to the ledger is a restamp; a later verification is
+    /// the changed entry's by and note, and a change with no new by and note is a restamp.
+    #[test]
+    fn ledger_entries_fold_into_stamps() {
+        let entry = |h: &str, who: Option<(&str, &str)>| ledger::Entry {
+            hash: h.into(),
+            by: who.map(|w| w.0.into()),
+            note: who.map(|w| w.1.into()),
+        };
+        let with = |entries: &[(&str, ledger::Entry)]| {
+            let mut s = st(Some("A"), None).expect("invariant: some");
+            s.entries = Some(
+                entries
+                    .iter()
+                    .map(|(k, e)| ((*k).to_owned(), e.clone()))
+                    .collect(),
+            );
+            Some(s)
+        };
+        let moved = [
+            ("body", entry("h1", Some(("agent:x", "n1")))),
+            ("file:a", entry("h2", None)),
+        ];
+        let verified = [
+            ("body", entry("h1", Some(("agent:x", "n1")))),
+            ("file:a", entry("h3", Some(("agent:y", "n2")))),
+        ];
+        let merged = [
+            ("body", entry("h1", Some(("agent:x", "n1")))),
+            ("file:a", entry("h3", Some(("agent:y", "n2")))),
+            ("file:b", entry("h4", None)),
+        ];
+        let ev = events(vec![
+            (
+                commit(1, "add"),
+                st(Some("A"), Some(("agent:x", "n1", "h0"))),
+            ),
+            (commit(2, "migrate"), with(&moved)),
+            (commit(3, "verify"), with(&verified)),
+            (commit(4, "merge"), with(&merged)),
+        ]);
+        let got: Vec<(i64, Change)> = ev
+            .into_iter()
+            .map(|e| (e.commit.time / 86_400, e.change))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                (1, Change::Revision(1)),
+                (
+                    1,
+                    Change::Stamped(Stamp {
+                        by: "agent:x".into(),
+                        note: "n1".into(),
+                        hash: Some("h0".into())
+                    })
+                ),
+                (2, Change::Restamped),
+                (
+                    3,
+                    Change::Stamped(Stamp {
+                        by: "agent:y".into(),
+                        note: "n2".into(),
+                        hash: None
+                    })
+                ),
+                (4, Change::Restamped),
             ]
         );
     }

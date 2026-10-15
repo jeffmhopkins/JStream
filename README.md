@@ -251,7 +251,6 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token \
 ## Platforms
 <!-- @section
 depends_on = ["docs/adr/0008-windows-support-policy.md"]
-verified = { hash = "b3:174bb43ca018529b", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Linux row's link moved from superseded ADR-0003 to ADR-0031, which restates the Linux codec-path deferral unchanged; Windows fact marker and ADR-0008 policy, macOS row unchanged" }
 -->
 
 | Platform | Status | Support |

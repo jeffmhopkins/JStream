@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:de801bc5855b5714", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286 differential groups/roles, #297): re-read main's purpose text incl. Tests bullet's differential run; this PR's live.rs set_clock fix and tests/sources.rs clock-swap test fit the Live sources and Tests bullets; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -162,7 +161,6 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:67ca169f728f9e96", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286, #297): re-read main's design text (differential script paragraph) beside this PR's clock-swap sentence in the live-sources paragraph; different paragraphs; swap sentence still matches LiveSources::set_clock; holds" }
 -->
 
 ### Engine and sessions
@@ -949,7 +947,6 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:3f20bc1b0c367a9b", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at e7e7433 (#272 CLAP filter contract and mixer side, #266 canvas styles); stamp-only conflicts; re-read main's text beside this PR's virtual-camera text; no jstream-core code changed by the merge; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

@@ -1,10 +1,11 @@
-//! Hash-bound verification (docs/DOCS.md#verification). A section's hash covers:
+//! Hash-bound verification (docs/DOCS.md#verification). A section has one hash per input,
+//! each stamped separately in the ledger (ADR-0050):
 //! 1. its own body text, normalized (metadata blocks removed, LF endings, trailing
 //!    whitespace stripped, surrounding blank lines trimmed);
-//! 2. every tracked file its `covers` globs match, in sorted order: path plus content hash;
-//! 3. every `depends_on` target: the reference plus a hash of the target's normalized body
-//!    (for a whole ADR, without its generated `adr-status` banner), or of one table row for
-//!    a `path#anchor/<key>` reference.
+//! 2. every tracked file its `covers` globs match, by content hash (never the ledger);
+//! 3. every `depends_on` target: a hash of the target's normalized body (for a whole ADR,
+//!    without its generated `adr-status` banner), or of one table row for a
+//!    `path#anchor/<key>` reference.
 //!
 //! Wherever Markdown is hashed, well-formed `@doc`, `@section` and `@rule` blocks are
 //! removed first, so recording a verification never stales another section (ADR-0039).
@@ -27,26 +28,6 @@ use super::parse::Doc;
 /// Prefix of real hashes. Anything else (e.g. the old `"bootstrap"` placeholder) is stale.
 pub(crate) const PREFIX: &str = "b3:";
 
-/// How a hash is computed. Only `docs rehash` uses anything but [`Mode::CURRENT`], to tell
-/// which stored hashes were fresh before ADR-0039.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Mode {
-    /// Remove well-formed metadata blocks from hashed Markdown (ADR-0039). `false` is the
-    /// rule before ADR-0039.
-    pub(crate) strip_metadata: bool,
-    /// Hash each row reference `path#anchor/<key>` as its whole section `path#anchor`, as
-    /// it was before being narrowed to the row.
-    pub(crate) widen_rows: bool,
-}
-
-impl Mode {
-    /// The rule `docs check` and `docs verify` apply.
-    pub(crate) const CURRENT: Self = Self {
-        strip_metadata: true,
-        widen_rows: false,
-    };
-}
-
 /// Normalizes a block of lines: trailing whitespace stripped, outer blank lines dropped.
 fn normalize(lines: &[&str]) -> String {
     let trimmed: Vec<&str> = lines.iter().map(|l| l.trim_end()).collect();
@@ -66,12 +47,6 @@ fn normalize(lines: &[&str]) -> String {
 /// generated `adr-status` banner, which is not ADR content (ADR-0038), so a status change
 /// doesn't stale its dependents.
 pub(crate) fn body(doc: &Doc, anchor: Option<&str>) -> Option<String> {
-    body_by(doc, anchor, true)
-}
-
-/// [`body`]; with `strip = false`, nested metadata blocks are kept (the rule before
-/// ADR-0039).
-fn body_by(doc: &Doc, anchor: Option<&str>, strip: bool) -> Option<String> {
     let lines: Vec<&str> = doc.text.lines().collect();
     let (start, end) = match anchor {
         None => (doc.content_start, lines.len()),
@@ -86,7 +61,7 @@ fn body_by(doc: &Doc, anchor: Option<&str>, strip: bool) -> Option<String> {
     let (start, end) = (start.min(lines.len()), end.min(lines.len()));
     let meta = doc.metadata_lines();
     let kept: Vec<&str> = (start..end)
-        .filter(|&k| !strip || !meta[k])
+        .filter(|&k| !meta[k])
         .map(|k| lines[k])
         .collect();
     if anchor.is_none() && doc.is_adr() {
@@ -108,11 +83,7 @@ pub(crate) enum RowError {
 /// The table row of section `anchor` that has a cell consisting exactly of `` `key` ``
 /// (ADR-0039), with trailing whitespace stripped. Exactly one row must match.
 pub(crate) fn row(doc: &Doc, anchor: &str, key: &str) -> Result<String, RowError> {
-    row_by(doc, anchor, key, true)
-}
-
-fn row_by(doc: &Doc, anchor: &str, key: &str, strip: bool) -> Result<String, RowError> {
-    let body = body_by(doc, Some(anchor), strip).ok_or(RowError::NoSection)?;
+    let body = body(doc, Some(anchor)).ok_or(RowError::NoSection)?;
     let cell = format!("`{key}`");
     let mut rows = body.lines().filter(|l| {
         let t = l.trim();
@@ -153,11 +124,11 @@ fn strip_metadata(path: &str, text: &str) -> String {
         .collect()
 }
 
-/// File content as hashed: CRLF folded to LF; with `strip`, Markdown metadata blocks
-/// removed; workflow `uses:` pins reduced to the action.
-fn file_content(path: &str, bytes: &[u8], strip: bool) -> Vec<u8> {
+/// File content as hashed: CRLF folded to LF; Markdown metadata blocks removed; workflow
+/// `uses:` pins reduced to the action.
+fn file_content(path: &str, bytes: &[u8]) -> Vec<u8> {
     let mut text = String::from_utf8_lossy(bytes).replace("\r\n", "\n");
-    if strip && path.ends_with(".md") {
+    if path.ends_with(".md") {
         text = strip_metadata(path, &text);
     }
     if !path.starts_with(".github/workflows/") {
@@ -336,6 +307,8 @@ impl<'a> Files<'a> {
         Ok(self
             .paths
             .iter()
+            // The ledger holds the stamps, so no section can cover it (ADR-0050).
+            .filter(|p| p.as_str() != super::ledger::PATH)
             .filter_map(|p| {
                 let hits: Vec<bool> = entries
                     .iter()
@@ -347,10 +320,10 @@ impl<'a> Files<'a> {
             .collect())
     }
 
-    fn content_hash(&self, path: &str, strip: bool) -> Result<String> {
+    fn content_hash(&self, path: &str) -> Result<String> {
         let bytes =
             std::fs::read(self.root.join(path)).with_context(|| format!("reading {path}"))?;
-        Ok(short(&blake3::hash(&file_content(path, &bytes, strip))))
+        Ok(short(&blake3::hash(&file_content(path, &bytes))))
     }
 
     /// The hash of `path`'s jstream view, or `None` when it has none (ADR-0042).
@@ -362,29 +335,55 @@ impl<'a> Files<'a> {
     }
 }
 
-/// Computes the hash for a section from its body, covers and depends_on.
-pub(crate) fn section_hash(
-    doc: &Doc,
-    anchor: &str,
-    covers: &[String],
-    depends_on: &[String],
-    files: &Files<'_>,
-    by_path: &BTreeMap<&str, &Doc>,
-) -> Result<String> {
-    section_hash_by(
-        Mode::CURRENT,
-        doc,
-        anchor,
-        covers,
-        depends_on,
-        files,
-        by_path,
-    )
+/// The ledger key of a section's own text.
+pub(crate) const BODY: &str = "body";
+
+/// The text a `depends_on` entry names: a section's or rule's normalized body, one table
+/// row for `path#anchor/<key>`, or a whole doc's body. `None` when it doesn't resolve.
+fn dep_text(dep: &str, by_path: &BTreeMap<&str, &Doc>) -> Option<String> {
+    let (file, section, key) = split_dep(dep);
+    let target = by_path.get(file)?;
+    match (section, key) {
+        (Some(s), Some(k)) => row(target, s, k).ok(),
+        _ => body(target, section),
+    }
 }
 
-/// [`section_hash`] under `mode`.
-pub(crate) fn section_hash_by(
-    mode: Mode,
+/// A section's inputs, each with its hash, keyed as in the ledger (ADR-0050): `body` for
+/// its own text, `file:<path>` for each tracked file its `covers` match
+/// (`file:<path>#jstream-meta` when hashed as its jstream view), and `dep:<reference>` for
+/// each `depends_on` target. The section is fresh when the ledger records exactly these.
+pub(crate) fn inputs(
+    doc: &Doc,
+    anchor: &str,
+    covers: &[String],
+    depends_on: &[String],
+    files: &Files<'_>,
+    by_path: &BTreeMap<&str, &Doc>,
+) -> Result<BTreeMap<String, String>> {
+    let tag = |h: String| format!("{PREFIX}{h}");
+    let mut out = BTreeMap::new();
+    let text = body(doc, Some(anchor)).unwrap_or_default();
+    out.insert(BODY.to_owned(), tag(short(&blake3::hash(text.as_bytes()))));
+    for (path, view) in files.matching_views(covers)? {
+        match view.then(|| files.view_hash(path)).transpose()?.flatten() {
+            Some(v) => out.insert(format!("file:{path}#{JSTREAM_META}"), tag(v)),
+            None => out.insert(format!("file:{path}"), tag(files.content_hash(path)?)),
+        };
+    }
+    for dep in depends_on {
+        let text = dep_text(dep, by_path).unwrap_or_default();
+        out.insert(
+            format!("dep:{dep}"),
+            tag(short(&blake3::hash(text.as_bytes()))),
+        );
+    }
+    Ok(out)
+}
+
+/// The single hash an inline `verified` stamp held before ADR-0050 moved stamps to the
+/// ledger. Only `docs migrate` uses it, to tell which inline stamps still held.
+pub(crate) fn legacy_section_hash(
     doc: &Doc,
     anchor: &str,
     covers: &[String],
@@ -392,14 +391,9 @@ pub(crate) fn section_hash_by(
     files: &Files<'_>,
     by_path: &BTreeMap<&str, &Doc>,
 ) -> Result<String> {
-    let strip = mode.strip_metadata;
     let mut h = blake3::Hasher::new();
     h.update(b"jstream-docs-v1\0body\0");
-    h.update(
-        body_by(doc, Some(anchor), strip)
-            .unwrap_or_default()
-            .as_bytes(),
-    );
+    h.update(body(doc, Some(anchor)).unwrap_or_default().as_bytes());
     for (path, view) in files.matching_views(covers)? {
         h.update(b"\0file\0");
         h.update(path.as_bytes());
@@ -412,30 +406,16 @@ pub(crate) fn section_hash_by(
             }
             None => {
                 h.update(b"\0");
-                h.update(files.content_hash(path, strip)?.as_bytes());
+                h.update(files.content_hash(path)?.as_bytes());
             }
         }
     }
     for dep in depends_on {
-        let (file, section, key) = split_dep(dep);
-        let (reference, target) = match (section, key) {
-            (Some(s), Some(_)) if mode.widen_rows => (
-                format!("{file}#{s}"),
-                by_path.get(file).and_then(|t| body_by(t, Some(s), strip)),
-            ),
-            (Some(s), Some(k)) => (
-                dep.clone(),
-                by_path.get(file).and_then(|t| row_by(t, s, k, strip).ok()),
-            ),
-            _ => (
-                dep.clone(),
-                by_path.get(file).and_then(|t| body_by(t, section, strip)),
-            ),
-        };
         h.update(b"\0dep\0");
-        h.update(reference.as_bytes());
+        h.update(dep.as_bytes());
         h.update(b"\0");
-        h.update(short(&blake3::hash(target.unwrap_or_default().as_bytes())).as_bytes());
+        let text = dep_text(dep, by_path).unwrap_or_default();
+        h.update(short(&blake3::hash(text.as_bytes())).as_bytes());
     }
     Ok(format!("{PREFIX}{}", short(&h.finalize())))
 }
@@ -532,16 +512,14 @@ mod tests {
         let a = file_content(
             ".github/workflows/x.yml",
             b"- uses: actions/checkout@aaaa # v7\nrun: x\r\n",
-            true,
         );
         let b = file_content(
             ".github/workflows/x.yml",
             b"- uses: actions/checkout@bbbb # v8\nrun: x\n",
-            true,
         );
         assert_eq!(a, b);
-        let c = file_content("src/x.rs", b"uses: a@1", true);
-        let d = file_content("src/x.rs", b"uses: a@2", true);
+        let c = file_content("src/x.rs", b"uses: a@1");
+        let d = file_content("src/x.rs", b"uses: a@2");
         assert_ne!(c, d);
     }
 
@@ -571,7 +549,7 @@ mod tests {
     /// byte for byte.
     #[test]
     fn markdown_metadata_is_not_hashed_but_content_is() {
-        let hash = |t: &str| file_content("d/T.md", t.as_bytes(), true);
+        let hash = |t: &str| file_content("d/T.md", t.as_bytes());
         let base = hash(MD);
         assert_eq!(
             String::from_utf8(base.clone()).unwrap(),
@@ -586,11 +564,6 @@ mod tests {
         }
         assert_ne!(hash(&MD.replace("Alpha.", "Alpha!")), base);
         assert_ne!(hash(&MD.replace("Rule text.", "Rule text!")), base);
-        // The legacy rule hashes the file whole.
-        assert_ne!(
-            file_content("d/T.md", MD.replace("first", "second").as_bytes(), false),
-            file_content("d/T.md", MD.as_bytes(), false)
-        );
     }
 
     /// ADR-0039: text in anything that is not a well-formed, parser-recognised metadata
@@ -598,7 +571,7 @@ mod tests {
     /// code fence, one whose TOML does not parse.
     #[test]
     fn fake_or_malformed_metadata_still_counts() {
-        let hash = |t: &str| file_content("d/T.md", t.as_bytes(), true);
+        let hash = |t: &str| file_content("d/T.md", t.as_bytes());
         let fakes = [
             // Not right after a heading.
             "\nProse.\n<!-- @section\nhidden = \"X\"\n-->\n",

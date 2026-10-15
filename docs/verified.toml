@@ -1,0 +1,2073 @@
+# Verification stamps: one entry per section input (docs/DOCS.md#verification, ADR-0050).
+# Written by `cargo xtask docs verify`; never edit by hand. The blank line after each entry
+# lets parallel PRs that re-verify different inputs of a section merge without a conflict.
+
+["ARCH#browser-source"]
+
+"body" = { hash = "b3:3a9719585d49403b", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review: sandbox is required where supported (bootstrap layout may replace the helper, or a superseding ADR), zip-size estimate marked unchecked and listed as open, pts wording and all three packet counts (2999/3000/2999) re-checked against the run JSON" }
+
+"dep:docs/adr/0004-wgpu-with-native-interop.md" = { hash = "b3:4dd2ed0785be217e" }
+
+"dep:docs/adr/0021-browser-source.md" = { hash = "b3:64d21faa19974bc3" }
+
+["ARCH#crate-map"]
+
+"body" = { hash = "b3:7c383fd8b20f53d3", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: re-read; added the jstream-ui-e2e row (layer 6, test-only harness under crates/jstream-ui/tests/e2e/mock-daemon, depends on control+server, no unsafe); lint-deps passes" }
+
+"dep:docs/RULES.md#R-ARCH-002" = { hash = "b3:a84629b45a0a2be7" }
+
+"dep:docs/RULES.md#R-ARCH-003" = { hash = "b3:b35ca6baf4367119" }
+
+"file:apps/jstream-cli/Cargo.toml#jstream-meta" = { hash = "b3:dbacb2dd7907964d" }
+
+"file:apps/jstream-daemon/Cargo.toml#jstream-meta" = { hash = "b3:8bc8c6ff8e57508b" }
+
+"file:apps/jstream-desktop/Cargo.toml#jstream-meta" = { hash = "b3:f7c235327227029b" }
+
+"file:crates/jstream-audio/Cargo.toml#jstream-meta" = { hash = "b3:9ffc9ae352b160a3" }
+
+"file:crates/jstream-control/Cargo.toml#jstream-meta" = { hash = "b3:e5fef95eb12cb895" }
+
+"file:crates/jstream-core/Cargo.toml#jstream-meta" = { hash = "b3:a8d2d95e5d1a7c3b" }
+
+"file:crates/jstream-encode/Cargo.toml#jstream-meta" = { hash = "b3:8b934df550ca875e" }
+
+"file:crates/jstream-graph/Cargo.toml#jstream-meta" = { hash = "b3:a6a6614d2ca7f468" }
+
+"file:crates/jstream-mcp/Cargo.toml#jstream-meta" = { hash = "b3:be88d569064d966b" }
+
+"file:crates/jstream-media/Cargo.toml#jstream-meta" = { hash = "b3:ac31564403d9a839" }
+
+"file:crates/jstream-mux/Cargo.toml#jstream-meta" = { hash = "b3:24f40f915476b541" }
+
+"file:crates/jstream-outputs/Cargo.toml#jstream-meta" = { hash = "b3:2bdf736999b99a35" }
+
+"file:crates/jstream-platform-windows/Cargo.toml#jstream-meta" = { hash = "b3:70046124f5cf9949" }
+
+"file:crates/jstream-platform/Cargo.toml#jstream-meta" = { hash = "b3:0879d91d9a46f83c" }
+
+"file:crates/jstream-plugin-proto/Cargo.toml#jstream-meta" = { hash = "b3:1ff7a5731ca92f93" }
+
+"file:crates/jstream-protocol/Cargo.toml#jstream-meta" = { hash = "b3:be2cb77094d2d1e3" }
+
+"file:crates/jstream-render/Cargo.toml#jstream-meta" = { hash = "b3:45a0daff6f397ade" }
+
+"file:crates/jstream-server/Cargo.toml#jstream-meta" = { hash = "b3:419939266a782736" }
+
+"file:crates/jstream-sources/Cargo.toml#jstream-meta" = { hash = "b3:52e89dfb02c9534f" }
+
+"file:crates/jstream-types/Cargo.toml#jstream-meta" = { hash = "b3:e7dbb93ef26bf6b8" }
+
+"file:crates/jstream-ui/Cargo.toml#jstream-meta" = { hash = "b3:d991949bd154b939" }
+
+"file:crates/jstream-ui/tests/e2e/mock-daemon/Cargo.toml#jstream-meta" = { hash = "b3:4e7bb49515c04b9f" }
+
+"file:crates/jstream-vcam-proto/Cargo.toml#jstream-meta" = { hash = "b3:504280e9852eb46f" }
+
+"file:crates/jstream-vcam-windows/Cargo.toml#jstream-meta" = { hash = "b3:24cef673281620f5" }
+
+"file:crates/jstream-youtube/Cargo.toml#jstream-meta" = { hash = "b3:dba3adb97afc2dd5" }
+
+["ARCH#data-model"]
+
+"body" = { hash = "b3:c2e6524561dc325b", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: Outputs list now includes VirtualCam (no settings, ignores its profile); Not-yet list drops VirtualCam, keeps YouTube; master/output chain note holds" }
+
+"dep:docs/adr/0022-item-transform-and-canvas.md" = { hash = "b3:af178dd41ff64ab0" }
+
+"dep:docs/adr/0023-placements-references-and-clones.md" = { hash = "b3:ac93d325312b1eb3" }
+
+"dep:docs/adr/0024-scene-structure.md" = { hash = "b3:47bc0da49dc24556" }
+
+"dep:docs/adr/0025-typed-settings-kind-descriptors.md" = { hash = "b3:b655210653447199" }
+
+"dep:docs/adr/0027-program-master-and-output-chains.md" = { hash = "b3:af6388c6d1da14e9" }
+
+"dep:docs/adr/0028-audio-model-v2.md" = { hash = "b3:fcb0bf8c19bab746" }
+
+"dep:docs/adr/0030-studio-state-and-scene-switching.md" = { hash = "b3:13ed63efdd45f336" }
+
+"dep:docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md" = { hash = "b3:b5397b5d6407b040" }
+
+"dep:docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md" = { hash = "b3:d63ee0e9a7bb859a" }
+
+"file:crates/jstream-graph/src/model/mod.rs" = { hash = "b3:bb4f30e58d926162" }
+
+["ARCH#gpu-pipeline"]
+
+"body" = { hash = "b3:6412cfa1dc90c301", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 fit modes built) into E1: dropped 'fit modes' from Still outside; E1's render_into/ResourceCache sentence and B3's geometry text both hold" }
+
+"dep:docs/adr/0004-wgpu-with-native-interop.md" = { hash = "b3:4dd2ed0785be217e" }
+
+"file:crates/jstream-platform-windows/src/gpu/capture.rs" = { hash = "b3:e413bab2e84c75e1" }
+
+"file:crates/jstream-platform-windows/src/gpu/d3d.rs" = { hash = "b3:74636e2565276acc" }
+
+"file:crates/jstream-platform-windows/src/gpu/mod.rs" = { hash = "b3:1f10a420e9f6a9bc" }
+
+"file:crates/jstream-render/Cargo.toml" = { hash = "b3:5a7c9b80875ea235" }
+
+"file:crates/jstream-render/README.md" = { hash = "b3:f719dde317481bce" }
+
+"file:crates/jstream-render/src/cache.rs" = { hash = "b3:071eeba73136670c" }
+
+"file:crates/jstream-render/src/color.rs" = { hash = "b3:5641b05dca77952a" }
+
+"file:crates/jstream-render/src/composite.wgsl" = { hash = "b3:ec3c05f2f0529e75" }
+
+"file:crates/jstream-render/src/compositor.rs" = { hash = "b3:bb5175d8f36e082d" }
+
+"file:crates/jstream-render/src/error.rs" = { hash = "b3:219665bab5be0284" }
+
+"file:crates/jstream-render/src/gpu.rs" = { hash = "b3:f1de9efc6510e1ea" }
+
+"file:crates/jstream-render/src/image.rs" = { hash = "b3:0edf4c378e3b8335" }
+
+"file:crates/jstream-render/src/lib.rs" = { hash = "b3:0ed7d39913b73022" }
+
+"file:crates/jstream-render/src/place.rs" = { hash = "b3:7b3daae7d1e65f73" }
+
+"file:crates/jstream-render/src/resolve.wgsl" = { hash = "b3:62fced90ebade4b5" }
+
+"file:crates/jstream-render/src/scene.rs" = { hash = "b3:50cf01aa0e35f171" }
+
+"file:crates/jstream-render/src/tests.rs" = { hash = "b3:eaa109533b8798d8" }
+
+["ARCH#mcp"]
+
+"body" = { hash = "b3:56a84beacedb36b2", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+
+"dep:docs/RULES.md#R-API-002" = { hash = "b3:8eea55b34b97d6a9" }
+
+"dep:docs/adr/0006-mcp-full-access.md" = { hash = "b3:fbe7c61707faa7bd" }
+
+"dep:docs/adr/0036-mcp-events-polling-tool.md" = { hash = "b3:528a4d728be121b6" }
+
+"file:crates/jstream-mcp/Cargo.toml" = { hash = "b3:a772352ba69e809b" }
+
+"file:crates/jstream-mcp/README.md" = { hash = "b3:0a70643fffaf7e11" }
+
+"file:crates/jstream-mcp/schema/tools.snap" = { hash = "b3:6ce7d22d0d32e466" }
+
+"file:crates/jstream-mcp/src/error.rs" = { hash = "b3:824842188b289238" }
+
+"file:crates/jstream-mcp/src/events.rs" = { hash = "b3:d87f0d9ba4bd6d36" }
+
+"file:crates/jstream-mcp/src/jsonrpc.rs" = { hash = "b3:5c306baedd4f5ddc" }
+
+"file:crates/jstream-mcp/src/lib.rs" = { hash = "b3:77d18110cc2318e2" }
+
+"file:crates/jstream-mcp/src/server.rs" = { hash = "b3:38834e7ab012f7ec" }
+
+"file:crates/jstream-mcp/src/stdio.rs" = { hash = "b3:c8ffb4cb6fdf8595" }
+
+"file:crates/jstream-mcp/src/tests.rs" = { hash = "b3:0280e1c33d9c5d66" }
+
+"file:crates/jstream-mcp/src/tools.rs" = { hash = "b3:28425808999cb795" }
+
+["ARCH#packaging"]
+
+"body" = { hash = "b3:1c343ec4bf85722c", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: the virtual camera bullet now says the daemon is the --register-vcam mode until the desktop app has it (the app exists but lacks that mode); rest unchanged" }
+
+"dep:docs/adr/0020-portable-windows-distribution.md" = { hash = "b3:febfe552adc09d5b" }
+
+["ARCH#persistence"]
+
+"body" = { hash = "b3:7ab4accbf98f6662", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: re-read; collection file saves a virtual_cam output as its bare kind (a_virtual_camera_round_trips); schema version unchanged; holds" }
+
+"dep:docs/RULES.md#R-API-003" = { hash = "b3:f17cde9b0d3da07c" }
+
+"dep:docs/RULES.md#R-SEC-001" = { hash = "b3:69c6131f3f1bd0fd" }
+
+"dep:docs/adr/0025-typed-settings-kind-descriptors.md" = { hash = "b3:b655210653447199" }
+
+"file:crates/jstream-graph/src/persist/fixtures/v1.json" = { hash = "b3:d0650af5fd5723f6" }
+
+"file:crates/jstream-graph/src/persist/mod.rs" = { hash = "b3:bab19879c528688b" }
+
+"file:crates/jstream-graph/src/persist/tests.rs" = { hash = "b3:16719bac96412a93" }
+
+["ARCH#principles"]
+
+"body" = { hash = "b3:5af84c5cc7c0a12d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited principle 8: listeners require a token and check Host, and Origin when present, matching R-SEC-002's new wording; other principles unchanged" }
+
+"dep:docs/adr/0001-library-first-engine.md" = { hash = "b3:7a1c016d1f87fdaf" }
+
+"dep:docs/adr/0013-command-model.md" = { hash = "b3:dfafd6bdd1057e8a" }
+
+"dep:docs/adr/0031-source-types-and-decoding-scope.md" = { hash = "b3:04b853b872d31424" }
+
+["ARCH#protocol"]
+
+"body" = { hash = "b3:360fbc5405febcf3", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+
+"dep:docs/adr/0006-mcp-full-access.md" = { hash = "b3:fbe7c61707faa7bd" }
+
+"dep:docs/adr/0013-command-model.md" = { hash = "b3:dfafd6bdd1057e8a" }
+
+"file:crates/jstream-control/Cargo.toml" = { hash = "b3:07915c072e50c894" }
+
+"file:crates/jstream-control/README.md" = { hash = "b3:79e5c90fd83afbe1" }
+
+"file:crates/jstream-control/src/control.rs" = { hash = "b3:e55527bc3d425ace" }
+
+"file:crates/jstream-control/src/error.rs" = { hash = "b3:50448c966c4de2f0" }
+
+"file:crates/jstream-control/src/lib.rs" = { hash = "b3:4f5eb7fab55f6c55" }
+
+"file:crates/jstream-control/src/mock.rs" = { hash = "b3:39387e007a68ab83" }
+
+"file:crates/jstream-control/src/ws.rs" = { hash = "b3:f37b52c47e4cc8a1" }
+
+"file:crates/jstream-control/src/ws_config.rs" = { hash = "b3:d7db1d06b04d10fc" }
+
+"file:crates/jstream-control/src/ws_web.rs" = { hash = "b3:edefe86e076ea4e3" }
+
+"file:crates/jstream-protocol/Cargo.toml" = { hash = "b3:7b1e34adc5bd9026" }
+
+"file:crates/jstream-protocol/README.md" = { hash = "b3:8b45b7d5f89d63c7" }
+
+"file:crates/jstream-protocol/schema/examples.snap" = { hash = "b3:ae97621dd6321b5a" }
+
+"file:crates/jstream-protocol/schema/protocol.snap" = { hash = "b3:7d0e84dd0b936271" }
+
+"file:crates/jstream-protocol/src/command.rs" = { hash = "b3:7afd907d558ee2b3" }
+
+"file:crates/jstream-protocol/src/encoder.rs" = { hash = "b3:241d371850f187f6" }
+
+"file:crates/jstream-protocol/src/envelope.rs" = { hash = "b3:63616c6985c48822" }
+
+"file:crates/jstream-protocol/src/error.rs" = { hash = "b3:5b68dbf625e4d783" }
+
+"file:crates/jstream-protocol/src/event.rs" = { hash = "b3:1731282165a924c2" }
+
+"file:crates/jstream-protocol/src/finite.rs" = { hash = "b3:5424eefb91ca4f05" }
+
+"file:crates/jstream-protocol/src/fixtures.rs" = { hash = "b3:19e3162fa96dfdb3" }
+
+"file:crates/jstream-protocol/src/geometry.rs" = { hash = "b3:91ec5275ab3c5e9f" }
+
+"file:crates/jstream-protocol/src/history.rs" = { hash = "b3:abc973f4355bada5" }
+
+"file:crates/jstream-protocol/src/id.rs" = { hash = "b3:f29ca7338086f3e2" }
+
+"file:crates/jstream-protocol/src/kind.rs" = { hash = "b3:9d53e1d6be49311f" }
+
+"file:crates/jstream-protocol/src/lib.rs" = { hash = "b3:1885a4d6a854ed6c" }
+
+"file:crates/jstream-protocol/src/output.rs" = { hash = "b3:489f2e86af7bf320" }
+
+"file:crates/jstream-protocol/src/parity.rs" = { hash = "b3:de043322eea1d501" }
+
+"file:crates/jstream-protocol/src/query.rs" = { hash = "b3:e2fab772da80649b" }
+
+"file:crates/jstream-protocol/src/schema.rs" = { hash = "b3:b48737a114c2fced" }
+
+"file:crates/jstream-protocol/src/settings.rs" = { hash = "b3:e9b7b4a0b8273b20" }
+
+"file:crates/jstream-protocol/src/version.rs" = { hash = "b3:9b7c4db35e5c7e3e" }
+
+"file:crates/jstream-server/Cargo.toml" = { hash = "b3:e9241efe87e7e719" }
+
+"file:crates/jstream-server/README.md" = { hash = "b3:2b4017ca054d9156" }
+
+"file:crates/jstream-server/src/config.rs" = { hash = "b3:0dfbb49d28e2b62a" }
+
+"file:crates/jstream-server/src/error.rs" = { hash = "b3:78515d947c87dfd0" }
+
+"file:crates/jstream-server/src/gate.rs" = { hash = "b3:aa923cddbd9a536f" }
+
+"file:crates/jstream-server/src/lib.rs" = { hash = "b3:ae3b3e60a2f4de54" }
+
+"file:crates/jstream-server/src/listener.rs" = { hash = "b3:ca2a076f73f966ae" }
+
+"file:crates/jstream-server/src/mcp.rs" = { hash = "b3:05057d7979293830" }
+
+"file:crates/jstream-server/src/session.rs" = { hash = "b3:1ab10d4f98ace68a" }
+
+"file:crates/jstream-server/src/tests.rs" = { hash = "b3:933d0c4ef1b02ecc" }
+
+"file:crates/jstream-server/src/ui.rs" = { hash = "b3:4a9ea9ae5014f95c" }
+
+["ARCH#repo-layout"]
+
+"body" = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Re-read against main.rs, which only adds docs merge-main to the usage list: the xtask line still names docs among its commands, so the layout holds" }
+
+"file:xtask/src/main.rs" = { hash = "b3:8dc9a0c76e46621c" }
+
+["ARCH#shape"]
+
+"body" = { hash = "b3:3053310b2b1a2656", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Crate-map daemon row (N3) now says the daemon registers and publishes the virtual camera via a virtual_cam output, matching serve.rs windows_backends" }
+
+"dep:docs/adr/0001-library-first-engine.md" = { hash = "b3:7a1c016d1f87fdaf" }
+
+"dep:docs/adr/0045-leptos-web-ui.md" = { hash = "b3:b0a2a9cd68f6facd" }
+
+"file:apps/jstream-cli/Cargo.toml#jstream-meta" = { hash = "b3:dbacb2dd7907964d" }
+
+"file:apps/jstream-cli/src/main.rs" = { hash = "b3:fe92cdacb6278716" }
+
+"file:apps/jstream-daemon/Cargo.toml#jstream-meta" = { hash = "b3:8bc8c6ff8e57508b" }
+
+"file:apps/jstream-daemon/src/main.rs" = { hash = "b3:d848ae5f04b83c6f" }
+
+"file:apps/jstream-desktop/Cargo.toml#jstream-meta" = { hash = "b3:f7c235327227029b" }
+
+"file:apps/jstream-desktop/src/main.rs" = { hash = "b3:b19eab2b3dd2f7b1" }
+
+["ARCH#threading"]
+
+"body" = { hash = "b3:27f72f3f6ef95752", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; main's render-snapshot paragraph (render thread loads lock-free, video.snapshot reads under the lock) kept as is; this PR's CLAP hosts paragraph (shared block and mixer side built, host/restarts/stats.tick not yet, dry-signal bypass) checked against rt/host.rs" }
+
+"dep:docs/adr/0014-media-clock.md" = { hash = "b3:68451099d1cf8c6d" }
+
+"dep:docs/adr/0027-program-master-and-output-chains.md" = { hash = "b3:af6388c6d1da14e9" }
+
+"dep:docs/adr/0028-audio-model-v2.md" = { hash = "b3:fcb0bf8c19bab746" }
+
+"dep:docs/adr/0032-live-edits-and-undo.md" = { hash = "b3:ff923b70ae781b73" }
+
+"dep:docs/adr/0035-clap-plugins-out-of-process.md" = { hash = "b3:56b6301e2e6a132b" }
+
+["CLAUDE#docs-duty"]
+
+"body" = { hash = "b3:14908506631bd1e7", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: DOCS#verification now stores stamps in docs/verified.toml; the hash bullet now says never edit the ledger by hand and names docs migrate instead of rehash; merge-main bullet says stamp conflicts; notes duty unchanged" }
+
+"dep:docs/DOCS.md#notes" = { hash = "b3:c9eda3a5d59efec7" }
+
+"dep:docs/DOCS.md#verification" = { hash = "b3:41129b2c61f893ac", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: DOCS#verification now stores stamps in docs/verified.toml; the hash bullet now says never edit the ledger by hand and names docs migrate instead of rehash; merge-main bullet says stamp conflicts; notes duty unchanged" }
+
+["CLAUDE#pr-loop"]
+
+"body" = { hash = "b3:d756a751285910f0", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read the PR loop against ADR-0043: item 7 now lists the narrowed maintainer tier and says everything else is agent tier, proxy format cited from ADR-0043" }
+
+"dep:REVIEW.md#output" = { hash = "b3:43319c759d4464d7" }
+
+"dep:REVIEW.md#rounds" = { hash = "b3:1d8bae6753e4ae8d" }
+
+["CONTRIBUTING#how-changes-land"]
+
+"body" = { hash = "b3:a2d3f28a7cbcbc7d", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read against R-GIT-001/002, R-GOV-003 and the narrowed R-GOV-005 (ADR-0043); the decisions bullet now names the five maintainer areas" }
+
+"dep:docs/RULES.md#R-GIT-001" = { hash = "b3:bfbe7853e916b600" }
+
+"dep:docs/RULES.md#R-GIT-002" = { hash = "b3:526eebc4f31009c4" }
+
+"dep:docs/RULES.md#R-GOV-003" = { hash = "b3:89b1e86ad3fad6c9" }
+
+"dep:docs/RULES.md#R-GOV-005" = { hash = "b3:7b29924362b09367" }
+
+["CRATE-jstream-audio#filters"]
+
+"body" = { hash = "b3:534b97e562940a00", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1 (N2): re-read; no_alloc sentence now separates the master bus's own chain from the master chain and output tap chain, and Not yet says the kernels' cost is what's measured" }
+
+"dep:docs/adr/0028-audio-model-v2.md#decision" = { hash = "b3:5e29b3241b700230" }
+
+"file:crates/jstream-audio/src/filter/compressor.rs" = { hash = "b3:7836f4052222a2a2" }
+
+"file:crates/jstream-audio/src/filter/delay.rs" = { hash = "b3:b0af3df4eeea2c0c" }
+
+"file:crates/jstream-audio/src/filter/gain.rs" = { hash = "b3:868636ebc894cc7b" }
+
+"file:crates/jstream-audio/src/filter/gate.rs" = { hash = "b3:213d7bfc847a431c" }
+
+"file:crates/jstream-audio/src/filter/limiter.rs" = { hash = "b3:a1c0f0586e004c59" }
+
+"file:crates/jstream-audio/src/filter/mod.rs" = { hash = "b3:418e944950d88c36" }
+
+["CRATE-jstream-audio#meters"]
+
+"body" = { hash = "b3:873ba6bdb1177e0c", by = "agent:claude@session_01MYuHTvXyZdeQGrKJhs9Htz", note = "New section, checked against src/meter/: filter length, cutoff and measured phase agreement, 100 ms steps and windows, gates, 0.02 LU histogram range and size, rate rule, and the tests listed; ADR-0028 decision (4x true peak, momentary/short-term/integrated, allocation-free, reset action) matches" }
+
+"dep:docs/adr/0028-audio-model-v2.md#decision" = { hash = "b3:5e29b3241b700230" }
+
+"file:crates/jstream-audio/src/meter/kweight.rs" = { hash = "b3:5245705e37deb44d" }
+
+"file:crates/jstream-audio/src/meter/loudness.rs" = { hash = "b3:57e921ced7b41e54" }
+
+"file:crates/jstream-audio/src/meter/mod.rs" = { hash = "b3:7b6e5ed3dd8380e8" }
+
+"file:crates/jstream-audio/src/meter/true_peak.rs" = { hash = "b3:35328ace37395ff8" }
+
+["CRATE-jstream-audio#purpose"]
+
+"body" = { hash = "b3:98e802a4aec0ba24", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; ARCH#threading's render-snapshot change doesn't touch this crate; this PR's insert_host_filter API, host.rs tests and no_alloc CLAP bullets checked against handle.rs, cmd.rs and the tests" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-audio" = { hash = "b3:308082ece28cb86f" }
+
+"dep:docs/ARCHITECTURE.md#threading" = { hash = "b3:27f72f3f6ef95752" }
+
+"file:crates/jstream-audio/src/error.rs" = { hash = "b3:d8e9ac73d567425f" }
+
+"file:crates/jstream-audio/src/filter/compressor.rs" = { hash = "b3:7836f4052222a2a2" }
+
+"file:crates/jstream-audio/src/filter/delay.rs" = { hash = "b3:b0af3df4eeea2c0c" }
+
+"file:crates/jstream-audio/src/filter/gain.rs" = { hash = "b3:868636ebc894cc7b" }
+
+"file:crates/jstream-audio/src/filter/gate.rs" = { hash = "b3:213d7bfc847a431c" }
+
+"file:crates/jstream-audio/src/filter/limiter.rs" = { hash = "b3:a1c0f0586e004c59" }
+
+"file:crates/jstream-audio/src/filter/mod.rs" = { hash = "b3:418e944950d88c36" }
+
+"file:crates/jstream-audio/src/handle.rs" = { hash = "b3:4cf620386cee1cdc" }
+
+"file:crates/jstream-audio/src/lib.rs" = { hash = "b3:f37d5c5d3c4b273c" }
+
+"file:crates/jstream-audio/src/meter/kweight.rs" = { hash = "b3:5245705e37deb44d" }
+
+"file:crates/jstream-audio/src/meter/loudness.rs" = { hash = "b3:57e921ced7b41e54" }
+
+"file:crates/jstream-audio/src/meter/mod.rs" = { hash = "b3:7b6e5ed3dd8380e8" }
+
+"file:crates/jstream-audio/src/meter/true_peak.rs" = { hash = "b3:35328ace37395ff8" }
+
+"file:crates/jstream-audio/src/rt/bus.rs" = { hash = "b3:83f115922f29efa0" }
+
+"file:crates/jstream-audio/src/rt/chain.rs" = { hash = "b3:0471f6f1d1625d24" }
+
+"file:crates/jstream-audio/src/rt/cmd.rs" = { hash = "b3:dd8c0cfd24cda601" }
+
+"file:crates/jstream-audio/src/rt/continuity.rs" = { hash = "b3:d05ce04f7cd98328" }
+
+"file:crates/jstream-audio/src/rt/control.rs" = { hash = "b3:74007a614fa11f23" }
+
+"file:crates/jstream-audio/src/rt/downmix.rs" = { hash = "b3:87a3c92b5159adb3" }
+
+"file:crates/jstream-audio/src/rt/drift.rs" = { hash = "b3:0b9d1aeb21625025" }
+
+"file:crates/jstream-audio/src/rt/host.rs" = { hash = "b3:7b96e0548bba48b1" }
+
+"file:crates/jstream-audio/src/rt/input.rs" = { hash = "b3:b603b36bb0fdeaf6" }
+
+"file:crates/jstream-audio/src/rt/mixer.rs" = { hash = "b3:00bb5601fdf16ebd" }
+
+"file:crates/jstream-audio/src/rt/mod.rs" = { hash = "b3:69ca57b1048cdd53" }
+
+"file:crates/jstream-audio/src/rt/retire.rs" = { hash = "b3:e6e8129ae1adc369" }
+
+"file:crates/jstream-audio/src/rt/ring.rs" = { hash = "b3:11a8ee3967274327" }
+
+"file:crates/jstream-audio/src/rt/shared.rs" = { hash = "b3:d9f812544be5eb7b" }
+
+"file:crates/jstream-audio/src/rt/sinc.rs" = { hash = "b3:2fc284fab2821c41" }
+
+"file:crates/jstream-audio/src/rt/tap.rs" = { hash = "b3:c470e006d8095daa" }
+
+"file:crates/jstream-audio/src/rt/testutil.rs" = { hash = "b3:3e63f714aef88590" }
+
+"file:crates/jstream-audio/tests/cost.rs" = { hash = "b3:c06e0c67b9b83617" }
+
+"file:crates/jstream-audio/tests/no_alloc.rs" = { hash = "b3:7a01e590515649ab" }
+
+"file:crates/jstream-audio/tests/sim.rs" = { hash = "b3:e5a6edbd7802a068" }
+
+["CRATE-jstream-audio#realtime"]
+
+"body" = { hash = "b3:302a58c5521da62b", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; ARCH#threading's render-snapshot change doesn't touch the mixer; this PR's CLAP filters paragraph checked against rt/host.rs and chain.rs" }
+
+"dep:docs/ARCHITECTURE.md#threading" = { hash = "b3:27f72f3f6ef95752" }
+
+"dep:docs/RULES.md#R-RT-001" = { hash = "b3:3221ab22f6747616" }
+
+"dep:docs/RULES.md#R-RT-003" = { hash = "b3:50f35d12590ef2be" }
+
+"file:crates/jstream-audio/src/rt/bus.rs" = { hash = "b3:83f115922f29efa0" }
+
+"file:crates/jstream-audio/src/rt/chain.rs" = { hash = "b3:0471f6f1d1625d24" }
+
+"file:crates/jstream-audio/src/rt/cmd.rs" = { hash = "b3:dd8c0cfd24cda601" }
+
+"file:crates/jstream-audio/src/rt/continuity.rs" = { hash = "b3:d05ce04f7cd98328" }
+
+"file:crates/jstream-audio/src/rt/control.rs" = { hash = "b3:74007a614fa11f23" }
+
+"file:crates/jstream-audio/src/rt/downmix.rs" = { hash = "b3:87a3c92b5159adb3" }
+
+"file:crates/jstream-audio/src/rt/drift.rs" = { hash = "b3:0b9d1aeb21625025" }
+
+"file:crates/jstream-audio/src/rt/host.rs" = { hash = "b3:7b96e0548bba48b1" }
+
+"file:crates/jstream-audio/src/rt/input.rs" = { hash = "b3:b603b36bb0fdeaf6" }
+
+"file:crates/jstream-audio/src/rt/mixer.rs" = { hash = "b3:00bb5601fdf16ebd" }
+
+"file:crates/jstream-audio/src/rt/mod.rs" = { hash = "b3:69ca57b1048cdd53" }
+
+"file:crates/jstream-audio/src/rt/retire.rs" = { hash = "b3:e6e8129ae1adc369" }
+
+"file:crates/jstream-audio/src/rt/ring.rs" = { hash = "b3:11a8ee3967274327" }
+
+"file:crates/jstream-audio/src/rt/shared.rs" = { hash = "b3:d9f812544be5eb7b" }
+
+"file:crates/jstream-audio/src/rt/sinc.rs" = { hash = "b3:2fc284fab2821c41" }
+
+"file:crates/jstream-audio/src/rt/tap.rs" = { hash = "b3:c470e006d8095daa" }
+
+"file:crates/jstream-audio/src/rt/testutil.rs" = { hash = "b3:3e63f714aef88590" }
+
+["CRATE-jstream-cli#design"]
+
+"body" = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at b3e6be5 (#263 mock cycle reasons name the cycle path); re-read beside this PR's virtual_cam text (mock accepts virtual_cam, set_target refusal unchanged; protocol 0.18); jstream-control/graph/protocol tests pass; holds" }
+
+"dep:crates/jstream-control/README.md#design" = { hash = "b3:2edc2ba0e38bc4ce" }
+
+"file:apps/jstream-cli/Cargo.toml" = { hash = "b3:513b26286e4094af" }
+
+"file:apps/jstream-cli/src/args.rs" = { hash = "b3:5ae0e8dd6e0d9eee" }
+
+"file:apps/jstream-cli/src/block.rs" = { hash = "b3:19c53d8711aea68a" }
+
+"file:apps/jstream-cli/src/exit.rs" = { hash = "b3:16e79b530b6f8e0a" }
+
+"file:apps/jstream-cli/src/main.rs" = { hash = "b3:fe92cdacb6278716" }
+
+"file:apps/jstream-cli/src/mcp.rs" = { hash = "b3:27f4505ffe21a4f8" }
+
+"file:apps/jstream-cli/src/run.rs" = { hash = "b3:c7379cddeb275056" }
+
+"file:apps/jstream-cli/src/run/tests.rs" = { hash = "b3:2b7de6b7d0ee590c" }
+
+["CRATE-jstream-cli#purpose"]
+
+"body" = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed: the item.move cycle golden now expects the mock's cycle path; error format (error: <message> (<code>)) and exit code 17 unchanged" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/apps/*" = { hash = "b3:194117bebc81240c" }
+
+"file:apps/jstream-cli/src/args.rs" = { hash = "b3:5ae0e8dd6e0d9eee" }
+
+"file:apps/jstream-cli/src/block.rs" = { hash = "b3:19c53d8711aea68a" }
+
+"file:apps/jstream-cli/src/exit.rs" = { hash = "b3:16e79b530b6f8e0a" }
+
+"file:apps/jstream-cli/src/main.rs" = { hash = "b3:fe92cdacb6278716" }
+
+"file:apps/jstream-cli/src/mcp.rs" = { hash = "b3:27f4505ffe21a4f8" }
+
+"file:apps/jstream-cli/src/run.rs" = { hash = "b3:c7379cddeb275056" }
+
+"file:apps/jstream-cli/src/run/tests.rs" = { hash = "b3:2b7de6b7d0ee590c" }
+
+["CRATE-jstream-cli#usage"]
+
+"body" = { hash = "b3:6693f8835c47fc77", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took B6-f's Edits bullet and added scene.create's optional role:group/role:scene; grouping batch now creates the scene as a group" }
+
+"file:apps/jstream-cli/src/args.rs" = { hash = "b3:5ae0e8dd6e0d9eee" }
+
+"file:apps/jstream-cli/src/exit.rs" = { hash = "b3:16e79b530b6f8e0a" }
+
+"file:apps/jstream-cli/src/mcp.rs" = { hash = "b3:27f4505ffe21a4f8" }
+
+"file:apps/jstream-cli/src/run.rs" = { hash = "b3:c7379cddeb275056" }
+
+["CRATE-jstream-control#design"]
+
+"body" = { hash = "b3:2edc2ba0e38bc4ce", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; set_target refusal for a virtual camera unchanged" }
+
+"dep:docs/ARCHITECTURE.md#protocol" = { hash = "b3:360fbc5405febcf3" }
+
+"dep:docs/adr/0006-mcp-full-access.md" = { hash = "b3:fbe7c61707faa7bd" }
+
+"dep:docs/adr/0013-command-model.md" = { hash = "b3:dfafd6bdd1057e8a" }
+
+"file:crates/jstream-control/Cargo.toml" = { hash = "b3:07915c072e50c894" }
+
+"file:crates/jstream-control/src/control.rs" = { hash = "b3:e55527bc3d425ace" }
+
+"file:crates/jstream-control/src/error.rs" = { hash = "b3:50448c966c4de2f0" }
+
+"file:crates/jstream-control/src/lib.rs" = { hash = "b3:4f5eb7fab55f6c55" }
+
+"file:crates/jstream-control/src/mock.rs" = { hash = "b3:39387e007a68ab83" }
+
+"file:crates/jstream-control/src/ws.rs" = { hash = "b3:f37b52c47e4cc8a1" }
+
+"file:crates/jstream-control/src/ws_config.rs" = { hash = "b3:d7db1d06b04d10fc" }
+
+"file:crates/jstream-control/src/ws_web.rs" = { hash = "b3:edefe86e076ea4e3" }
+
+["CRATE-jstream-control#purpose"]
+
+"body" = { hash = "b3:e353197aa1bfa71e", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; shared-names bullet is main's; mock still accepts virtual_cam" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-control" = { hash = "b3:107caa6f41f5bf25" }
+
+"file:crates/jstream-control/src/control.rs" = { hash = "b3:e55527bc3d425ace" }
+
+"file:crates/jstream-control/src/error.rs" = { hash = "b3:50448c966c4de2f0" }
+
+"file:crates/jstream-control/src/lib.rs" = { hash = "b3:4f5eb7fab55f6c55" }
+
+"file:crates/jstream-control/src/mock.rs" = { hash = "b3:39387e007a68ab83" }
+
+"file:crates/jstream-control/src/ws.rs" = { hash = "b3:f37b52c47e4cc8a1" }
+
+"file:crates/jstream-control/src/ws_config.rs" = { hash = "b3:d7db1d06b04d10fc" }
+
+"file:crates/jstream-control/src/ws_web.rs" = { hash = "b3:edefe86e076ea4e3" }
+
+["CRATE-jstream-core#design"]
+
+"body" = { hash = "b3:598e44286e6aa3b5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286, #297): re-read main's design text (differential script paragraph) beside this PR's clock-swap sentence in the live-sources paragraph; different paragraphs; swap sentence still matches LiveSources::set_clock; holds" }
+
+"dep:crates/jstream-control/README.md#design" = { hash = "b3:2edc2ba0e38bc4ce" }
+
+"dep:crates/jstream-protocol/README.md#design" = { hash = "b3:c394c05d715bfb95" }
+
+"dep:docs/ARCHITECTURE.md#protocol" = { hash = "b3:360fbc5405febcf3" }
+
+"dep:docs/RULES.md#R-API-004" = { hash = "b3:2d6cfa635e9b2786" }
+
+"dep:docs/adr/0013-command-model.md" = { hash = "b3:dfafd6bdd1057e8a" }
+
+"file:crates/jstream-core/Cargo.toml" = { hash = "b3:82b99f798fcea13a" }
+
+"file:crates/jstream-core/src/audio_sources.rs" = { hash = "b3:b4572a1cb406aeda" }
+
+"file:crates/jstream-core/src/audit.rs" = { hash = "b3:63e27b443cbc6f6d" }
+
+"file:crates/jstream-core/src/collection.rs" = { hash = "b3:6ecb293741341e3b" }
+
+"file:crates/jstream-core/src/drops.rs" = { hash = "b3:c7eb14245f6d9072" }
+
+"file:crates/jstream-core/src/engine.rs" = { hash = "b3:6e9e17e99a36f044" }
+
+"file:crates/jstream-core/src/events.rs" = { hash = "b3:f56b2c7983cf2c88" }
+
+"file:crates/jstream-core/src/history.rs" = { hash = "b3:7378eab81da1ba15" }
+
+"file:crates/jstream-core/src/kinds.rs" = { hash = "b3:15e2232a8346318c" }
+
+"file:crates/jstream-core/src/lib.rs" = { hash = "b3:63c2460ffe6ccaff" }
+
+"file:crates/jstream-core/src/live.rs" = { hash = "b3:9ceafdfcc04ac858" }
+
+"file:crates/jstream-core/src/outputs.rs" = { hash = "b3:b7dbe1b3935b3df8" }
+
+"file:crates/jstream-core/src/runtime/mod.rs" = { hash = "b3:b5aa5ea1644b6fdd" }
+
+"file:crates/jstream-core/src/runtime/pipeline.rs" = { hash = "b3:6e594960329f8055" }
+
+"file:crates/jstream-core/src/runtime/publish.rs" = { hash = "b3:cd76a871c2ae751d" }
+
+"file:crates/jstream-core/src/runtime/render.rs" = { hash = "b3:8ffcf66ee4ab36b2" }
+
+"file:crates/jstream-core/src/runtime/sink.rs" = { hash = "b3:9597d8d3fe05859a" }
+
+"file:crates/jstream-core/src/runtime/vcam.rs" = { hash = "b3:20b9282859764b8b" }
+
+"file:crates/jstream-core/src/session.rs" = { hash = "b3:809f3084121b94be" }
+
+"file:crates/jstream-core/src/snapshot.rs" = { hash = "b3:918fe91ec11037de" }
+
+"file:crates/jstream-core/src/studio.rs" = { hash = "b3:7388509dff80cbe4" }
+
+"file:crates/jstream-core/src/tests.rs" = { hash = "b3:e44c4ac9f274a9b2" }
+
+"file:crates/jstream-core/src/tests/audio.rs" = { hash = "b3:10b70d595b0d6cbf" }
+
+"file:crates/jstream-core/src/tests/collection.rs" = { hash = "b3:31eb7a26da4bb8c3" }
+
+"file:crates/jstream-core/src/tests/history.rs" = { hash = "b3:c9688aabcb558c82" }
+
+"file:crates/jstream-core/src/tests/sources.rs" = { hash = "b3:cc39789a9b4f72e9" }
+
+["CRATE-jstream-core#purpose"]
+
+"body" = { hash = "b3:82e54c0e6df260d6", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#286 differential groups/roles, #297): re-read main's purpose text incl. Tests bullet's differential run; this PR's live.rs set_clock fix and tests/sources.rs clock-swap test fit the Live sources and Tests bullets; holds" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-core" = { hash = "b3:d63649ff29b26532" }
+
+"file:crates/jstream-core/src/audio_sources.rs" = { hash = "b3:b4572a1cb406aeda" }
+
+"file:crates/jstream-core/src/audit.rs" = { hash = "b3:63e27b443cbc6f6d" }
+
+"file:crates/jstream-core/src/collection.rs" = { hash = "b3:6ecb293741341e3b" }
+
+"file:crates/jstream-core/src/drops.rs" = { hash = "b3:c7eb14245f6d9072" }
+
+"file:crates/jstream-core/src/engine.rs" = { hash = "b3:6e9e17e99a36f044" }
+
+"file:crates/jstream-core/src/events.rs" = { hash = "b3:f56b2c7983cf2c88" }
+
+"file:crates/jstream-core/src/history.rs" = { hash = "b3:7378eab81da1ba15" }
+
+"file:crates/jstream-core/src/kinds.rs" = { hash = "b3:15e2232a8346318c" }
+
+"file:crates/jstream-core/src/lib.rs" = { hash = "b3:63c2460ffe6ccaff" }
+
+"file:crates/jstream-core/src/live.rs" = { hash = "b3:9ceafdfcc04ac858" }
+
+"file:crates/jstream-core/src/outputs.rs" = { hash = "b3:b7dbe1b3935b3df8" }
+
+"file:crates/jstream-core/src/runtime/mod.rs" = { hash = "b3:b5aa5ea1644b6fdd" }
+
+"file:crates/jstream-core/src/runtime/pipeline.rs" = { hash = "b3:6e594960329f8055" }
+
+"file:crates/jstream-core/src/runtime/publish.rs" = { hash = "b3:cd76a871c2ae751d" }
+
+"file:crates/jstream-core/src/runtime/render.rs" = { hash = "b3:8ffcf66ee4ab36b2" }
+
+"file:crates/jstream-core/src/runtime/sink.rs" = { hash = "b3:9597d8d3fe05859a" }
+
+"file:crates/jstream-core/src/runtime/vcam.rs" = { hash = "b3:20b9282859764b8b" }
+
+"file:crates/jstream-core/src/session.rs" = { hash = "b3:809f3084121b94be" }
+
+"file:crates/jstream-core/src/snapshot.rs" = { hash = "b3:918fe91ec11037de" }
+
+"file:crates/jstream-core/src/studio.rs" = { hash = "b3:7388509dff80cbe4" }
+
+"file:crates/jstream-core/src/tests.rs" = { hash = "b3:e44c4ac9f274a9b2" }
+
+"file:crates/jstream-core/src/tests/audio.rs" = { hash = "b3:10b70d595b0d6cbf" }
+
+"file:crates/jstream-core/src/tests/collection.rs" = { hash = "b3:31eb7a26da4bb8c3" }
+
+"file:crates/jstream-core/src/tests/history.rs" = { hash = "b3:c9688aabcb558c82" }
+
+"file:crates/jstream-core/src/tests/sources.rs" = { hash = "b3:cc39789a9b4f72e9" }
+
+"file:crates/jstream-core/tests/mcp.rs" = { hash = "b3:678b488c706f11fa" }
+
+"file:crates/jstream-core/tests/scenarios.rs" = { hash = "b3:3496bce5e35361d6" }
+
+["CRATE-jstream-core#runtime"]
+
+"body" = { hash = "b3:c613a5f13a68bf45", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at e7e7433 (#272 CLAP filter contract and mixer side, #266 canvas styles); stamp-only conflicts; re-read main's text beside this PR's virtual-camera text; no jstream-core code changed by the merge; holds" }
+
+"dep:docs/ARCHITECTURE.md#threading" = { hash = "b3:27f72f3f6ef95752" }
+
+"dep:docs/RULES.md#R-RT-006" = { hash = "b3:f2c3ac9292e67cf2" }
+
+"file:crates/jstream-core/src/runtime/mod.rs" = { hash = "b3:b5aa5ea1644b6fdd" }
+
+"file:crates/jstream-core/src/runtime/pipeline.rs" = { hash = "b3:6e594960329f8055" }
+
+"file:crates/jstream-core/src/runtime/publish.rs" = { hash = "b3:cd76a871c2ae751d" }
+
+"file:crates/jstream-core/src/runtime/render.rs" = { hash = "b3:8ffcf66ee4ab36b2" }
+
+"file:crates/jstream-core/src/runtime/sink.rs" = { hash = "b3:9597d8d3fe05859a" }
+
+"file:crates/jstream-core/src/runtime/vcam.rs" = { hash = "b3:20b9282859764b8b" }
+
+["CRATE-jstream-daemon#design"]
+
+"body" = { hash = "b3:9199dc0f5b8e802e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 merge of main (#297 daemon vcam, #237): re-read main's design (WindowsVcam backend, mfsensorgroup delay-load, MFCreateVirtualCamera probe); stale via core#design's clock-swap sentence from this PR; daemon still supplies QpcClock via with_backends; holds" }
+
+"dep:crates/jstream-core/README.md#design" = { hash = "b3:598e44286e6aa3b5" }
+
+"dep:crates/jstream-server/README.md#design" = { hash = "b3:f989adc34a6af1d9" }
+
+"dep:docs/ARCHITECTURE.md#persistence" = { hash = "b3:7ab4accbf98f6662" }
+
+"file:apps/jstream-daemon/Cargo.toml" = { hash = "b3:9d6ffbf45d26a653" }
+
+"file:apps/jstream-daemon/src/args.rs" = { hash = "b3:0c6280460499ee3c" }
+
+"file:apps/jstream-daemon/src/components.rs" = { hash = "b3:a750642233d72b2c" }
+
+"file:apps/jstream-daemon/src/crash.rs" = { hash = "b3:5c5aac8c1b12a291" }
+
+"file:apps/jstream-daemon/src/logs.rs" = { hash = "b3:2ce291dd14ddd2a9" }
+
+"file:apps/jstream-daemon/src/main.rs" = { hash = "b3:d848ae5f04b83c6f" }
+
+"file:apps/jstream-daemon/src/register.rs" = { hash = "b3:1ac657a1accf6f5e" }
+
+"file:apps/jstream-daemon/src/serve.rs" = { hash = "b3:0ea86641640d405e" }
+
+"file:apps/jstream-daemon/src/token.rs" = { hash = "b3:5b73caa28ffd99e3" }
+
+["CRATE-jstream-daemon#purpose"]
+
+"body" = { hash = "b3:b37caba12b27c4e9", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b follow-up: re-read; Serving bullet holds (the live engine now carries WindowsVcam, detailed in Design); Tests bullet's delay_load.rs sentence covers mfsensorgroup.dll now in the delayed list" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/apps/*" = { hash = "b3:194117bebc81240c" }
+
+"file:apps/jstream-daemon/src/args.rs" = { hash = "b3:0c6280460499ee3c" }
+
+"file:apps/jstream-daemon/src/components.rs" = { hash = "b3:a750642233d72b2c" }
+
+"file:apps/jstream-daemon/src/crash.rs" = { hash = "b3:5c5aac8c1b12a291" }
+
+"file:apps/jstream-daemon/src/logs.rs" = { hash = "b3:2ce291dd14ddd2a9" }
+
+"file:apps/jstream-daemon/src/main.rs" = { hash = "b3:d848ae5f04b83c6f" }
+
+"file:apps/jstream-daemon/src/register.rs" = { hash = "b3:1ac657a1accf6f5e" }
+
+"file:apps/jstream-daemon/src/serve.rs" = { hash = "b3:0ea86641640d405e" }
+
+"file:apps/jstream-daemon/src/token.rs" = { hash = "b3:5b73caa28ffd99e3" }
+
+"file:apps/jstream-daemon/tests/daemon.rs" = { hash = "b3:702aba0bed410207" }
+
+"file:apps/jstream-daemon/tests/delay_load.rs" = { hash = "b3:fa55ac483c3bac65" }
+
+"file:apps/jstream-daemon/tests/e2e.rs" = { hash = "b3:7666dcee9f6dd8ce" }
+
+["CRATE-jstream-daemon#usage"]
+
+"body" = { hash = "b3:b2396ad80b13c8a8", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 B2: exit-code 0 row now includes a successful --register-vcam; N1: Virtual camera bullet says an already-current registration keeps the file's ACL as it is" }
+
+"file:apps/jstream-daemon/src/args.rs" = { hash = "b3:0c6280460499ee3c" }
+
+"file:apps/jstream-daemon/src/main.rs" = { hash = "b3:d848ae5f04b83c6f" }
+
+"file:apps/jstream-daemon/src/token.rs" = { hash = "b3:5b73caa28ffd99e3" }
+
+["CRATE-jstream-desktop#design"]
+
+"body" = { hash = "b3:c4445af061a77053", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 now excepts GET /pair on a TLS listener and allows a device-token cookie; desktop serves loopback without TLS, pairs nothing and uses its in-memory token, so nothing here changes; holds" }
+
+"dep:docs/RULES.md#R-SEC-001" = { hash = "b3:69c6131f3f1bd0fd" }
+
+"dep:docs/RULES.md#R-SEC-002" = { hash = "b3:9bcfb0336f6adad9" }
+
+"dep:docs/adr/0020-portable-windows-distribution.md" = { hash = "b3:febfe552adc09d5b" }
+
+"dep:docs/adr/0045-leptos-web-ui.md" = { hash = "b3:b0a2a9cd68f6facd" }
+
+"file:apps/jstream-desktop/build.rs" = { hash = "b3:22c33836996b1c6b" }
+
+"file:apps/jstream-desktop/src/app.rs" = { hash = "b3:c539140aae7561d4" }
+
+"file:apps/jstream-desktop/src/bootstrap.rs" = { hash = "b3:f0fe0fb519a068bf" }
+
+"file:apps/jstream-desktop/src/data.rs" = { hash = "b3:ca2f21dc552ae191" }
+
+"file:apps/jstream-desktop/src/host.rs" = { hash = "b3:9b575597b71027d3" }
+
+"file:apps/jstream-desktop/src/lib.rs" = { hash = "b3:47bd5b3369b57d20" }
+
+"file:apps/jstream-desktop/src/logs.rs" = { hash = "b3:99e633ebddadb039" }
+
+"file:apps/jstream-desktop/src/main.rs" = { hash = "b3:b19eab2b3dd2f7b1" }
+
+"file:apps/jstream-desktop/src/shell.rs" = { hash = "b3:ee281b0fbf540f66" }
+
+"file:apps/jstream-desktop/src/ui.rs" = { hash = "b3:45624952598c1f3a" }
+
+"file:apps/jstream-desktop/tauri.conf.json" = { hash = "b3:558b5c5512b30191" }
+
+["CRATE-jstream-desktop#purpose"]
+
+"body" = { hash = "b3:ec6f85c97d250939", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/apps/*" = { hash = "b3:194117bebc81240c" }
+
+"file:apps/jstream-desktop/src/app.rs" = { hash = "b3:c539140aae7561d4" }
+
+"file:apps/jstream-desktop/src/bootstrap.rs" = { hash = "b3:f0fe0fb519a068bf" }
+
+"file:apps/jstream-desktop/src/data.rs" = { hash = "b3:ca2f21dc552ae191" }
+
+"file:apps/jstream-desktop/src/host.rs" = { hash = "b3:9b575597b71027d3" }
+
+"file:apps/jstream-desktop/src/lib.rs" = { hash = "b3:47bd5b3369b57d20" }
+
+"file:apps/jstream-desktop/src/logs.rs" = { hash = "b3:99e633ebddadb039" }
+
+"file:apps/jstream-desktop/src/main.rs" = { hash = "b3:b19eab2b3dd2f7b1" }
+
+"file:apps/jstream-desktop/src/shell.rs" = { hash = "b3:ee281b0fbf540f66" }
+
+"file:apps/jstream-desktop/src/ui.rs" = { hash = "b3:45624952598c1f3a" }
+
+["CRATE-jstream-desktop#usage"]
+
+"body" = { hash = "b3:4d0cdcc543ce52f7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
+
+"file:apps/jstream-desktop/Cargo.toml" = { hash = "b3:9ae316de6772baa9" }
+
+"file:apps/jstream-desktop/src/app.rs" = { hash = "b3:c539140aae7561d4" }
+
+"file:apps/jstream-desktop/src/data.rs" = { hash = "b3:ca2f21dc552ae191" }
+
+"file:apps/jstream-desktop/src/logs.rs" = { hash = "b3:99e633ebddadb039" }
+
+"file:apps/jstream-desktop/src/main.rs" = { hash = "b3:b19eab2b3dd2f7b1" }
+
+["CRATE-jstream-encode#design"]
+
+"body" = { hash = "b3:a0353286f83c8702", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: Sharing paragraph now says jstream-core keys its registry by the protocol encoder profile (id and settings) and maps it to platform configs; Not yet drops encoder profiles in the protocol" }
+
+"dep:docs/RULES.md#R-RT-002" = { hash = "b3:24c0e2f735f7e770" }
+
+"dep:docs/RULES.md#R-RT-004" = { hash = "b3:5624f57eaa7a6f32" }
+
+"dep:docs/adr/0014-media-clock.md" = { hash = "b3:68451099d1cf8c6d" }
+
+"dep:docs/adr/0031-source-types-and-decoding-scope.md" = { hash = "b3:04b853b872d31424" }
+
+"file:crates/jstream-encode/src/audio.rs" = { hash = "b3:79b9830d47ed6557" }
+
+"file:crates/jstream-encode/src/error.rs" = { hash = "b3:6cf396d8a1731016" }
+
+"file:crates/jstream-encode/src/fanout.rs" = { hash = "b3:876cc2224e1406f8" }
+
+"file:crates/jstream-encode/src/lib.rs" = { hash = "b3:69895501654ddc46" }
+
+"file:crates/jstream-encode/src/registry.rs" = { hash = "b3:6a8de9fcad8ead85" }
+
+"file:crates/jstream-encode/src/session.rs" = { hash = "b3:55ea3a587b34caad" }
+
+"file:crates/jstream-encode/src/tests.rs" = { hash = "b3:df3b8e35c3661ab4" }
+
+"file:crates/jstream-encode/src/video.rs" = { hash = "b3:21668f51b28f0233" }
+
+["CRATE-jstream-encode#purpose"]
+
+"body" = { hash = "b3:1ac237caa31707d0", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at e7e7433 (#272 CLAP filter contract and mixer side, #266 canvas styles); stamp-only conflicts; re-read main's text beside this PR's virtual-camera text; no jstream-core code changed by the merge; holds" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-encode" = { hash = "b3:984f333744172f87" }
+
+"dep:docs/ARCHITECTURE.md#data-model" = { hash = "b3:c2e6524561dc325b" }
+
+"dep:docs/ARCHITECTURE.md#threading" = { hash = "b3:27f72f3f6ef95752" }
+
+"file:crates/jstream-encode/src/audio.rs" = { hash = "b3:79b9830d47ed6557" }
+
+"file:crates/jstream-encode/src/error.rs" = { hash = "b3:6cf396d8a1731016" }
+
+"file:crates/jstream-encode/src/fanout.rs" = { hash = "b3:876cc2224e1406f8" }
+
+"file:crates/jstream-encode/src/lib.rs" = { hash = "b3:69895501654ddc46" }
+
+"file:crates/jstream-encode/src/registry.rs" = { hash = "b3:6a8de9fcad8ead85" }
+
+"file:crates/jstream-encode/src/session.rs" = { hash = "b3:55ea3a587b34caad" }
+
+"file:crates/jstream-encode/src/tests.rs" = { hash = "b3:df3b8e35c3661ab4" }
+
+"file:crates/jstream-encode/src/video.rs" = { hash = "b3:21668f51b28f0233" }
+
+["CRATE-jstream-graph#purpose"]
+
+"body" = { hash = "b3:6e40df5eba7c117a", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+
+"dep:crates/jstream-protocol/README.md#design" = { hash = "b3:c394c05d715bfb95" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-graph" = { hash = "b3:95dbeb7275d807fb" }
+
+"dep:docs/ARCHITECTURE.md#data-model" = { hash = "b3:c2e6524561dc325b" }
+
+"file:crates/jstream-graph/src/apply.rs" = { hash = "b3:8723db76d9b1adb1" }
+
+"file:crates/jstream-graph/src/deps.rs" = { hash = "b3:b1dc233b2dfda255" }
+
+"file:crates/jstream-graph/src/encoder.rs" = { hash = "b3:42485db0e5133b45" }
+
+"file:crates/jstream-graph/src/lib.rs" = { hash = "b3:69a177fc1679d6f7" }
+
+"file:crates/jstream-graph/src/model/mod.rs" = { hash = "b3:bb4f30e58d926162" }
+
+"file:crates/jstream-graph/src/persist/fixtures/v1.json" = { hash = "b3:d0650af5fd5723f6" }
+
+"file:crates/jstream-graph/src/persist/mod.rs" = { hash = "b3:bab19879c528688b" }
+
+"file:crates/jstream-graph/src/persist/tests.rs" = { hash = "b3:16719bac96412a93" }
+
+"file:crates/jstream-graph/src/plan.rs" = { hash = "b3:c5dfc4f94c042e67" }
+
+"file:crates/jstream-graph/src/read.rs" = { hash = "b3:a8e1177b2c5ef21e" }
+
+"file:crates/jstream-graph/src/target.rs" = { hash = "b3:a8d9aadd1dbe050a" }
+
+"file:crates/jstream-graph/src/tests.rs" = { hash = "b3:2c2e07d130490dc0" }
+
+"file:crates/jstream-graph/src/touched.rs" = { hash = "b3:33d941b2db0a2eb9" }
+
+["CRATE-jstream-mcp#design"]
+
+"body" = { hash = "b3:5805136af34391bf", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server design; same token/Host/Origin checks on /mcp; holds" }
+
+"dep:docs/ARCHITECTURE.md#mcp" = { hash = "b3:56a84beacedb36b2" }
+
+"dep:docs/adr/0006-mcp-full-access.md" = { hash = "b3:fbe7c61707faa7bd" }
+
+"dep:docs/adr/0013-command-model.md" = { hash = "b3:dfafd6bdd1057e8a" }
+
+"dep:docs/adr/0036-mcp-events-polling-tool.md" = { hash = "b3:528a4d728be121b6" }
+
+"file:crates/jstream-mcp/Cargo.toml" = { hash = "b3:a772352ba69e809b" }
+
+"file:crates/jstream-mcp/src/error.rs" = { hash = "b3:824842188b289238" }
+
+"file:crates/jstream-mcp/src/events.rs" = { hash = "b3:d87f0d9ba4bd6d36" }
+
+"file:crates/jstream-mcp/src/jsonrpc.rs" = { hash = "b3:5c306baedd4f5ddc" }
+
+"file:crates/jstream-mcp/src/lib.rs" = { hash = "b3:77d18110cc2318e2" }
+
+"file:crates/jstream-mcp/src/server.rs" = { hash = "b3:38834e7ab012f7ec" }
+
+"file:crates/jstream-mcp/src/stdio.rs" = { hash = "b3:c8ffb4cb6fdf8595" }
+
+"file:crates/jstream-mcp/src/tests.rs" = { hash = "b3:0280e1c33d9c5d66" }
+
+"file:crates/jstream-mcp/src/tools.rs" = { hash = "b3:28425808999cb795" }
+
+["CRATE-jstream-mcp#purpose"]
+
+"body" = { hash = "b3:18b0851a4a16dce0", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-mcp" = { hash = "b3:8a8e9ae67d5d5efb" }
+
+"file:crates/jstream-mcp/src/error.rs" = { hash = "b3:824842188b289238" }
+
+"file:crates/jstream-mcp/src/events.rs" = { hash = "b3:d87f0d9ba4bd6d36" }
+
+"file:crates/jstream-mcp/src/jsonrpc.rs" = { hash = "b3:5c306baedd4f5ddc" }
+
+"file:crates/jstream-mcp/src/lib.rs" = { hash = "b3:77d18110cc2318e2" }
+
+"file:crates/jstream-mcp/src/server.rs" = { hash = "b3:38834e7ab012f7ec" }
+
+"file:crates/jstream-mcp/src/stdio.rs" = { hash = "b3:c8ffb4cb6fdf8595" }
+
+"file:crates/jstream-mcp/src/tests.rs" = { hash = "b3:0280e1c33d9c5d66" }
+
+"file:crates/jstream-mcp/src/tools.rs" = { hash = "b3:28425808999cb795" }
+
+["CRATE-jstream-media#purpose"]
+
+"body" = { hash = "b3:e204cadb57ccceae", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the enhanced-RTMP link; ADR-0041 keeps ADR-0009/0034's RTMP/RTMPS with enhanced RTMP for HEVC/AV1, so the text holds" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-media" = { hash = "b3:18137b74917731cc" }
+
+"dep:docs/adr/0014-media-clock.md" = { hash = "b3:68451099d1cf8c6d" }
+
+"dep:docs/adr/0031-source-types-and-decoding-scope.md" = { hash = "b3:04b853b872d31424" }
+
+"file:crates/jstream-media/src/audio.rs" = { hash = "b3:836135152fc57087" }
+
+"file:crates/jstream-media/src/color.rs" = { hash = "b3:ce0438eb1859e6fe" }
+
+"file:crates/jstream-media/src/error.rs" = { hash = "b3:1d2c5fbae960d299" }
+
+"file:crates/jstream-media/src/lib.rs" = { hash = "b3:92a44864b9ef193c" }
+
+"file:crates/jstream-media/src/packet.rs" = { hash = "b3:b08d0b0fd25d7ae1" }
+
+"file:crates/jstream-media/src/pixel.rs" = { hash = "b3:12eb4553ad7e5ab1" }
+
+"file:crates/jstream-media/src/time.rs" = { hash = "b3:3969b618c2c6f598" }
+
+"file:crates/jstream-media/src/video.rs" = { hash = "b3:d6dfe064425156bb" }
+
+["CRATE-jstream-mux#purpose"]
+
+"body" = { hash = "b3:be26765b746b53d7", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ADR-0041, whose only change is text (review N2): the Context bullet is rewrapped and the follow-on list names jstream-media and ARCH's protocol section; the decision is unchanged, so this section holds" }
+
+"dep:crates/jstream-media/README.md#purpose" = { hash = "b3:e204cadb57ccceae" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-mux" = { hash = "b3:cc699c75167f9edd" }
+
+"dep:docs/adr/0031-source-types-and-decoding-scope.md" = { hash = "b3:04b853b872d31424" }
+
+"dep:docs/adr/0041-youtube-interaction-scope-v3.md" = { hash = "b3:acbf94ce5b03cce1" }
+
+"file:crates/jstream-mux/Cargo.toml" = { hash = "b3:1474bbecc72bdf29" }
+
+"file:crates/jstream-mux/src/aac.rs" = { hash = "b3:1a2554756d148b5f" }
+
+"file:crates/jstream-mux/src/amf0.rs" = { hash = "b3:bd98f8ff4ce4393e" }
+
+"file:crates/jstream-mux/src/av1.rs" = { hash = "b3:10c2e8324584c92e" }
+
+"file:crates/jstream-mux/src/bits.rs" = { hash = "b3:8e78714f72aa8281" }
+
+"file:crates/jstream-mux/src/error.rs" = { hash = "b3:a2f64c693fbc8b72" }
+
+"file:crates/jstream-mux/src/flv.rs" = { hash = "b3:544b671cf32ab627" }
+
+"file:crates/jstream-mux/src/fmp4.rs" = { hash = "b3:71b4164effacdf00" }
+
+"file:crates/jstream-mux/src/h264.rs" = { hash = "b3:655a50861b8f8ac2" }
+
+"file:crates/jstream-mux/src/hevc.rs" = { hash = "b3:db7b56b6ec192456" }
+
+"file:crates/jstream-mux/src/lib.rs" = { hash = "b3:20caa632a5d049a6" }
+
+["CRATE-jstream-outputs#purpose"]
+
+"body" = { hash = "b3:763725b717128451", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (#213, #292 and others) into #237: took main's stamp; stale only via ARCH#threading, whose CLAP-host paragraph now says the shared block and mixer side are built; this section names no CLAP hosts; re-read; Transport shutdown text (#209, #236) and main's text hold" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs" = { hash = "b3:2ef270bb1b4e0cc6" }
+
+"dep:docs/ARCHITECTURE.md#threading" = { hash = "b3:27f72f3f6ef95752" }
+
+"dep:docs/adr/0031-source-types-and-decoding-scope.md" = { hash = "b3:04b853b872d31424" }
+
+"dep:docs/adr/0041-youtube-interaction-scope-v3.md" = { hash = "b3:acbf94ce5b03cce1" }
+
+"file:crates/jstream-outputs/src/lib.rs" = { hash = "b3:0af46734582b0cb9" }
+
+"file:crates/jstream-outputs/src/record/error.rs" = { hash = "b3:5576f34b8fef4acc" }
+
+"file:crates/jstream-outputs/src/record/mod.rs" = { hash = "b3:cc85a1122375004d" }
+
+"file:crates/jstream-outputs/src/record/recorder.rs" = { hash = "b3:7ddb6a365fd67a71" }
+
+"file:crates/jstream-outputs/src/record/recorder/tests.rs" = { hash = "b3:6cfb2eb8e06393ab" }
+
+"file:crates/jstream-outputs/src/rtmp/chunk.rs" = { hash = "b3:15260271e7418d26" }
+
+"file:crates/jstream-outputs/src/rtmp/error.rs" = { hash = "b3:9daa5597d500ed95" }
+
+"file:crates/jstream-outputs/src/rtmp/handshake.rs" = { hash = "b3:56db1c333933c322" }
+
+"file:crates/jstream-outputs/src/rtmp/mod.rs" = { hash = "b3:48aabf739157f73d" }
+
+"file:crates/jstream-outputs/src/rtmp/publisher.rs" = { hash = "b3:5d006624a81efe15" }
+
+"file:crates/jstream-outputs/src/rtmp/publisher/tests.rs" = { hash = "b3:5e5202f939f23f5d" }
+
+"file:crates/jstream-outputs/src/rtmp/reconnect.rs" = { hash = "b3:2e491927c123a8d9" }
+
+"file:crates/jstream-outputs/src/rtmp/reconnect/tests.rs" = { hash = "b3:1dca1b9e35c2f81a" }
+
+"file:crates/jstream-outputs/src/rtmp/test_util.rs" = { hash = "b3:1b537bb60e282a9b" }
+
+"file:crates/jstream-outputs/src/rtmp/transport.rs" = { hash = "b3:4fc931bca126c978" }
+
+"file:crates/jstream-outputs/src/rtmp/transport/tests.rs" = { hash = "b3:c1e7be8d3c75538e" }
+
+"file:crates/jstream-outputs/src/rtmp/url.rs" = { hash = "b3:19a6b6cb7ecef9fe" }
+
+["CRATE-jstream-platform#gpu-frames"]
+
+"body" = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3 cascade from ARCH#crate-map: only the jstream-ui-e2e test-harness row was added; GPU frame design untouched; holds" }
+
+"dep:docs/ARCHITECTURE.md#crate-map" = { hash = "b3:7c383fd8b20f53d3" }
+
+"dep:docs/ARCHITECTURE.md#gpu-pipeline" = { hash = "b3:6412cfa1dc90c301" }
+
+"dep:docs/RULES.md#unsafe" = { hash = "b3:9074e32b08b81d5b" }
+
+"dep:docs/adr/0004-wgpu-with-native-interop.md" = { hash = "b3:4dd2ed0785be217e" }
+
+["CRATE-jstream-platform#purpose"]
+
+"body" = { hash = "b3:ac6493f8088539b9", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
+
+"dep:crates/jstream-media/README.md#purpose" = { hash = "b3:e204cadb57ccceae" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-platform" = { hash = "b3:4179d522e3055d3d" }
+
+"dep:docs/ARCHITECTURE.md#threading" = { hash = "b3:27f72f3f6ef95752" }
+
+"dep:docs/adr/0004-wgpu-with-native-interop.md" = { hash = "b3:4dd2ed0785be217e" }
+
+"dep:docs/adr/0014-media-clock.md" = { hash = "b3:68451099d1cf8c6d" }
+
+"dep:docs/adr/0020-portable-windows-distribution.md" = { hash = "b3:febfe552adc09d5b" }
+
+"dep:docs/adr/0031-source-types-and-decoding-scope.md" = { hash = "b3:04b853b872d31424" }
+
+"file:crates/jstream-platform/Cargo.toml" = { hash = "b3:3d41b91ed599db93" }
+
+"file:crates/jstream-platform/src/audio.rs" = { hash = "b3:f0a2d34cd26f9151" }
+
+"file:crates/jstream-platform/src/backends.rs" = { hash = "b3:4c383cdea1e1ca60" }
+
+"file:crates/jstream-platform/src/capture.rs" = { hash = "b3:9d77cc24947fd900" }
+
+"file:crates/jstream-platform/src/clock.rs" = { hash = "b3:34c4d1c416af47c3" }
+
+"file:crates/jstream-platform/src/codec.rs" = { hash = "b3:f7ce23061cfbb76d" }
+
+"file:crates/jstream-platform/src/error.rs" = { hash = "b3:7d8f9a5250232107" }
+
+"file:crates/jstream-platform/src/fake.rs" = { hash = "b3:f0faa7b84c4c4c37" }
+
+"file:crates/jstream-platform/src/gpu.rs" = { hash = "b3:7711b9f3083b64e2" }
+
+"file:crates/jstream-platform/src/id.rs" = { hash = "b3:8019c83df5cad30a" }
+
+"file:crates/jstream-platform/src/keys.rs" = { hash = "b3:5e9dc58061f8fffa" }
+
+"file:crates/jstream-platform/src/lib.rs" = { hash = "b3:0e9c9d2a54867156" }
+
+"file:crates/jstream-platform/src/surface.rs" = { hash = "b3:acaa4ad70c04147a" }
+
+"file:crates/jstream-platform/src/tests.rs" = { hash = "b3:c8788f07d1105937" }
+
+"file:crates/jstream-platform/src/vcam.rs" = { hash = "b3:29fcc9029fafe17d" }
+
+"file:crates/jstream-platform/src/video_device.rs" = { hash = "b3:191ac01e6ea05888" }
+
+["CRATE-jstream-platform-windows#purpose"]
+
+"body" = { hash = "b3:7522c9a00d99ef52", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Re-read WindowsVcam Start: probe then HKLM check, matching sink.rs; the N-edition wording holds for this crate's hosts in general. The sink.rs change only moved registered()'s doc back above it (B1)" }
+
+"dep:crates/jstream-platform/README.md#purpose" = { hash = "b3:ac6493f8088539b9" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows" = { hash = "b3:dfa8602587609b6c" }
+
+"dep:docs/ARCHITECTURE.md#threading" = { hash = "b3:27f72f3f6ef95752" }
+
+"dep:docs/RULES.md#real-time" = { hash = "b3:c60cba487fc0a5e5" }
+
+"dep:docs/RULES.md#unsafe" = { hash = "b3:9074e32b08b81d5b" }
+
+"dep:docs/adr/0014-media-clock.md" = { hash = "b3:68451099d1cf8c6d" }
+
+"dep:docs/adr/0020-portable-windows-distribution.md" = { hash = "b3:febfe552adc09d5b" }
+
+"dep:docs/adr/0031-source-types-and-decoding-scope.md" = { hash = "b3:04b853b872d31424" }
+
+"file:crates/jstream-platform-windows/src/audio/device.rs" = { hash = "b3:6e50e93d4063133d" }
+
+"file:crates/jstream-platform-windows/src/audio/format.rs" = { hash = "b3:31c8f054cad0d072" }
+
+"file:crates/jstream-platform-windows/src/audio/mod.rs" = { hash = "b3:70e2eee4ab5b0ceb" }
+
+"file:crates/jstream-platform-windows/src/audio/process.rs" = { hash = "b3:d47d64ab0a716fca" }
+
+"file:crates/jstream-platform-windows/src/audio/stream.rs" = { hash = "b3:3294ae8699585eea" }
+
+"file:crates/jstream-platform-windows/src/capture/convert.rs" = { hash = "b3:c69cc7614d14a3de" }
+
+"file:crates/jstream-platform-windows/src/capture/id.rs" = { hash = "b3:a5976c69be087903" }
+
+"file:crates/jstream-platform-windows/src/capture/mailbox.rs" = { hash = "b3:a15cf56d9898996a" }
+
+"file:crates/jstream-platform-windows/src/capture/mod.rs" = { hash = "b3:05a494ad3dae5f79" }
+
+"file:crates/jstream-platform-windows/src/capture/ring.rs" = { hash = "b3:bc308dcc158e28d4" }
+
+"file:crates/jstream-platform-windows/src/capture/targets.rs" = { hash = "b3:2843d6ac31fa1d3a" }
+
+"file:crates/jstream-platform-windows/src/capture/wgc.rs" = { hash = "b3:2946612c32823272" }
+
+"file:crates/jstream-platform-windows/src/clock.rs" = { hash = "b3:bcbc90e406de91b4" }
+
+"file:crates/jstream-platform-windows/src/codec/aac.rs" = { hash = "b3:0b4fe8918cdd233a" }
+
+"file:crates/jstream-platform-windows/src/codec/h264.rs" = { hash = "b3:a5e1bd2cf0f9cd5e" }
+
+"file:crates/jstream-platform-windows/src/codec/mf.rs" = { hash = "b3:c5d1fa497918f58d" }
+
+"file:crates/jstream-platform-windows/src/codec/mod.rs" = { hash = "b3:e7ff5e49bb280c63" }
+
+"file:crates/jstream-platform-windows/src/com.rs" = { hash = "b3:c237392a0b5423fa" }
+
+"file:crates/jstream-platform-windows/src/credential.rs" = { hash = "b3:74c65b07fb166fc0" }
+
+"file:crates/jstream-platform-windows/src/gpu/capture.rs" = { hash = "b3:e413bab2e84c75e1" }
+
+"file:crates/jstream-platform-windows/src/gpu/d3d.rs" = { hash = "b3:74636e2565276acc" }
+
+"file:crates/jstream-platform-windows/src/gpu/mod.rs" = { hash = "b3:1f10a420e9f6a9bc" }
+
+"file:crates/jstream-platform-windows/src/lib.rs" = { hash = "b3:9c4ac5054362a8e3" }
+
+"file:crates/jstream-platform-windows/src/n_edition.rs" = { hash = "b3:ede57dd335c2eec0" }
+
+"file:crates/jstream-platform-windows/src/vcam/format.rs" = { hash = "b3:04540a625ddb78d5" }
+
+"file:crates/jstream-platform-windows/src/vcam/mod.rs" = { hash = "b3:285422524ff022b2" }
+
+"file:crates/jstream-platform-windows/src/vcam/shared.rs" = { hash = "b3:82d17cf6bf52c003" }
+
+"file:crates/jstream-platform-windows/src/vcam/sink.rs" = { hash = "b3:2fcb7bb950608efc" }
+
+"file:crates/jstream-platform-windows/src/vcam_register.rs" = { hash = "b3:6306e460290304f4" }
+
+"file:crates/jstream-platform-windows/src/video_device/convert.rs" = { hash = "b3:ac51705cb1f0f5e1" }
+
+"file:crates/jstream-platform-windows/src/video_device/format.rs" = { hash = "b3:e3cbc2c9fd67c624" }
+
+"file:crates/jstream-platform-windows/src/video_device/mjpeg.rs" = { hash = "b3:0c32961c446a2304" }
+
+"file:crates/jstream-platform-windows/src/video_device/mod.rs" = { hash = "b3:f668b5036880228b" }
+
+"file:crates/jstream-platform-windows/src/video_device/pairing.rs" = { hash = "b3:0d06445d4e435a5b" }
+
+"file:crates/jstream-platform-windows/src/video_device/source.rs" = { hash = "b3:25518dc134afe9b2" }
+
+"file:crates/jstream-platform-windows/src/video_device/stream.rs" = { hash = "b3:ae38f30acfef5995" }
+
+["CRATE-jstream-plugin-proto#purpose"]
+
+"body" = { hash = "b3:db731ccc24b25277", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: new crate; re-read every bullet against lib.rs, status.rs, ring.rs, params.rs and shared.rs: field list and writers, init/config/publish_ready/ready_latency, slot seqlock, SLOTS 8, MAX_BLOCK_FRAMES 2048, MAX_DEPTH 6, DEFAULT_DEPTH 2, first_useful, 256-event param rings with corrupt counts, trust checks, tests list" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-plugin-proto" = { hash = "b3:abb01bfde77a5db4" }
+
+"dep:docs/adr/0035-clap-plugins-out-of-process.md#decision" = { hash = "b3:97ad7e8e9e7724bf" }
+
+"file:crates/jstream-plugin-proto/src/lib.rs" = { hash = "b3:3beb5a09dc9eff7c" }
+
+"file:crates/jstream-plugin-proto/src/params.rs" = { hash = "b3:053682d10c8a595b" }
+
+"file:crates/jstream-plugin-proto/src/ring.rs" = { hash = "b3:546555571fcb0210" }
+
+"file:crates/jstream-plugin-proto/src/shared.rs" = { hash = "b3:0f2425741faff210" }
+
+"file:crates/jstream-plugin-proto/src/status.rs" = { hash = "b3:8cec5f4716edad12" }
+
+["CRATE-jstream-protocol#design"]
+
+"body" = { hash = "b3:c394c05d715bfb95", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+
+"dep:docs/RULES.md#R-API-001" = { hash = "b3:1783d2b84f435d63" }
+
+"dep:docs/RULES.md#R-API-002" = { hash = "b3:8eea55b34b97d6a9" }
+
+"dep:docs/RULES.md#R-API-004" = { hash = "b3:2d6cfa635e9b2786" }
+
+"dep:docs/RULES.md#R-ARCH-006" = { hash = "b3:24e470838185e418" }
+
+"dep:docs/adr/0013-command-model.md" = { hash = "b3:dfafd6bdd1057e8a" }
+
+"file:crates/jstream-protocol/schema/examples.snap" = { hash = "b3:ae97621dd6321b5a" }
+
+"file:crates/jstream-protocol/schema/protocol.snap" = { hash = "b3:7d0e84dd0b936271" }
+
+"file:crates/jstream-protocol/src/command.rs" = { hash = "b3:7afd907d558ee2b3" }
+
+"file:crates/jstream-protocol/src/encoder.rs" = { hash = "b3:241d371850f187f6" }
+
+"file:crates/jstream-protocol/src/envelope.rs" = { hash = "b3:63616c6985c48822" }
+
+"file:crates/jstream-protocol/src/error.rs" = { hash = "b3:5b68dbf625e4d783" }
+
+"file:crates/jstream-protocol/src/event.rs" = { hash = "b3:1731282165a924c2" }
+
+"file:crates/jstream-protocol/src/finite.rs" = { hash = "b3:5424eefb91ca4f05" }
+
+"file:crates/jstream-protocol/src/fixtures.rs" = { hash = "b3:19e3162fa96dfdb3" }
+
+"file:crates/jstream-protocol/src/geometry.rs" = { hash = "b3:91ec5275ab3c5e9f" }
+
+"file:crates/jstream-protocol/src/history.rs" = { hash = "b3:abc973f4355bada5" }
+
+"file:crates/jstream-protocol/src/id.rs" = { hash = "b3:f29ca7338086f3e2" }
+
+"file:crates/jstream-protocol/src/kind.rs" = { hash = "b3:9d53e1d6be49311f" }
+
+"file:crates/jstream-protocol/src/lib.rs" = { hash = "b3:1885a4d6a854ed6c" }
+
+"file:crates/jstream-protocol/src/output.rs" = { hash = "b3:489f2e86af7bf320" }
+
+"file:crates/jstream-protocol/src/parity.rs" = { hash = "b3:de043322eea1d501" }
+
+"file:crates/jstream-protocol/src/query.rs" = { hash = "b3:e2fab772da80649b" }
+
+"file:crates/jstream-protocol/src/schema.rs" = { hash = "b3:b48737a114c2fced" }
+
+"file:crates/jstream-protocol/src/settings.rs" = { hash = "b3:e9b7b4a0b8273b20" }
+
+"file:crates/jstream-protocol/src/version.rs" = { hash = "b3:9b7c4db35e5c7e3e" }
+
+["CRATE-jstream-protocol#purpose"]
+
+"body" = { hash = "b3:a5b312f61a8186c8", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol" = { hash = "b3:55468c98f61fc0f9" }
+
+"file:crates/jstream-protocol/src/command.rs" = { hash = "b3:7afd907d558ee2b3" }
+
+"file:crates/jstream-protocol/src/encoder.rs" = { hash = "b3:241d371850f187f6" }
+
+"file:crates/jstream-protocol/src/envelope.rs" = { hash = "b3:63616c6985c48822" }
+
+"file:crates/jstream-protocol/src/error.rs" = { hash = "b3:5b68dbf625e4d783" }
+
+"file:crates/jstream-protocol/src/event.rs" = { hash = "b3:1731282165a924c2" }
+
+"file:crates/jstream-protocol/src/finite.rs" = { hash = "b3:5424eefb91ca4f05" }
+
+"file:crates/jstream-protocol/src/fixtures.rs" = { hash = "b3:19e3162fa96dfdb3" }
+
+"file:crates/jstream-protocol/src/geometry.rs" = { hash = "b3:91ec5275ab3c5e9f" }
+
+"file:crates/jstream-protocol/src/history.rs" = { hash = "b3:abc973f4355bada5" }
+
+"file:crates/jstream-protocol/src/id.rs" = { hash = "b3:f29ca7338086f3e2" }
+
+"file:crates/jstream-protocol/src/kind.rs" = { hash = "b3:9d53e1d6be49311f" }
+
+"file:crates/jstream-protocol/src/lib.rs" = { hash = "b3:1885a4d6a854ed6c" }
+
+"file:crates/jstream-protocol/src/output.rs" = { hash = "b3:489f2e86af7bf320" }
+
+"file:crates/jstream-protocol/src/parity.rs" = { hash = "b3:de043322eea1d501" }
+
+"file:crates/jstream-protocol/src/query.rs" = { hash = "b3:e2fab772da80649b" }
+
+"file:crates/jstream-protocol/src/schema.rs" = { hash = "b3:b48737a114c2fced" }
+
+"file:crates/jstream-protocol/src/settings.rs" = { hash = "b3:e9b7b4a0b8273b20" }
+
+"file:crates/jstream-protocol/src/version.rs" = { hash = "b3:9b7c4db35e5c7e3e" }
+
+["CRATE-jstream-render#design"]
+
+"body" = { hash = "b3:7f2a94f0736d9611", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
+
+"dep:docs/RULES.md#R-RT-002" = { hash = "b3:24c0e2f735f7e770" }
+
+"dep:docs/adr/0004-wgpu-with-native-interop.md" = { hash = "b3:4dd2ed0785be217e" }
+
+"file:crates/jstream-render/src/cache.rs" = { hash = "b3:071eeba73136670c" }
+
+"file:crates/jstream-render/src/color.rs" = { hash = "b3:5641b05dca77952a" }
+
+"file:crates/jstream-render/src/composite.wgsl" = { hash = "b3:ec3c05f2f0529e75" }
+
+"file:crates/jstream-render/src/compositor.rs" = { hash = "b3:bb5175d8f36e082d" }
+
+"file:crates/jstream-render/src/error.rs" = { hash = "b3:219665bab5be0284" }
+
+"file:crates/jstream-render/src/gpu.rs" = { hash = "b3:f1de9efc6510e1ea" }
+
+"file:crates/jstream-render/src/image.rs" = { hash = "b3:0edf4c378e3b8335" }
+
+"file:crates/jstream-render/src/lib.rs" = { hash = "b3:0ed7d39913b73022" }
+
+"file:crates/jstream-render/src/place.rs" = { hash = "b3:7b3daae7d1e65f73" }
+
+"file:crates/jstream-render/src/resolve.wgsl" = { hash = "b3:62fced90ebade4b5" }
+
+"file:crates/jstream-render/src/scene.rs" = { hash = "b3:50cf01aa0e35f171" }
+
+"file:crates/jstream-render/src/tests.rs" = { hash = "b3:eaa109533b8798d8" }
+
+["CRATE-jstream-render#purpose"]
+
+"body" = { hash = "b3:79c89d3a788a641a", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: render's link to ARCH Threads for the cache hand-off still points at the model's State-to-RT-threads text; holds" }
+
+"dep:crates/jstream-platform/README.md#gpu-frames" = { hash = "b3:3c3b2d799f3dc3f1" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-render" = { hash = "b3:a2b6fb6e591a93b7" }
+
+"dep:docs/ARCHITECTURE.md#gpu-pipeline" = { hash = "b3:6412cfa1dc90c301" }
+
+"dep:docs/adr/0004-wgpu-with-native-interop.md" = { hash = "b3:4dd2ed0785be217e" }
+
+"dep:docs/adr/0022-item-transform-and-canvas.md" = { hash = "b3:af178dd41ff64ab0" }
+
+"file:crates/jstream-render/Cargo.toml" = { hash = "b3:5a7c9b80875ea235" }
+
+"file:crates/jstream-render/src/cache.rs" = { hash = "b3:071eeba73136670c" }
+
+"file:crates/jstream-render/src/color.rs" = { hash = "b3:5641b05dca77952a" }
+
+"file:crates/jstream-render/src/composite.wgsl" = { hash = "b3:ec3c05f2f0529e75" }
+
+"file:crates/jstream-render/src/compositor.rs" = { hash = "b3:bb5175d8f36e082d" }
+
+"file:crates/jstream-render/src/error.rs" = { hash = "b3:219665bab5be0284" }
+
+"file:crates/jstream-render/src/gpu.rs" = { hash = "b3:f1de9efc6510e1ea" }
+
+"file:crates/jstream-render/src/image.rs" = { hash = "b3:0edf4c378e3b8335" }
+
+"file:crates/jstream-render/src/lib.rs" = { hash = "b3:0ed7d39913b73022" }
+
+"file:crates/jstream-render/src/place.rs" = { hash = "b3:7b3daae7d1e65f73" }
+
+"file:crates/jstream-render/src/resolve.wgsl" = { hash = "b3:62fced90ebade4b5" }
+
+"file:crates/jstream-render/src/scene.rs" = { hash = "b3:50cf01aa0e35f171" }
+
+"file:crates/jstream-render/src/tests.rs" = { hash = "b3:eaa109533b8798d8" }
+
+["CRATE-jstream-render#testing"]
+
+"body" = { hash = "b3:e262bbf38ca8d7b4", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 golden geometry tests) into E1: the E1 layer/cache test list and B3's golden tests are both in tests.rs; holds" }
+
+"dep:docs/RULES.md#R-TEST-003" = { hash = "b3:56dea7b43ab3b19d" }
+
+"dep:docs/RULES.md#R-TEST-004" = { hash = "b3:7db1a4e21a6cee80" }
+
+"dep:docs/RULES.md#testing" = { hash = "b3:e2b28a2df72d9e17" }
+
+"file:crates/jstream-render/src/tests.rs" = { hash = "b3:eaa109533b8798d8" }
+
+["CRATE-jstream-server#design"]
+
+"body" = { hash = "b3:f989adc34a6af1d9", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; server passes output kinds through untouched" }
+
+"dep:crates/jstream-control/README.md#design" = { hash = "b3:2edc2ba0e38bc4ce" }
+
+"dep:docs/ARCHITECTURE.md#protocol" = { hash = "b3:360fbc5405febcf3" }
+
+"dep:docs/RULES.md#R-SEC-002" = { hash = "b3:9bcfb0336f6adad9" }
+
+"dep:docs/adr/0006-mcp-full-access.md" = { hash = "b3:fbe7c61707faa7bd" }
+
+"file:crates/jstream-server/Cargo.toml" = { hash = "b3:e9241efe87e7e719" }
+
+"file:crates/jstream-server/src/config.rs" = { hash = "b3:0dfbb49d28e2b62a" }
+
+"file:crates/jstream-server/src/error.rs" = { hash = "b3:78515d947c87dfd0" }
+
+"file:crates/jstream-server/src/gate.rs" = { hash = "b3:aa923cddbd9a536f" }
+
+"file:crates/jstream-server/src/lib.rs" = { hash = "b3:ae3b3e60a2f4de54" }
+
+"file:crates/jstream-server/src/listener.rs" = { hash = "b3:ca2a076f73f966ae" }
+
+"file:crates/jstream-server/src/mcp.rs" = { hash = "b3:05057d7979293830" }
+
+"file:crates/jstream-server/src/session.rs" = { hash = "b3:1ab10d4f98ace68a" }
+
+"file:crates/jstream-server/src/tests.rs" = { hash = "b3:933d0c4ef1b02ecc" }
+
+"file:crates/jstream-server/src/ui.rs" = { hash = "b3:4a9ea9ae5014f95c" }
+
+["CRATE-jstream-server#purpose"]
+
+"body" = { hash = "b3:2f40600f2090e7bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-server" = { hash = "b3:91b837e64ac2fb2b" }
+
+"file:crates/jstream-server/src/config.rs" = { hash = "b3:0dfbb49d28e2b62a" }
+
+"file:crates/jstream-server/src/error.rs" = { hash = "b3:78515d947c87dfd0" }
+
+"file:crates/jstream-server/src/gate.rs" = { hash = "b3:aa923cddbd9a536f" }
+
+"file:crates/jstream-server/src/lib.rs" = { hash = "b3:ae3b3e60a2f4de54" }
+
+"file:crates/jstream-server/src/listener.rs" = { hash = "b3:ca2a076f73f966ae" }
+
+"file:crates/jstream-server/src/mcp.rs" = { hash = "b3:05057d7979293830" }
+
+"file:crates/jstream-server/src/session.rs" = { hash = "b3:1ab10d4f98ace68a" }
+
+"file:crates/jstream-server/src/tests.rs" = { hash = "b3:933d0c4ef1b02ecc" }
+
+"file:crates/jstream-server/src/ui.rs" = { hash = "b3:4a9ea9ae5014f95c" }
+
+["CRATE-jstream-sources#purpose"]
+
+"body" = { hash = "b3:ba182674aa6f4948", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 N1: Windows walk split out of open_inside into walk_below (takes the already-resolved path below the root); Assets paragraph's walk description unchanged and still holds; Tests sentence now says the Windows test refuses links both at resolve and in the walk on its own" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-sources" = { hash = "b3:dfba6103702005f0" }
+
+"dep:docs/adr/0025-typed-settings-kind-descriptors.md" = { hash = "b3:b655210653447199" }
+
+"dep:docs/adr/0031-source-types-and-decoding-scope.md" = { hash = "b3:04b853b872d31424" }
+
+"file:crates/jstream-sources/src/audio.rs" = { hash = "b3:234830343d1d1b94" }
+
+"file:crates/jstream-sources/src/color.rs" = { hash = "b3:6426952914886671" }
+
+"file:crates/jstream-sources/src/describe.rs" = { hash = "b3:1e76d8540f8523a1" }
+
+"file:crates/jstream-sources/src/error.rs" = { hash = "b3:aa4fbc16ed86f665" }
+
+"file:crates/jstream-sources/src/image/decode.rs" = { hash = "b3:6ae3f673fe0d6d0b" }
+
+"file:crates/jstream-sources/src/image/mod.rs" = { hash = "b3:c4299f8d4d3cdecb" }
+
+"file:crates/jstream-sources/src/lib.rs" = { hash = "b3:6aad027c56bf7896" }
+
+"file:crates/jstream-sources/src/registry.rs" = { hash = "b3:ac43d32ccbcb0360" }
+
+"file:crates/jstream-sources/src/source.rs" = { hash = "b3:ce78a1a8abbe3ef9" }
+
+"file:crates/jstream-sources/src/text/mod.rs" = { hash = "b3:34314ba6e93e9e21" }
+
+"file:crates/jstream-sources/src/text/raster.rs" = { hash = "b3:c3408e030cf73654" }
+
+"file:crates/jstream-sources/tests/data/anim.webp" = { hash = "b3:9d858ccee8b712ef" }
+
+"file:crates/jstream-sources/tests/data/lossy.webp" = { hash = "b3:09433a4360ef17e1" }
+
+"file:crates/jstream-sources/tests/data/solid.jpg" = { hash = "b3:229b4a20d80ca78c" }
+
+"file:crates/jstream-sources/tests/data/text/plain.png" = { hash = "b3:dbb67160c5d2f421" }
+
+"file:crates/jstream-sources/tests/data/text/styled.png" = { hash = "b3:fc3b1214b3ce4e96" }
+
+"file:crates/jstream-sources/tests/sources.rs" = { hash = "b3:2820dce1d7eb4c5e" }
+
+"file:crates/jstream-sources/tests/text.rs" = { hash = "b3:92e8e9ffe9842e37" }
+
+["CRATE-jstream-types#purpose"]
+
+"body" = { hash = "b3:f826effbf89b6964", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "ARCH#crate-map changed only in the jstream-encode row (ADR-0027 sharing: no video chain shares per mix and encoder profile, a chained output gets its own session), the jstream-mcp row (stdio here, streamable HTTP served by jstream-server) and the jstream-server row (serves that transport, not built); the jstream-types row is unchanged and this Purpose still matches it" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-types" = { hash = "b3:f4882fbbc5e6dc89" }
+
+"file:crates/jstream-types/src/lib.rs" = { hash = "b3:0c768a21be15de21" }
+
+"file:crates/jstream-types/src/rational.rs" = { hash = "b3:3adcff769a347c8c" }
+
+["CRATE-jstream-ui#build"]
+
+"body" = { hash = "b3:d5d04df86b3b2eb8", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: added the pointer to CI's ui-e2e job and tests/e2e/README.md; trunk build steps unchanged and still what CI runs" }
+
+"dep:docs/adr/0045-leptos-web-ui.md" = { hash = "b3:b0a2a9cd68f6facd" }
+
+"file:crates/jstream-ui/Cargo.toml" = { hash = "b3:6cf5a664dd2c8f4c" }
+
+"file:crates/jstream-ui/Trunk.toml" = { hash = "b3:f87a888e55181fde" }
+
+"file:crates/jstream-ui/index.html" = { hash = "b3:8547ab2b9342942f" }
+
+"file:crates/jstream-ui/src/main.rs" = { hash = "b3:b0fabe46ab68dffb" }
+
+["CRATE-jstream-ui#canvas"]
+
+"body" = { hash = "b3:2c42943b912b6f1d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: Styles bullet now says the test refuses any style attribute, static or set at run time (style=move, attr:style), outside test modules; matches sets_style_attribute in lib.rs" }
+
+"dep:docs/adr/0022-item-transform-and-canvas.md" = { hash = "b3:af178dd41ff64ab0" }
+
+"dep:docs/adr/0032-live-edits-and-undo.md" = { hash = "b3:ff923b70ae781b73" }
+
+"file:crates/jstream-ui/src/canvas/mod.rs" = { hash = "b3:49945f646dfa549c" }
+
+"file:crates/jstream-ui/src/canvas/model.rs" = { hash = "b3:a216b2e0e45b54ef" }
+
+"file:crates/jstream-ui/src/canvas/snap.rs" = { hash = "b3:7e81b19db47fd220" }
+
+"file:crates/jstream-ui/src/canvas/transform.rs" = { hash = "b3:3e890dfae55620cc" }
+
+["CRATE-jstream-ui#design"]
+
+"body" = { hash = "b3:de38d89391222d92", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line changed; design bullets untouched and exercised by the e2e specs (connect, outputs, key handling)" }
+
+"dep:crates/jstream-control/README.md#design" = { hash = "b3:2edc2ba0e38bc4ce" }
+
+"dep:docs/adr/0045-leptos-web-ui.md" = { hash = "b3:b0a2a9cd68f6facd" }
+
+"file:crates/jstream-ui/src/app.rs" = { hash = "b3:8c1bea968ba0a189" }
+
+"file:crates/jstream-ui/src/canvas/mod.rs" = { hash = "b3:49945f646dfa549c" }
+
+"file:crates/jstream-ui/src/canvas/model.rs" = { hash = "b3:a216b2e0e45b54ef" }
+
+"file:crates/jstream-ui/src/canvas/snap.rs" = { hash = "b3:7e81b19db47fd220" }
+
+"file:crates/jstream-ui/src/canvas/transform.rs" = { hash = "b3:3e890dfae55620cc" }
+
+"file:crates/jstream-ui/src/host.rs" = { hash = "b3:3ab8a619ef73791f" }
+
+"file:crates/jstream-ui/src/lib.rs" = { hash = "b3:374727eaba299426" }
+
+"file:crates/jstream-ui/src/main.rs" = { hash = "b3:b0fabe46ab68dffb" }
+
+"file:crates/jstream-ui/src/panels/mod.rs" = { hash = "b3:ef3e4d543c670393" }
+
+"file:crates/jstream-ui/src/panels/outputs.rs" = { hash = "b3:81728ddff971bf23" }
+
+"file:crates/jstream-ui/src/session.rs" = { hash = "b3:076299ee126c849d" }
+
+"file:crates/jstream-ui/style.css" = { hash = "b3:bd8197d3c2a90a4b" }
+
+["CRATE-jstream-ui#purpose"]
+
+"body" = { hash = "b3:e5df397b64055237", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line gained the e2e README sections; contents list holds" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-ui" = { hash = "b3:8b72f650cbef12f9" }
+
+"file:crates/jstream-ui/src/app.rs" = { hash = "b3:8c1bea968ba0a189" }
+
+"file:crates/jstream-ui/src/canvas/mod.rs" = { hash = "b3:49945f646dfa549c" }
+
+"file:crates/jstream-ui/src/canvas/model.rs" = { hash = "b3:a216b2e0e45b54ef" }
+
+"file:crates/jstream-ui/src/canvas/snap.rs" = { hash = "b3:7e81b19db47fd220" }
+
+"file:crates/jstream-ui/src/canvas/transform.rs" = { hash = "b3:3e890dfae55620cc" }
+
+"file:crates/jstream-ui/src/host.rs" = { hash = "b3:3ab8a619ef73791f" }
+
+"file:crates/jstream-ui/src/lib.rs" = { hash = "b3:374727eaba299426" }
+
+"file:crates/jstream-ui/src/main.rs" = { hash = "b3:b0fabe46ab68dffb" }
+
+"file:crates/jstream-ui/src/panels/mod.rs" = { hash = "b3:ef3e4d543c670393" }
+
+"file:crates/jstream-ui/src/panels/outputs.rs" = { hash = "b3:81728ddff971bf23" }
+
+"file:crates/jstream-ui/src/session.rs" = { hash = "b3:076299ee126c849d" }
+
+["CRATE-jstream-ui-e2e#harness"]
+
+"body" = { hash = "b3:fdb6e469d9e83983", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "deny fix: the harness dropped anyhow (banned outside apps, R-RS-003) for Box<dyn Error>; behaviour and text unchanged" }
+
+"file:crates/jstream-ui/tests/e2e/fixtures.js" = { hash = "b3:3598cb5bc234f145" }
+
+"file:crates/jstream-ui/tests/e2e/global-setup.js" = { hash = "b3:cd1222001aad0cda" }
+
+"file:crates/jstream-ui/tests/e2e/mock-daemon/Cargo.toml" = { hash = "b3:e97684fe742d6756" }
+
+"file:crates/jstream-ui/tests/e2e/mock-daemon/src/main.rs" = { hash = "b3:926ac43cee05f291" }
+
+"file:crates/jstream-ui/tests/e2e/package.json" = { hash = "b3:ef446217a71d1fdc" }
+
+"file:crates/jstream-ui/tests/e2e/playwright.config.js" = { hash = "b3:063a37f95f399bff" }
+
+"file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js" = { hash = "b3:e05f245bcdd1b64e" }
+
+"file:crates/jstream-ui/tests/e2e/specs/connect.spec.js" = { hash = "b3:b902e392dbb641e7" }
+
+"file:crates/jstream-ui/tests/e2e/specs/outputs.spec.js" = { hash = "b3:dfb621a5b9890b97" }
+
+["CRATE-jstream-ui-e2e#running"]
+
+"body" = { hash = "b3:cc33975e5ce1cf00", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
+
+"file:crates/jstream-ui/tests/e2e/package.json" = { hash = "b3:ef446217a71d1fdc" }
+
+"file:crates/jstream-ui/tests/e2e/playwright.config.js" = { hash = "b3:063a37f95f399bff" }
+
+["CRATE-jstream-ui-e2e#tests"]
+
+"body" = { hash = "b3:3973811d2b41bfa3", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
+
+"file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js" = { hash = "b3:e05f245bcdd1b64e" }
+
+"file:crates/jstream-ui/tests/e2e/specs/connect.spec.js" = { hash = "b3:b902e392dbb641e7" }
+
+"file:crates/jstream-ui/tests/e2e/specs/outputs.spec.js" = { hash = "b3:dfb621a5b9890b97" }
+
+["CRATE-jstream-vcam-proto#purpose"]
+
+"body" = { hash = "b3:b6a3f609729e0f1f", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Review round 1: re-read against the code after B1/N2/N3: sddl_objects(user_sid) replaces the IU DACL, logging left out of the contract, choose_frame safety stated as a timing assumption, re-initialisation and format_matches listed" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-vcam-proto" = { hash = "b3:69317b1d67515848" }
+
+"file:crates/jstream-vcam-proto/src/control.rs" = { hash = "b3:5b94524313e254bb" }
+
+"file:crates/jstream-vcam-proto/src/lib.rs" = { hash = "b3:11679c4222aa2a93" }
+
+"file:crates/jstream-vcam-proto/src/names.rs" = { hash = "b3:5506fd7891457520" }
+
+["CRATE-jstream-vcam-windows#hardware-check"]
+
+"body" = { hash = "b3:6d760c430e428d10", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
+
+"dep:docs/ARCHITECTURE.md#packaging" = { hash = "b3:1c343ec4bf85722c" }
+
+"file:crates/jstream-vcam-windows/examples/vcam_smoke/main.rs" = { hash = "b3:741967485a750fec" }
+
+"file:crates/jstream-vcam-windows/examples/vcam_smoke/smoke.rs" = { hash = "b3:52b22e31260a816a" }
+
+["CRATE-jstream-vcam-windows#purpose"]
+
+"body" = { hash = "b3:c640c2439b8b37f8", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only: the daemon registers until the desktop app has --register-vcam): the Registration bullet's jstream-daemon --register-vcam still holds; rest unchanged" }
+
+"dep:crates/jstream-vcam-proto/README.md#purpose" = { hash = "b3:b6a3f609729e0f1f" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows" = { hash = "b3:ecfd9b5f74db77b1" }
+
+"dep:docs/ARCHITECTURE.md#packaging" = { hash = "b3:1c343ec4bf85722c" }
+
+"dep:docs/RULES.md#unsafe" = { hash = "b3:9074e32b08b81d5b" }
+
+"dep:docs/adr/0020-portable-windows-distribution.md" = { hash = "b3:febfe552adc09d5b" }
+
+"file:crates/jstream-vcam-windows/Cargo.toml" = { hash = "b3:5d86cc2aab180d79" }
+
+"file:crates/jstream-vcam-windows/src/lib.rs" = { hash = "b3:a11be4e03388f15a" }
+
+"file:crates/jstream-vcam-windows/src/pace.rs" = { hash = "b3:ddd1a9e738e6c587" }
+
+"file:crates/jstream-vcam-windows/src/pixels.rs" = { hash = "b3:9c9bb12d6619a1fa" }
+
+"file:crates/jstream-vcam-windows/src/trust.rs" = { hash = "b3:052ff36d65680eb3" }
+
+"file:crates/jstream-vcam-windows/src/win/activate.rs" = { hash = "b3:a09d085fe5a1383e" }
+
+"file:crates/jstream-vcam-windows/src/win/attrs.rs" = { hash = "b3:9c3a291d17eb2496" }
+
+"file:crates/jstream-vcam-windows/src/win/dll.rs" = { hash = "b3:d9ce3ae1ef818d95" }
+
+"file:crates/jstream-vcam-windows/src/win/frames.rs" = { hash = "b3:22be68cdd50e8dd9" }
+
+"file:crates/jstream-vcam-windows/src/win/log.rs" = { hash = "b3:4442f4b5cabff0d9" }
+
+"file:crates/jstream-vcam-windows/src/win/mod.rs" = { hash = "b3:8f00cd699547e6a2" }
+
+"file:crates/jstream-vcam-windows/src/win/reg.rs" = { hash = "b3:c28895e1e4c38b31" }
+
+"file:crates/jstream-vcam-windows/src/win/session.rs" = { hash = "b3:8bfe86421fa75457" }
+
+"file:crates/jstream-vcam-windows/src/win/shared.rs" = { hash = "b3:5ae80ee249a7723b" }
+
+"file:crates/jstream-vcam-windows/src/win/source.rs" = { hash = "b3:63e42e67393d20f4" }
+
+"file:crates/jstream-vcam-windows/src/win/stream.rs" = { hash = "b3:8c355a30a5fdf52f" }
+
+["CRATE-jstream-youtube#purpose"]
+
+"body" = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via platform#purpose (Audio and FakeAudioIo lines); Secret and OAuthTokenStore text unchanged; holds" }
+
+"dep:crates/jstream-platform/README.md#purpose" = { hash = "b3:ac6493f8088539b9" }
+
+"dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube" = { hash = "b3:e3b27ea549009815" }
+
+"dep:docs/RULES.md#R-DEP-006" = { hash = "b3:8efb19c99c8be969" }
+
+"dep:docs/RULES.md#R-SEC-001" = { hash = "b3:69c6131f3f1bd0fd" }
+
+"dep:docs/adr/0041-youtube-interaction-scope-v3.md" = { hash = "b3:acbf94ce5b03cce1" }
+
+"file:crates/jstream-youtube/fixtures/broadcast_bind.json" = { hash = "b3:8da9c74a2b289be3" }
+
+"file:crates/jstream-youtube/fixtures/broadcast_insert.json" = { hash = "b3:be2c5ab84b2b7eca" }
+
+"file:crates/jstream-youtube/fixtures/broadcast_transition_live.json" = { hash = "b3:ade83091ac58b10d" }
+
+"file:crates/jstream-youtube/fixtures/broadcasts_list.json" = { hash = "b3:95050509cf687820" }
+
+"file:crates/jstream-youtube/fixtures/error_quota.json" = { hash = "b3:95d711a6ef1fe846" }
+
+"file:crates/jstream-youtube/fixtures/error_redundant_transition.json" = { hash = "b3:6c649ac9dbe8d502" }
+
+"file:crates/jstream-youtube/fixtures/error_unauthorized.json" = { hash = "b3:7e03c74f21ea4875" }
+
+"file:crates/jstream-youtube/fixtures/stream_health.json" = { hash = "b3:2efad0d57637728c" }
+
+"file:crates/jstream-youtube/fixtures/stream_insert.json" = { hash = "b3:d5e99a1a606674ab" }
+
+"file:crates/jstream-youtube/fixtures/streams_list.json" = { hash = "b3:2949cfa5f5935bc3" }
+
+"file:crates/jstream-youtube/fixtures/token_exchange.json" = { hash = "b3:28985ade2aad062b" }
+
+"file:crates/jstream-youtube/fixtures/token_invalid_grant.json" = { hash = "b3:d388d0682e80ff41" }
+
+"file:crates/jstream-youtube/fixtures/token_refresh.json" = { hash = "b3:8b26b2ef26103774" }
+
+"file:crates/jstream-youtube/src/error.rs" = { hash = "b3:a175ce9c54120d89" }
+
+"file:crates/jstream-youtube/src/fake.rs" = { hash = "b3:072de4248097ea45" }
+
+"file:crates/jstream-youtube/src/http.rs" = { hash = "b3:31540dfad4259a71" }
+
+"file:crates/jstream-youtube/src/https.rs" = { hash = "b3:a1b77e31232697af" }
+
+"file:crates/jstream-youtube/src/https/tests.rs" = { hash = "b3:2a7db87174f1fd6d" }
+
+"file:crates/jstream-youtube/src/lib.rs" = { hash = "b3:b597181b25e55fbd" }
+
+"file:crates/jstream-youtube/src/live.rs" = { hash = "b3:37cfb6646affdb72" }
+
+"file:crates/jstream-youtube/src/live/tests.rs" = { hash = "b3:21c5a49c69bdfd06" }
+
+"file:crates/jstream-youtube/src/loopback.rs" = { hash = "b3:49badb1e6e8761a0" }
+
+"file:crates/jstream-youtube/src/loopback/tests.rs" = { hash = "b3:a9e8a37ad1f0f16f" }
+
+"file:crates/jstream-youtube/src/oauth.rs" = { hash = "b3:f2c643e2a1704b86" }
+
+"file:crates/jstream-youtube/src/oauth/tests.rs" = { hash = "b3:b593d1da7528ba61" }
+
+["DOCS#bootstrap"]
+
+"body" = { hash = "b3:8758c926376e2f75", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/backrefs.rs" = { hash = "b3:ba285841b70c7e29", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/check.rs" = { hash = "b3:6bd6da8c4e14a6a5", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/generate.rs" = { hash = "b3:0225a3d9dee611c2", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/govern.rs" = { hash = "b3:34cbbe36abdc6774", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/hash.rs" = { hash = "b3:47f2638e8778ff07", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/history.rs" = { hash = "b3:da94cddb8a942901", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/ledger.rs" = { hash = "b3:6f3db2a13cab1237", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/merge.rs" = { hash = "b3:898779ce7a1834df", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/mod.rs" = { hash = "b3:3df60a105143a5c7", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution and post-merge migrate, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/parse.rs" = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+"file:xtask/src/docs/progress.rs" = { hash = "b3:0047ff70349b6728", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0050: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
+
+["DOCS#dependency-lint"]
+
+"body" = { hash = "b3:c5e5edb854632c87", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: lint_deps.rs gains native-code allowlist entries for Tauri's tree (tauri links guard, vswhom-sys build-time C++, Linux gtk-rs and WebKitGTK sys crates, objc2-exception-helper, iana-time-zone-haiku, defmt), all covered by the native-code bullet; no rule logic changed" }
+
+"dep:docs/RULES.md#R-ARCH-002" = { hash = "b3:a84629b45a0a2be7" }
+
+"dep:docs/RULES.md#R-ARCH-003" = { hash = "b3:b35ca6baf4367119" }
+
+"dep:docs/RULES.md#R-ARCH-005" = { hash = "b3:92cb7243a7329a36" }
+
+"dep:docs/RULES.md#R-DEP-002" = { hash = "b3:5a4289040223e5dc" }
+
+"dep:docs/RULES.md#R-DEP-003" = { hash = "b3:c6836c98530b7bf5" }
+
+"dep:docs/RULES.md#R-UNSAFE-001" = { hash = "b3:379ee0e3d8c9e499" }
+
+"file:xtask/src/lint_deps.rs" = { hash = "b3:bd44ff4e86f247fa" }
+
+["DOCS#governance"]
+
+"body" = { hash = "b3:45d7638cdee2c505", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read for ADR-0038 renumbered from 0036: governance.rs strips only one-'> '-line adr-status blocks from accepted ADRs before comparing; accepted-ADR and Status banner bullets match, protected list unchanged" }
+
+"dep:docs/adr/0019-review-gate-v2.md" = { hash = "b3:a0dd0fef4c0b0f34" }
+
+"file:.github/workflows/governance.yml" = { hash = "b3:92d196ca1c361213" }
+
+"file:xtask/src/governance.rs" = { hash = "b3:d2e3fa818c90908d" }
+
+["DOCS#ttl"]
+
+"body" = { hash = "b3:e67dd72e603695c3", by = "agent:claude@session_0113X373pgdBkQR1gyCtut9j", note = "Re-read against sweep.yml: new Roadmap progress step runs xtask docs progress (full history from fetch-depth 0) into the issue; added its bullet; deny, docs-due, update dry-run, override audit, one pinned issue and not-built list unchanged" }
+
+"file:.github/workflows/sweep.yml" = { hash = "b3:84f32e8fcb8e27a6" }
+
+["FUZZ#running"]
+
+"body" = { hash = "b3:9aadff45c171e39f", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r3: Cargo.toml now also forbids unsafe_code and denies undocumented_unsafe_blocks (B1); commands, seeds and layout unchanged" }
+
+"file:fuzz/Cargo.toml" = { hash = "b3:a1b798424bdb4684" }
+
+"file:fuzz/seed.sh" = { hash = "b3:9c5ca3f268d45f94" }
+
+["FUZZ#targets"]
+
+"body" = { hash = "b3:489806575d8fb9ac", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r3: amf0 header reworded (N2) to the property it asserts; README row unchanged and still accurate" }
+
+"file:fuzz/fuzz_targets/aac.rs" = { hash = "b3:cc2f13ad15f910af" }
+
+"file:fuzz/fuzz_targets/amf0.rs" = { hash = "b3:878d25390985d2f5" }
+
+"file:fuzz/fuzz_targets/av1.rs" = { hash = "b3:2f3fc59c1f8bf703" }
+
+"file:fuzz/fuzz_targets/collection_load.rs" = { hash = "b3:963074756596382b" }
+
+"file:fuzz/fuzz_targets/h264.rs" = { hash = "b3:13ee3bb5abc5560e" }
+
+"file:fuzz/fuzz_targets/hevc.rs" = { hash = "b3:a9be1820a8584bfd" }
+
+"file:fuzz/fuzz_targets/kind_settings.rs" = { hash = "b3:9d11f72a855604c1" }
+
+"file:fuzz/fuzz_targets/mux.rs" = { hash = "b3:c96607ecbfc52f86" }
+
+"file:fuzz/fuzz_targets/protocol_decode.rs" = { hash = "b3:cbc148f78a6a98ff" }
+
+["README#platforms"]
+
+"body" = { hash = "b3:18feaae75f4923a3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Linux row's link moved from superseded ADR-0003 to ADR-0031, which restates the Linux codec-path deferral unchanged; Windows fact marker and ADR-0008 policy, macOS row unchanged" }
+
+"dep:docs/adr/0008-windows-support-policy.md" = { hash = "b3:c65b46a55b573338" }
+
+["REVIEW#checks"]
+
+"body" = { hash = "b3:0c707680ca3d6b3d", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read Step 2 item 3 and the blocking list against ADR-0043: tier checked against ADR-0043, too-high tier non-blocking, decision-comment rules unchanged" }
+
+"dep:docs/RULES.md#R-DOC-004" = { hash = "b3:9a94d90984796d06" }
+
+"dep:docs/RULES.md#R-GOV-001" = { hash = "b3:707502218d014ee7" }
+
+["REVIEW#ground-rules"]
+
+"body" = { hash = "b3:ef6690600d49a5a1", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against ADR-0019: comment-only reviewer, one head SHA, recusal via Claude-Session trailers, PR text as data, base-branch REVIEW/RULES/DOCS all unchanged" }
+
+"dep:docs/adr/0019-review-gate-v2.md" = { hash = "b3:a0dd0fef4c0b0f34" }
+
+["REVIEW#output"]
+
+"body" = { hash = "b3:43319c759d4464d7", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Only the escalate row's wording changed (maintainer-tier ADR); verdict semantics and gate rules unchanged" }
+
+"file:.github/workflows/review-gate.yml" = { hash = "b3:addd703428e7de5a" }
+
+["ROADMAP#m0"]
+
+"body" = { hash = "b3:20d931da187bfda8", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review N5: Demo line now says S1-S4 each have a written result (S4's is ARCH#browser-source); Track B bullets unchanged" }
+
+"dep:docs/adr/0016-docs-as-checked-graph-v2.md" = { hash = "b3:eafcbe72ac465f3c" }
+
+"dep:docs/adr/0019-review-gate-v2.md" = { hash = "b3:a0dd0fef4c0b0f34" }
+
+["ROADMAP#m1"]
+
+"body" = { hash = "b3:360ec790b7f94840", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Restored the ADR-0031 dependency a merge dropped; M1b's source-kinds bullet is ADR-0031's list (display, window, video capture device, image formats, color, text, audio inputs, browser) and still matches it" }
+
+"dep:docs/adr/0020-portable-windows-distribution.md" = { hash = "b3:febfe552adc09d5b" }
+
+"dep:docs/adr/0031-source-types-and-decoding-scope.md" = { hash = "b3:04b853b872d31424" }
+
+["ROADMAP#m2"]
+
+"body" = { hash = "b3:66add461f96cc3f3", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: M2's first bullet now says Leptos is confirmed by ADR-0045 (which supersedes ADR-0002 and keeps its web-UI decision); depends_on moved to ADR-0045; rest of M2 unchanged" }
+
+"dep:docs/adr/0045-leptos-web-ui.md" = { hash = "b3:b0a2a9cd68f6facd" }
+
+["RULES#compatibility"]
+
+"body" = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+
+"dep:docs/ARCHITECTURE.md#persistence" = { hash = "b3:7ab4accbf98f6662" }
+
+"dep:docs/ARCHITECTURE.md#protocol" = { hash = "b3:360fbc5405febcf3" }
+
+["RULES#dependencies"]
+
+"body" = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
+
+"dep:docs/adr/0031-source-types-and-decoding-scope.md" = { hash = "b3:04b853b872d31424" }
+
+["RULES#documentation"]
+
+"body" = { hash = "b3:7e663fb4bee1ca49", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "DOCS#gate item 1 now names ledger stamps, inline stamps and ledger form; R-DOC-003 text updated to the per-input stamp; the other R-DOC rules don't depend on where stamps are stored" }
+
+"dep:docs/DOCS.md#gate" = { hash = "b3:d94ce0fdb0067b08", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "DOCS#gate item 1 now names ledger stamps, inline stamps and ledger form; R-DOC-003 text updated to the per-input stamp; the other R-DOC rules don't depend on where stamps are stored" }
+
+["RULES#governance"]
+
+"body" = { hash = "b3:d680c65b3862bf89", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read R-GOV-001..005: R-GOV-005 now follows ADR-0043's narrowed maintainer tier; labels, overrides, gate and proxy decisions unchanged" }
+
+"dep:docs/adr/0019-review-gate-v2.md" = { hash = "b3:a0dd0fef4c0b0f34" }
+
+["RULES#real-time"]
+
+"body" = { hash = "b3:c60cba487fc0a5e5", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
+
+"dep:docs/ARCHITECTURE.md#threading" = { hash = "b3:27f72f3f6ef95752" }
+
+["RUNBOOK-GO-LIVE#before"]
+
+"body" = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
+
+"dep:apps/jstream-daemon/README.md#usage" = { hash = "b3:b2396ad80b13c8a8" }
+
+["RUNBOOK-GO-LIVE#smoke"]
+
+"body" = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
+
+"dep:apps/jstream-cli/README.md#usage" = { hash = "b3:6693f8835c47fc77" }
+
+"dep:apps/jstream-daemon/README.md#usage" = { hash = "b3:b2396ad80b13c8a8" }
+
+"file:scripts/smoke.ps1" = { hash = "b3:a560da0e5768f43e" }
+
+["RUNBOOK-GO-LIVE#steps"]
+
+"body" = { hash = "b3:6c80462d313b08c9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: stale through server design, where only a citation was added; steps unchanged; holds" }
+
+"dep:apps/jstream-cli/README.md#usage" = { hash = "b3:6693f8835c47fc77" }
+
+"dep:apps/jstream-daemon/README.md#usage" = { hash = "b3:b2396ad80b13c8a8" }
+
+"dep:crates/jstream-server/README.md#design" = { hash = "b3:f989adc34a6af1d9" }
+
+["SECURITY#scope"]
+
+"body" = { hash = "b3:06282b84a1425ad4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: control API bullet now names the TLS-only pairing page and the device-only cookie, per R-SEC-002's amended text; other bullets unchanged" }
+
+"dep:docs/RULES.md#R-SEC-001" = { hash = "b3:69c6131f3f1bd0fd" }
+
+"dep:docs/RULES.md#R-SEC-002" = { hash = "b3:9bcfb0336f6adad9" }
+
+"dep:docs/RULES.md#R-SEC-003" = { hash = "b3:e62d5f1a75c6baa0" }
+
+"dep:docs/RULES.md#R-SEC-004" = { hash = "b3:f3e3a293b719fe8d" }
