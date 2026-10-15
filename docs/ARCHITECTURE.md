@@ -524,7 +524,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e3759c009695f67a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through server design; transport bullet (UI, Basic, subprotocol) unchanged; holds" }
+verified = { hash = "b3:74d27819755c5784", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 241 N2/N6: only the mock's cycle reason text and a rustdoc changed; nothing in the protocol summary describes them; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
