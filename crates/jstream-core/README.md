@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:41bd606ba62a9b24", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b): C1b's Live sources and Kinds bullets are main's; the shared program stage Runtime bullet holds beside them (live sources run on the control side and the render thread reads their frames from the render snapshot)" }
+verified = { hash = "b3:0ccda6723c3bb204", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ef1b96c7380c96f5", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b): C1b's Live sources subsection and publish_render re-plan are main's and touch no runtime code; F3's program-stage, collector and encoder-profile paragraphs hold against pipeline.rs" }
+verified = { hash = "b3:0a1d6d40d7cae6a3", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
 -->
 
 ### Engine and sessions
