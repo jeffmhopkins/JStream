@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:928b559944b79c2d", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: re-read; jstream-plugin-proto row now matches its new manifest summary (layer 0, no unsafe); lint-deps passes; plugin-clap and plugin-host rows stay planned" }
+verified = { hash = "b3:b565e139a0c83a2b", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: re-read; added the jstream-ui-e2e row (layer 6, test-only harness under crates/jstream-ui/tests/e2e/mock-daemon, depends on control+server, no unsafe); lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

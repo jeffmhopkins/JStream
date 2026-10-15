@@ -8,7 +8,7 @@
 //! jstream-ui-e2e --ui-dir crates/jstream-ui/dist --token <token>
 //! ```
 //!
-//! Docs: crates/jstream-ui/tests/e2e/README.md#harness
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/tests/e2e/README.md#harness
 
 #![forbid(unsafe_code)]
 
