@@ -239,7 +239,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:42de2996be9ddaa0", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; parser, connector, mock and MCP proxy design unchanged; holds" }
+verified = { hash = "b3:7f8829f1b75a26fe", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (G3b #213): re-read; stale through cascade only, text is main's; nothing in it depends on B7's opacity, blend or filters; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:34a4937a99c6c3ea", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Commands list has B7's edits plus main's scene.switch action; Filters bullet; parity bullet; holds" }
+verified = { hash = "b3:caf9925baf51a260", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (G3b #213): re-read; Outputs bullet now rtmp, record and virtual_cam with B7's Filters bullet above; Commands list holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -50,7 +50,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `FilterOwner` (tagged `type`; only `source` so far), `FilterChain` (`video`, `audio`),
   `FilterInfo` and `FilterChains`, the chains `SourceInfo` reports, and
   `MAX_CHAIN_FILTERS` (8).
-- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
@@ -92,8 +92,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.17 because of
-  `scene.create`'s optional `role`; 0.16 added `scene.switch`, `studio.get` and
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
+  the `virtual_cam` output kind; 0.17 added `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
   `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
@@ -108,7 +108,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a recording output and two
+  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output and two
   encoder profiles), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
   URL, recording path and encoder profile checks, and `item.set_source` and
@@ -130,7 +130,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:554547a53e61d7f1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; Opacity, blend and filters subsection, edges, blockers, plans, reads, undo, compat notes merged with main's f64 number text; holds" }
+verified = { hash = "b3:ebb25381bb1aa1ae", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main (G3b #213): re-read; B7's Opacity, blend and filters subsection and edges/plans/undo text beside G3b's text; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -362,7 +362,13 @@ no `..` segment and end in a file name, and
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
 so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
-record elsewhere. The
+record elsewhere. A `virtual_cam` output (0.18) has no fields: it offers the program
+video to other apps on the engine's machine as a webcam, with no audio, at the canvas
+size it has when it starts and 30 fps. `output.start` fails with `action_failed` when
+the engine has no virtual camera, the camera isn't registered on the machine, or it
+can't offer that size. It has no target either, so `output.set_target` refuses it too,
+and it encodes nothing, so its encoder profile is stored but unused. A 0.9 to 0.17
+client reads it as `Unknown`. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,

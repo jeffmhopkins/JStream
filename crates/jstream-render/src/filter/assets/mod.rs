@@ -21,7 +21,15 @@ use crate::error::RenderError;
 use crate::filter::{Ctx, Pass};
 use crate::image::Image;
 
+#[allow(
+    unused_imports,
+    reason = "Lane V: the chain runtime (V0) is the first caller outside this group"
+)]
 pub(crate) use cube::{Lut, LutError};
+#[allow(
+    unused_imports,
+    reason = "Lane V: the chain runtime (V0) is the first caller outside this group"
+)]
 pub(crate) use lut::lut_image;
 
 /// This group's kinds.
