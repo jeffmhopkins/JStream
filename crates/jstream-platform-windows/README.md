@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:3e6613a76ab78bdc", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "Merge of main (94fb25d, D5 audio) and #325's head (de1dfb7) into F6: re-read against both sides; D5's audio text and E3b/E3c/F6's GPU capture, encode target and HEVC/AV1 text sit side by side without contradiction; holds" }
+verified = { hash = "b3:f9788b48b0b25db6", by = "agent:claude@session_01Y3YB5ZnzRmEJ1zFyYHVJ48", note = "F6 review N2: MfCodecs intro, shared bullets, on_context and test list now say video encoders; shared bullets' profile line names Format's per-codec profiles and the software fallback as H.264 only; matches codec/video.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -160,7 +160,8 @@ The code is ported from spikes S1 to S3. This first cut has:
 
 - **`MfCodecs`** (`Codecs`), Media Foundation codecs
   ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): the **AAC encoder** and
-  the **H.264 encoder**, from CPU frames or from encode targets on the GPU. AAC:
+  the **video encoders** (H.264, HEVC and AV1), from CPU frames or from encode targets on
+  the GPU. AAC:
   - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
     Windows that is Microsoft's software AAC encoder. It takes 44.1 or 48 kHz; mono or
     stereo at 96, 128, 160 or 192 kbps, or 5.1 at six times those (576, 768, 960 or
@@ -210,13 +211,14 @@ The code is ported from spikes S1 to S3. This first cut has:
       staged write waits for (`WindowsGpu` below). Neither waits on the CPU. The encoder
       drops the frame once the copy is queued, so a producer writes a target again only
       when it holds the frame's only clone.
-  - **H.264, both paths:**
+  - **Video encoders, both paths:**
     - **Choosing an encoder** on the CPU path: hardware encoder MFTs come first, then the
-      OS software encoder, following `HardwarePreference`. The first one that accepts the
+      OS software encoder (H.264 only), following `HardwarePreference`. The first one that accepts the
       media types wins, and `CodecInfo::hardware` says which kind it was.
     - **Configuration:** CBR or peak-constrained VBR, the keyframe interval as the GOP
       size, no B-frames (so packets come out in presentation order and `dts == pts`),
-      low latency, the High profile, and BT.709 limited range. `ICodecAPI` settings are
+      low latency, the codec's profile from its `Format` (H.264 High, HEVC Main or AV1
+      Main), and BT.709 limited range. `ICodecAPI` settings are
       best effort; the media type always carries the bit rate.
     - **Timing:** each packet gets back its frame's exact `pts`, even when the frame's
       time base doesn't round evenly to the encoder's 100 ns. Keyframes come from
@@ -288,7 +290,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     adapter, and two fences shared between D3D11 and D3D12: the context's fence and the
     release fence. The `AdapterId` carries the adapter's LUID and PCI vendor ID.
   - **Capture** reaches the context's D3D11 device through `WgcCapture::on_gpu`, and the
-    H.264 encoder through `MfCodecs`' `Codecs::on_context`, both above.
+    video encoders through `MfCodecs`' `Codecs::on_context`, both above.
   - **`encode_target`** allocates an NV12 texture with a shared NT handle on the D3D11
     side, opens it on D3D12, and wraps it as a `wgpu::Texture` through wgpu-hal (in the
     `COMMON` state, which wgpu calls `PRESENT`).
@@ -407,8 +409,8 @@ The code is ported from spikes S1 to S3. This first cut has:
 **Tests:** the clock conversion, the stream helpers (format choice, sample copies,
 packet flags, positions across a device move), the capture helpers (BGRA to NV12 with
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
-AAC helpers (configuration check, PCM conversion, packet timing and padding), the H.264
-helpers (configuration check, NV12 packing, `pts` mapping), the GPU capture ring's slot
+AAC helpers (configuration check, PCM conversion, packet timing and padding), the video
+encoder helpers (configuration check, NV12 packing, `pts` mapping), the GPU capture ring's slot
 choice (reuse, drop when full, release on resize), the credential helpers (target names
 of both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
 the Media Foundation check's decision (edition kinds and the advice for each) and the
