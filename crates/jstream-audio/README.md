@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:3378b29ca2db7521", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is main's live add/remove inputs; dependency ARCH#threading changed only by F2b's recording sentence, which doesn't touch audio" }
+verified = { hash = "b3:ae235e7d84dce9fb", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4 adds tests/no_alloc.rs (covered by tests/**): re-read the section; added a line on it under Tests; API, errors, time line and sim.rs description unchanged" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -101,6 +101,10 @@ be.
   restart. Each is counted as it should be, and the audio is back on the time line
   afterwards.
 
+`tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
+under `assert_no_alloc`, through the same kinds of glitches and live input changes
+([Real-time design](#realtime)).
+
 The crate is built with `opt-level = 3` in the dev profile (root `Cargo.toml`). Debug
 builds of the app need a resampler fast enough for a real-time thread, and the
 simulations need it to finish in seconds.
@@ -110,7 +114,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:ce7c325b8d4e8c06", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4: replaced 'no test proves the absence of allocation' with the no_alloc test's description, checked against tests/no_alloc.rs (inputs, events, checked scope, warm-up and checked durations, coverage asserts); rest of the section unchanged" }
+verified = { hash = "b3:ce7c325b8d4e8c06", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "Re-verified after the Purpose edit; no_alloc paragraph checked against tests/no_alloc.rs" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
