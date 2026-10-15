@@ -165,8 +165,8 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:985e50d539aea292", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; Built so far keeps B4's settings text and adds Record { path, container: mp4 }; Not yet drops Record" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
+verified = { hash = "b3:39a005ebabd81f23", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; ADR-0040 hotkey sentence and depends_on are main's; Built so far still lists Record { path, container: mp4 } with its path checks" }
 -->
 
 ```
@@ -256,9 +256,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   display order, and a variant sits under its parent, never in a folder. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
-  decision. Deleting the scene, source or output a binding's action names succeeds: the
-  binding stays, is reported as broken, does nothing when pressed, and can be re-pointed
-  (a batch of `hotkey.clear` and `hotkey.set`, as ADR-0024 §5 rebinds); undoing the delete makes it work again. `Scene.background` (absent
+  decision. Deleting the scene, source or output a binding's action names also removes
+  that binding, in the same undoable edit, and undo restores both; `delete.plan` lists
+  the bindings it will remove, and a binding is never a delete blocker
+  ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). `Scene.background` (absent
   means transparent) is scene model, not metadata, because the compositor draws it
   wherever the scene renders.
 - **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
