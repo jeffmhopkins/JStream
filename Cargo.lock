@@ -2621,6 +2621,7 @@ dependencies = [
  "gif",
  "image-webp",
  "jstream-media",
+ "jstream-platform",
  "jstream-protocol",
  "png 0.18.1",
  "realfft",

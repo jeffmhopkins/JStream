@@ -84,6 +84,19 @@ Contents:
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
   `HardwarePreference` defaults to hardware first with the software codec as fallback,
   as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) says.
+- **Media files** (`media_file.rs`,
+  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `MediaDecoders`
+  (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the
+  video pixel format and a `HardwarePreference`) as a `MediaDecoder` (`Send`), which
+  owns the whole file: the platform demuxes and decodes it with its own APIs, unlike
+  the packet-level `VideoDecoder`. `info()` gives a `MediaInfo`: the first video stream
+  (`MediaVideoInfo`: frame size and nominal frame period) or `None`, whether there is
+  audio, and the duration when the container says. `next_video()` blocks while it
+  decodes the next frame, in presentation order, and is `Ok(None)` at the end;
+  `seek(to)` restarts decoding at the key frame at or before `to`, so the frames up to
+  it may come out first. Frame times are on the file's own timeline from its start, not
+  the media clock; the `media` source maps them onto the clock. Audio decoding comes
+  with the media source's audio.
 - **Virtual camera:** `VcamSink` (`Send`): `start` with a `VcamFormat`, `publish`
   frames (the newest wins, and it never blocks on a consumer that may have died, as in
   spike S2), `stop`. Registering the camera's DLL is the app's job
@@ -102,8 +115,8 @@ Contents:
   Only refresh tokens are stored; access tokens stay in the caller's memory. No error may
   contain a token. `jstream-youtube` keeps its Google refresh token here.
 - **Injection:** `Backends`, a plain struct holding one platform's clock, capture, video
-  capture device, audio, codec and GPU-interop backends and its optional virtual-camera
-  sink.
+  capture device, audio, codec, GPU-interop and media-file backends and its optional
+  virtual-camera sink.
 - **IDs and errors:** `DeviceId`, an opaque backend-chosen string. `PlatformError`, one
   `thiserror` enum for every trait; OS failures carry the call and the raw status code
   (`HRESULT`, `OSStatus`, `errno`), and a missing OS component (`MissingComponent`, such
@@ -119,6 +132,10 @@ Contents:
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
   MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
+  `FakeMediaDecoders` (a path registered with `add` plays a `FakeClip`, synthetic RGBA
+  frames whose colour tells them apart, seeking to the key frame before as a real
+  decoder does; any other path is `Unsupported`, and nothing is read from disk; its
+  `stats` count opens, seeks and frames),
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
   `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,

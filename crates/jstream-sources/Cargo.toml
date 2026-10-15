@@ -1,7 +1,7 @@
 [package]
 name = "jstream-sources"
 version = "0.0.0"
-description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour, image, text, audio waveform and audio spectrum sources."
+description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour, image, text, media file, audio waveform and audio spectrum sources."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -22,6 +22,9 @@ ab_glyph_rasterizer.workspace = true
 gif.workspace = true
 image-webp.workspace = true
 jstream-media.workspace = true
+# The media-file backend trait: the `media` kind's demuxer and decoders are injected
+# (ADR-0031).
+jstream-platform.workspace = true
 jstream-protocol.workspace = true
 png.workspace = true
 # The spectrum source's FFT (C10).
@@ -37,3 +40,5 @@ zune-jpeg.workspace = true
 [dev-dependencies]
 # Checks that the audio scope and the scope sources draw without allocating (R-RT-001).
 assert_no_alloc.workspace = true
+# Fake media files for the `media` kind's tests (R-TEST-004).
+jstream-platform = { workspace = true, features = ["fake"] }

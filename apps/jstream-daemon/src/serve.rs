@@ -70,7 +70,8 @@ pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Ar
 #[cfg(windows)]
 fn windows_backends() -> anyhow::Result<Backends> {
     use jstream_platform_windows::{
-        MfCodecs, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu, WindowsVcam,
+        MfCodecs, MfMediaDecoders, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu,
+        WindowsVcam,
     };
     Ok(Backends {
         clock: Arc::new(QpcClock::new().context("could not open the QPC media clock")?),
@@ -79,6 +80,7 @@ fn windows_backends() -> anyhow::Result<Backends> {
         audio: Arc::new(WasapiAudio::new()),
         codecs: Arc::new(MfCodecs::new()),
         gpu: Arc::new(WindowsGpu::new()),
+        media: Arc::new(MfMediaDecoders::new()),
         vcam: Some(Box::new(WindowsVcam::new())),
     })
 }

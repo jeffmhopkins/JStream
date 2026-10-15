@@ -11,11 +11,15 @@
 //!
 //! [`snapshot::plan`](crate::snapshot) asks the live source of every item it reaches for
 //! its frame at the current time on the media clock, and when that frame next changes.
-//! The thread re-plans at the earliest such time, so an animated image advances on the
-//! clock; a still frame is planned once. A source that draws its frames as they come
-//! due (a [`Painter`]: the `waveform` and `spectrum` kinds) is painted by the thread just
-//! before it re-plans, holding no engine lock, so asking it for its frame under the
-//! collection lock only hands out the frame painted last.
+//! The thread re-plans at the earliest such time, so an animated image or a video
+//! advances on the clock; a still frame is planned once. A source that draws its frames
+//! as they come due (a [`Painter`]: the `waveform` and `spectrum` kinds) is painted by
+//! the thread just before it re-plans, holding no engine lock, so asking it for its
+//! frame under the collection lock only hands out the frame painted last. A source that
+//! a plan reaches after plans that didn't is told it is shown again ([`Source::show`]),
+//! so a media file can restart. A source built before plans that didn't reach it (on a
+//! scene that isn't the program yet, or behind a hidden item) counts as shown again when
+//! one first does.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -24,7 +28,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
-use jstream_platform::MediaClock;
+use jstream_platform::{MediaClock, MediaDecoders};
 use jstream_protocol::{Settings, SourceId, SourceKind};
 use jstream_sources::{AudioScope, Context, Painter, Registry, Source, SourceError};
 
@@ -52,6 +56,9 @@ pub(crate) struct LiveSources {
     host: Weak<dyn LiveHost>,
     /// Whether the thread has been started.
     started: bool,
+    /// Numbers the plans of the program mix, from 1, so a source can tell whether the
+    /// previous plan reached it.
+    plan: u64,
 }
 
 /// What the engine wants for one source, and what it runs now.
@@ -69,6 +76,10 @@ struct Running {
     /// When it was built, on the media clock: its time zero.
     start: MediaTime,
     shown: Option<(Arc<VideoFrame>, Frame)>,
+    /// The last plan that reached it, or the plan current when it was built, so the
+    /// first plan to reach it after that counts as showing it again when one between
+    /// didn't.
+    planned: u64,
 }
 
 /// One source to build.
@@ -115,6 +126,7 @@ impl LiveSources {
             worker: Arc::new(Worker::new(Arc::new(SystemClock::new()))),
             host,
             started: false,
+            plan: 0,
         }
     }
 
@@ -146,6 +158,15 @@ impl LiveSources {
     /// The program mix's audio, for the `waveform` and `spectrum` sources.
     pub(crate) fn set_audio_scope(&mut self, scope: Arc<AudioScope>) {
         self.ctx.audio = Some(scope);
+    }
+
+    /// The platform's media files, which `media` sources play through. Sources built
+    /// before have none, so they are built again.
+    pub(crate) fn set_media(&mut self, media: Arc<dyn MediaDecoders>) {
+        self.ctx.media = Some(media);
+        for entry in self.entries.values_mut() {
+            entry.settings = Settings::new();
+        }
     }
 
     /// The folder behind `collection` asset references: the collection file's.
@@ -216,11 +237,13 @@ impl LiveSources {
         if entry.ticket != built.ticket {
             return false;
         }
+        let plan = self.plan;
         let running = match built.result {
             Ok(source) => Some(Running {
                 source,
                 start: self.worker.now(),
                 shown: None,
+                planned: plan,
             }),
             // A kind that is described but not built yet draws what it drew before C1b:
             // a `display` source shows the pipeline's capture.
@@ -266,16 +289,30 @@ impl LiveSources {
         self.worker.now()
     }
 
+    /// Starts a plan of the program mix: the [`frame`](Self::frame) calls until the next
+    /// one are the sources it reaches.
+    pub(crate) fn begin_plan(&mut self) {
+        self.plan += 1;
+    }
+
     /// The frame `source_id` shows at `now`, numbered from `versions` when it is new,
     /// and when it is next replaced. `None` when the source has no live instance.
+    ///
+    /// A source the previous plan didn't reach, though an earlier one did or it was
+    /// built before it, is shown again first ([`Source::show`]).
     pub(crate) fn frame(
         &mut self,
         source_id: &SourceId,
         now: MediaTime,
         versions: &mut u64,
     ) -> Option<(Frame, Option<MediaTime>)> {
+        let plan = self.plan;
         let running = self.entries.get_mut(source_id)?.running.as_mut()?;
         let at = since(now, running.start);
+        if running.planned + 1 < plan {
+            running.source.show(at);
+        }
+        running.planned = plan;
         let video = match running.source.frame(at) {
             Ok(video) => video,
             Err(err) => {

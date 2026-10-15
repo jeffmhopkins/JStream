@@ -35,6 +35,7 @@ fn ctx(collection: &Path) -> Context {
         },
         limits: Limits::default(),
         audio: None,
+        media: None,
     }
 }
 

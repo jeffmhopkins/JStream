@@ -4,9 +4,9 @@
 
 use super::{add, batch, connected, create, edits};
 use crate::Engine;
-use jstream_media::Timebase;
-use jstream_platform::fake::FakeClock;
-use jstream_protocol::{AssetRoot, Batch, Edit, Reference, Settings, SourceId, SourceKind};
+use jstream_media::{FrameSize, Timebase};
+use jstream_platform::fake::{FakeClip, FakeClock, FakeMediaDecoders};
+use jstream_protocol::{AssetRoot, Batch, Edit, ItemId, Reference, Settings, SourceId, SourceKind};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::PathBuf;
@@ -388,4 +388,149 @@ fn a_waveform_source_is_painted_by_the_sources_thread() {
         Some([0xff, 0, 0, 0xff]),
         "full scale"
     );
+}
+
+/// Shows or hides item `i1`.
+fn visible(control: &crate::InProcessControl, visible: bool) {
+    batch(
+        control,
+        Batch::single(Edit::ItemSetVisible {
+            item_id: ItemId::new("i1"),
+            scene_id: None,
+            visible,
+        }),
+    )
+    .expect("shown or hidden");
+}
+
+/// The fake clip frame `video` shows, re-planning until the decode thread has caught up
+/// with the clock and the program mix shows `want`.
+fn plays(engine: &Engine, want: u32) -> bool {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < deadline {
+        engine.replan();
+        if shown(engine, "video") == Some(FakeClip::pixel(want)) {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    false
+}
+
+#[test]
+fn a_media_file_plays_on_the_clock_and_restarts_when_shown_again() {
+    let dir = temp_dir("media");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: false,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(true)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(true)),
+    ]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("video", "media", video),
+            add("a", "i1", "video"),
+        ]),
+    )
+    .expect("created");
+    assert!(plays(&engine, 0), "the first frame");
+    clock.advance(250);
+    assert!(plays(&engine, 2), "frame 2 at 250 ms");
+
+    visible(&control, false);
+    assert_eq!(shown(&engine, "video"), None, "hidden");
+    clock.advance(300);
+    visible(&control, true);
+    assert!(plays(&engine, 0), "shown again, it plays from the start");
+    clock.advance(100);
+    assert!(plays(&engine, 1));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// B2 of #245's review: a source built while no plan reaches it (here, behind an item
+/// created hidden) starts from the beginning when the program first shows it, rather
+/// than where its clock has run to.
+#[test]
+fn a_media_file_first_shown_long_after_it_was_built_plays_from_the_start() {
+    let dir = temp_dir("media-hidden");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: false,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media.clone()));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(false)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(true)),
+    ]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("video", "media", video),
+            add("a", "i1", "video"),
+            Edit::ItemSetVisible {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+                visible: false,
+            },
+        ]),
+    )
+    .expect("created hidden");
+    assert_eq!(shown(&engine, "video"), None, "built, but hidden");
+    assert_eq!(media.stats().opened, 1, "the file was opened");
+    engine.replan();
+    // Past the end of the one-second clip: without the restart it would show its last
+    // frame.
+    clock.advance(5000);
+    engine.replan();
+    visible(&control, true);
+    assert!(plays(&engine, 0), "first shown, it plays from the start");
+    clock.advance(100);
+    assert!(plays(&engine, 1));
+    let _ = fs::remove_dir_all(dir);
 }

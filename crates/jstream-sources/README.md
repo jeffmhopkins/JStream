@@ -28,12 +28,15 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   reading and decoding a file, so it never runs on a real-time thread.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
-  `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks nor allocates, and
-  a frame handed out stays valid after an update. Most make their frames when created
-  or updated; the `waveform` and `spectrum` kinds draw theirs in a `Painter` instead,
-  and `frame` hands out the one painted last. `next_change(at)` says when that frame is next replaced (`None`: never), so
-  a renderer can skip re-uploading a still. `update(settings)` applies a change to
-  `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
+  `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
+  allocates, and a frame handed out stays valid after an update. Most make their frames
+  when created or updated; a `media` file decodes them ahead on a thread of its own;
+  the `waveform` and `spectrum` kinds draw theirs in a `Painter` instead, and `frame`
+  hands out the one painted last. `next_change(at)` says when that frame is next
+  replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
+  says the program mix shows the source again after plans that didn't reach it; a kind
+  may restart there, and the default does nothing. `update(settings)` applies a change
+  to `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
   needs a new source instead. `painter()` (default `None`) returns the source's
   `Painter`.
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
@@ -44,10 +47,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
-  and its program mix asks each source for `frame` and `next_change` (see
-  `jstream-core`'s *Live sources*).
+  and its program mix asks each source for `frame` and `next_change`, and calls `show`
+  (see `jstream-core`'s *Live sources*).
 - `Context`: the folders behind the `collection` and `app` asset roots
-  (`AssetRoots`), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
+  (`AssetRoots`), the platform's media files (`media`, an
+  `Option<Arc<dyn MediaDecoders>>` from `jstream-platform`, `None` until the host
+  injects its backends), and `Limits` on what a file may decode to: 256 MiB files, 16384 px
   sides and 1 GiB of decoded memory by default. The image's size is checked before
   anything is allocated for it, and the decoded-memory cap counts the frames kept plus
   the working buffers held while decoding: a GIF's canvas and its "restore to
@@ -118,6 +123,34 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`.
+- `media`: the `file` asset, a local video file demuxed and decoded by the platform's
+  `MediaDecoders` (the Media Foundation Source Reader on Windows,
+  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), so it plays the
+  containers and codecs the OS does. `create` opens the file through
+  `AssetRoots::open` and decodes its first frame, so a file the platform can't play,
+  one with no video, or one without a media backend (`SourceError::NoBackend`) fails
+  there. A decode thread (`jstream-media-file`) then reads frames ahead, up to 8, or
+  fewer when they, the frame shown and two more held elsewhere would pass
+  `max_decoded_bytes`; the frame's sides must be within `max_side`, and every later
+  frame must have the first one's size. The source maps its
+  clock time onto the file's timeline at `speed` (0.25 to 4), from where it last
+  started, and shows the latest frame the timeline has reached; a speed change keeps
+  the position. With `loop` the file plays again from the start after its end, the
+  timeline running on; without it the last frame stays, and turning `loop` on
+  afterwards plays on. With `restart_on_show` the file starts again each time the
+  program mix shows it after not showing it (`Source::show`), the first time
+  included. When the frame shown
+  falls more than a second behind the timeline (it was hidden, or the decoder can't
+  keep up), the source seeks instead of decoding every frame between; a seek decodes
+  from the key frame before its target and skips frames up to it (a looping file
+  sought past its end before its length is known plays from its start there). The
+  decode thread seeks and decodes with the shared state unlocked, so `frame` only
+  waits to take a queued frame. Until the decoder
+  catches up, `next_change` asks again 10 ms later. Every setting but `file` is live.
+  A decode error, or a frame of another size, stops the source: `frame` then fails
+  with `SourceError::Decode`. The
+  file's audio isn't played yet, and an audio-only file fails to create. With no file,
+  the source shows one transparent pixel.
 - `waveform` and `spectrum` (C10) draw the latest 2048 samples (43 ms at 48 kHz) of
   the `Context`'s `AudioScope`, which in the engine is the program mix. `create`
   paints the first frame; after that their `Painter` draws a new one each 1/30 s tick
@@ -141,7 +174,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   than a bin shows its nearest bin. Bars at least three pixels wide have a
   one-pixel gap. Both read the program mix only: a bus or a single source needs the
   protocol's bus entity and a per-source tap in the mixer first.
-- `display`, `media`, `webcam` and `window` are described only, with the settings B4
+- `display`, `webcam` and `window` are described only, with the settings B4
   gave them: sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.
 
@@ -181,17 +214,24 @@ itself is the host's configuration and is trusted, and so is what is in it: a ha
 inside the root to a file outside is read, because the link and its target are the same
 file and neither check can tell them apart. Making one needs write access inside the
 root, and refusing every file with more than one link would also refuse deduplicated
-files.
+files. `AssetRoots::open` checks a file the same way for a reader that opens it again by
+path (a platform decoder streaming a large file) and returns the open file with its
+resolved host path. The caller keeps the file open until that reader has opened the
+path: on Windows it is held without delete sharing, so it, and the folders above it,
+can't be renamed or replaced meanwhile. Unix has no such hold, so there the path is
+only checked.
 Errors name an asset by the root and path its setting holds, never by the host path
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). A missing or
 undecodable file is an error from `create`, never from the edit that set it.
 
-**Dependencies.** `jstream-media` (frames and the media clock), `jstream-protocol`
-(descriptors, settings and references), `serde_json` (setting values), `thiserror`
-(`SourceError`), the pure-Rust decoders `png`, `zune-jpeg` with `zune-core`,
-`image-webp` and `gif`, `realfft` (with `rustfft`, scalar only) for the spectrum's
-FFT, and for fonts `skrifa` (with `read-fonts`, `font-types`, `bytemuck`, `yoke` and
-`once_cell`) and `ab_glyph_rasterizer`, each with default features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
+**Dependencies.** `jstream-media` (frames and the media clock), `jstream-platform`
+(the `MediaDecoders` trait the `media` kind plays through; its `fake` feature in
+tests), `jstream-protocol` (descriptors, settings and references), `serde_json`
+(setting values), `thiserror` (`SourceError`), the pure-Rust decoders `png`,
+`zune-jpeg` with `zune-core`, `image-webp` and `gif`, `realfft` (with `rustfft`,
+scalar only) for the spectrum's FFT, and for fonts `skrifa` (with `read-fonts`,
+`font-types`, `bytemuck`, `yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with
+default features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
 (RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
@@ -215,4 +255,8 @@ log bar showing, smoothing and a still ring falling to silence, a silent source
 settling on one frame and polling slowly until a live change redraws it, and which
 settings are live. `tests/scope_no_alloc.rs`, its own binary under `assert_no_alloc`'s allocator,
 checks that a push, a read, and painting and taking both kinds' frames don't allocate
-once the pool has filled.
+once the pool has filled. `tests/media.rs` plays
+`jstream-platform`'s fake media files (`FakeMediaDecoders`, frames told apart by
+colour): frames on the clock, the last frame held, looping and the seek after a gap,
+speed and a speed change, restarting when shown, turning `loop` on after the end, no
+file, and the errors and limits.

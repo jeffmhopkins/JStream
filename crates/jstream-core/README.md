@@ -54,7 +54,9 @@ state machine. Contents:
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
-  mix shows their frames and advances animations on the media clock. A frame stored
+  mix shows their frames and advances animations and videos on the media clock, and
+  tells a source when it shows it again. `media` sources play through the injected
+  backends' media files. A frame stored
   with `set_source_frame` wins over the live one, and a kind that is only described
   draws nothing, except that a `display` source shows the output pipeline's capture
   on the render thread (see *Live sources* and *Snapshots* in [Design](#design)).
@@ -494,17 +496,24 @@ current time, counted from when the source was built. A live frame is shared wit
 the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version only when
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
-thread re-plans then, so an animated image advances on the clock and a still one is
-never re-planned. A source with a `jstream_sources::Painter` (the `waveform` and
-`spectrum` kinds, which draw a whole frame and, for the spectrum, an FFT each 1/30 s)
-is painted by that thread just before each re-plan, holding no engine lock, so under
-the collection lock the plan only takes the frame painted last; `install`, `sync`
-and a clock swap hand the thread the running painters and their time zeros. Every
-other built kind makes its frames when built, so the plan's `frame` calls under the
-lock never draw. Sources run on the media clock of the backends the host injects
-(`with_backends`), else on a monotonic clock of the engine's own. A clock swap
+thread re-plans then, so an animated image or a video advances on the clock and a
+still one is never re-planned. A source with a `jstream_sources::Painter` (the
+`waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
+FFT each 1/30 s) is painted by that thread just before each re-plan, holding no engine
+lock, so under the collection lock the plan only takes the frame painted last;
+`install`, `sync` and a clock swap hand the thread the running painters and their time
+zeros. Every other built kind makes its frames when built, or (a `media` file) decodes
+them ahead on a thread of its own, so the plan's `frame` calls under the lock never
+draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
+last plan that reached it, starting from the plan current when it was built: one that
+a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
+program) is told so first (`Source::show`), so a media file can restart, including
+the first time it is shown. Sources run on the media clock of the backends the host
+injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
-the thread re-plans at once on the new one. `collection` asset
+the thread re-plans at once on the new one. `media` sources play through the injected
+backends' media files (`Backends::media`); before any are injected a `media` source
+fails to build (`NoBackend`), and injecting them rebuilds every source. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
 for every `app` reference, the asset is unreadable and the source draws nothing.
 

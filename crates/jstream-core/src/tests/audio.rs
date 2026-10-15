@@ -10,7 +10,8 @@ use crate::{Engine, RecordingPublish};
 use jstream_control::Control;
 use jstream_media::{ChannelLayout, FrameSize, Timebase};
 use jstream_platform::fake::{
-    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeVideoDevices,
+    FakeAudioIo, FakeCapture, FakeClock, FakeCodecs, FakeGpuInterop, FakeMediaDecoders,
+    FakeVideoDevices,
 };
 use jstream_platform::{AudioInputTarget, AudioProcess, Backends};
 use jstream_protocol::{Batch, Edit, Event, OutputId, OutputState, Settings, SourceId, SourceKind};
@@ -31,6 +32,7 @@ fn engine(audio: &FakeAudioIo, clock: &FakeClock) -> Engine {
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(FakeGpuInterop),
         vcam: None,
+        media: Arc::new(FakeMediaDecoders::new()),
     };
     Engine::new()
         .with_output(OutputId::new("yt"))
