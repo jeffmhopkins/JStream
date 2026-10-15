@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:bf09281d73fb6205", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading render-snapshot wording only; content identical to main's verified text, re-read, names no render-snapshot loader, holds" }
+verified = { hash = "b3:ddedda1543b1de0a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b N4: mixer.rs Time line now names MixerConfig::latency_frames for poll's arrival latency; Purpose's API bullet already calls it latency (default 1440); re-read; holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -23,13 +23,13 @@ it implements. This first cut covers what [ROADMAP M1a](../../ROADMAP.md#m1) nee
 (a WASAPI microphone and desktop loopback mixed for the AAC encoder): adaptive
 resampling of each input onto the engine time line, and metering. It also has
 [ADR-0028](../../docs/adr/0028-audio-model-v2.md)'s routing: each input is a source's
-audio stream with its fader and mute, and feeds stereo buses through a send matrix
-with a gain per send, applied after the fader. The master bus always exists, and every
-new input sends to it at 0 dB. Each bus has its own fader and mute. Activity gains
-(audio that follows the program), filter chains and latency compensation, and monitor
-taps come later. The true-peak and loudness meters
-([Meters](#meters)) and the filter kernels ([Filters](#filters)) exist as DSP but
-don't run in the mixer yet.
+audio stream with its filter chain, fader and mute, and feeds stereo buses through a
+send matrix with a gain per send, applied after the fader. The master bus always
+exists, and every new input sends to it at 0 dB. Each bus has its own filter chain,
+fader and mute. Chains run the kernels in [Filters](#filters), and the mixer
+compensates their latency. Activity gains (audio that follows the program), sidechain
+keys in the mixer and monitor taps come later. The true-peak and loudness meters
+([Meters](#meters)) exist as DSP but don't run in the mixer yet.
 
 **Time line.** Engine frame `n` is media time `n / rate` on the media clock
 ([ADR-0014](../../docs/adr/0014-media-clock.md)), with `rate` the engine rate (48 kHz by
@@ -58,13 +58,21 @@ stamped on the clock, and no device is the master.
 - `InputControl::set_send` (linear or dB, 0 to +24 dB) sends the input into a bus
   after its fader and mute, or changes that send's gain; `remove_send` stops it. A new
   bus has no sends. A send that starts, stops or changes ramps over one block.
+- `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
+  filter (`FilterSpec`: gain, noise gate, compressor, limiter or delay, built at the
+  engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
+  edits it and `remove` removes it. They go through the command queue like inputs. At
+  most 8 filters and 100 ms of latency per chain. `Mixer::latency_frames` is the
+  chains' latency the mixer compensates, and each block's `pts` is its first frame minus
+  it.
   The `InputControl` also holds a reference to the input's ring and counters, so
   whichever handle is dropped last, the free never happens on a real-time thread (see
   [Real-time design](#realtime)).
 - `Mixer::poll(now, out)` mixes the next block once the media clock `now` has passed its
   end by the latency, writes the master bus into `out` (interleaved stereo), and returns
   its `Block` (first
-  frame, length, and `pts` in ticks of `1 / rate`). The first call starts the time line
+  frame, length, and `pts` in ticks of `1 / rate`: the media time of the input in the
+  block, so the first frame minus the chains' latency). The first call starts the time line
   at `now` minus the latency. `Mixer::mix(frame, out)` mixes a given block regardless of
   the clock. A mixer that falls more than half a ring behind the clock jumps to the
   newest due block and counts the skipped frames. `Mixer::bus_block(bus)` reads any
@@ -79,12 +87,14 @@ stamped on the clock, and no device is the master.
 - `meter::TruePeakMeter` and `meter::LoudnessMeter`: the true-peak and BS.1770 loudness
   meters, not yet run by the mixer ([Meters](#meters)).
 - `filter::AudioFilter` and its kernels `Gain`, `NoiseGate`, `Compressor` (with a
-  sidechain key), `Limiter` and `Delay`, not yet run by the mixer ([Filters](#filters)).
+  sidechain key, which the mixer's chains don't offer yet), `Limiter` and `Delay`
+  ([Filters](#filters)).
 
 **Errors** (`AudioError`): an invalid configuration (including a loudness meter's
 rate, or a filter's rate or settings), an unsupported input rate or sample layout, a
-wrong output length, more than 64 inputs or 16 buses, a full command queue, or a collector
-thread that could not start. No variant allocates.
+wrong output length, more than 64 inputs, 16 buses or 8 filters in a chain, an input,
+bus or filter already removed, a full command queue, or a collector thread that could
+not start. No variant allocates.
 
 **Tests.** The unit tests in each `src/rt/` module cover:
 - ring: underrun, drop-oldest overrun, late frames, forward jumps, and a two-thread test
@@ -99,6 +109,11 @@ thread that could not start. No variant allocates.
   meter, sends ramping in and out, a muted input feeding no bus, buses added from
   another thread and removed, a send to a removed bus not reaching the bus that reuses
   its buffer, the 16-bus limit, and a removed bus's state freed once its handle is gone;
+- filter chains: an input's chain before its fader and a bus's on its sum, edits and
+  removal applied live, latency compensation (a limiter on one input and one bus: every
+  input and bus lines up, and `pts` moves back by the total, then returns when they are
+  removed), a delay filter's output stamped later by its delay, and the limits and
+  rejected edits;
 - inputs added from another thread while the mixer runs, then removed, the 64-input
   limit, and the ring freed on the collector thread whichever of the mixer and the
   producer lets go last, and the collector ending with its last handle.
@@ -118,8 +133,8 @@ be.
   afterwards.
 
 `tests/no_alloc.rs` is R-RT-001's `callback_does_not_allocate`: the real-time calls
-under `assert_no_alloc`, through the same kinds of glitches and live input changes
-([Real-time design](#realtime)).
+under `assert_no_alloc`, through the same kinds of glitches and live input, bus, send
+and filter changes ([Real-time design](#realtime)).
 
 The crate is built with `opt-level = 3` in the dev profile (root `Cargo.toml`). Debug
 builds of the app need a resampler fast enough for a real-time thread, and the
@@ -130,7 +145,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:1662e5077cab96dd", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading render-snapshot wording only; content identical to main's verified text, re-read, names no render-snapshot loader, holds" }
+verified = { hash = "b3:b0999c43d802e557", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b N4: module doc wording only (arrival latency vs chain latency); re-read; this section's Latency compensation and poll text hold" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -210,9 +225,10 @@ Unlike S3, whose error was relative to its first measurement, this one is absolu
 inputs line up with each other. Its sign is flipped because `u` scales the input step,
 not rubato's output ratio.
 
-**Mixer** (`mixer.rs`): per block, reads each ring, ramps each input's fader and meters
-it, then adds it into every bus it sends to, ramping each send's gain. For each bus it
-then ramps the bus fader, replaces any non-finite sample with 0 and meters the output.
+**Mixer** (`mixer.rs`): per block, reads each ring, runs each input's filter chain and
+compensation delay, ramps its fader and meters it, then adds it into every bus it sends
+to, ramping each send's gain. For each bus it then runs the bus chain and compensation
+delay, ramps the bus fader, replaces any non-finite sample with 0 and meters the output.
 The master's output is the block `poll` returns. Peaks use a `fetch_max` on the bits,
 which order like the values for non-negative floats.
 
@@ -220,12 +236,35 @@ which order like the values for non-negative floats.
 allocated in `Mixer::new`; slot 0 is the master. Each input has one send per slot (an
 atomic bus id and an atomic gain), so the send matrix is fixed-size and a send change
 is two atomic stores: the gain first, then the target, with release ordering so the
-mixer never applies a stale gain to a new target. A send counts only while its slot
+mixer never applies a stale gain to a new target (a retarget only happens once the old
+bus is gone from the slot). A send counts only while its slot
 holds the bus it names. Bus ids are never reused, so a send to a removed bus stays
 silent even after another bus takes the slot. The mixer remembers which bus each send's
 ramp was for, and starts again from silence when that changes. Skipping silent sends
 keeps the cost at one pass over the block per active send. Sends are post-fader only,
 as ADR-0028 decides.
+
+**Filter chains** (`chain.rs`). Every input and bus has a chain of up to 8 filters,
+reserved when the input or bus is built on the control thread, so the mixer inserts and
+unlinks filters without allocating. The control plane builds each filter (its delay
+lines and look-ahead at their maximum) and sends it through the command queue; a removed
+filter, and a removed input's or bus's chain, goes to the collector. An edit is a plain
+value the mixer applies with the kernel's own setter, after the control plane has
+checked its kind and range. The control plane keeps a record of each chain's filters
+for that check, so it never reads the mixer's copy. Inserting or removing a filter
+takes effect at a block edge without a crossfade.
+
+**Latency compensation.** Each chain's latency is the sum of its filters' (the
+limiters' look-ahead; a `Delay` filter is a deliberate shift and counts 0, per
+ADR-0028). After its chain, every input is delayed to the longest input chain's latency
+and every bus to the longest bus chain's, by a compensation delay each chain allocates
+for 100 ms when built, so every bus sum lines up and buses line up with each other.
+Each block's `pts` is its first frame minus the two maxima: the media time of the input
+it carries. A `Delay` adds nothing to that, so input audio from media time `t` lands
+in the block stamped `t` plus the delay: ADR-0028's "stamped later by its delay". Adding
+or removing a filter with latency changes the delays at once (the
+frames in between are skipped or repeated) and moves `pts` by the difference, so a
+consumer sees a gap or an overlap there.
 
 **Adding and removing inputs and buses** (`cmd.rs`, `retire.rs`). The control thread
 allocates the ring and the producer (or a bus's shared state) and sends them on a
@@ -249,15 +288,18 @@ full command queue refuses the add or the removal rather than blocking the mixer
 **No allocation, tested** (`tests/no_alloc.rs`). The test R-RT-001 names,
 `rt::callback_does_not_allocate`, runs in its own test binary with `assert_no_alloc`'s
 allocator installed globally. After 15 s of warm-up, it runs 30 s of simulated 10 ms
-ticks. In each tick, every input's `on_packet`, `Mixer::poll` and the filter kernels and
-meters on each mixed block run inside an `assert_no_alloc` scope. Any allocation or free
+ticks. In each tick, every input's `on_packet`, `Mixer::poll` (with its filter chains)
+and a keyed compressor and the meters on each mixed block run inside an
+`assert_no_alloc` scope. Any allocation or free
 there fails the test, in debug and release builds alike. Five inputs (mono 44.1 kHz,
 stereo 48 and 96 kHz, 5.1, and 32 kHz added while running) drift and jitter. The checked phase also
 covers timestamp outliers and missing stamps, lost packets, a discontinuity, a stalled
 audio thread that catches up, a 3 s device gap that resets the mapping, silent and
 non-finite packets, a mixer stall long enough to overrun the rings and skip frames,
-and an input added and one removed while the mixer runs. The test checks that each of
-those paths ran. Control-plane calls and dropping a producer (stream teardown) run
+an input added and one removed while the mixer runs, a bus added, sent to, given a
+limiter and removed, filters on an input and the master edited every 0.5 s, and a
+limiter added to and removed from an input (so the compensation delays move). The test
+checks that each of those paths ran. Control-plane calls and dropping a producer (stream teardown) run
 outside the scope. Locks, blocking and logging are still left to review.
 
 **Not yet enforced or measured:**
@@ -325,7 +367,7 @@ true-peak cases from files) are not run; they would add binary fixtures.
 <!-- @section
 covers = ["crates/jstream-audio/src/filter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:cb02503c16657318", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4: dropped the no-allocation test from Not yet and noted tests/no_alloc.rs runs all five kernels (compressor keyed) on the bus under the check; kernel table and tests list unchanged" }
+verified = { hash = "b3:8cae68faa9d8e330", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b B1: re-read Delay row: not compensated, so its output is stamped later by its delay; matches mixer.rs and the new test" }
 -->
 
 `src/filter/` holds the audio filter kernels
@@ -348,7 +390,7 @@ source first), `latency_frames` and `reset`.
 | `NoiseGate` | Open and close thresholds (hysteresis), hold, linear attack and release ramps, a range (gain when closed). Detector: the larger channel's level, instant attack, 10 ms decay. Defaults are OBS's | 0 |
 | `Compressor` | Threshold, ratio (up to `inf`), quadratic soft knee, makeup; gain reduction smoothed in dB with attack and release time constants (Giannoulis, Massberg and Reiss, 2012). With a key, it detects on the key instead: ADR-0028's ducking | 0 |
 | `Limiter` | Look-ahead (0 to 20 ms, fixed when built) sample-peak limiter: sliding minimum of the needed gain over the look-ahead, release smoothing, then a box average over the look-ahead, so the gain ramps down before a peak and the output never exceeds the ceiling | the look-ahead |
-| `Delay` | Up to a maximum fixed when built (at most 5000 ms) | 0: a deliberate shift, which the mixer stamps later instead of compensating |
+| `Delay` | Up to a maximum fixed when built (at most 5000 ms) | 0: a deliberate shift, which the mixer doesn't compensate, so its output is stamped later by its delay |
 
 Detectors are stereo-linked (one gain for both channels). The limiter's last step clamps
 at the ceiling, which only catches rounding, or audio already in its delay line when
@@ -362,12 +404,14 @@ static curve, soft knee, attack and release time constants, and ducking from a k
 the limiter's latency, ceiling under bursts, transients and +12 dB overload at several
 look-aheads, its ramp ahead of a peak and its recovery; the delay's shift, maximum and
 changes; block-size independence and reset where state is kept; rejected settings.
-`tests/no_alloc.rs` runs all five, the compressor keyed, on the mixed bus under the
-allocation check ([Real-time design](#realtime)).
+The mixer runs them in each input's and bus's chain, with their latency compensated
+([Real-time design](#realtime)). `tests/no_alloc.rs` runs all five under the
+allocation check: the gate and compressor on an input, gain, delay and limiter on the
+master and a limiter on another bus and input, and a keyed compressor on the mixed
+block.
 
-**Not yet:** running them in the mixer (filter chains on sources and buses, keys and
-latency compensation in the audio graph), their settings in kind descriptors and the
-protocol, and a CPU measurement: their cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
+**Not yet:** sidechain keys in the mixer's chains, their settings in kind descriptors
+and the protocol, and a CPU measurement: their cost is not measured ([R-RT-005](../../docs/RULES.md#R-RT-005)).
 
 <a id="follow-ups"></a>
 ## Not yet
@@ -378,8 +422,8 @@ protocol, and a CPU measurement: their cost is not measured ([R-RT-005](../../do
   stay atomics, which is ARCH's "continuous parameters bypass snapshots". The input
   list changes through the command queue in [Real-time design](#realtime), not through
   an `arc-swap` snapshot, and so do buses; sends are atomics per input and bus slot.
-  The snapshot ARCH gives each subsystem, for the rest of the audio graph (filters,
-  keys and their processing order), is still later.
+  Filters change through the same queue. The snapshot ARCH gives each subsystem, for
+  the rest of the audio graph (keys and their processing order), is still later.
 - **A panic in `on_packet` or `Mixer::poll`**
   ([R-RT-006](../../docs/RULES.md#R-RT-006)). Nothing in this crate catches one or
   mutes the bus. The test R-RT-006 names, `scenarios::rt_panic_is_reported`, doesn't
@@ -390,11 +434,12 @@ protocol, and a CPU measurement: their cost is not measured ([R-RT-005](../../do
   thread that calls it, which must catch a panic there, mute the bus and raise the
   error event. `rt_panic_is_reported` lands with that engine thread.
 - **The rest of the audio model** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
-  the activity gain per source, filter chains with
-  keys and latency compensation ([Filters](#filters) has the kernels), running the true-peak and loudness meters in the mixer (for the
+  the activity gain per source, sidechain keys in the mixer's chains (the compressor
+  has one; the mixer needs the key's source processed first), running the true-peak and
+  loudness meters in the mixer (for the
   master bus and subscribed buses and sources) with their meter-stream fields and
-  `audio.reset_loudness`, and monitor taps; buses and sends in the protocol and the
-  graph; and render-side resampling for output devices.
+  `audio.reset_loudness`, and monitor taps; buses, sends and filters in the protocol
+  and the graph; and render-side resampling for output devices.
 - **A CPU measurement** of the mixer on hardware.
 - **Feeding the fitted drift forward** into the controller, which would shorten the
   start-up transient (about 0.46 · drift / (2π · 0.02 Hz): 0.55 ms at 150 ppm).
