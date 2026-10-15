@@ -320,7 +320,7 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:58068a9c133cbde8", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "depends_on and R-DEP-002's link moved to ADR-0031; R-DEP-002 gains ADR-0031's sentence that pure-Rust image and font crates are not banned codec libraries; deny.toml bans and lint-deps allowlist enforcement unchanged" }
+verified = { hash = "b3:cee5defb3a32a048", by = "agent:claude@session_01H77oW1hhSxiNfijCpkEKPw", note = "Re-read R-DEP-001..006 against H2: R-DEP-005 now says multiple-versions is deny (M1d) and duplicates need a skip entry with a reason, which deny.toml now has for all eight; other rules unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -378,8 +378,8 @@ enforced_by = ["deny:bans"]
 applies_to = ["Cargo.lock"]
 -->
 Duplicates need a `deny.toml` skip entry with a reason. Known duplicates (several `windows`
-crate versions via Tauri, wgpu and windows-rs) are expected. `multiple-versions` is `warn`
-until M1 and switches to `deny` there ([ROADMAP](../ROADMAP.md#m1)).
+crate versions via Tauri, wgpu and windows-rs) are expected. `multiple-versions` is `deny`
+(M1d, [ROADMAP](../ROADMAP.md#m1)).
 
 <a id="R-DEP-006"></a>
 ### R-DEP-006: TLS through rustls with the ring provider
