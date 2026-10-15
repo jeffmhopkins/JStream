@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:4d2d232d9f0f4f13", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: depends_on moved from superseded ADR-0002 to ADR-0045, which keeps the same web-UI decision; diagram's jstream-ui (Leptos to WASM) client unchanged" }
+verified = { hash = "b3:bcf5d3053a8f0044", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: Hosts table desktop row adds the first cut (Windows, WebView2, fresh in-memory token handed to the page) with a README link; diagram and the new apps/jstream-desktop/src/main.rs (a thin entry point) fit the shape" }
 -->
 
 ```
@@ -54,7 +54,7 @@ verified = { hash = "b3:4d2d232d9f0f4f13", by = "agent:claude@session_01SHnfsdCu
 
 | Host (`apps/`) | What it is |
 |---|---|
-| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
+| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:1b409ee708c3c06c", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: jstream-ui row moves from — to layer 3 with ADR-0045, matching crates/jstream-ui/Cargo.toml (layer 3, depends on control L2 and protocol L1); lint-deps passes" }
+verified = { hash = "b3:427df7ea39ba3f91", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: new apps/jstream-desktop manifest, layer 6, links core and server and platform-windows on Windows, as the apps/* row already says; lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -869,7 +869,7 @@ verified = { hash = "b3:042c342d215b5bc4", by = "agent:claude@session_01TiAAtPXb
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:026533f994053898", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c: virtual camera bullet says jstream-daemon --register-vcam is that mode until the app exists, with the startup moved-folder warning; unregister waits for the app" }
+verified = { hash = "b3:981e101ec9dc1d4b", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: the virtual camera bullet now says the daemon is the --register-vcam mode until the desktop app has it (the app exists but lacks that mode); rest unchanged" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -889,7 +889,7 @@ Direct3D 12).
 - **Virtual camera:** the app registers the COM media source from its own folder the first
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
   because Frame Server ignores per-user registration. The app can unregister the source and
-  detects a moved folder. Until the desktop app exists, `jstream-daemon --register-vcam` is
+  detects a moved folder. Until the desktop app has that mode, `jstream-daemon --register-vcam` is
   that mode, and the daemon warns at startup when the registration names another folder
   ([jstream-daemon › Usage](../apps/jstream-daemon/README.md#usage)); unregistering waits
   for the app. Spike S2 (Windows 11 25H2, build 26200) found:
