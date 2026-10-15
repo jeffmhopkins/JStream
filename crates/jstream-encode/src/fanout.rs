@@ -6,7 +6,8 @@
 //! is resynchronised: it gets nothing more until the next keyframe, since the packets in
 //! between can't be decoded without the one it lost. A new subscriber likewise starts at
 //! the next keyframe. Every AAC packet is a keyframe, so audio subscribers start and
-//! resume at once.
+//! resume at once. A new video subscriber asks the encoder for a keyframe, so with an
+//! encoder that can force one it starts at the next frame.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -205,6 +206,14 @@ impl Subscription {
             Err(RecvTimeoutError::Timeout) => Ok(None),
             Err(RecvTimeoutError::Disconnected) => Err(self.end()),
         }
+    }
+
+    /// Asks the session for a keyframe, as
+    /// [`VideoSession::request_keyframe`](crate::VideoSession::request_keyframe) does,
+    /// for a consumer that holds only its subscription. It does nothing on an audio
+    /// stream, whose packets are all keyframes.
+    pub fn request_keyframe(&self) {
+        self.shared.want_keyframe();
     }
 
     /// What this subscriber has been given and lost so far.
