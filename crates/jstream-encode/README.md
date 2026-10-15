@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:4ea3e57dd7b0d2db", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (E1, Y1): stale via ARCH#threading's collector wording; encode text relies only on the Encode (per session) row, unchanged; holds" }
+verified = { hash = "b3:88f9f8c4f98e2ec4", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#179): stale via ARCH data-model/core; encode text unchanged (VideoInput/AudioInput are cheap clones, as stated); holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

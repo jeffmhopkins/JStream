@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:5b48abe79d036210", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (#182 ADR-0042: covers now the manifests' jstream-meta view) into Y1: took main's stamp, re-read the map; the view changes only by jstream-youtube's manifest (layer 2, unsafe no, summary equal to its row, only JStream dependency jstream-platform L1, strictly lower); main's rows untouched" }
+verified = { hash = "b3:02c4efbe3c5ca2ea", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#167 jstream-youtube) into C1a, stamp-only conflict: re-read; main's jstream-youtube row taken as is; jstream-sources L4 row still matches its jstream-meta summary and layer" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:9cb6ae0afcf2dba8", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#205, E1): Built so far keeps encoder profiles beside E1's 8-level limit; the stale 'Nothing is persisted yet' now points at Persistence, which saves profiles and each output's profile" }
+verified = { hash = "b3:75e4901b1ccbc62f", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#179 C1a) and review B3/N5: Built so far takes C1a's jstream-sources kinds sentence with F3's outputs-with-encoder_profile and encoder-profile sentences; collection-file line now says it saves everything built so far" }
 -->
 
 ```
@@ -354,7 +354,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
-  built-in kinds are stubs in `jstream-core` until `jstream-sources` exists.
+  built-in kinds' descriptors come from `jstream-sources`, whose `color` and `image`
+  kinds produce frames; the engine doesn't render from them yet.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
   container: mp4 }`, the path checked to be absolute and to end in a file name. A stream
@@ -370,8 +371,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
-  `outputs` and `encoders`. The collection file saves all of these, encoder profiles
-  and each output's profile included ([Persistence](#persistence)).
+  `outputs` and `encoders`. The collection file saves everything built so
+  far, encoder profiles and each output's profile included ([Persistence](#persistence)).
 
 <a id="threading"></a>
 ## Threads, clock and sync

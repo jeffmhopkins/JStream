@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:af71d9e0f5c8886e", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (E1 #172): Runtime bullet merges the shared program stage with E1's render snapshot (runtime/render.rs); Snapshot and stub-kind bullets are E1's; Collection file bullet holds" }
+verified = { hash = "b3:3781fc7aa81d5502", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#179 C1a): C1a's Kinds bullet (registry from jstream-sources) is main's; Runtime bullet keeps the shared program stage with E1's render snapshot; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -49,12 +49,11 @@ state machine. Contents:
   names with `with_collection_file` (or creates it), and saves it atomically after every
   change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
-  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
-  They are stubs: `color`, `image`, `media` and `text` take a first set of parameters,
-  and `display`, `webcam` and `window` none. Nothing renders from their settings yet;
-  frames still come from `set_source_frame`, except that a `display` source with no
-  stored frame shows the output pipeline's capture on the render thread (see
-  *Snapshots*). `jstream-sources` replaces them.
+  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)),
+  taken from `jstream-sources`' built-in registry. Nothing renders from their settings
+  yet; frames still come from `set_source_frame`, except that a `display` source with
+  no stored frame shows the output pipeline's capture on the render thread (see
+  *Snapshots*).
 - **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -124,7 +123,7 @@ state machine. Contents:
   leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
-Not here yet: live values, real source kinds, the audio and outputs
+Not here yet: live values, rendering from the source registry, the audio and outputs
 snapshots, a GPU encode target, and the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -137,7 +136,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e17ba3e80f6b618e", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (E1 #172): render-thread paragraph now sends to the program stage's collector, joined by Program after the render thread, and adopts snapshots while it has no session; E1's Snapshots text and F3's encoder profile and sharing paragraphs hold against pipeline.rs and render.rs" }
+verified = { hash = "b3:bc8dbba0480cc28e", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B4: render-thread paragraph now says a finished encoder session's input goes to the program stage's collector (render and mixer), which ends once both threads drop their senders and Program joins after them; matches push_each, launch_program and Program::drop; C1a's Not yet and Dependencies text is main's" }
 -->
 
 ### Engine and sessions
@@ -177,16 +176,17 @@ and the pipeline compositor), `jstream-platform` (backend traits the host inject
 the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its drop
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
-publisher and the recording file sink), `png`
+publisher and the recording file sink), `jstream-sources` (the built-in kind
+descriptors), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
-[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `serde_json`
-(settings values in the built-in kind descriptors), `thiserror`
+[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
 `tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
-`tests/scenarios.rs`) and `jstream-mcp` (`tests/mcp.rs`). All of them
+`tests/scenarios.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
+values and saved collection files in `src/tests.rs`, `src/tests/` and `tests/mcp.rs`). All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
@@ -579,14 +579,17 @@ cut has no GPU encode target. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
 the snapshot it held to the program stage's `jstream-collector` thread. The GPU images the
-cache frees go there too, so nothing the render thread lets go of is freed on it
-([R-RT-003](../../docs/RULES.md#R-RT-003)). The thread clears the stopped marker
+cache frees go there too, and so does the input of an encoder session that has
+finished (the session may already be gone, leaving that input the last reference to
+its shared state and channel), so nothing the render thread lets go of is freed on it
+([R-RT-003](../../docs/RULES.md#R-RT-003)). The mixer thread hands a finished audio
+input to the same collector. The thread clears the stopped marker
 before its first load (`SeqCst`, then a fence), and publishes it again when it stops
 or a fatal error stops its drawing, so `RenderHub::caught_up` treats it as caught up
 ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading), "Live-value handover"; only
-tests poll it until live edits exist). The collector ends when the render thread
-drops its sender, and the program stage (`Program`) joins it right after the render
-thread. While the stage has no encoder session it draws nothing but still adopts
+tests poll it until live edits exist). The collector ends when the render and mixer
+threads have dropped their senders, and the program stage (`Program`) joins it right
+after them. While the stage has no encoder session it draws nothing but still adopts
 each new snapshot, so it never holds a gesture up. The compositor
 and its cache drop on the render thread when it exits, after the tick loop. What it rides out
 and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
@@ -757,8 +760,8 @@ The daemon's `--collection` option, which turns this on, is a later item.
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- The daemon's `--collection` option and audit file, and real source kinds with
-  settings that change what renders (`jstream-sources`).
+- The daemon's `--collection` option and audit file, and rendering sources from
+  `jstream-sources`' registry, so settings change what renders.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one
@@ -770,7 +773,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:39e630206eb94dd6", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (E1 #172): merged E1's program-mix render (render snapshot, capture fallback, collector) into F3's shared program stage text (serialized starts, per-profile sessions over channels, last-output drain and stats, program failure to every output); matches launch_program and render_loop" }
+verified = { hash = "b3:949ce870e72aed2c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B4: render and mixer threads hand a finished session's input to the collector rather than drop it; what they let go of (snapshots, GPU images, finished inputs) goes to jstream-collector; matches pipeline.rs push_each and render.rs Garbage::Video/Audio" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -789,7 +792,8 @@ one program stage (capture, render, mixer); the first `output.start` builds it a
 last `output.stop` tears it down, and starts are serialized. Encode threads are the
 ones inside the encoder sessions: outputs with the same encoder profile share one
 session, and the render and mixer threads take a new session's inputs from a channel,
-never a lock, and drop a session that has finished. While the stage has no session it
+never a lock, and hand a finished session's input to the collector rather than drop
+it. While the stage has no session it
 draws nothing but still adopts the latest render snapshot. Each output has its own
 output thread. An output leaving a session others still use takes what is queued for
 it and goes; the last one drains the encoders. The output thread muxes FLV and sends
@@ -801,7 +805,8 @@ program stage also starts `jstream-stats`, which is not a real-time thread: it e
 output stops. The render loop publishes capture mailbox skips, and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. None of those threads lock the collection: the render thread reads the
-render snapshot, and what it lets go of goes to the program stage's
+render snapshot, and what the render and mixer threads let go of (replaced snapshots,
+GPU images, finished sessions' inputs) goes to the program stage's
 `jstream-collector` thread. `output.stop` during `starting` cancels that start and
 emits `stopped` only after the start has dropped its threads. The render and mixer
 threads catch a panic at their boundary ([R-RT-006](../../docs/RULES.md#R-RT-006)); a
