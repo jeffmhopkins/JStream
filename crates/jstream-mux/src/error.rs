@@ -68,6 +68,66 @@ pub enum MuxError {
         "no AVC decoder configuration: configure one or start with a keyframe carrying SPS and PPS"
     )]
     MissingAvcConfig,
+    /// No VPS, SPS or PPS was available to build an `HEVCDecoderConfigurationRecord`.
+    #[error(
+        "missing HEVC parameter sets: {vps} VPS, {sps} SPS and {pps} PPS found; need at least one of each"
+    )]
+    MissingHevcParameterSets {
+        /// How many VPS NAL units were found.
+        vps: usize,
+        /// How many SPS NAL units were found.
+        sps: usize,
+        /// How many PPS NAL units were found.
+        pps: usize,
+    },
+    /// An HEVC SPS was too short or malformed to read the fields the record needs.
+    #[error("malformed HEVC SPS: {reason}")]
+    InvalidHevcSps {
+        /// What was wrong.
+        reason: &'static str,
+    },
+    /// AV1 data was not a sequence of well-formed OBUs.
+    #[error("malformed AV1 OBU at byte {offset}: {reason}")]
+    InvalidObu {
+        /// Where the OBU starts.
+        offset: usize,
+        /// What was wrong.
+        reason: &'static str,
+    },
+    /// An AV1 sequence header OBU was too short or malformed to read the fields the
+    /// `AV1CodecConfigurationRecord` needs.
+    #[error("malformed AV1 sequence header: {reason}")]
+    InvalidAv1SequenceHeader {
+        /// What was wrong.
+        reason: &'static str,
+    },
+    /// AV1 data held no sequence header OBU to build an `AV1CodecConfigurationRecord`.
+    #[error("no AV1 sequence header OBU found")]
+    MissingAv1SequenceHeader,
+    /// No HEVC or AV1 decoder configuration was configured and the first packet was not
+    /// a keyframe to take it from.
+    #[error(
+        "no {codec:?} decoder configuration: configure one or start with a keyframe carrying it"
+    )]
+    MissingDecoderConfig {
+        /// The video codec.
+        codec: Codec,
+    },
+    /// The muxer's configuration contradicts itself.
+    #[error("invalid muxer configuration: {reason}")]
+    InvalidConfig {
+        /// What was wrong.
+        reason: &'static str,
+    },
+    /// A packet's pts differed from its dts in a format that has nowhere to store the
+    /// difference (AV1 in FLV).
+    #[error("{codec:?} packet has composition offset {ms} ms, but the format stores none")]
+    UnexpectedCompositionOffset {
+        /// The packet's codec.
+        codec: Codec,
+        /// pts − dts, in milliseconds.
+        ms: i64,
+    },
     /// A timestamp fell before the muxer's origin.
     #[error("timestamp {ms} ms is before the stream origin")]
     NegativeTimestamp {
