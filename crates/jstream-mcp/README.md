@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:d1c5b482acd8eb67", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read: tools.rs only adds a video.snapshot sentence to the video tool description; the Tools and Events bullets and the snapshot image-block note still hold" }
+verified = { hash = "b3:2d4009ea144de67c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via server.rs: Server still answers one message at a time; contents list unchanged by opening the session at initialize/server/discover" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:045b7b705f600fa9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#124 N1/N2 follow-up: Events field table gains the stats row (newest stats.tick outside the buffer, absent until the first tick), matching events.rs Page.stats; Snapshots now notes the video tool description names the placeholder, matching tools.rs group_tool and tools.snap" }
+verified = { hash = "b3:10ad376d3a45c6f9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited Session and identity (hello at initialize or server/discover, lazy fallback for a failed hello or a client that skips both, why: jstream-server handshake timeout) and the Events read paragraph; checked against server.rs open_early/open and tests.rs" }
 -->
 
 ### Tools
@@ -135,11 +135,18 @@ no reply.
 
 A `Server` owns one `Control` session, so every tool call acts as one client of the
 engine: one undo history and one name in the audit log
-([ADR-0013](../../docs/adr/0013-command-model.md)). `hello` is sent before the first
-tool call that needs the engine, with the MCP client's name (`clientInfo.name` from
-`initialize`, or from the request's `_meta`; `jstream-mcp` if none). Later names don't
-change the session. `describe_api`, argument errors and `events` reads never call the
-engine ([Events](#design)).
+([ADR-0013](../../docs/adr/0013-command-model.md)). `hello` is sent as soon as the MCP
+client introduces itself: at `initialize` (handshake-based revisions) with
+`clientInfo.name`, or at `server/discover` (2026-07-28) with the name in its `_meta`;
+`jstream-mcp` if none. A transport such as `jstream-cli mcp` connects when it starts, and
+`jstream-server` closes a connection that hasn't completed its handshake within its
+handshake timeout ([jstream-server › Design](../jstream-server/README.md#design)), so the
+session must open before the agent goes idle, not at its first tool call. If that
+`hello` fails, the request still succeeds, and a client that skips both (a stateless
+client going straight to `tools/call`) gets its `hello` before the next tool call that
+needs the engine, which reports a failure. Later names don't change the session.
+`describe_api`, argument errors and `events` reads never call the engine
+([Events](#design)).
 
 After a call fails with a lost connection, the next call sends `hello` again on the same
 `Control`. That never yields a new `client_id`, so it never splits the undo history
@@ -192,9 +199,9 @@ An `events.dropped` event among `events` is a different gap: over the WebSocket 
 ([jstream-server › Design](../jstream-server/README.md#design)). The thread drains the
 subscription as events arrive, so it is rare; either way, the agent re-reads the state.
 
-A read sends no call to the engine. Only when no tool call has opened the session yet
-does it send `hello`, which starts the subscription, so that first read holds at most
-what arrived since. Once the subscription exists it sends nothing, so after the session
+A read sends no call to the engine. Only when nothing has opened the session yet (no
+`initialize` or `server/discover`, or its `hello` failed) does it send `hello`, which
+starts the subscription, so that first read holds at most what arrived since. Once the subscription exists it sends nothing, so after the session
 is lost it still answers from the buffer. Every MCP client of one server reads the same
 buffer, each with its own cursor (question 6). The tool returns at once; waiting for the
 next event would hold up the in-order stdio loop. The tool's description states the
