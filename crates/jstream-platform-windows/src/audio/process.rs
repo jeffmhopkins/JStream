@@ -32,11 +32,12 @@ pub(crate) fn list() -> Result<Vec<AudioProcess>, PlatformError> {
     let mut out = Vec::new();
     // SAFETY: `entry` is a valid PROCESSENTRY32W with `dwSize` set, for both calls.
     let mut next = unsafe { Process32FirstW(snapshot.0, &mut entry) };
+    let mut call = "Process32FirstW";
     loop {
         match next {
             Ok(()) => {}
             Err(e) if e.code() == ERROR_NO_MORE_FILES.to_hresult() => return Ok(out),
-            Err(e) => return Err(os_error("Process32NextW", &e)),
+            Err(e) => return Err(os_error(call, &e)),
         }
         let len = entry
             .szExeFile
@@ -50,5 +51,6 @@ pub(crate) fn list() -> Result<Vec<AudioProcess>, PlatformError> {
         });
         // SAFETY: as above.
         next = unsafe { Process32NextW(snapshot.0, &mut entry) };
+        call = "Process32NextW";
     }
 }

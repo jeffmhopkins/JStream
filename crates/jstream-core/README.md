@@ -152,7 +152,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a9a3735f757cb868", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#196 B5, #226 A3, #207, #233, #229, #230): stamp-only conflicts, both sides kept; main's undo touched-set, opener and stop-drain text and C5's Audio sources/Locking/Not yet text don't overlap; a deleted audio source now loses its status at sync, which the text (status only while recording or unavailable) allows; holds" }
+verified = { hash = "b3:7283b1c58d558176", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#207 bounded output.stop) into A6: took main's stamp; re-read; #207's STOP_DRAIN/OUTPUT_GRACE stop prose kept, A6's audit-log and collection-file lines (daemon injects AuditFile in its log dir, --collection turns the file on) and Not yet (app asset folder only) hold" }
 -->
 
 ### Engine and sessions
@@ -823,8 +823,8 @@ twice the limit. A write error is logged at `warn` and loses the entry; it never
 the call. Dropping the `AuditFile` writes what is queued and joins the thread. Times
 are UTC, RFC 3339 to the millisecond, formatted without a date crate.
 
-No host injects a sink yet: the daemon's wiring, in its data directory, is a later
-item.
+`jstream-daemon` injects an `AuditFile` in its log directory
+([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 
 ### Collection file
 
@@ -850,19 +850,23 @@ Unix the directory flushed too; on Unix it is mode `0600`. A failed save is logg
 result as it is: the change stays applied and the next change saves again. Undo
 history and idempotency keys are not saved.
 
-The daemon's `--collection` option, which turns this on, is a later item.
+`jstream-daemon`'s `--collection` option turns this on
+([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 
 ### Not yet
 
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- The daemon's `--collection` option and audit file, and an `app` asset folder for
-  live sources.
+- An `app` asset folder for live sources.
 - Reporting an audio source that is unavailable to clients (it is only logged), and
   listing the devices and applications an audio source can record in
   `kind.describe`: an `Enum` of them would make a collection naming an unplugged
   device fail validation, so it needs a query, which takes a protocol queue slot.
+- Whether the default microphone and desktop audio stay as implicit inputs of a
+  collection with no audio source once gain, mute and routing reach the protocol
+  (D5): ADR-0028 models every mixer input as a source with sends, and these two have
+  none.
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.

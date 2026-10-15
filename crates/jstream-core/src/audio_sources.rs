@@ -251,6 +251,8 @@ impl AudioInputs {
         {
             tracing::error!(panic = ?err, "the jstream-audio-sources thread panicked");
         }
+        // Cleared first, so no status says recording once a stream has stopped.
+        lock(&self.wanted.state).status.clear();
         let mut open = lock(&self.open);
         for (_, input) in std::mem::take(&mut open.inputs) {
             if let Some(live) = input.live {
@@ -258,8 +260,6 @@ impl AudioInputs {
             }
         }
         open.removing.clear();
-        drop(open);
-        lock(&self.wanted.state).status.clear();
     }
 }
 

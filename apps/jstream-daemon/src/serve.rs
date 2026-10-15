@@ -4,7 +4,8 @@
 //! over RTMP(S).
 
 use crate::args::Options;
-use jstream_core::Engine;
+use anyhow::Context;
+use jstream_core::{AuditSink, Engine};
 use jstream_server::{Connector, Server, ServerConfig, Token};
 use std::future::Future;
 use std::io;
@@ -24,7 +25,9 @@ use {
 pub type Connect =
     Arc<dyn Fn(&str, &Secret) -> Result<Box<dyn LivePublish>, PublishError> + Send + Sync>;
 
-/// The engine the daemon serves: an empty collection, plus the placeholder outputs.
+/// The engine the daemon serves: the collection in `--collection`'s file (else an empty
+/// one that is not saved), the placeholder outputs, and `audit` recording every batch,
+/// undo, redo and action.
 ///
 /// On Windows it is live (see `live`, which is Windows and test only): the OS backends (WGC capture, WASAPI audio, Media
 /// Foundation codecs and webcams, the QPC clock), stream keys in Credential Manager, and a publish
@@ -32,13 +35,22 @@ pub type Connect =
 /// backends yet, so output actions only step the placeholder state machine.
 ///
 /// # Errors
-/// On Windows, when a backend can't be created (the QPC clock).
-pub fn engine(options: &Options) -> anyhow::Result<Arc<Engine>> {
+/// When the collection file can't be read, loaded or created, and on Windows, when a
+/// backend can't be created (the QPC clock).
+pub fn engine(options: &Options, audit: Arc<dyn AuditSink>) -> anyhow::Result<Arc<Engine>> {
+    let mut engine = Engine::new().with_audit(audit);
+    if let Some(path) = &options.collection {
+        // The error names the file and what is wrong with it.
+        engine = engine
+            .with_collection_file(path)
+            .context("could not open the collection")?;
+    }
+    // Declared outputs survive a load, so this order is only for reading.
     let engine = options
         .outputs
         .iter()
         .cloned()
-        .fold(Engine::new(), Engine::with_output);
+        .fold(engine, Engine::with_output);
     #[cfg(windows)]
     let engine = live(
         engine,
@@ -55,7 +67,6 @@ pub fn engine(options: &Options) -> anyhow::Result<Arc<Engine>> {
 /// a pipeline starts. Windows has no virtual camera sink yet.
 #[cfg(windows)]
 fn windows_backends() -> anyhow::Result<Backends> {
-    use anyhow::Context;
     use jstream_platform_windows::{
         MfCodecs, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu,
     };
@@ -207,7 +218,7 @@ mod tests {
         Query, QueryResult, Rev, SceneId,
     };
     use jstream_control::{Control, ControlError, WsConfig, WsControl};
-    use jstream_core::{Engine, LivePublish, RecordingPublish};
+    use jstream_core::{AuditMemory, Engine, LivePublish, RecordingPublish};
     use jstream_media::Timebase;
     use jstream_platform::fake::{FakeClock, MemoryKeyStore, backends};
     use jstream_platform::{Secret, StreamKeyStore};
@@ -242,9 +253,13 @@ mod tests {
             ..Options::default()
         };
         let token = Token::new(TOKEN).expect("a valid token");
-        let server = bind(engine(&options).expect("an engine"), 0, token)
-            .await
-            .expect("binds");
+        let server = bind(
+            engine(&options, Arc::new(AuditMemory::new())).expect("an engine"),
+            0,
+            token,
+        )
+        .await
+        .expect("binds");
         assert!(server.local_addr().ip().is_loopback());
         assert_ne!(server.local_addr().port(), 0);
         assert_eq!(
@@ -319,17 +334,21 @@ mod tests {
     async fn a_port_in_use_fails_to_bind() {
         let token = Token::new(TOKEN).expect("a valid token");
         let server = bind(
-            engine(&Options::default()).expect("an engine"),
+            engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
             0,
             token.clone(),
         )
         .await
         .expect("binds");
         let port = server.local_addr().port();
-        let error = bind(engine(&Options::default()).expect("an engine"), port, token)
-            .await
-            .err()
-            .expect("the port is taken");
+        let error = bind(
+            engine(&Options::default(), Arc::new(AuditMemory::new())).expect("an engine"),
+            port,
+            token,
+        )
+        .await
+        .err()
+        .expect("the port is taken");
         assert!(
             error.to_string().contains(&format!("127.0.0.1:{port}")),
             "{error}"
@@ -542,5 +561,72 @@ mod tests {
         drop(control);
         drop(engine);
         timely(async { while events.next().await.is_some() {} }).await;
+    }
+
+    /// `--collection` loads the file and saves every change to it, so a second engine on
+    /// the same file starts where the first stopped; the audit sink sees the batch.
+    #[tokio::test]
+    async fn the_collection_file_persists_and_every_call_is_audited() {
+        let dir =
+            std::env::temp_dir().join(format!("jstream-daemon-collection-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("a scratch directory");
+        let file = dir.join("collection.json");
+        let options = Options {
+            collection: Some(file.to_str().expect("a UTF-8 path").to_owned()),
+            ..Options::default()
+        };
+        let audit = Arc::new(AuditMemory::new());
+        let first = engine(&options, Arc::clone(&audit) as _).expect("an engine");
+        assert!(file.exists(), "a missing file is created");
+        let control = session(&first).await;
+        timely(control.call(Call::Batch(Batch::single(Edit::SceneCreate {
+            scene_id: SceneId::new("main"),
+            name: "Main".to_owned(),
+        }))))
+        .await
+        .expect("applied");
+        let entries = audit.entries();
+        assert_eq!(entries.len(), 1, "{entries:?}");
+        assert_eq!(entries[0].call, "batch");
+        assert_eq!(entries[0].edits, ["scene.create"]);
+        assert_eq!(entries[0].rev_after, Rev(1));
+        drop(control);
+        drop(first);
+
+        let second = engine(&options, Arc::new(AuditMemory::new())).expect("an engine");
+        let control = session(&second).await;
+        match timely(control.call(Call::Query {
+            query: Query::SceneList,
+        }))
+        .await
+        .expect("answered")
+        .result
+        {
+            CallResult::Query {
+                result: QueryResult::SceneList { rev, scenes },
+            } => {
+                assert_eq!(rev, Rev(1), "the rev is saved too");
+                assert_eq!(scenes.len(), 1);
+                assert_eq!(scenes[0].scene_id.as_str(), "main");
+            }
+            other => panic!("expected scene.list, got {other:?}"),
+        }
+
+        // A file that holds no collection is an error that names it, and is left as it is.
+        std::fs::write(&file, "not json").expect("written");
+        let Err(error) = engine(&options, Arc::new(AuditMemory::new())) else {
+            panic!("an unloadable file was loaded");
+        };
+        let message = format!("{error:#}");
+        assert!(
+            message.starts_with("could not open the collection: cannot load the collection file"),
+            "{message}"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&file).expect("still there"),
+            "not json"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
