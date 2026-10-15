@@ -12,12 +12,18 @@
 use std::env;
 
 /// The Media Foundation DLLs the daemon imports from: `mfplat.dll` (`MfCodecs`,
-/// `MfVideoDevices`), `mf.dll` and `mfreadwrite.dll` (`MfVideoDevices`). N editions
-/// also lack `mfsensorgroup.dll`, which `WindowsVcam` imports from; add it when the
-/// daemon links the virtual camera, not before: delay-loading a DLL the binary doesn't
-/// import from is linker warning LNK4199, which CI's `-D warnings` turns into an error
+/// `MfVideoDevices`), `mf.dll` and `mfreadwrite.dll` (`MfVideoDevices`), and
+/// `mfsensorgroup.dll` (`WindowsVcam`), which N editions also lack and Windows 10 has
+/// without `MFCreateVirtualCamera` (`WindowsVcam::start` checks for it before calling
+/// it). Only DLLs the binary imports from belong here: delay-loading one it doesn't is
+/// linker warning LNK4199, which CI's `-D warnings` turns into an error
 /// (`linker_messages`). `tests/delay_load.rs` checks the built binary.
-const MEDIA_FOUNDATION: [&str; 3] = ["mfplat.dll", "mf.dll", "mfreadwrite.dll"];
+const MEDIA_FOUNDATION: [&str; 4] = [
+    "mfplat.dll",
+    "mf.dll",
+    "mfreadwrite.dll",
+    "mfsensorgroup.dll",
+];
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
