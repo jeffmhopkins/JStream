@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:95ce68c7b46d25bd", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (program stage, vcam, studio) into #219: Runtime bullet now combines main's shared program stage with E3b's GPU-context compositing and CPU fallback; Tests bullet keeps gpu_capture.rs and windows_gpu.rs (hw-tests, ignored); holds" }
+verified = { hash = "b3:5b7f921245fe4fde", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "#219 Windows clippy fix: windows_gpu.rs now fills main's Backends::video_devices with FakeVideoDevices; re-read, the section's text about the hardware test and the GPU capture path still holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -171,7 +171,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4534c05d0f409f99", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into #219: render-thread paragraph now says the capture path is chosen when the program stage opens (main's shared stage); allocation list combines the GPU import bind group with main's vcam tap buffers; holds" }
+verified = { hash = "b3:a644f46e353d0d76", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "#219 Windows clippy fix: windows_gpu.rs now fills main's Backends::video_devices with FakeVideoDevices; re-read, the section's text about the hardware test and the GPU capture path still holds" }
 -->
 
 ### Engine and sessions
