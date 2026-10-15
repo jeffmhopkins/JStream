@@ -370,3 +370,42 @@ fn a_session_that_ends_takes_its_history_with_it() {
     drop(control);
     assert_eq!(engine.history_depths(&client), (0, 0));
 }
+
+#[test]
+fn undo_and_redo_are_audited() {
+    let audit = std::sync::Arc::new(crate::AuditMemory::new());
+    let engine = Engine::new().with_audit(audit.clone());
+    let control = connected(&engine);
+    batch(&control, one(create("a"))).expect("a");
+    let mut keyed = HistoryCall::new(HistoryOp::Undo);
+    keyed.idempotency_key = Some(IdempotencyKey::new("u-1"));
+    history(&control, keyed.clone()).expect("undo");
+    history(&control, keyed).expect("retry");
+    redo(&control).expect("redo");
+    let error = redo(&control).expect_err("nothing to redo");
+    assert_eq!(code(&error), Some("history_empty"));
+
+    let summary: Vec<_> = audit
+        .entries()
+        .iter()
+        .map(|e| {
+            (
+                e.call,
+                e.edits.len(),
+                (e.rev_before.0, e.rev_after.0),
+                e.error,
+                e.replayed,
+            )
+        })
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            ("batch", 1, (0, 1), None, false),
+            ("history.undo", 0, (1, 2), None, false),
+            ("history.undo", 0, (2, 2), None, true),
+            ("history.redo", 0, (2, 3), None, false),
+            ("history.redo", 0, (3, 3), Some("history_empty"), false),
+        ]
+    );
+}
