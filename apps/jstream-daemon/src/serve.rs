@@ -26,7 +26,7 @@ pub type Connect =
 
 /// The engine the daemon serves: an empty collection, plus the placeholder outputs.
 ///
-/// On Windows it is live ([`live`]): the OS backends (WGC capture, WASAPI audio, Media
+/// On Windows it is live (see `live`, which is Windows and test only): the OS backends (WGC capture, WASAPI audio, Media
 /// Foundation codecs, the QPC clock), stream keys in Credential Manager, and a publish
 /// opener that connects RTMP(S) on each `output.start`. Elsewhere there are no
 /// backends yet, so output actions only step the placeholder state machine.

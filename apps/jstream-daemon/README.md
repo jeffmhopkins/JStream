@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:1df32d164d19dffe", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3 merged with #153 and #148: contents list serve.rs (live engine on Windows, MCP on), the MF/AAC check in main.rs and components.rs, build.rs delay-load, and the opener, live-engine and delay_load.rs tests; Not here yet still holds" }
+verified = { hash = "b3:3b0bb9b79c4b0d56", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "CI doc fix: serve.rs engine() doc no longer intra-links the cfg(windows, test) live fn; code unchanged, contents list holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -151,7 +151,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:6af0aadc37fcf7e4", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: Live on Windows, publish opener (Weak to the Arc engine, PublishError::new reasons, no key in errors), MF + AAC check and mfplat-only delay-load (LNK4199 reason) bullets match serve.rs, main.rs, components.rs, build.rs; MCP bullet from #153 kept; dependencies list platform, platform-windows (Windows), media, protocol" }
+verified = { hash = "b3:52cc6e4874faa0db", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "CI doc fix: serve.rs engine() doc no longer intra-links the cfg(windows, test) live fn; Live on Windows and opener bullets unchanged and hold" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
