@@ -174,3 +174,4 @@ Each problem a run finds becomes its own issue, with:
 - the Windows edition and build, and the GPU.
 
 Never attach the token file, a key file or a screenshot of Credential Manager.
+
