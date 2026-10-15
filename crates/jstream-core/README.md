@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:a39b458bec0abe04", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read against #138: tests list adds the blocked-send stop test and the trickle-reading RTMP peer; Runtime and Drop counts bullets still hold" }
+verified = { hash = "b3:776be5d7a3dab550", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; History bullet (B2) and Snapshot/canvas text (B3) both hold; history.rs now also handles item.set_geometry and canvas.set_size" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -114,7 +114,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fa9f534b908875ab", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Re-read the stop and RTMP drain paragraphs against #138: deadline fixed by the stop, wait for a publishing output thread bounded by STOP_DRAIN + OUTPUT_GRACE then detached with its watcher line closed, recordings always joined, RtmpPublish cuts every socket write via Transport::set_write_deadline; rest of Design unchanged" }
+verified = { hash = "b3:47f70b5587157701", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; core prose unchanged by the merge; Snapshots canvas/placement and undo touched-set (placement, canvas size) text hold against snapshot.rs and history.rs" }
 -->
 
 ### Engine and sessions
@@ -239,14 +239,16 @@ collection lock:
 - **Conflicts.** Each applied batch, undo and redo is logged with what it *touched*,
   computed in core from its edits and the inverse's (so a delete also names what it
   removed): objects created or deleted, objects used (an item's scene and source, a
-  `scene` source's scene, a duplicate's original), properties set (names, transform,
-  crop, visibility, an item's index, each settings parameter, an output's target), and
-  the scenes' order. An undo or redo first applies the step's edits to a copy of the
+  `scene` source's scene, a duplicate's original), properties set (names, an item's
+  placement, whether set as a transform or a geometry, crop, visibility, an item's
+  index, each settings parameter, an output's target), the scenes' order, and the
+  canvas size. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
   `scene.create` also deletes the items the scene holds now, even ones whose own step
   was dropped. The step conflicts with another client's later entry, logged after
   the step was last applied or undone, when either creates or deletes an object the
-  other touches, when both set the same property, or when both reorder scenes. Two
+  other touches, when both set the same property, when both reorder scenes, or when
+  both set the canvas size. Two
   items added to one scene do not conflict. A conflict fails with `undo_conflict`
   naming the first such entry, nothing applied, and the step dropped. Edits that
   pass the check but no longer apply also fail with `undo_conflict`, naming the latest
@@ -268,8 +270,12 @@ state exists, that scene is the first one in display order. `Program` will follo
 ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)); that state is M2
 ([ROADMAP › M2](../../ROADMAP.md#m2)). An empty collection is an opaque black canvas.
 
-The canvas is [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s default,
-1920×1080. `canvas.set_size` is not a message yet, so every snapshot uses that size.
+The canvas is the collection's (`State::canvas`, default 1920×1080, changed by
+`canvas.set_size`), copied into the shot with the items, so every scene of a snapshot,
+nested ones included, is composited at that size; the PNG is that canvas scaled to fit
+1280. Each item is drawn in its stored placement form
+([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)): a geometry by the
+shared formula, a legacy transform evaluated against the frame's size.
 Hidden items are skipped. A source with no stored frame is skipped, not drawn as a
 placeholder. Opacity is 1 and the only blend is src-over: the graph does not store
 either yet, and the compositor's blend is src-over.

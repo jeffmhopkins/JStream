@@ -9,6 +9,7 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::finite::Finite32;
+use crate::geometry::ItemGeometry;
 use crate::id::{IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
@@ -59,6 +60,10 @@ pub enum Edit {
     /// source, it doesn't copy it: one source can be placed in many scenes, or several
     /// times in one, and every placement shows the same instance (`source.duplicate`
     /// makes a separate copy). Inverse: `item.remove`.
+    ///
+    /// The item's placement is `geometry` when that is sent, else a legacy placement:
+    /// `transform`, or [`ItemTransform::IDENTITY`] when both are omitted (ADR-0022).
+    /// Sending both is `invalid_argument`.
     #[serde(rename = "item.add")]
     ItemAdd {
         /// The scene to add to.
@@ -67,26 +72,48 @@ pub enum Edit {
         item_id: ItemId,
         /// The source the item shows.
         source_id: SourceId,
-        /// Initial transform. Omitted means [`ItemTransform::IDENTITY`].
+        /// **Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The
+        /// initial legacy placement, with its 0.3 meaning.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         transform: Option<ItemTransform>,
+        /// The initial placement as a box on the canvas, checked like
+        /// `item.set_geometry`'s.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        geometry: Option<ItemGeometry>,
     },
     /// Removes an item from its scene. The source itself stays. Inverse: `item.add` with
-    /// the removed item's scene, ID, source and transform, then `item.reorder` to its old
-    /// stacking position (unless it was on top), `item.set_crop` if it was cropped, and
+    /// the removed item's scene, ID and source, and its placement in the field matching
+    /// its form (`transform` or `geometry`), then `item.reorder` to its old stacking
+    /// position (unless it was on top), `item.set_crop` if it was cropped, and
     /// `item.set_visible` if it was hidden.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
         item_id: ItemId,
     },
-    /// Replaces an item's transform. Inverse: `item.set_transform` with the previous one.
+    /// **Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.
+    /// Replaces an item's placement with a legacy one, which keeps its 0.3 meaning.
+    /// Inverse: the previous placement, as `item.set_transform` if it was legacy and
+    /// `item.set_geometry` if it was a geometry.
     #[serde(rename = "item.set_transform")]
     ItemSetTransform {
         /// The item to move.
         item_id: ItemId,
         /// The new transform.
         transform: ItemTransform,
+    },
+    /// Replaces an item's placement with a box on the canvas (ADR-0022). A size that is
+    /// not greater than zero, a `perspective_px` that is not greater than zero, and any
+    /// non-neutral `tilt_deg`, `turn_deg`, `depth_px` or `perspective_px` (the
+    /// compositor does not draw 3D yet) are `invalid_argument`. Inverse: the previous
+    /// placement, as `item.set_geometry` if it was a geometry and `item.set_transform`
+    /// if it was legacy.
+    #[serde(rename = "item.set_geometry")]
+    ItemSetGeometry {
+        /// The item to place.
+        item_id: ItemId,
+        /// The new geometry.
+        geometry: ItemGeometry,
     },
     /// Shows or hides an item. Inverse: `item.set_visible` with the previous value.
     #[serde(rename = "item.set_visible")]
@@ -206,6 +233,17 @@ pub enum Edit {
         /// The new target, validated as in `output.create`.
         target: RtmpTarget,
     },
+    /// Changes the canvas: every scene's coordinate space, in whole pixels (ADR-0022).
+    /// Items keep their canvas-pixel placements; nothing moves or resizes. Zero, or a
+    /// side over the engine's maximum (at least 7680, both ways), is `invalid_argument`.
+    /// Inverse: `canvas.set_size` with the previous size.
+    #[serde(rename = "canvas.set_size")]
+    CanvasSetSize {
+        /// Canvas width in pixels.
+        width: u32,
+        /// Canvas height in pixels.
+        height: u32,
+    },
     /// Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.
     /// Its stream key stays in the credential store, so undoing the delete restores a
     /// working output; `output.clear_key` removes it. Inverse: `output.create` with its
@@ -227,6 +265,7 @@ impl Edit {
             Edit::ItemAdd { .. } => "item.add",
             Edit::ItemRemove { .. } => "item.remove",
             Edit::ItemSetTransform { .. } => "item.set_transform",
+            Edit::ItemSetGeometry { .. } => "item.set_geometry",
             Edit::ItemSetVisible { .. } => "item.set_visible",
             Edit::ItemReorder { .. } => "item.reorder",
             Edit::SceneReorder { .. } => "scene.reorder",
@@ -239,6 +278,7 @@ impl Edit {
             Edit::OutputCreate { .. } => "output.create",
             Edit::OutputSetTarget { .. } => "output.set_target",
             Edit::OutputDelete { .. } => "output.delete",
+            Edit::CanvasSetSize { .. } => "canvas.set_size",
         }
     }
 }
@@ -434,6 +474,10 @@ impl Vec2 {
 
 /// A protocol 0.3 placement: where a scene item sits until it is stored as
 /// [`ItemGeometry`](crate::ItemGeometry).
+///
+/// **Deprecated** since 0.11 (ADR-0022) and removed in 1.0, with `item.set_transform`,
+/// `item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning
+/// below.
 ///
 /// `position` is the top-left corner in canvas pixels, `scale` is relative to the
 /// source's current size, and `rotation_deg` turns clockwise about that corner.
