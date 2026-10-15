@@ -163,6 +163,12 @@ impl Mixer {
     /// the producer for the input's audio thread and a control handle. Allocates: call it
     /// while setting the mixer up, not from the mixer thread's loop.
     ///
+    /// Keep the returned [`InputControl`] until the input's stream is closed and the
+    /// mixer is dropped: it holds the last reference to the input's ring and counters,
+    /// so they are freed on the control plane rather than on a real-time thread
+    /// (R-RT-003). Dropping it early (`let (producer, _) = ...`) moves that free back
+    /// onto the audio or mixer thread.
+    ///
     /// # Errors
     /// [`AudioError::UnsupportedFormat`] for planar samples, and
     /// [`AudioError::UnsupportedRate`] for a rate more than 4 times above or 6 times below

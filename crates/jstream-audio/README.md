@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:70f0f8b14d30db2e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#139, #140) into #133: re-read; the API bullet's InputControl keep-alive sentence matches handle.rs, and main's SeqCst handover text adds nothing this section claims about the built mixer API" }
+verified = { hash = "b3:fd110f2942cf8913", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#133 review N1: add_input rustdoc now says to keep the InputControl until the stream is closed and the mixer dropped, else the free moves to an RT thread; doc comment only, no code change; re-read the section and its keep-alive / no-collector wording still matches" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -94,7 +94,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:d2fe91f5ecad9a36", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#139, #140) into #133: re-read; the no-collector bullet (InputControl holds ring and counters so the last reference drops on the control plane) matches mixer.rs/handle.rs, and the section still claims only rings and atomics on the RT threads, consistent with ARCH#threading's SeqCst handover" }
+verified = { hash = "b3:8c88bd69420113d8", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#133 review N1: add_input rustdoc now says to keep the InputControl until the stream is closed and the mixer dropped, else the free moves to an RT thread; doc comment only, no code change; re-read the section and its keep-alive / no-collector wording still matches" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
