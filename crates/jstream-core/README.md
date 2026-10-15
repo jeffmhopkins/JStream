@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b3e0638a0bdc1804", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Undo and redo touched-set text now names an item's placement (transform or geometry) and the canvas size, and canvas.set_size conflicts with canvas.set_size; matches history.rs Prop::Placement and Touched.canvas plus the new unit test" }
+verified = { hash = "b3:3f8a5ffe3da8d846", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1 (protocol README only changed): re-read Undo and redo; Order of checks and Conflicts agree with the protocol README's new wording" }
 -->
 
 ### Engine and sessions

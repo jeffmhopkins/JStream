@@ -32,7 +32,7 @@ use s4_browser::page;
 use s4_browser::stats::Samples;
 
 /// What the audio handler asks CEF for: 48 kHz, 10 ms packets (CEF's default is 1024
-/// frames). The engine's mixer runs at 48 kHz (ADR-0028).
+/// frames). The engine's mixer runs at 48 kHz (ARCHITECTURE.md › threading).
 pub const REQUESTED_AUDIO: (i32, i32) = (48_000, 480);
 
 /// How long after the window ends the loop may keep running before it is stopped
@@ -761,7 +761,15 @@ impl Shared {
                 "url_kind",
                 if self.test_page { "test page" } else { "--url" },
             )
-            .raw("report", c.report.clone().unwrap_or_else(|| "null".into()))
+            // Only the test page's line is known to be JSON; another page's stays text.
+            .raw(
+                "report",
+                match &c.report {
+                    Some(r) if self.test_page => r.clone(),
+                    Some(r) => json::string(r),
+                    None => "null".into(),
+                },
+            )
             .int("console_messages", c.count)
             .raw(
                 "other_console",
