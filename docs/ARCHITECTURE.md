@@ -505,7 +505,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:92b7bead00a5a859", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Cascade from protocol#design; re-read, Edits bullet says placement edits take scene_id (0.12), canvas/geometry 0.11; holds" }
+verified = { hash = "b3:9918c6c82ddebbf8", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "#168: re-read; no asset path rules stated in this section, nothing to change" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

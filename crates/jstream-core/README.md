@@ -131,7 +131,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8530f5004443e479", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: re-read; resolved Not yet: daemon --collection/audit file with rendering sources from jstream-sources' registry, plus E1's audio/outputs snapshots bullet as is; Dependencies list jstream-sources and serde_json dev-only, matching Cargo.toml after E1's arc-swap" }
+verified = { hash = "b3:964af2b9ec3f631b", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "#168: stale only through protocol#design; re-read, core text untouched" }
 -->
 
 ### Engine and sessions

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:0dec987513c39899", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review round 2 B2: re-read the Limits paragraph against decode.rs and image-webp 0.2.4 (limit read only for ICCP/EXIF/XMP), gif 0.14.2 (MemoryLimit per frame) and zune-jpeg 0.5.15 (mcu_prog.rs whole-image i16 coefficients per component); counted buffers (1 canvas still, 2 animated WebP) and the listed uncounted ones match" }
+verified = { hash = "b3:9b407fe0a2451c6e", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "#188: Assets paragraph now describes AssetRoots::read checking the opened file (Unix dev/inode against the re-resolved path; Windows walk holding each folder without delete sharing, refusing reparse points), matching source.rs open_inside/check_opened; Seams and Limits unchanged" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -79,6 +79,14 @@ Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
 
 **Assets.** `AssetRoots::resolve` resolves a `collection` or `app` path through
 symlinks and rejects one that leaves its root; an `absolute` path is used as it is.
+`AssetRoots::read` checks the file it opens, not only the path it resolved, so swapping
+a folder inside the root for a symlink meanwhile can't make it read a file outside. On
+Unix the opened file must be, by device and inode, the file its path resolves to inside
+the root afterwards. Stable Rust has no file IDs on Windows, so there the resolved path
+is walked from the root and each folder on it is held open without delete sharing,
+which stops it being renamed or replaced until the file is open; one that has become a
+reparse point is refused. The root folder itself is the host's configuration and is
+trusted.
 Errors name an asset by the root and path its setting holds, never by the host path
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). A missing or
 undecodable file is an error from `create`, never from the edit that set it.

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:c9f8fa7e31b98afb", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Commands list merges B3's set_geometry/canvas.set_size and B6's set_role/item.move; Geometry bullet: 0.12 groups, 0.11 canvas and geometry, 0.10 history" }
+verified = { hash = "b3:d4a77be96ec2e9ba", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "#168: re-read; check_asset_path mention holds, no rule list here to change" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -104,7 +104,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:c31fe2b045ea1f33", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Round 6 B5 follow-up: Groups subsection's placement-edit list now names item.set_geometry, matching command.rs's scene_id field on it" }
+verified = { hash = "b3:eb46638c394088d9", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "#168: Rejections bullet now lists ':' among what a collection/app asset path must not contain, matching check_asset_path in kind.rs; rest unchanged" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -259,7 +259,8 @@ never a type per kind.
   reference to a missing scene or source is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
   `collection` and `app` are relative, with `/` separators and no `..` segment, drive
-  letter or leading `/`; an asset that doesn't exist yet is accepted.
+  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows); an
+  asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `item.move`, `source.create`,
