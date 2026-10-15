@@ -191,3 +191,22 @@ fn a_restyle_redraws_and_the_font_needs_a_restart() {
         Err(SourceError::NotLive { .. })
     ));
 }
+
+/// `frame` never fails, as the built-in kinds promise: a featured message the settings
+/// can't draw shows nothing, and the next one is drawn (review B2 on #363).
+#[test]
+fn a_message_too_large_to_draw_shows_nothing_and_never_fails() {
+    let ctx = Context::default();
+    // A `max_width` of 0 doesn't wrap, so 1000 characters are far over 16384 pixels.
+    let mut source = Registry::builtin()
+        .create("chat_message", &settings(&[("max_width", json!(0))]), &ctx)
+        .expect("a source");
+    ctx.chat.set(Some(message(&"m".repeat(1000))));
+    assert_eq!(size(&source.frame(ms(0)).expect("a frame")), (1, 1));
+    // Not retried on every frame: the same blank comes back.
+    let blank = source.frame(ms(100)).expect("a frame");
+    assert_eq!(size(&blank), (1, 1));
+
+    ctx.chat.set(Some(message("short")));
+    assert!(size(&source.frame(ms(200)).expect("a frame")).0 > 1);
+}

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:cdbd91908d283090", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4 part 1: re-read after rewrapping the registry doc comment; chat_message text unchanged and holds" }
+verified = { hash = "b3:5436a26ce422b73b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#363 round 1 B1/B2/N5: re-read the chat_message bullet; stack now counts its output plus its blocks and composites in place, frame never fails (an undrawable message shows the transparent pixel), and the preset sentence that needs #375 is gone; holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -104,8 +104,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `chat_message` (named "Chat message"): the featured live chat message
   ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md) §2). It belongs to
   the optional API path: messages come from the Live API's chat, which needs a Google
-  OAuth client the user configured. Chat with no sign-in is the browser source's
-  YouTube chat preset. The message is
+  OAuth client the user configured. The message is
   runtime state, not a setting: `Context::chat` holds a `ChatFeature`, a shared slot
   the host fills with `set(Some(FeaturedMessage { author, badge, text, amount }))` or
   clears with `set(None)`, and every source created from that context draws what it
@@ -113,7 +112,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   amount) in `author_color` sits over the text in `text_color`, left-aligned, each as
   narrow as it fits and wrapped at `max_width` less the `padding` (0 doesn't wrap), on
   `background` with `padding` around both. It draws with the text kind's renderer, so
-  the same font, outline and limits rules apply; the bundled font covers Latin text
+  the same font and outline rules apply, and each block counts against the limits as
+  a text source's does; stacking them counts the frame and the blocks it is drawn
+  from. A message these settings or limits can't draw (too wide with no wrapping, or
+  over the memory cap) shows the one transparent pixel instead: `frame` never fails,
+  as for every built-in kind, and the next message featured is drawn again. The
+  bundled font covers Latin text
   only, so other scripts need a `font`. Every field is a stranger's text and is drawn
   as plain text: line breaks and other control characters become spaces, and text is
   cut to 1000 characters and the name, badge and amount to 100 each. With nothing

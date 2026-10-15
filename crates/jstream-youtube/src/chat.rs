@@ -180,7 +180,10 @@ pub struct ChatPoller {
     live_chat_id: String,
     page_token: Option<String>,
     due: Instant,
+    /// Errors in a row of the same class, quota or not.
     errors: u32,
+    /// Whether those errors were quota errors.
+    quota: bool,
     ended: bool,
 }
 
@@ -194,6 +197,7 @@ impl ChatPoller {
             page_token: None,
             due: now,
             errors: 0,
+            quota: false,
             ended: false,
         }
     }
@@ -252,7 +256,12 @@ impl ChatPoller {
                 Ok(Poll::Ended)
             }
             Err(e) => {
-                let (first, max) = if e.is_quota() {
+                // A change of class starts that class's ladder from its first step.
+                if e.is_quota() != self.quota {
+                    self.quota = e.is_quota();
+                    self.errors = 0;
+                }
+                let (first, max) = if self.quota {
                     (QUOTA_BACKOFF, MAX_QUOTA_BACKOFF)
                 } else {
                     (ERROR_BACKOFF, MAX_ERROR_BACKOFF)

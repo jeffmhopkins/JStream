@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:cd93377bf8af9f2f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y4: re-read; added the chat module (chat_messages, ChatMessage/ChatEvent/Paid, ChatPoller pacing, backoff and end states) checked against chat.rs and its tests; Not yet line updated" }
+verified = { hash = "b3:e6b58484e026dbbf", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#363 round 1 N2: re-read the chat bullet; each error class keeps its own ladder, as chat.rs now does; holds" }
 -->
 
 Layer-2 client for Google sign-in and the
@@ -94,7 +94,8 @@ Contents:
   1000 and 100 characters, and nothing here interprets them. `ChatPoller` drives one
   chat: it follows the page token, waits the `pollingIntervalMillis` the API returns
   (never faster, and at least 1 s), backs off doubling after errors (from 60 s up to
-  30 min for quota and rate-limit errors, from 5 s up to 5 min for others), and stops
+  30 min for quota and rate-limit errors, from 5 s up to 5 min for others; a change of
+  class starts that ladder at its first step), and stops
   for good when a page reports `offlineAt` or the API answers `liveChatEnded`,
   `liveChatNotFound` or `liveChatDisabled`. It takes the time as an argument, starts
   no thread and never sleeps: the engine's loop calls `poll` and waits until `due`.

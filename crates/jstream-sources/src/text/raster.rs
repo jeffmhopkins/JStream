@@ -420,25 +420,31 @@ pub(crate) fn stack(
         inner_h.saturating_add(padding.saturating_mul(2)).max(1) as f32,
         limits,
     )?;
-    if u64::from(width) * u64::from(height) * 4 > limits.max_decoded_bytes {
+    // The output, composited in place, plus the blocks it is drawn from, which are
+    // still held.
+    let blocks_bytes: u64 = blocks.iter().map(|(_, rgba)| rgba.len() as u64).sum();
+    if (u64::from(width) * u64::from(height) * 4).saturating_add(blocks_bytes)
+        > limits.max_decoded_bytes
+    {
         return Err(too_large(width, height));
     }
     let (w, h) = (width as usize, height as usize);
-    let mut px = vec![premultiplied(background, 1.0); w * h];
+    let mut rgba = background.repeat(w * h);
     let mut y0 = padding as usize;
-    for (size, rgba) in blocks {
+    for (size, block) in blocks {
         let (bw, bh) = (size.width() as usize, size.height() as usize);
         for y in 0..bh {
             for x in 0..bw {
                 let i = (y * bw + x) * 4;
-                let src = [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]];
-                let at = &mut px[(y0 + y) * w + padding as usize + x];
-                *at = over(premultiplied(src, 1.0), *at);
+                let src = [block[i], block[i + 1], block[i + 2], block[i + 3]];
+                let o = ((y0 + y) * w + padding as usize + x) * 4;
+                let below = [rgba[o], rgba[o + 1], rgba[o + 2], rgba[o + 3]];
+                let px = straight(over(premultiplied(src, 1.0), premultiplied(below, 1.0)));
+                rgba[o..o + 4].copy_from_slice(&px);
             }
         }
         y0 += bh + gap as usize;
     }
-    let rgba = px.into_iter().flat_map(straight).collect();
     Ok((FrameSize::new(width, height)?, rgba))
 }
 
@@ -467,7 +473,42 @@ fn straight(px: [f32; 4]) -> [u8; 4] {
 
 #[cfg(test)]
 mod tests {
-    use super::distance_1d;
+    use super::{distance_1d, stack};
+    use crate::{Limits, SourceError};
+    use jstream_media::FrameSize;
+
+    /// `stack` counts its output and the blocks it still holds against
+    /// `max_decoded_bytes` (review B1 on #363).
+    #[test]
+    fn stack_counts_its_output_and_its_blocks() {
+        let block = (FrameSize::new(10, 10).expect("size"), vec![255; 400]);
+        let limits = |max_decoded_bytes| Limits {
+            max_decoded_bytes,
+            ..Limits::default()
+        };
+        // 10x10 output (400 bytes) plus the 400-byte block.
+        let (size, rgba) =
+            stack(std::slice::from_ref(&block), 0, [0; 4], 0, &limits(800)).expect("fits");
+        assert_eq!((size.width(), size.height(), rgba.len()), (10, 10, 400));
+        assert!(matches!(
+            stack(&[block], 0, [0; 4], 0, &limits(799)),
+            Err(SourceError::Setting { .. })
+        ));
+    }
+
+    /// Blocks are drawn over the background, the lower one under the gap.
+    #[test]
+    fn stack_draws_blocks_over_the_background() {
+        let red = (FrameSize::new(1, 1).expect("size"), vec![255, 0, 0, 255]);
+        let clear = (FrameSize::new(1, 1).expect("size"), vec![0; 4]);
+        let (size, rgba) =
+            stack(&[red, clear], 1, [0, 0, 255, 255], 1, &Limits::default()).expect("fits");
+        assert_eq!((size.width(), size.height()), (3, 5));
+        let px = |x: usize, y: usize| &rgba[(y * 3 + x) * 4..(y * 3 + x) * 4 + 4];
+        assert_eq!(px(1, 1), [255, 0, 0, 255]);
+        assert_eq!(px(1, 3), [0, 0, 255, 255]);
+        assert_eq!(px(0, 0), [0, 0, 255, 255]);
+    }
 
     #[test]
     fn the_distance_transform_is_squared_distance_to_the_nearest_zero() {

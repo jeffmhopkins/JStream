@@ -32,7 +32,7 @@ const MAX_PADDING: u32 = 1024;
 const CHECK_EVERY_MS: i64 = 100;
 
 /// A chat message to show on stream. Every field is untrusted text from a stranger: it
-/// is drawn as plain text, with control characters dropped, and cut to
+/// is drawn as plain text, with control characters replaced by spaces, and cut to
 /// [`MAX_CHAT_TEXT`] or [`MAX_CHAT_LABEL`] characters.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FeaturedMessage {
@@ -221,11 +221,14 @@ struct ChatSource {
 
 impl Source for ChatSource {
     /// Hands out the drawn frame, redrawing first if another message was featured
-    /// since. Only that redraw allocates.
+    /// since. Only that redraw allocates. Never fails, as the built-in kinds promise: a
+    /// message these settings and limits can't draw (too wide unwrapped, or over the
+    /// memory cap) shows nothing, once, until another message is featured.
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
         if self.feature.revision() != self.revision {
             let (revision, message) = self.feature.read();
-            self.frame = draw(&self.font, message.as_deref(), &self.settings, &self.limits)?;
+            self.frame = draw(&self.font, message.as_deref(), &self.settings, &self.limits)
+                .or_else(|_| blank())?;
             self.revision = revision;
         }
         Ok(Arc::clone(&self.frame))
@@ -258,6 +261,16 @@ impl Source for ChatSource {
 /// Draws `message` as `settings` style it: a header line (badge, author, amount) in the
 /// author colour over the text in the text colour. No message draws one transparent
 /// pixel.
+/// One transparent pixel: what a source shows with nothing (drawable) featured.
+fn blank() -> Result<Arc<VideoFrame>, SourceError> {
+    let zero = MediaTime::zero(Timebase::MILLIS);
+    Ok(Arc::new(rgba_frame(
+        FrameSize::new(1, 1)?,
+        vec![0; 4],
+        zero,
+    )?))
+}
+
 fn draw(
     font: &[u8],
     message: Option<&FeaturedMessage>,
@@ -285,11 +298,7 @@ fn draw(
     let background = color(settings, "background")?;
     let zero = MediaTime::zero(Timebase::MILLIS);
     let Some(message) = message else {
-        return Ok(Arc::new(rgba_frame(
-            FrameSize::new(1, 1)?,
-            vec![0; 4],
-            zero,
-        )?));
+        return blank();
     };
     let font = parse(font).map_err(|reason| SourceError::Decode {
         path: "(font)".into(),

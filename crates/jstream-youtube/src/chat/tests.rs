@@ -270,3 +270,22 @@ fn an_offline_page_ends_the_chat() {
     assert_eq!(poller.poll(&mut client, now).unwrap(), Poll::Ended);
     assert!(poller.is_ended());
 }
+
+/// Each class of error keeps its own ladder: a quota error after transport errors
+/// waits the first quota step, not a step doubled by the other errors (review N2 on
+/// #363).
+#[test]
+fn a_quota_error_after_other_errors_starts_at_the_first_quota_step() {
+    let transport = FakeTransport::new();
+    let mut client = signed_in(&transport);
+    let mut now = Instant::now();
+    let mut poller = ChatPoller::new("chat", now);
+    for _ in 0..3 {
+        // Nothing queued: a transport error.
+        assert!(poller.poll(&mut client, now).is_err());
+        now = poller.due();
+    }
+    transport.respond(403, QUOTA);
+    assert!(poller.poll(&mut client, now).unwrap_err().is_quota());
+    assert_eq!(poller.due() - now, QUOTA_BACKOFF);
+}
