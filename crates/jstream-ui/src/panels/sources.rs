@@ -450,6 +450,7 @@ mod tests {
                 },
                 settings: Default::default(),
                 duplicated_from: None,
+                audio: None,
             }],
             scenes: vec![SceneInfo {
                 scene_id: "main".into(),

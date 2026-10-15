@@ -2307,7 +2307,7 @@ stamp = { hash = "b3:d5d04df86b3b2eb8", by = "agent:claude@session_016cfwAwenZjq
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/Cargo.toml"]
-stamp = { hash = "b3:6cf5a664dd2c8f4c" }
+stamp = { hash = "b3:0328871c7d26aeef", by = "agent:u3a-builder", note = "Re-read after merging main; Cargo.toml still adds only serde_json, build text unchanged" }
 
 ["CRATE-jstream-ui#build"."file:crates/jstream-ui/Trunk.toml"]
 stamp = { hash = "b3:f87a888e55181fde" }
@@ -2340,7 +2340,7 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:de38d89391222d92", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at Q3 (#309): the design text is main's (Playwright against a mock daemon); D5's mock additions (buses, sends, audio) are additive to the state the mock daemon serves; holds" }
+stamp = { hash = "b3:db57d461c0c11457", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:4b7f99a329a36029" }
@@ -2349,7 +2349,7 @@ stamp = { hash = "b3:4b7f99a329a36029" }
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:8c1bea968ba0a189" }
+stamp = { hash = "b3:8cf7ec4e2d3163db", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
 stamp = { hash = "b3:49945f646dfa549c" }
@@ -2367,31 +2367,46 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:3ab8a619ef73791f" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:374727eaba299426" }
+stamp = { hash = "b3:7f8188e6129a36ac", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/confirm.rs"]
+stamp = { hash = "b3:a465bc7057b65d15", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:ef3e4d543c670393" }
+stamp = { hash = "b3:a2e053a57a1580a2", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:81728ddff971bf23" }
 
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
+stamp = { hash = "b3:b9816bcdb2c73579", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
+stamp = { hash = "b3:b24a15b358dcb55b", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/sources.rs"]
+stamp = { hash = "b3:a412fc9db0bf618b", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d" }
 
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
+stamp = { hash = "b3:f7fbf7c2d86d19fc", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:bd8197d3c2a90a4b" }
+stamp = { hash = "b3:125bc106442671d6", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:e5df397b64055237", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line gained the e2e README sections; contents list holds" }
+stamp = { hash = "b3:9f1fbe6853555dbc", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:8c1bea968ba0a189" }
+stamp = { hash = "b3:8cf7ec4e2d3163db", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
 stamp = { hash = "b3:49945f646dfa549c" }
@@ -2409,25 +2424,40 @@ stamp = { hash = "b3:3e890dfae55620cc" }
 stamp = { hash = "b3:3ab8a619ef73791f" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:374727eaba299426" }
+stamp = { hash = "b3:7f8188e6129a36ac", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/confirm.rs"]
+stamp = { hash = "b3:a465bc7057b65d15", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/mod.rs"]
-stamp = { hash = "b3:ef3e4d543c670393" }
+stamp = { hash = "b3:a2e053a57a1580a2", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:81728ddff971bf23" }
 
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
+stamp = { hash = "b3:b9816bcdb2c73579", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
+stamp = { hash = "b3:b24a15b358dcb55b", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/sources.rs"]
+stamp = { hash = "b3:a412fc9db0bf618b", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d" }
 
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
+stamp = { hash = "b3:f7fbf7c2d86d19fc", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+
 ["CRATE-jstream-ui-e2e#harness"."body"]
-stamp = { hash = "b3:fdb6e469d9e83983", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "deny fix: the harness dropped anyhow (banned outside apps, R-RS-003) for Box<dyn Error>; behaviour and text unchanged" }
+stamp = { hash = "b3:984dd6f77ea95af9", by = "agent:u3a-builder", note = "Re-read after merging main; connect and inspectorPage fixtures as described; all 18 tests run locally" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/fixtures.js"]
-stamp = { hash = "b3:3598cb5bc234f145" }
+stamp = { hash = "b3:9fe5903a69528bac", by = "agent:u3a-builder", note = "Re-read after merging main; connect and inspectorPage fixtures as described; all 18 tests run locally" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/global-setup.js"]
 stamp = { hash = "b3:cd1222001aad0cda" }
@@ -2451,7 +2481,10 @@ stamp = { hash = "b3:e05f245bcdd1b64e" }
 stamp = { hash = "b3:b902e392dbb641e7" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/outputs.spec.js"]
-stamp = { hash = "b3:dfb621a5b9890b97" }
+stamp = { hash = "b3:1891eea87aebb83a", by = "agent:u3a-builder", note = "Re-read after merging main; connect and inspectorPage fixtures as described; all 18 tests run locally" }
+
+["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scenes.spec.js"]
+stamp = { hash = "b3:11c90c48df365bd4", by = "agent:u3a-builder", note = "Re-read after merging main; connect and inspectorPage fixtures as described; all 18 tests run locally" }
 
 ["CRATE-jstream-ui-e2e#running"."body"]
 stamp = { hash = "b3:cc33975e5ce1cf00", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
@@ -2463,7 +2496,7 @@ stamp = { hash = "b3:ef446217a71d1fdc" }
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:3973811d2b41bfa3", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
+stamp = { hash = "b3:ad5b8d44cbee4358", by = "agent:u3a-builder", note = "Re-read after merging main; scenes and outputs bullets match the specs, which pass locally (18, #305 failing as marked)" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
 stamp = { hash = "b3:e05f245bcdd1b64e" }
@@ -2472,7 +2505,10 @@ stamp = { hash = "b3:e05f245bcdd1b64e" }
 stamp = { hash = "b3:b902e392dbb641e7" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/outputs.spec.js"]
-stamp = { hash = "b3:dfb621a5b9890b97" }
+stamp = { hash = "b3:1891eea87aebb83a", by = "agent:u3a-builder", note = "Re-read after merging main; scenes and outputs bullets match the specs, which pass locally (18, #305 failing as marked)" }
+
+["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scenes.spec.js"]
+stamp = { hash = "b3:11c90c48df365bd4", by = "agent:u3a-builder", note = "Re-read after merging main; scenes and outputs bullets match the specs, which pass locally (18, #305 failing as marked)" }
 
 ["CRATE-jstream-vcam-proto#purpose"."body"]
 stamp = { hash = "b3:b6a3f609729e0f1f", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Review round 1: re-read against the code after B1/N2/N3: sddl_objects(user_sid) replaces the IU DACL, logging left out of the contract, choose_frame safety stated as a timing assumption, re-initialisation and format_matches listed" }
