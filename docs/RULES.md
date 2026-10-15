@@ -622,6 +622,7 @@ On a draft PR every `ci` job is skipped; they run when the PR is marked ready fo
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
+| `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
 
 <a id="R-GIT-004"></a>
