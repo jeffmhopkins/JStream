@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:5948ab52c39e10a3", by = "agent:claude@session_01458UdCECYpNmex7sr1Hbtc", note = "U3b: Panels bullet names outputs.rs (Outputs under the inspector, its calls tested against MockEngine); app.rs adds it in the inspector region; re-read, holds" }
+verified = { hash = "b3:149c9b3ef5ab0696", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (U3b #254 outputs panel, B6-r #211) into U4: kept main's Panels bullet (outputs.rs) and U4's Canvas bullet; re-read both against the code, holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -36,7 +36,10 @@ Contents (the skeleton; [Design](#design) explains the choices):
   inspector (creating, editing and deleting outputs, their stream keys, start and stop,
   go-live and the pipeline's health), and the calls and logic behind it, tested
   natively against `MockEngine`.
-- **Canvas** (`canvas/`): the preview canvas. A placeholder for now.
+- **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
+  over a placeholder background, edits their geometry with the pointer and the
+  keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
+  hooked up yet.
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
   ([Build](#build)).
@@ -46,7 +49,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c1bb0c382472d8c8", by = "agent:claude@session_01458UdCECYpNmex7sr1Hbtc", note = "U3b: new Outputs and write-only stream key bullets match outputs.rs (state.get + output.status loads, event handling, go-live/end-stream rules, 5-tick health window, key read from an unbound password field into SecretString and cleared); style.css panel block; shell bullet still holds" }
+verified = { hash = "b3:d644f249970d9016", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (U3b outputs panel) into U4 plus review N1/N2 fixes: took main's text; canvas still opens its own events() subscription keeping only the stream; nothing else in the section changed; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -95,6 +98,52 @@ verified = { hash = "b3:c1bb0c382472d8c8", by = "agent:claude@session_01458UdCEC
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`); only `start()` needs a browser.
+
+<a id="canvas"></a>
+## Canvas
+<!-- @section
+covers = ["crates/jstream-ui/src/canvas/**"]
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
+verified = { hash = "b3:50bd20b4a20be791", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Review N1/N2: resize follows pointer movement (no jump), aspect-locked corners scale by the axis that changed more so inward drags shrink, nudges and new drags build on the pending geometry; section's claims re-read, hold" }
+-->
+
+The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
+in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
+handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads the
+scene and sends the edits. These three are pure and tested natively against
+`MockEngine`; `mod.rs` is the component.
+
+- **What it shows.** The scene on program (`studio.get`, or the first non-group scene
+  if none is), re-read on every `state.changed`, `studio.changed` and
+  `events.dropped`. Boxes are outlined with `jstream-protocol`'s placement formula, so
+  the overlay matches what the compositor draws. An item still stored as a 0.3 legacy
+  placement is not drawn: its box depends on the source's runtime size, which the
+  protocol doesn't report yet (ADR-0022's `source.sizes`), and the toolbar counts
+  such items. Hidden items are drawn dashed.
+- **Selecting and dragging.** A press selects the topmost box under the pointer, or
+  clears the selection on empty canvas. Dragging the box moves it. The selected box
+  has eight resize handles and a rotate handle above its top edge. A corner keeps the
+  box's aspect ratio (Shift frees it) and an edge handle changes one side; the
+  opposite corner or edge stays put, in the box's own rotated frame, and a box never
+  gets smaller than 1 pixel or flips. Rotation turns about the centre and snaps to
+  the nearest multiple of 90° within 4°; Shift moves it in 15° steps. Arrow keys
+  nudge the selected box by 1 pixel (Shift: 10). Escape cancels a drag, or clears the
+  selection.
+- **Snapping.** A moved box's edges and centre snap, within 6 screen pixels, to the
+  canvas's edges and centre lines and to the other boxes' edges and centres, using
+  each box's axis-aligned bounds; the lines it lands on are drawn as guides. An
+  upright box's resized edges snap the same way. Alt skips snapping for one drag, and
+  a toolbar toggle turns it off.
+- **Undoable edits.** A drag changes nothing in the engine until it ends: the overlay
+  draws the gesture locally, and on release one batch with one `item.set_geometry`
+  commits it, so each gesture (and each nudge) is one undo step. It carries no
+  `expected_rev`: a drag is last writer wins per field
+  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Live values
+  (`live.set`), which would show the drag on the output while it happens, are not in
+  the protocol yet. Undo and redo (toolbar buttons, Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y
+  while the canvas has focus) are `history.undo` and `history.redo`; the buttons grey
+  out when the engine reports nothing left, and an `undo_conflict` is explained.
+- **Styles** are inline, since the shell's stylesheet belongs to the shell.
 
 <a id="build"></a>
 ## Build
