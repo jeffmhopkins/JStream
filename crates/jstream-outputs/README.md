@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:bd5137389f3420a8", by = "agent:claude@session_01Ut2Cuz7uioyngsXQuKGFMP", note = "#156 review N1/N2: re-read Purpose against the manifest description change and the ends_recording doc (create-time errors count as never started); the record paragraph's error bullet still matches error.rs, crate-map row unchanged" }
+verified = { hash = "b3:d0817d8b8ea99a07", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main (#156 recording sink) into D1: section text is main's; stale only via ARCH#threading, where D1 changes only the mixer's collector sentences; re-read its thread mentions (reconnect attempts on a short-lived thread), none concerns the collector" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

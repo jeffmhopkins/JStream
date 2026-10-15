@@ -97,7 +97,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ed0b0f5d6d5f5e8b", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Review round 1 N4: Dependencies now says serde_json is for settings values in src/tests.rs and tests/mcp.rs, matching Cargo.toml; rest unchanged" }
+verified = { hash = "b3:724c05123f79cdea", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#149, #181, #166) into C1a: only the verified line conflicted (took main's); main's prose (C6 Nested scenes, D1 mixer inputs) and C1a's Dependencies (jstream-sources, serde_json dev-only) and Not yet bullets both hold" }
 -->
 
 ### Engine and sessions

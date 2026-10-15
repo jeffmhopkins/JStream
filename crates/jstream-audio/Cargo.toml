@@ -16,6 +16,7 @@ unsafe_allowed = false
 workspace = true
 
 [dependencies]
+crossbeam-channel.workspace = true
 jstream-media.workspace = true
 jstream-platform.workspace = true
 thiserror.workspace = true
