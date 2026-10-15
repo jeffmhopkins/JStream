@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:1e1e45f0ed866c69", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:5359a037fc331799", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2: re-read; added the jstream-anim row (layer 0, no dependencies, no unsafe, ADR-0049 keyframe-scene model); summary matches its Cargo.toml; lint-deps passes" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -27,7 +27,7 @@ stamp = { hash = "b3:dbacb2dd7907964d" }
 stamp = { hash = "b3:8bc8c6ff8e57508b" }
 
 ["ARCH#crate-map"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:5c51e1eba3426ff0", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:f7c235327227029b" }
 
 ["ARCH#crate-map"."file:crates/jstream-anim/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:324421806c43a0e9" }
@@ -63,7 +63,7 @@ stamp = { hash = "b3:2bdf736999b99a35" }
 stamp = { hash = "b3:70046124f5cf9949" }
 
 ["ARCH#crate-map"."file:crates/jstream-platform/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:22a476a9c93201fc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:0879d91d9a46f83c" }
 
 ["ARCH#crate-map"."file:crates/jstream-plugin-proto/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:1ff7a5731ca92f93" }
@@ -234,16 +234,10 @@ stamp = { hash = "b3:a9ee7e6a5b49c7c0" }
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
 
 ["ARCH#packaging"."body"]
-stamp = { hash = "b3:2ce3de03f8d149b3", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:1c343ec4bf85722c", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: the virtual camera bullet now says the daemon is the --register-vcam mode until the desktop app has it (the app exists but lacks that mode); rest unchanged" }
 
 ["ARCH#packaging"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
-
-["ARCH#packaging"."file:.cargo/config.toml"]
-stamp = { hash = "b3:61cf92f665e234af", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
-
-["ARCH#packaging"."file:xtask/src/dist.rs"]
-stamp = { hash = "b3:712aa0a6f80c3dea", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
 
 ["ARCH#persistence"."body"]
 stamp = { hash = "b3:7ab4accbf98f6662", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): collections bullet (schema_version, forward migrations, checks as edits) holds; the sends fix needs no migration since schema 1 files load as before" }
@@ -420,10 +414,10 @@ stamp = { hash = "b3:933d0c4ef1b02ecc" }
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
 
 ["ARCH#repo-layout"."body"]
-stamp = { hash = "b3:a667852c45363c39", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Re-read against main.rs, which only adds docs merge-main to the usage list: the xtask line still names docs among its commands, so the layout holds" }
 
 ["ARCH#repo-layout"."file:xtask/src/main.rs"]
-stamp = { hash = "b3:09fc131573a24bd3", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:8dc9a0c76e46621c" }
 
 ["ARCH#shape"."body"]
 stamp = { hash = "b3:3053310b2b1a2656", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Crate-map daemon row (N3) now says the daemon registers and publishes the virtual camera via a virtual_cam output, matching serve.rs windows_backends" }
@@ -447,10 +441,10 @@ stamp = { hash = "b3:8bc8c6ff8e57508b" }
 stamp = { hash = "b3:d848ae5f04b83c6f" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:5c51e1eba3426ff0", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:f7c235327227029b" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
 ["ARCH#threading"."body"]
 stamp = { hash = "b3:27f72f3f6ef95752", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; main's render-snapshot paragraph (render thread loads lock-free, video.snapshot reads under the lock) kept as is; this PR's CLAP hosts paragraph (shared block and mixer side built, host/restarts/stats.tick not yet, dry-signal bypass) checked against rt/host.rs" }
@@ -1104,7 +1098,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:0f2e711dc3b37c46", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:861da27967b6506b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#360, #299 D6, #381) into #328: took main's stamp; re-read; main changes no daemon code, only core#design's activity-gain text, which the daemon text doesn't name; this PR's /DELAYLOAD, LNK4199 and delay_load.rs text still matches build.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:f8d3caba075c6078" }
@@ -1128,7 +1122,7 @@ stamp = { hash = "b3:a750642233d72b2c" }
 stamp = { hash = "b3:5c5aac8c1b12a291" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/logs.rs"]
-stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:2ce291dd14ddd2a9" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/main.rs"]
 stamp = { hash = "b3:d848ae5f04b83c6f" }
@@ -1158,7 +1152,7 @@ stamp = { hash = "b3:a750642233d72b2c" }
 stamp = { hash = "b3:5c5aac8c1b12a291" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/logs.rs"]
-stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:2ce291dd14ddd2a9" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/main.rs"]
 stamp = { hash = "b3:d848ae5f04b83c6f" }
@@ -1182,7 +1176,7 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:7666dcee9f6dd8ce" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:3a63cc2f21a2d3ba", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:b2396ad80b13c8a8", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1 B2: exit-code 0 row now includes a successful --register-vcam; N1: Virtual camera bullet says an already-current registration keeps the file's ACL as it is" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:0c6280460499ee3c" }
@@ -1217,17 +1211,20 @@ stamp = { hash = "b3:c539140aae7561d4" }
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:f0fe0fb519a068bf" }
 
+["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/data.rs"]
+stamp = { hash = "b3:ca2f21dc552ae191" }
+
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
 stamp = { hash = "b3:9b575597b71027d3" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:df16daf5092f4655", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:47bd5b3369b57d20" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/shell.rs"]
 stamp = { hash = "b3:ee281b0fbf540f66" }
@@ -1239,7 +1236,7 @@ stamp = { hash = "b3:45624952598c1f3a" }
 stamp = { hash = "b3:558b5c5512b30191" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:237641d2046203da", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:ec6f85c97d250939", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:194117bebc81240c" }
@@ -1250,17 +1247,20 @@ stamp = { hash = "b3:c539140aae7561d4" }
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:f0fe0fb519a068bf" }
 
+["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/data.rs"]
+stamp = { hash = "b3:ca2f21dc552ae191" }
+
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
 stamp = { hash = "b3:9b575597b71027d3" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:df16daf5092f4655", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:47bd5b3369b57d20" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/shell.rs"]
 stamp = { hash = "b3:ee281b0fbf540f66" }
@@ -1269,19 +1269,22 @@ stamp = { hash = "b3:ee281b0fbf540f66" }
 stamp = { hash = "b3:45624952598c1f3a" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:fa5650de95328aac", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:4d0cdcc543ce52f7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
-stamp = { hash = "b3:5b31f315753e29fe", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:9ae316de6772baa9" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:c539140aae7561d4" }
+
+["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/data.rs"]
+stamp = { hash = "b3:ca2f21dc552ae191" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:b19eab2b3dd2f7b1" }
 
 ["CRATE-jstream-encode#design"."body"]
 stamp = { hash = "b3:a0353286f83c8702", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: Sharing paragraph now says jstream-core keys its registry by the protocol encoder profile (id and settings) and maps it to platform configs; Not yet drops encoder profiles in the protocol" }
@@ -1638,7 +1641,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:1e1e45f0ed866c69", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:5359a037fc331799" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
@@ -1650,13 +1653,13 @@ stamp = { hash = "b3:9074e32b08b81d5b" }
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:ac6493f8088539b9", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:e204cadb57ccceae" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform"]
-stamp = { hash = "b3:63ee3c30fdb30af2", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:4179d522e3055d3d" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:27f72f3f6ef95752" }
@@ -1674,7 +1677,7 @@ stamp = { hash = "b3:febfe552adc09d5b" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/Cargo.toml"]
-stamp = { hash = "b3:4b200778c1e4db39", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:3d41b91ed599db93" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/audio.rs"]
 stamp = { hash = "b3:f0a2d34cd26f9151" }
@@ -1707,10 +1710,7 @@ stamp = { hash = "b3:8019c83df5cad30a" }
 stamp = { hash = "b3:5e9dc58061f8fffa" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/lib.rs"]
-stamp = { hash = "b3:9c4c35f877b38440", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
-
-["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/paths.rs"]
-stamp = { hash = "b3:3a503eff8a85882d", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:0e9c9d2a54867156" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/surface.rs"]
 stamp = { hash = "b3:acaa4ad70c04147a" }
@@ -1728,7 +1728,7 @@ stamp = { hash = "b3:191ac01e6ea05888" }
 stamp = { hash = "b3:7522c9a00d99ef52", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Re-read WindowsVcam Start: probe then HKLM check, matching sink.rs; the N-edition wording holds for this crate's hosts in general. The sink.rs change only moved registered()'s doc back above it (B1)" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:ac6493f8088539b9" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:dfa8602587609b6c" }
@@ -2493,7 +2493,7 @@ stamp = { hash = "b3:5506fd7891457520" }
 stamp = { hash = "b3:6d760c430e428d10", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:2ce3de03f8d149b3", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:1c343ec4bf85722c" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."file:crates/jstream-vcam-windows/examples/vcam_smoke/main.rs"]
 stamp = { hash = "b3:741967485a750fec" }
@@ -2511,7 +2511,7 @@ stamp = { hash = "b3:b6a3f609729e0f1f" }
 stamp = { hash = "b3:ecfd9b5f74db77b1" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:2ce3de03f8d149b3", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:1c343ec4bf85722c" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:9074e32b08b81d5b" }
@@ -2571,7 +2571,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via platform#purpose (Audio and FakeAudioIo lines); Secret and OAuthTokenStore text unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:ac6493f8088539b9" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:e3b27ea549009815" }
@@ -2865,7 +2865,7 @@ stamp = { hash = "b3:27f72f3f6ef95752" }
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:3a63cc2f21a2d3ba", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:b2396ad80b13c8a8" }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
@@ -2874,7 +2874,7 @@ stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:6dc625770a5edc67" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:3a63cc2f21a2d3ba", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:b2396ad80b13c8a8" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -2886,7 +2886,7 @@ stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:6dc625770a5edc67" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:3a63cc2f21a2d3ba", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after #376 (ADR-0053 ledger): text and inputs byte-identical to efd1ec4, where this PR last re-read and verified it (only inline stamps removed); holds" }
+stamp = { hash = "b3:b2396ad80b13c8a8" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:2c41053918072ae6" }
