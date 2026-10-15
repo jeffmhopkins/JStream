@@ -45,12 +45,12 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `████████░░` 83% | 15 | 2 | 1 |
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `█████████░` 86% | 30 | 3 | 2 |
-| [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
+| [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 6 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 26% | 6 | 11 | 6 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 11% | 1 | 1 | 7 |
 
-75 of 111 items are merged; 7 of those still wait on a run on Windows hardware.
+76 of 111 items are merged; 8 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -141,7 +141,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M1c</b> Virtual camera: 5 of 6 merged</summary>
+<summary><b>M1c</b> Virtual camera: 6 of 6 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -150,7 +150,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | G3a | vcam producer (engine side) | ✅ merged | #194 |
 | G3b | VirtualCam output kind | 🧪 merged, Windows run pending: camera run on Windows 11 | #213, #297 |
 | G3c | --register-vcam | 🧪 merged, Windows run pending: registration check with UAC | #235 |
-| P1 | Portable Windows zip | ⏳ planned |  |
+| P1 | Portable Windows zip | 🧪 merged, Windows run pending: unzip and run the CI zip on Windows (#338) | #271 |
 
 </details>
 

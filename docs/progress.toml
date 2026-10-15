@@ -543,7 +543,9 @@ note = "registration check with UAC"
 id = "P1"
 milestone = "M1c"
 title = "Portable Windows zip"
-status = "planned"
+status = "hardware"
+prs = [271]
+note = "unzip and run the CI zip on Windows (#338)"
 
 # M1d
 

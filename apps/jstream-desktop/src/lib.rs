@@ -9,7 +9,6 @@
 
 pub mod app;
 pub mod bootstrap;
-pub mod data;
 pub mod host;
 pub mod logs;
 #[cfg(windows)]

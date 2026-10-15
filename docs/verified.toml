@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
+stamp = { hash = "b3:70bf626d4367afd8", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#359 X1): main's new layer-3 jstream-effects row sits beside P1's jstream-platform row ('and paths (the data folder, ADR-0020)', matching its Cargo.toml summary) and main's jstream-anim row; lint-deps passes" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -27,7 +27,7 @@ stamp = { hash = "b3:dbacb2dd7907964d" }
 stamp = { hash = "b3:8bc8c6ff8e57508b" }
 
 ["ARCH#crate-map"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:f7c235327227029b" }
+stamp = { hash = "b3:5c51e1eba3426ff0", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: jstream-platform row adds 'and paths (the data folder, ADR-0020)', matching its Cargo.toml summary; desktop's jstream-meta unchanged in layer; main's jstream-anim row also present; lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-anim/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:324421806c43a0e9" }
@@ -66,7 +66,7 @@ stamp = { hash = "b3:2bdf736999b99a35" }
 stamp = { hash = "b3:70046124f5cf9949" }
 
 ["ARCH#crate-map"."file:crates/jstream-platform/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:0879d91d9a46f83c" }
+stamp = { hash = "b3:22a476a9c93201fc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: jstream-platform row adds 'and paths (the data folder, ADR-0020)', matching its Cargo.toml summary; desktop's jstream-meta unchanged in layer; main's jstream-anim row also present; lint-deps passes" }
 
 ["ARCH#crate-map"."file:crates/jstream-plugin-proto/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:1ff7a5731ca92f93" }
@@ -240,10 +240,16 @@ stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
 
 ["ARCH#packaging"."body"]
-stamp = { hash = "b3:1c343ec4bf85722c", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: the virtual camera bullet now says the daemon is the --register-vcam mode until the desktop app has it (the app exists but lacks that mode); rest unchanged" }
+stamp = { hash = "b3:f1cd89b16dfff9f6", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after ADR-0054 (#395): the dist job moved from ci.yml to after-review.yml with its own dist-ui release UI job; the Building-the-zip bullet now says so (runs on main and on a PR once review passes, named by --revision after the commit tested); rest still matches dist.rs and .cargo/config.toml" }
 
 ["ARCH#packaging"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
+
+["ARCH#packaging"."file:.cargo/config.toml"]
+stamp = { hash = "b3:61cf92f665e234af", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers adds xtask/src/dist.rs and .cargo/config.toml (declared); State bullet names the data folder via paths; new Building-the-zip bullet matches dist.rs (trunk UI or --ui-dir, four binaries, vcruntime/msvcp refused, UCRT and msvcrt.dll allowed, deterministic deflate zip, git describe or --revision naming) and config.toml's crt-static flag; CI dist job as described" }
+
+["ARCH#packaging"."file:xtask/src/dist.rs"]
+stamp = { hash = "b3:712aa0a6f80c3dea", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers adds xtask/src/dist.rs and .cargo/config.toml (declared); State bullet names the data folder via paths; new Building-the-zip bullet matches dist.rs (trunk UI or --ui-dir, four binaries, vcruntime/msvcp refused, UCRT and msvcrt.dll allowed, deterministic deflate zip, git describe or --revision naming) and config.toml's crt-static flag; CI dist job as described" }
 
 ["ARCH#persistence"."body"]
 stamp = { hash = "b3:7ab4accbf98f6662", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): collections bullet (schema_version, forward migrations, checks as edits) holds; the sends fix needs no migration since schema 1 files load as before" }
@@ -420,10 +426,10 @@ stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
 
 ["ARCH#repo-layout"."body"]
-stamp = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Re-read against main.rs, which only adds docs merge-main to the usage list: the xtask line still names docs among its commands, so the layout holds" }
+stamp = { hash = "b3:a667852c45363c39", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: xtask line lists dist (the portable zip) in place of release, matching xtask/src/main.rs's new dist dispatch and usage entry" }
 
 ["ARCH#repo-layout"."file:xtask/src/main.rs"]
-stamp = { hash = "b3:0c6fb015c0446730", by = "agent:claude", note = "xtask/src/main.rs only changed the merge-main help line; the layout and the xtask command list still hold." }
+stamp = { hash = "b3:67e9c88a4f6bc64f", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#400 waves): main.rs's merge-main usage gains --from; P1's dist dispatch and usage entry stay; xtask line lists docs, lint-deps, governance, dist (the portable zip), gen-schema, golden; holds" }
 
 ["ARCH#shape"."body"]
 stamp = { hash = "b3:67ff057d2d135aa7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; the daemon row's --ui-dir mention matches main.rs; holds" }
@@ -447,10 +453,10 @@ stamp = { hash = "b3:8bc8c6ff8e57508b" }
 stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; the daemon row's --ui-dir mention matches main.rs; holds" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:f7c235327227029b" }
+stamp = { hash = "b3:5c51e1eba3426ff0", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: desktop main.rs now gets its data folder from jstream_platform::paths and its Cargo.toml adds jstream-platform as a common dependency; Shape's app rows name no data module and still match; holds" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:b19eab2b3dd2f7b1" }
+stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: desktop main.rs now gets its data folder from jstream_platform::paths and its Cargo.toml adds jstream-platform as a common dependency; Shape's app rows name no data module and still match; holds" }
 
 ["ARCH#threading"."body"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: PR's rewrap of render-snapshot and live-value handover paragraphs, wording fix 'a change that would contradict it', marker cleared to STARTING (below every generation, runtime/render.rs); thread table unchanged; holds" }
@@ -1104,7 +1110,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
+stamp = { hash = "b3:ec76a643a1a5e0b1", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#247): main's Startup/Listening text now names --ui-dir and the UI directory; P1's data-directory bullet (jstream-platform paths, portable marker), Dependencies entry and open question 5 are unaffected and still match logs.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:f8d3caba075c6078" }
@@ -1128,7 +1134,7 @@ stamp = { hash = "b3:a750642233d72b2c" }
 stamp = { hash = "b3:5c5aac8c1b12a291" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/logs.rs"]
-stamp = { hash = "b3:2ce291dd14ddd2a9" }
+stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data-directory bullet now names jstream-platform's paths module (portable marker handled), Dependencies lists the data directory under jstream-platform, open question 5 says the log default uses it and the token/collection don't yet; matches logs.rs; sits beside main's #328 delay-load text without overlap" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/main.rs"]
 stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
@@ -1158,7 +1164,7 @@ stamp = { hash = "b3:a750642233d72b2c" }
 stamp = { hash = "b3:5c5aac8c1b12a291" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/logs.rs"]
-stamp = { hash = "b3:2ce291dd14ddd2a9" }
+stamp = { hash = "b3:4406d24360ab8753", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: logs.rs's default dir now comes from jstream_platform::paths::data_dir (its own data_dir() removed); the Startup bullet's 'creates the log directory' still holds; main's WindowsVcam/delay-load text unaffected" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/main.rs"]
 stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
@@ -1182,7 +1188,7 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:7666dcee9f6dd8ce" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
+stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#247 --ui-dir): main's --ui-dir row, Web UI bullet and exit-1 row sit beside P1's Log files bullet (data folder beside the exe with a portable marker; missing HOME/APPDATA fails only without it), which still matches paths::data_dir_for and logs.rs; holds" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
@@ -1217,20 +1223,17 @@ stamp = { hash = "b3:c539140aae7561d4" }
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:f0fe0fb519a068bf" }
 
-["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/data.rs"]
-stamp = { hash = "b3:ca2f21dc552ae191" }
-
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
 stamp = { hash = "b3:9b575597b71027d3" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:47bd5b3369b57d20" }
+stamp = { hash = "b3:df16daf5092f4655", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: inputs changed are data.rs removal, lib.rs and main.rs moving to jstream_platform::paths::data_dir_for; Design names no data module and its ADR-0020 portable/state text matches paths; holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:b19eab2b3dd2f7b1" }
+stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: inputs changed are data.rs removal, lib.rs and main.rs moving to jstream_platform::paths::data_dir_for; Design names no data module and its ADR-0020 portable/state text matches paths; holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/shell.rs"]
 stamp = { hash = "b3:ee281b0fbf540f66" }
@@ -1242,7 +1245,7 @@ stamp = { hash = "b3:45624952598c1f3a" }
 stamp = { hash = "b3:558b5c5512b30191" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:ec6f85c97d250939", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
+stamp = { hash = "b3:237641d2046203da", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs deleted and lib.rs drops its module; contents list says logs.rs in the data folder from jstream-platform's paths, Tests drop the data folder; main.rs calls paths::data_dir_for; release build of the portable folder is now cargo xtask dist (ARCH Packaging)" }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:194117bebc81240c" }
@@ -1253,20 +1256,17 @@ stamp = { hash = "b3:c539140aae7561d4" }
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:f0fe0fb519a068bf" }
 
-["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/data.rs"]
-stamp = { hash = "b3:ca2f21dc552ae191" }
-
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
 stamp = { hash = "b3:9b575597b71027d3" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/lib.rs"]
-stamp = { hash = "b3:47bd5b3369b57d20" }
+stamp = { hash = "b3:df16daf5092f4655", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs deleted and lib.rs drops its module; contents list says logs.rs in the data folder from jstream-platform's paths, Tests drop the data folder; main.rs calls paths::data_dir_for; release build of the portable folder is now cargo xtask dist (ARCH Packaging)" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:b19eab2b3dd2f7b1" }
+stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: data.rs deleted and lib.rs drops its module; contents list says logs.rs in the data folder from jstream-platform's paths, Tests drop the data folder; main.rs calls paths::data_dir_for; release build of the portable folder is now cargo xtask dist (ARCH Packaging)" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/shell.rs"]
 stamp = { hash = "b3:ee281b0fbf540f66" }
@@ -1275,22 +1275,19 @@ stamp = { hash = "b3:ee281b0fbf540f66" }
 stamp = { hash = "b3:45624952598c1f3a" }
 
 ["CRATE-jstream-desktop#usage"."body"]
-stamp = { hash = "b3:4d0cdcc543ce52f7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
+stamp = { hash = "b3:fa5650de95328aac", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (declared governance change); Data folder text says both hosts find it through jstream-platform paths, matching main.rs and Cargo.toml (jstream-platform now a common dependency)" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
-stamp = { hash = "b3:9ae316de6772baa9" }
+stamp = { hash = "b3:5b31f315753e29fe", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (declared governance change); Data folder text says both hosts find it through jstream-platform paths, matching main.rs and Cargo.toml (jstream-platform now a common dependency)" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:c539140aae7561d4" }
-
-["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/data.rs"]
-stamp = { hash = "b3:ca2f21dc552ae191" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:99e633ebddadb039" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/main.rs"]
-stamp = { hash = "b3:b19eab2b3dd2f7b1" }
+stamp = { hash = "b3:6e2fcbff62ba4fc5", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers drops the deleted data.rs (declared governance change); Data folder text says both hosts find it through jstream-platform paths, matching main.rs and Cargo.toml (jstream-platform now a common dependency)" }
 
 ["CRATE-jstream-effects#purpose"."body"]
 stamp = { hash = "b3:43dd619147c37ef5", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "Round 1 (B1, N1-N3): re-read; hot reload now stamps the manifest plus named shaders and retries duplicate-refused folders when an ID is freed; contract adds overrides; prelude validated alone" }
@@ -1686,7 +1683,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge cascade from ARCH#crate-map: re-read; the crate-map body is unchanged apart from the stamp move, nothing in it bears on GPU frames; holds" }
+stamp = { hash = "b3:70bf626d4367afd8", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main: stale only via ARCH#crate-map (main's jstream-effects row, P1's jstream-platform paths row); GPU frame design text untouched on both sides; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
@@ -1698,13 +1695,13 @@ stamp = { hash = "b3:9074e32b08b81d5b" }
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:ac6493f8088539b9", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
+stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:e204cadb57ccceae" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform"]
-stamp = { hash = "b3:4179d522e3055d3d" }
+stamp = { hash = "b3:63ee3c30fdb30af2", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
@@ -1722,7 +1719,7 @@ stamp = { hash = "b3:febfe552adc09d5b" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/Cargo.toml"]
-stamp = { hash = "b3:3d41b91ed599db93" }
+stamp = { hash = "b3:4b200778c1e4db39", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/audio.rs"]
 stamp = { hash = "b3:f0a2d34cd26f9151" }
@@ -1755,7 +1752,10 @@ stamp = { hash = "b3:8019c83df5cad30a" }
 stamp = { hash = "b3:5e9dc58061f8fffa" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/lib.rs"]
-stamp = { hash = "b3:0e9c9d2a54867156" }
+stamp = { hash = "b3:9c4c35f877b38440", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
+
+["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/paths.rs"]
+stamp = { hash = "b3:3a503eff8a85882d", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = 'P1: new Data folder bullet for paths.rs: portable marker -> data beside the exe, else APPDATA\JStream / Application Support / XDG or ~/.local/share, absolute vars only, plain function, no dirs crate; matches paths.rs and its tests; lib.rs exports paths; Cargo.toml summary and ARCH crate-map row name it' }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/surface.rs"]
 stamp = { hash = "b3:acaa4ad70c04147a" }
@@ -1773,7 +1773,7 @@ stamp = { hash = "b3:191ac01e6ea05888" }
 stamp = { hash = "b3:7522c9a00d99ef52", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Re-read WindowsVcam Start: probe then HKLM check, matching sink.rs; the N-edition wording holds for this crate's hosts in general. The sink.rs change only moved registered()'s doc back above it (B1)" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:ac6493f8088539b9" }
+stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via jstream-platform#purpose's new Data folder bullet; this crate's portable-install mentions (key store, Moved registration) agree with paths' marker semantics; holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:dfa8602587609b6c" }
@@ -2538,7 +2538,7 @@ stamp = { hash = "b3:5506fd7891457520" }
 stamp = { hash = "b3:6d760c430e428d10", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:1c343ec4bf85722c" }
+stamp = { hash = "b3:f1cd89b16dfff9f6", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH#packaging (CI dist job moved to after-review.yml); hardware-check steps build and register the DLL by hand as before; holds" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."file:crates/jstream-vcam-windows/examples/vcam_smoke/main.rs"]
 stamp = { hash = "b3:741967485a750fec" }
@@ -2556,7 +2556,7 @@ stamp = { hash = "b3:b6a3f609729e0f1f" }
 stamp = { hash = "b3:ecfd9b5f74db77b1" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:1c343ec4bf85722c" }
+stamp = { hash = "b3:f1cd89b16dfff9f6", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH#packaging, where only the CI dist job's home changed (after-review.yml, ADR-0054); DLL and registration text unchanged; holds" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:9074e32b08b81d5b" }
@@ -2616,7 +2616,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via platform#purpose (Audio and FakeAudioIo lines); Secret and OAuthTokenStore text unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:ac6493f8088539b9" }
+stamp = { hash = "b3:4b35259d47009233", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via jstream-platform#purpose's new paths/data-folder bullet; the token store seam it describes is unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:e3b27ea549009815" }
@@ -2910,7 +2910,7 @@ stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
+stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = '''P1 merge of main: daemon usage gained main's --ui-dir/Web UI text plus P1's portable data folder; prerequisites use the default %APPDATA%\JStream layout and no UI flag; holds''' }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
@@ -2919,7 +2919,7 @@ stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:6dc625770a5edc67" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
+stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main: smoke.ps1 still passes --token-file and --log-dir in its run folder and no --ui-dir, so neither main's UI flag nor P1's data-folder default reaches it; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -2931,7 +2931,7 @@ stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:6dc625770a5edc67" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
+stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = '''P1 merge of main: daemon usage gained --ui-dir (not used by these steps) and P1's portable data folder; steps run target\release with no marker, so the %APPDATA%\JStream\logs check holds''' }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; step 7 (Ctrl-C prints stopped, exits 0) holds with #301's bounded close wait; default limits are non-zero; holds" }
