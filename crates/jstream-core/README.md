@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:0ccda6723c3bb204", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
+verified = { hash = "b3:37ef6bf05a741e51", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C2 adds one test (tests/sources.rs: a text source is built and rebuilt); the Live sources text describes any built kind and names none, so it holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0a1d6d40d7cae6a3", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
+verified = { hash = "b3:4876812d91935711", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C2 only adds a live-source test for the text kind; design text (protocol, command model, control) unaffected" }
 -->
 
 ### Engine and sessions

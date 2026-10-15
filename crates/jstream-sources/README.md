@@ -11,9 +11,9 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**", "crates/jstream-sources/assets/**"]
+covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:03c7f285c58c489f", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#222 C1b) into png 0.18: kept main's C1b seams text; png 0.18 maps a usize-overflowing frame size to a decode error, not described here; holds" }
+verified = { hash = "b3:93f18bde144c048e", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (#217 asset reads, png 0.18, C1b) into C2: re-read the whole section; main's Assets and seams text kept; C2's text kind, Bundled font, dependencies and tests paragraphs match text/mod.rs, raster.rs and tests/text.rs (golden reader moved to png 0.18's BufRead API); covers back to main's globs" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every

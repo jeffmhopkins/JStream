@@ -125,6 +125,40 @@ fn a_stored_frame_wins_over_the_live_source() {
 }
 
 #[test]
+fn a_text_source_is_built_and_rebuilt() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let text = |background: &str| {
+        settings(&[
+            ("text", json!("Hi")),
+            ("background", json!(background)),
+            ("padding", json!(4)),
+        ])
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("caption", "text", text("#00ff00ff")),
+            add("a", "i1", "caption"),
+        ]),
+    )
+    .expect("created");
+    // The top left corner is padding, so it shows the background.
+    assert_eq!(shown(&engine, "caption"), Some([0, 0xff, 0, 0xff]));
+
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("caption"),
+            patch: settings(&[("background", json!("#0000ffff"))]),
+        }),
+    )
+    .expect("changed");
+    assert_eq!(shown(&engine, "caption"), Some([0, 0, 0xff, 0xff]));
+}
+
+#[test]
 fn a_kind_that_is_not_built_still_shows_the_capture() {
     let engine = Engine::new();
     let control = connected(&engine);

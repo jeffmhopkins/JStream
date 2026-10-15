@@ -101,8 +101,15 @@ fn check_golden(name: &str, frame: &VideoFrame) {
         return;
     }
     let file = std::fs::File::open(&path).expect("the golden PNG; run with JSTREAM_BLESS=1");
-    let mut reader = png::Decoder::new(file).read_info().expect("a PNG");
-    let mut want = vec![0; reader.output_buffer_size()];
+    let mut reader = png::Decoder::new(std::io::BufReader::new(file))
+        .read_info()
+        .expect("a PNG");
+    let mut want = vec![
+        0;
+        reader
+            .output_buffer_size()
+            .expect("a PNG that fits in memory")
+    ];
     let info = reader.next_frame(&mut want).expect("PNG data");
     assert_eq!((info.width, info.height), (w, h), "{name}: size");
     assert_eq!(info.color_type, png::ColorType::Rgba, "{name}: colour type");

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:90cf1722254d4270", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b, #148 MF N editions): stamp-only conflict, main's text taken; F3 wrote nothing here that C1b or #148 changes; holds" }
+verified = { hash = "b3:4e94e00ba2cf7061", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Stale only through ARCH#data-model, where C2 added text to the built kinds; the graph stores any builtin kind's settings and names none as built; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
