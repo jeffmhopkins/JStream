@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:eba200dc806a87e7", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): actions/queries/events lists merged with D5's; version line 0.21 privacy, 0.20 mixes, 0.19 audio" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -145,7 +144,6 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:f8cae17cb03a9924", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): privacy.get, privacy.changed and dedicated now say 0.21; envelope example at 0.21; mixes stay 0.20, audio 0.19" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -342,8 +340,14 @@ never a type per kind.
   reference to a missing scene or source is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
   `collection` and `app` are relative, with `/` separators and no `..` segment, drive
-  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows); an
-  asset that doesn't exist yet is accepted.
+  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
+  Under `absolute` the path is `/…`, `\…`, `C:\…` or `C:/…`, with no `..` segment, no
+  second leading separator (`\\host\share`, `//host/share`, `\\.\…` and `\\?\…` name
+  a UNC share or a device, and opening one on Windows hands the engine's credentials to
+  that host), no `:` but the drive letter's, and no `?` or `*` (Win32 never allows
+  them in a file name, and `\??\UNC\…` or `\??\GLOBALROOT\Device\…` is an NT object
+  path that reaches the same hosts and devices). An asset that doesn't exist yet is
+  accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,

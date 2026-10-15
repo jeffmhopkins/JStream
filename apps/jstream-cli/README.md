@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:e156e5bb385ff1d0", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): cascade only; text names neither privacy nor audio in a way the merge changed" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +46,6 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:318571adb4f28608", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): privacy commands table and privacy.changed in the event note sit beside D5's 'audio edits not in the CLI' note; holds" }
 -->
 
 ```sh
@@ -242,7 +240,6 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:801aea75b13b0aaf", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): cascade only" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

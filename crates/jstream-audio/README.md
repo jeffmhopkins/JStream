@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:1048f660f20793e8", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): cascade only; audio crate untouched by privacy" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -31,7 +30,8 @@ compensates their latency. It also has
 [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)'s audio half: a
 master chain on every bus that feeds an output, output taps with their own chains for
 outputs that encode their own audio, and each bus's output before the master chain for
-monitoring. Activity gains (audio that follows the program), sidechain keys in the mixer
+monitoring. Each input has an activity gain (audio that follows the program) before
+its sends. Sidechain keys in the mixer
 and the monitor devices themselves come later. The true-peak and loudness meters
 ([Meters](#meters)) exist as DSP but don't run in the mixer yet; `jstream-core`'s
 mixer thread runs them on the master block the mixer returns.
@@ -66,6 +66,10 @@ stamped on the clock, and no device is the master.
 - `InputControl::set_send` (linear or dB, 0 to +24 dB) sends the input into a bus
   after its fader and mute, or changes that send's gain; `remove_send` stops it. A new
   bus has no sends. A send that starts, stops or changes ramps over one block.
+- `InputControl::set_activity_gain` (linear, 0 to 1) scales every send of the input,
+  after its fader, mute and meter: ADR-0028's activity gain, which `jstream-core` sets
+  from what the Program mix shows. It ramps over one block with the sends, and a new
+  input starts at 1.
 - `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
   filter (`FilterSpec`: gain, noise gate, compressor, limiter or delay, built at the
   engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
@@ -180,7 +184,6 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:76ed26c75906851e", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2b merge of E2 (main's D5 audio; mixes 0.20, privacy now 0.21): cascade only; mixer does not read the privacy flag yet, as the core docs say" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -188,7 +191,8 @@ Everything that runs on a real-time thread lives in `src/rt/`
 **audio thread** (the platform backend's, one per stream) calls
 `InputProducer::push_packet`. That call downmixes, tracks the device clock, resamples,
 and writes into the input's ring. The **mixer thread** calls `Mixer::poll`, which reads
-every ring for the block's window, applies faders and sends, sums each bus and meters.
+every ring for the block's window, applies faders, activity gains and sends, sums each
+bus and meters.
 Neither allocates,
 locks, blocks or logs after setup ([R-RT-001](../../docs/RULES.md#R-RT-001)). They
 share only the rings and atomics: gains, sends, meters and counters
@@ -394,8 +398,17 @@ with 8 stereo 48 kHz inputs. Measured on a cloud container (4 vCPUs of an Intel 
 Run it on the target machine with
 `cargo test --release -p jstream-audio --test cost -- --ignored --nocapture`.
 
+**Benchmarks** (`benches/mix.rs`, criterion). `mix_block` times the same three mixer
+scenarios per block, and `input_push` times one engine block's worth of device frames (1024 at 48 kHz, 940 or 941
+at 44.1 kHz) through `InputProducer::push_packet` (downmix and adaptive resampling).
+Measured on a cloud container (4 vCPUs of an Intel Xeon at 2.10 GHz, Linux 6.18), release
+build, mean: `input_push` about 200 µs at either rate (0.9% of the block period). The
+`bench` workflow records them on every push to `main`
+([R-GIT-003](../../docs/RULES.md#R-GIT-003)). Run them with
+`cargo bench -p jstream-audio --bench mix`.
+
 **Not yet enforced or measured:**
-- The cost on Windows hardware, and of resampling, is not measured.
+- The cost on Windows hardware is not measured.
 - Catching a panic at the thread boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) is the engine's job, where the threads are.
 
@@ -404,7 +417,6 @@ Run it on the target machine with
 <!-- @section
 covers = ["crates/jstream-audio/src/meter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:f77ce7451ac1f6e0", by = "agent:claude@session_01MYuHTvXyZdeQGrKJhs9Htz", note = "New section, checked against src/meter/: filter length, cutoff and measured phase agreement, 100 ms steps and windows, gates, 0.02 LU histogram range and size, rate rule, and the tests listed; ADR-0028 decision (4x true peak, momentary/short-term/integrated, allocation-free, reset action) matches" }
 -->
 
 `src/meter/` holds the broadcast meters
@@ -459,7 +471,6 @@ true-peak cases from files) are not run; they would add binary fixtures.
 <!-- @section
 covers = ["crates/jstream-audio/src/filter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
-verified = { hash = "b3:a5b7e32b71b1656a", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1 (N2): re-read; no_alloc sentence now separates the master bus's own chain from the master chain and output tap chain, and Not yet says the kernels' cost is what's measured" }
 -->
 
 `src/filter/` holds the audio filter kernels
@@ -530,7 +541,7 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   thread that calls it, which must catch a panic there, mute the bus and raise the
   error event. `rt_panic_is_reported` lands with that engine thread.
 - **The rest of the audio model** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
-  the activity gain per source, sidechain keys in the mixer's chains (the compressor
+  sidechain keys in the mixer's chains (the compressor
   has one; the mixer needs the key's source processed first), running the true-peak and
   loudness meters in the mixer (for the
   master bus and subscribed buses and sources) with their meter-stream fields and
