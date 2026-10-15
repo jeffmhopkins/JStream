@@ -487,7 +487,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:730d037d3a32ecb6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via the jstream-server README (open question 8): Transport bullet still holds; the handshake timeout is server-local, envelope unchanged" }
+verified = { hash = "b3:5386153a7678a890", by = "agent:claude@session_01Gkayyrtq9Ahc5U37dAfdoB", note = "Re-read for #137: test-only change (shutdown tests wait on counted conditions instead of fixed sleeps; CLOSE_TIMEOUT made pub(crate) for the test). No behaviour change; the section still matches; envelope and transport bullets unaffected" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
