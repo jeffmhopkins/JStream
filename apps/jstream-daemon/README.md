@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:4a3e60814bb404c1", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "Re-read the delay-load bullet: N1, the MFCreateVirtualCamera probe protects Windows 10; an N edition without the Media Feature Pack stops at check_media_foundation (exit 3) before output.start" }
+verified = { hash = "b3:dfc6a98d87b07e79", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (#292 #297 #286 #237) into D5 after round 4: daemon text is main's WindowsVcam wiring; names no audio routing; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

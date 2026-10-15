@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:0d5784cb3dd8c709", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#241 N1: differential script adds an item.list b query after the redo (shows i1 in b); Tests bullet's differential-run description holds" }
+verified = { hash = "b3:84396a293b0d1d8c", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (#292 #297 #286 #237) into D5 after round 4: text unchanged, stale via covered code (#286's differential script); tests line still lists scene roles, group moves and D5's audio tests; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -180,7 +180,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e6d045266787a69b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#241 N1: differential script adds an item.list b query after the redo, compared like the other calls; the script paragraph holds" }
+verified = { hash = "b3:4aeb75fe9e73646d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (#292 #297 #286 #237) into D5 after round 4: text unchanged, stale via covered code; audio routing and program scene text hold" }
 -->
 
 ### Engine and sessions
