@@ -3214,7 +3214,8 @@ pub(crate) fn check_secrets_are_redacted() {
     assert_eq!(stored.expose(), KEY, "the key reached the store");
 }
 
-/// The audit log gets one entry per batch and action, with the client, the request, the
+/// The audit log gets one entry per batch and action, with the client and its latest
+/// `hello` name, the request, the
 /// call, the edits by name, the `rev` before and after and the result code; queries are
 /// not recorded, and an idempotent retry is marked as replayed.
 #[test]
@@ -3224,7 +3225,14 @@ fn batches_and_actions_are_audited() {
         .with_output(OutputId::new("out_1"))
         .with_audit(audit.clone());
     let control = connected(&engine);
-    let other = connected(&engine);
+    let other = engine.connect();
+    let named = |client_name: &str| Hello {
+        protocol: PROTOCOL_VERSION,
+        client_name: client_name.into(),
+    };
+    block_on(other.hello(named("claude-code"))).expect("handshake");
+    // A second `hello` keeps the client ID and renames the client in the log.
+    block_on(other.hello(named("claude-desktop"))).expect("again");
 
     batch(&control, Batch::single(create("a"))).expect("first");
     batch(
@@ -3243,6 +3251,19 @@ fn batches_and_actions_are_audited() {
     block_on(control.call(output_call("nope", true))).expect_err("unknown output");
 
     let entries = audit.entries();
+    let names: Vec<_> = entries.iter().map(|e| e.client_name.as_str()).collect();
+    assert_eq!(
+        names,
+        [
+            "test",
+            "claude-desktop",
+            "test",
+            "test",
+            "test",
+            "test",
+            "test"
+        ]
+    );
     let summary: Vec<_> = entries
         .iter()
         .map(|e| {
@@ -3337,7 +3358,8 @@ fn batches_and_actions_are_audited() {
     assert!(
         line.starts_with("{\"time\":\"")
             && line.contains(
-                "\"client_id\":\"client_2\",\"request_id\":\"req_1\",\"call\":\"batch\",\
+                "\"client_id\":\"client_2\",\"client_name\":\"claude-desktop\",\
+             \"request_id\":\"req_1\",\"call\":\"batch\",\
              \"edits\":[\"scene.create\",\"source.create\",\"item.add\"],\
              \"rev_before\":1,\"rev_after\":2,\"result\":\"ok\"}"
             ),

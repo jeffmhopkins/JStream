@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:e99bfc5521a4d2cf", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#147 C6) into B8 #171: re-read Tests bullet with both C6's nested-scene tests and B8's audit tests, Snapshot and Audit log bullets; both hold" }
+verified = { hash = "b3:3585f875affb8449", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "#171 B1: re-read Purpose; the Audit log bullet and Tests bullet still hold with client_name added (entry fields are listed in Design)" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -104,7 +104,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:83eb9dd992e214da", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#147 C6) into B8 #171: C6's Snapshots nested-scene paragraph and B8's Audit log subsection coexist; snapshots are queries, which the audit log does not record; Locking unchanged by C6" }
+verified = { hash = "b3:36b9fdf792806e2e", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "#171 B1/N1/N2: Audit log field list now has client_name (latest hello, cut to 128 bytes, kept for the engine's lifetime) matching audit.rs, register_client/rename_client and session.rs; hello bullet says a second hello renames; request_id note (N1) and AuditSink seam reason (N2) added" }
 -->
 
 ### Engine and sessions
@@ -122,7 +122,8 @@ WebSocket API does, minus serialization:
 - `hello` checks the version (`unsupported_version`; a host may hand the session to a
   client built against another protocol version) and assigns a `client_id`
   (`client_1`, `client_2`, …, unique per engine). A second `hello` returns the same
-  identity with the current `rev`. A refused `hello` opens nothing.
+  identity with the current `rev`, and its `client_name` replaces the first in the audit
+  log. A refused `hello` opens nothing.
 - Every call before `hello` fails with `handshake_required`. `events()` does not need
   the handshake, as with the mock; `jstream-server` subscribes only after `welcome`.
 - Request IDs are `req_1`, `req_2`, … per session, as `WsControl` numbers them, and
@@ -512,15 +513,24 @@ Every agent action goes to the audit log
 ([ADR-0006](../../docs/adr/0006-mcp-full-access.md),
 [ARCH › MCP](../../docs/ARCHITECTURE.md#mcp)). `Engine::execute` records one
 `AuditEntry` for each batch and action, failed ones included, and none for queries:
-the time, `client_id`, the session's `request_id`, the call (`batch` or the action's
-name), a batch's edits by name in order, an action's `output_id`, the `rev` before and
+the time, `client_id`, the client's name from its latest `hello` (`client_name`, cut
+to 128 bytes; `client_id`s restart at `client_1` with the engine, so the name is what
+says which agent acted across restarts), the session's `request_id`, the call (`batch`
+or the action's name), a batch's edits by name in order, an action's `output_id`, the `rev` before and
 after, the result (`ok` or the error code), and `replayed` for a batch whose
 idempotency key had already been applied. It holds no argument of any call: no names,
 settings, URLs or keys, so `output.set_key` records only that action on that output
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). The `rev` before is read just before the
 call; an applied batch reports its own `rev` minus one, so another client's batch
 landing in between does not skew it, and a failed batch or an action reports the same
-`rev` twice.
+`rev` twice. The `request_id` is the in-process session's (`req_N`); for a WebSocket
+client the server maps its own wire ID to it, so the entry can't yet be matched to the
+ID the client sent. The engine keeps each client's name for its lifetime, as it keeps
+the IDs.
+
+`AuditSink` is a trait because the host chooses the sink (a file in the data
+directory, memory in tests, its own view in a UI), the same kind of host-injection
+seam as `DropSource`.
 
 The sink is behind its own mutex, taken only to clone the handle, and `record` is
 called after the call completes, with no engine lock held. A sink must not block:

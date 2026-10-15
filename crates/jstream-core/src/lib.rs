@@ -31,7 +31,7 @@ mod tests;
 
 pub use audit::{
     AUDIT_FILE, AUDIT_FILE_OLD, AuditEntry, AuditFile, AuditMemory, AuditSink,
-    DEFAULT_MAX_FILE_BYTES, QUEUE_ENTRIES,
+    DEFAULT_MAX_FILE_BYTES, MAX_CLIENT_NAME_BYTES, QUEUE_ENTRIES,
 };
 pub use drops::{
     AudioBusDrops, AudioEncodeDrops, AudioInputDrops, DropSnapshot, DropSource, DropSourceId,

@@ -319,12 +319,38 @@ impl Engine {
         lock(&self.shared.state).graph.rev()
     }
 
-    /// Assigns the next client ID and returns it with the current `rev`.
-    pub(crate) fn register_client(&self) -> (ClientId, Rev) {
+    /// Assigns the next client ID, records `client_name` for it (the name the audit log
+    /// shows), and returns the ID with the current `rev`.
+    pub(crate) fn register_client(&self, client_name: &str) -> (ClientId, Rev) {
         let mut state = lock(&self.shared.state);
         state.clients += 1;
         let client_id = ClientId::new(format!("client_{}", state.clients));
+        state
+            .client_names
+            .insert(client_id.clone(), audit::client_name(client_name));
         (client_id, state.graph.rev())
+    }
+
+    /// Records `client_name` as the name of `client_id`, which sent `hello` again, and
+    /// returns the current `rev`.
+    pub(crate) fn rename_client(&self, client_id: &ClientId, client_name: &str) -> Rev {
+        let mut state = lock(&self.shared.state);
+        state
+            .client_names
+            .insert(client_id.clone(), audit::client_name(client_name));
+        state.graph.rev()
+    }
+
+    /// What an audit entry needs before its call runs: the current `rev` and the
+    /// client's name from its latest `hello`.
+    fn audit_context(&self, client_id: &ClientId) -> (Rev, String) {
+        let state = lock(&self.shared.state);
+        let name = state
+            .client_names
+            .get(client_id)
+            .cloned()
+            .unwrap_or_default();
+        (state.graph.rev(), name)
     }
 
     /// Opens an event subscription: the stream, and the weak handle its session keeps
@@ -366,11 +392,10 @@ impl Engine {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
         }
-        let audit = self
-            .shared
-            .audit
-            .sink_for(&call)
-            .map(|sink| (sink, audit::Pending::new(&call, self.rev())));
+        let audit = self.shared.audit.sink_for(&call).map(|sink| {
+            let (rev, client_name) = self.audit_context(client_id);
+            (sink, audit::Pending::new(&call, rev, client_name))
+        });
         let output = match &call {
             Call::Action {
                 action:
@@ -1152,6 +1177,9 @@ struct State {
     applied: BTreeMap<(ClientId, IdempotencyKey), Rev>,
     /// How many sessions have completed `hello`; numbers the client IDs.
     clients: u64,
+    /// Each client's name from its latest `hello`, for the audit log. Kept for the
+    /// engine's lifetime, like the client IDs.
+    client_names: BTreeMap<ClientId, String>,
     subscribers: Subscribers,
     /// The latest CPU frame of each source, keyed by id. Runtime state: not part of
     /// `rev`. A snapshot draws an item from this when the source is not itself a scene.

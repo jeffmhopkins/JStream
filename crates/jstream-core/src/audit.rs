@@ -31,8 +31,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub struct AuditEntry {
     /// When the call finished.
     pub time: SystemTime,
-    /// The client that sent it.
+    /// The client that sent it. IDs are numbered per engine, so they start again at
+    /// `client_1` when the engine restarts.
     pub client_id: ClientId,
+    /// The name the client gave in its latest `hello` (`claude-desktop`), cut to
+    /// [`MAX_CLIENT_NAME_BYTES`]. Chosen by the client, so it says who claims to act,
+    /// not who proved it.
+    pub client_name: String,
     /// The request, as numbered by the client's session.
     pub request_id: RequestId,
     /// `batch`, or the action's name (`output.start`).
@@ -62,6 +67,8 @@ impl AuditEntry {
         json_string(&mut line, &utc_time(self.time));
         line.push_str(",\"client_id\":");
         json_string(&mut line, self.client_id.as_str());
+        line.push_str(",\"client_name\":");
+        json_string(&mut line, &self.client_name);
         line.push_str(",\"request_id\":");
         json_string(&mut line, self.request_id.as_str());
         line.push_str(",\"call\":");
@@ -134,6 +141,8 @@ pub const AUDIT_FILE: &str = "audit.jsonl";
 pub const AUDIT_FILE_OLD: &str = "audit.1.jsonl";
 /// How large [`AuditFile`] lets the current file grow before starting a new one.
 pub const DEFAULT_MAX_FILE_BYTES: u64 = 8 * 1024 * 1024;
+/// The longest client name an entry keeps; a longer one is cut at a character boundary.
+pub const MAX_CLIENT_NAME_BYTES: usize = 128;
 /// How many entries wait for the writer thread before new ones are dropped (and counted).
 pub const QUEUE_ENTRIES: usize = 1024;
 
@@ -330,8 +339,18 @@ impl Audit {
     }
 }
 
+/// `name` cut to [`MAX_CLIENT_NAME_BYTES`], at a character boundary.
+pub(crate) fn client_name(name: &str) -> String {
+    let mut end = name.len().min(MAX_CLIENT_NAME_BYTES);
+    while !name.is_char_boundary(end) {
+        end -= 1;
+    }
+    name[..end].to_owned()
+}
+
 /// What an entry records of a call, taken before the call consumes it.
 pub(crate) struct Pending {
+    client_name: String,
     call: &'static str,
     edits: Vec<&'static str>,
     output_id: Option<OutputId>,
@@ -342,7 +361,7 @@ impl Pending {
     /// `rev_before` is read just before the call runs. Another client's batch can land
     /// between that read and the call, so for an applied batch the entry uses the
     /// batch's own `rev` minus one instead.
-    pub(crate) fn new(call: &Call, rev_before: Rev) -> Self {
+    pub(crate) fn new(call: &Call, rev_before: Rev, client_name: String) -> Self {
         let (name, edits, output_id) = match call {
             Call::Batch(batch) => (
                 "batch",
@@ -353,6 +372,7 @@ impl Pending {
             _ => ("unknown", Vec::new(), None),
         };
         Self {
+            client_name,
             call: name,
             edits,
             output_id,
@@ -380,6 +400,7 @@ impl Pending {
         AuditEntry {
             time: SystemTime::now(),
             client_id: client_id.clone(),
+            client_name: self.client_name,
             request_id: request_id.clone(),
             call: self.call,
             edits: self.edits,
@@ -460,8 +481,8 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::{
-        AUDIT_FILE, AUDIT_FILE_OLD, AuditEntry, AuditFile, AuditSink, civil_from_days, json_string,
-        utc_time,
+        AUDIT_FILE, AUDIT_FILE_OLD, AuditEntry, AuditFile, AuditSink, MAX_CLIENT_NAME_BYTES,
+        civil_from_days, client_name, json_string, utc_time,
     };
     use jstream_protocol::{ClientId, OutputId, RequestId, Rev};
     use std::path::PathBuf;
@@ -471,6 +492,7 @@ mod tests {
         AuditEntry {
             time: UNIX_EPOCH + Duration::from_millis(1_760_488_935_007),
             client_id: ClientId::new("client_1"),
+            client_name: "claude-desktop".to_owned(),
             request_id: RequestId::new(format!("req_{n}")),
             call: "output.set_key",
             edits: Vec::new(),
@@ -515,7 +537,7 @@ mod tests {
         assert_eq!(
             entry(4).to_json_line(),
             "{\"time\":\"2025-10-15T00:42:15.007Z\",\"client_id\":\"client_1\",\
-             \"request_id\":\"req_4\",\"call\":\"output.set_key\",\"output_id\":\"out_yt\",\
+             \"client_name\":\"claude-desktop\",\"request_id\":\"req_4\",\"call\":\"output.set_key\",\"output_id\":\"out_yt\",\
              \"rev_before\":4,\"rev_after\":4,\"result\":\"ok\"}"
         );
     }
@@ -564,7 +586,19 @@ mod tests {
 
     #[test]
     fn a_missing_directory_fails_to_open() {
-        let dir = scratch("missing").join("not-there");
-        assert!(AuditFile::open(&dir).is_err());
+        let scratch = scratch("missing");
+        assert!(AuditFile::open(&scratch.join("not-there")).is_err());
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    #[test]
+    fn long_client_names_are_cut_at_a_character_boundary() {
+        assert_eq!(client_name("jstream-cli"), "jstream-cli");
+        let long = "é".repeat(MAX_CLIENT_NAME_BYTES);
+        let cut = client_name(&long);
+        assert_eq!(cut.len(), MAX_CLIENT_NAME_BYTES);
+        assert!(long.starts_with(&cut));
+        let odd = format!("a{long}");
+        assert_eq!(client_name(&odd).len(), MAX_CLIENT_NAME_BYTES - 1);
     }
 }
