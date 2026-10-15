@@ -852,5 +852,5 @@ or mixer panic) is a channel message to a watcher the control thread started; th
 watcher emits `failed` and stops the pipeline. A program-stage failure reaches every
 running output. Frame hand-off is the encoder session queues. The audio and outputs
 snapshots and a GPU encode target are still rows of the ARCH thread table, not this
-cut. The mixer also has its own collector, which frees only input rings and their
-counters.
+cut. The mixer also has its own collector, which frees input rings and their counters,
+removed buses' state, and removed filter chains and filters.
