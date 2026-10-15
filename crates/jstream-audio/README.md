@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:f07236117b959ad7", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: stale via ARCH#threading's Collector row rewording only (program-stage collector fed by render and mixer; mixer's own for input rings); this section's text unchanged and consistent; holds" }
+verified = { hash = "b3:bce46b7621561bd5", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (D4 no_alloc, F3, ADR-0042) into D2: re-read; D2's bus/send API, limits, errors and test list sit beside main's tests/no_alloc.rs paragraph; no_alloc covers live input changes and the master path, as stated" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -130,7 +130,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:4b14be3ec63e284a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: stale via ARCH#threading's Collector row rewording only (program-stage collector fed by render and mixer; mixer's own for input rings); this section's text unchanged and consistent; holds" }
+verified = { hash = "b3:38c62e3436c704c8", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (D4 no_alloc, F3, ADR-0042) into D2: re-read; D2's mixer/bus/send paragraphs unchanged and consistent with main's no-allocation section; Not yet keeps main's CPU-measurement bullet plus D2's protocol line" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
