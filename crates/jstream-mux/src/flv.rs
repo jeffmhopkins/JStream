@@ -370,19 +370,13 @@ impl ExVideoConfig {
         if !packet.is_keyframe() {
             return Err(MuxError::MissingDecoderConfig { codec });
         }
+        // A keyframe without the parameter sets keeps the error that says which ones
+        // were missing.
         match self {
-            Self::Hevc(_) => match HevcDecoderConfig::from_annexb(packet.data()) {
-                Err(MuxError::MissingHevcParameterSets { .. }) => {
-                    Err(MuxError::MissingDecoderConfig { codec })
-                }
-                other => other.map(|c| Self::Hevc(Some(c))),
-            },
-            Self::Av1(_) => match Av1CodecConfig::from_obus(packet.data()) {
-                Err(MuxError::MissingAv1SequenceHeader) => {
-                    Err(MuxError::MissingDecoderConfig { codec })
-                }
-                other => other.map(|c| Self::Av1(Some(c))),
-            },
+            Self::Hevc(_) => {
+                HevcDecoderConfig::from_annexb(packet.data()).map(|c| Self::Hevc(Some(c)))
+            }
+            Self::Av1(_) => Av1CodecConfig::from_obus(packet.data()).map(|c| Self::Av1(Some(c))),
         }
     }
 }
@@ -600,8 +594,10 @@ impl FlvTagger {
     /// [`MuxError::NegativeTimestamp`] for a dts before the origin,
     /// [`MuxError::NonMonotonicDts`] when a track's dts goes backwards,
     /// [`MuxError::CompositionOffsetOutOfRange`], [`MuxError::MissingAvcConfig`] or
-    /// [`MuxError::MissingDecoderConfig`] for a first video packet without its decoder
-    /// configuration, [`MuxError::UnexpectedCompositionOffset`] for an AV1 packet whose
+    /// [`MuxError::MissingDecoderConfig`] for a first video packet that is not a keyframe
+    /// or lacks its decoder configuration ([`MuxError::MissingHevcParameterSets`] and
+    /// [`MuxError::MissingAv1SequenceHeader`] for an HEVC or AV1 keyframe),
+    /// [`MuxError::UnexpectedCompositionOffset`] for an AV1 packet whose
     /// pts and dts differ, the framing errors of [`MuxError::NotAnnexB`],
     /// [`MuxError::InvalidObu`], [`MuxError::InvalidHevcSps`],
     /// [`MuxError::InvalidAv1SequenceHeader`], and [`MuxError::Media`].
@@ -1520,7 +1516,11 @@ mod tests {
         let bare = Packet::new(Codec::Hevc, true, ms(0), ms(0), vec![0, 0, 1, 0x28, 0x01]).unwrap();
         assert!(matches!(
             tagger.push(&bare),
-            Err(MuxError::MissingDecoderConfig { codec: Codec::Hevc })
+            Err(MuxError::MissingHevcParameterSets {
+                vps: 0,
+                sps: 0,
+                pps: 0
+            })
         ));
         let bad_sps = Packet::new(Codec::Hevc, true, ms(0), ms(0), {
             let mut au = vec![0, 0, 1];
@@ -1621,6 +1621,11 @@ mod tests {
         let no_header = Packet::new(Codec::Av1, true, ms(0), ms(0), vec![0x32, 0x00]).unwrap();
         assert!(matches!(
             tagger.push(&no_header),
+            Err(MuxError::MissingAv1SequenceHeader)
+        ));
+        let inter = Packet::new(Codec::Av1, false, ms(0), ms(0), av1_keyframe()).unwrap();
+        assert!(matches!(
+            tagger.push(&inter),
             Err(MuxError::MissingDecoderConfig { codec: Codec::Av1 })
         ));
         assert!(tagger.finish().is_empty(), "no video, no end of sequence");

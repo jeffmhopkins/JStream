@@ -104,8 +104,8 @@ pub enum MuxError {
     /// AV1 data held no sequence header OBU to build an `AV1CodecConfigurationRecord`.
     #[error("no AV1 sequence header OBU found")]
     MissingAv1SequenceHeader,
-    /// The first HEVC or AV1 packet carried no decoder configuration and none was
-    /// configured.
+    /// No HEVC or AV1 decoder configuration was configured and the first packet was not
+    /// a keyframe to take it from.
     #[error(
         "no {codec:?} decoder configuration: configure one or start with a keyframe carrying it"
     )]

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mux", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0034-youtube-interaction-scope-v2.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:1fda1c8dfd7be7e6", by = "agent:claude@session_01M7dd6pdhEEieUbct9m5TkJ", note = "F5: re-read Purpose against the enhanced RTMP change: intro and framing paragraph name HEVC (Annex B) and AV1 (low-overhead OBU temporal units, TD and padding dropped by av1::to_sample); new flv Enhanced RTMP bullet matches with_enhanced_video/ExVideoConfig, the ExVideoTagHeader layout, SequenceStart/CodedFrames/CodedFramesX/SequenceEnd choice, AV1 cts error and FourCC videocodecid; new hevc and av1 bullets match hevc.rs and av1.rs; Not yet now lists fourCcList signalling, HEVC/AV1 in MP4 and mid-stream parameter-set changes; ARCH crate-map row (FLV with enhanced RTMP) and ADR-0031/0034 still hold" }
+verified = { hash = "b3:2b18d14a9468e213", by = "agent:claude@session_01M7dd6pdhEEieUbct9m5TkJ", note = "F5 round 2: re-read Purpose after merging main and the review fixes: the av1 bullet now says to_sample rejects a temporal unit left empty (matches av1.rs); the Enhanced RTMP bullet still matches flv.rs (an HEVC/AV1 keyframe without parameter sets now reports MissingHevcParameterSets/MissingAv1SequenceHeader, which the bullet doesn't name); rest unchanged from round 1" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):
@@ -110,7 +110,8 @@ Contents:
   because frames keep their in-band copies; spatial segmentation, parallelism and frame
   rate are written as unknown (0). These match FFmpeg's FLV muxer byte for byte on the
   test stream.
-- **`av1`:** OBU splitting (`av1::obus`), `av1::to_sample`, and `Av1CodecConfig`, the AV1
+- **`av1`:** OBU splitting (`av1::obus`), `av1::to_sample` (which rejects a temporal unit
+  holding only delimiters and padding, so no empty frame is written), and `Av1CodecConfig`, the AV1
   ISOBMFF `AV1CodecConfigurationRecord`, with its profile, level, tier, bit depth,
   monochrome flag and chroma subsampling read from the sequence header OBU, which it
   stores as `configOBUs` (with a size field). No initial presentation delay is written.

@@ -95,13 +95,20 @@ pub fn obus(data: &[u8]) -> Result<Vec<Obu<'_>>, MuxError> {
 /// delimiters and padding, which the AV1 ISOBMFF binding says should not be stored.
 ///
 /// # Errors
-/// As [`obus`].
+/// As [`obus`], and [`MuxError::InvalidObu`] when nothing is left to store, so an empty
+/// frame never reaches the container.
 pub fn to_sample(data: &[u8]) -> Result<Vec<u8>, MuxError> {
     let mut out = Vec::with_capacity(data.len());
     for obu in obus(data)? {
         if !matches!(obu.obu_type, OBU_TEMPORAL_DELIMITER | OBU_PADDING) {
             out.extend_from_slice(obu.raw);
         }
+    }
+    if out.is_empty() {
+        return Err(MuxError::InvalidObu {
+            offset: 0,
+            reason: "temporal unit holds only temporal delimiters and padding",
+        });
     }
     Ok(out)
 }
@@ -435,6 +442,14 @@ pub(crate) mod tests {
         let mut expected = SEQUENCE_HEADER_444.to_vec();
         expected.extend_from_slice(&[0x30, 0xAA, 0xBB]);
         assert_eq!(to_sample(&tu).unwrap(), expected);
+        assert!(matches!(
+            to_sample(&[0x12, 0x00, 0x7A, 0x01, 0x00]),
+            Err(MuxError::InvalidObu { offset: 0, .. })
+        ));
+        assert!(matches!(
+            to_sample(&[]),
+            Err(MuxError::InvalidObu { offset: 0, .. })
+        ));
     }
 
     /// The record FFmpeg 6.1's FLV muxer wrote for the same stream, byte for byte.

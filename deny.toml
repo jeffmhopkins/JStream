@@ -24,9 +24,22 @@ allow = [
 ]
 
 [bans]
-multiple-versions = "warn"   # switches to "deny" in M1 (R-DEP-005)
+multiple-versions = "deny"   # R-DEP-005: every duplicate needs a `skip` entry below
 wildcards = "deny"
 allow-wildcard-paths = true  # workspace path deps; all members are publish = false
+# R-DEP-005: duplicates we can't remove yet. Each entry names the older version and the
+# crate that pins it. Remove an entry when its pin moves; cargo-deny warns on unused skips.
+# Adding one is a governance change (R-GOV-001).
+skip = [
+    { crate = "bitflags@1.3.2", reason = "png 0.17 (jstream-core snapshots) uses bitflags 1; png 0.18 drops it but needs a jstream-core source change" },
+    { crate = "miniz_oxide@0.8.9", reason = "png 0.17 uses miniz_oxide 0.8 directly and 0.9 through flate2" },
+    { crate = "cpufeatures@0.2.17", reason = "sha1 0.10 (axum and tungstenite WebSocket handshake) uses 0.2; blake3 uses 0.3" },
+    { crate = "getrandom@0.2.17", reason = "ring 0.17 (rustls provider, R-DEP-006) uses getrandom 0.2" },
+    { crate = "getrandom@0.3.4", reason = "rand_core 0.9 (tungstenite's rand) uses 0.3, and the daemon matches it on purpose; tempfile uses 0.4" },
+    { crate = "hashbrown@0.16.1", reason = "gpu-allocator 0.28 under wgpu-hal, which is pinned exactly (ADR-0004)" },
+    { crate = "syn@2.0.119", reason = "windows-implement/windows-interface (windows-core 0.62, pinned exactly) and zerocopy-derive still use syn 2" },
+    { crate = "windows-sys@0.52.0", reason = "ring 0.17 (rustls provider, R-DEP-006) uses windows-sys 0.52" },
+]
 deny = [
     # R-DEP-002 / ADR-0031: no FFmpeg, GStreamer or bundled C codec libraries.
     # Name lists are incomplete by nature; xtask lint-deps also checks `links =` crates.

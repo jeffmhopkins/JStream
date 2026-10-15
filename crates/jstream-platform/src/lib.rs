@@ -17,10 +17,12 @@ mod error;
 pub mod fake;
 mod gpu;
 mod id;
+mod keys;
 mod surface;
 #[cfg(test)]
 mod tests;
 mod vcam;
+mod video_device;
 
 pub use audio::{
     AudioDeviceInfo, AudioDirection, AudioInputHandler, AudioInputTarget, AudioIo,
@@ -37,8 +39,13 @@ pub use codec::{
 pub use error::PlatformError;
 pub use gpu::{AdapterId, FrameSync, GpuContext, GpuFrame, GpuInterop};
 pub use id::DeviceId;
+pub use keys::{Secret, StreamKeyStore};
 pub use surface::VideoSurface;
 pub use vcam::{VcamFormat, VcamSink};
+pub use video_device::{
+    CaptureDecoder, CaptureEncoding, CompressedFrame, VideoDeviceFormat, VideoDeviceInfo,
+    VideoDevices,
+};
 
 /// The media types the traits are written in, re-exported so backends and the engine can
 /// name them through one dependency.
