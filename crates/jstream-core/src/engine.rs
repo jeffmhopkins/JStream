@@ -124,8 +124,9 @@ impl Engine {
     /// instead of the placeholder state machine. Configure this before
     /// [`connect`](Self::connect); clones made earlier do not see it.
     ///
-    /// A start still needs a publish target ([`with_publish`](Self::with_publish)).
-    /// Without one it fails with `action_failed` and changes no output state.
+    /// A start still needs a publish target ([`with_publish`](Self::with_publish))
+    /// or an opener ([`with_publish_opener`](Self::with_publish_opener)). Without
+    /// either it fails with `action_failed` and changes no output state.
     #[must_use]
     pub fn with_backends(mut self, backends: Backends) -> Self {
         let host = self.host();

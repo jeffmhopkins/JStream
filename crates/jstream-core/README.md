@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:65f4c419557d8b72", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the publish opener: intro now names with_publish or with_publish_opener as the target, Engine bullet lists with_publish_opener, Tests bullet adds the opener tests (fake RTMP server, start/media/stop twice; an opener that cannot connect); other bullets unchanged" }
+verified = { hash = "b3:e5668d1f25346387", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main into #135 plus with_backends rustdoc naming with_publish_opener (#135 N1): re-read intro, Engine, Runtime, Outputs and Tests bullets; both target kinds and the opener tests are described, nothing from main's side contradicts them" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -82,7 +82,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4bc40475c850e5e9", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Pipeline/Outputs against engine.rs start_pipeline: Target::Ready (with_publish, consumed) or Target::Open (OpenPublish, kept) taken under the locks, opener run after starting and outside collection lock and gate, its error fails like a launch (failed, action_failed 'opening the publish target: ...'); failed-path and cancel-path wording now distinguish one-shot from opened targets; Locking unchanged" }
+verified = { hash = "b3:7690fc486aabad2d", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main into #135 plus with_backends rustdoc (#135 N1): re-read Pipeline/failure/stop paragraphs against engine.rs; one-shot vs opener wording, opener after starting outside the locks, error text R-SEC-001, kept on failure all match; Locking unchanged" }
 -->
 
 ### Engine and sessions

@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:3931e7feee029f29", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the output-pipeline paragraph against runtime/ (OpenPublish type, MediaHost.open_publish, launch doc): 'once the host has injected platform backends and a publish target' still holds for an opener, which runs on the control thread that runs output.start; no thread or failure-path change" }
+verified = { hash = "b3:2a23f997fce1180e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main into #135: re-read the section; the #132/#139 handover text is main's and unchanged, and #135's runtime change (OpenPublish opener held in MediaHost, called on the control thread that runs output.start, outside the engine locks) fits 'once the host has injected platform backends and a publish target'; no thread, RT or failure-path change" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -461,6 +461,20 @@ that carries it, and releases the gesture's live values from the parameter chann
 every thread that reads them has reported a generation at least that high. Until then the
 parameter channel keeps the live value, so no frame shows the old value in between. The
 control side polls the published generations; the real-time threads never wait for it.
+A thread that isn't adopting snapshots counts as caught up, so a gesture's live values
+aren't held while it is stopped or parked (no output running, nothing to render, no
+device to mix for). Before it stops or parks it publishes a stopped marker in place of
+its generation, and it shows nothing while marked. Each reader's slot starts as
+the stopped marker, so a gesture committed before a thread has ever run waits on
+nothing. On starting or resuming it clears the marker before it loads a snapshot, and
+reads the parameter channels only after that load. So if the control side saw the
+marker and released a gesture, the thread's next load comes after the committing
+snapshot was published and already carries the committed value. That needs a store
+then load on each side (the thread clears the marker then loads the snapshot; the
+control side publishes the snapshot then reads the marker), which release and acquire
+alone don't order: the marker and generation stores and reads are `SeqCst`, with a
+`SeqCst` fence between each side's store and its load. A fence doesn't allocate, lock
+or wait, so R-RT-001 and R-RT-002 still hold.
 
 The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
 reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
