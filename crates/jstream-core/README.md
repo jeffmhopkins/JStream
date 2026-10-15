@@ -136,7 +136,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:16b7772a97d6b112", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review N6/N7: push_each refactored to take a retire closure (unit-tested); render and mixer still hand finished inputs to the program stage's collector, joined after both threads; text holds" }
+verified = { hash = "b3:3dcccba7ea476df7", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#217 asset paths): #217 adds ':' to the rejected asset-path forms and changes no text F3 wrote here; F3's encoder profile, protocol 0.13 and program-stage text hold beside it" }
 -->
 
 ### Engine and sessions
