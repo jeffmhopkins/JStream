@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:fef60452d483296b", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read against regenerated tools.snap (12 tools: canvas and history added); holds" }
+verified = { hash = "b3:82eb8dd44bacbc6a", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#176 B2 history, #183 B3 canvas/geometry, #171 B8) into B9: re-read; contents unchanged; tools generated from the schema" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:674ea2e696582794", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: tool table nouns now canvas and history together; tools.snap regenerated, mcp tests count 12 tools" }
+verified = { hash = "b3:9a6fb7011aa8b44c", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#176 B2 history, #183 B3 canvas/geometry, #171 B8) into B9: re-read; Tools table nouns are canvas, delete, history and the rest; tools.snap regenerated, mcp tests count 13 tools" }
 -->
 
 ### Tools

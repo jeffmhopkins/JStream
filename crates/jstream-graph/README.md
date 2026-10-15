@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a4ec811e21b6c0ee", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; graph prose unchanged by the merge and still matches model/, apply.rs and read.rs" }
+verified = { hash = "b3:479ce9f87fe4e537", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#176 B2 history, #183 B3 canvas/geometry, #171 B8) into B9: re-read; main's Canvas and geometry bullet kept after the blocker bullet; Reading keeps delete.plan and main's canvas/geometry read text; matches apply.rs, plan.rs, read.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

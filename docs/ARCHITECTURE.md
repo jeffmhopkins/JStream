@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d46a278a46d73d8a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; crate shape unchanged" }
+verified = { hash = "b3:78add9f428030484", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#176 B2 history, #183 B3 canvas/geometry, #171 B8) into B9: took main's text, re-read; B9 touches apps only in the CLI exit.rs test; shape holds" }
 -->
 
 ```
@@ -504,7 +504,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:415e020d4c5b0d5c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; Edits bullet (canvas.set_size/item.set_geometry at 0.11) and History bullet hold" }
+verified = { hash = "b3:fe9f3fce8a205265", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9 review round 1 (B2 wording): blockers doc no longer names a version (it said 0.10, which main now uses); re-read, the Deletes/Errors text holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -613,7 +613,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:f87823856265c90a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: grouped tools list includes canvas and history; tools.snap now about 102 KB, so the text says about 100 KB" }
+verified = { hash = "b3:9d74bc6817e884cc", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#176 B2 history, #183 B3 canvas/geometry, #171 B8) into B9: re-read; grouped tools list has canvas, delete, history; tools.snap now about 108 KB, text says about 110 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -627,7 +627,7 @@ verified = { hash = "b3:f87823856265c90a", by = "agent:claude@session_01SS5BBdaw
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 100 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 110 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

@@ -2923,7 +2923,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "A field had a value the engine can't accept.",
           "properties": {
             "blockers": {
-              "description": "When a `scene.delete` or `source.delete` is refused because other objects still\nrefer to its target: every one of those references, in a stable order. The\n`delete.plan` query returns the batch that removes them with the target. Empty\notherwise, and then omitted. Missing (from a server older than 0.10) parses as\nempty.",
+              "description": "When a `scene.delete` or `source.delete` is refused because other objects still\nrefer to its target: every one of those references, in a stable order. The\n`delete.plan` query returns the batch that removes them with the target. Empty\notherwise, and then omitted. Missing (from a server that predates\n`delete.plan`) parses as empty.",
               "items": {
                 "$ref": "#/$defs/Blocker"
               },
