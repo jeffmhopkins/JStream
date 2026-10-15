@@ -127,7 +127,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:8a0ed78550ef9209", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; serve.rs builds one Engine with with_output and sets config.mcp = true, as the MCP and Listening bullets say" }
+verified = { hash = "b3:c2621dd22311127d", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Stale via server design (I1 413-from-Content-Length row): the daemon's MCP bullet makes no claim on body limits; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

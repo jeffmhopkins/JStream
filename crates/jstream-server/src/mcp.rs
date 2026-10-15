@@ -18,7 +18,7 @@
 //! - **Limits.** At most `ServerConfig::max_mcp_sessions` sessions are open; an
 //!   `initialize` beyond that is `503`. A session unused for
 //!   `ServerConfig::mcp_idle_timeout` is ended, checked whenever a request arrives.
-//!   Bodies over 4 MiB are `413`.
+//!   Bodies over 4 MiB are `413`, refused from `Content-Length` before they are read.
 
 use crate::gate::Refusal;
 use crate::listener::Accepted;
@@ -226,15 +226,17 @@ async fn post(mcp: &Mcp, headers: &HeaderMap, body: Body, peer: SocketAddr) -> R
         Ok(id) => id,
         Err(()) => return bad_request("`Mcp-Session-Id` must appear at most once".into()),
     };
+    let declared = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok());
+    // A body declared too long is refused before any of it is read.
+    if declared.is_some_and(|length| length > MAX_MESSAGE_BYTES as u64) {
+        return too_large();
+    }
     let bytes = match axum::body::to_bytes(body, MAX_MESSAGE_BYTES).await {
         Ok(bytes) => bytes,
-        Err(_) => {
-            return (
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "the body is over 4 MiB, or could not be read\n",
-            )
-                .into_response();
-        }
+        Err(_) => return too_large(),
     };
     let Ok(message) = std::str::from_utf8(&bytes) else {
         return bad_request("the body is not UTF-8".into());
@@ -317,6 +319,14 @@ fn reply(answer: Option<String>) -> Response {
             .into_response(),
         None => StatusCode::ACCEPTED.into_response(),
     }
+}
+
+fn too_large() -> Response {
+    (
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "the body is over 4 MiB, or could not be read\n",
+    )
+        .into_response()
 }
 
 fn bad_request(reason: String) -> Response {

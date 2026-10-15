@@ -1436,16 +1436,37 @@ fn mcp_refuses_malformed_requests() {
         &body,
     );
     assert_eq!(reply.status, 400);
-    let huge = format!("\"{}\"", "x".repeat(5 << 20));
-    let reply = harness.http(
-        "POST",
-        &[
-            ("Authorization", &bearer),
-            ("Content-Type", "application/json"),
-        ],
-        &huge,
-    );
-    assert_eq!(reply.status, 413);
+    // A body declared over 4 MiB is refused from its `Content-Length`, before it is
+    // read. Only the headers are sent: the server may close the connection as soon as it
+    // has answered, so writing the whole body could fail on the client's side.
+    let addr = harness.authority.clone();
+    let reply = harness.run(async {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let mut stream = match tokio::net::TcpStream::connect(&addr).await {
+            Ok(stream) => stream,
+            Err(error) => panic!("connect: {error}"),
+        };
+        let head = format!(
+            "POST {} HTTP/1.1\r\nHost: {addr}\r\nAuthorization: {bearer}\r\n\
+             Content-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+            crate::MCP_PATH,
+            5 << 20
+        );
+        if let Err(error) = stream.write_all(head.as_bytes()).await {
+            panic!("write: {error}");
+        }
+        // The status line is enough; the server may keep the connection open.
+        let mut answer = Vec::new();
+        let mut chunk = [0u8; 1024];
+        while !answer.windows(2).any(|w| w == b"\r\n") {
+            match stream.read(&mut chunk).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => answer.extend_from_slice(&chunk[..n]),
+            }
+        }
+        String::from_utf8_lossy(&answer).into_owned()
+    });
+    assert!(reply.starts_with("HTTP/1.1 413"), "{reply}");
     assert_eq!(
         harness.sessions.load(Ordering::SeqCst),
         0,

@@ -496,7 +496,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:82d7d068908dd255", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read main's settings, kinds and kind.list/kind.describe bullets and I1's /mcp transport sentence; both hold" }
+verified = { hash = "b3:1dbe914dd531c477", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Stale via jstream-server src (I1 413 from Content-Length): transport bullet's /mcp sentence still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

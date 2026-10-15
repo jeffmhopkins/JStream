@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:a66ba3609c99df8a", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#137/#150 test-only shutdown changes) into I1 #153: contents list (mcp.rs, MCP config fields) and not-yet list re-read against lib.rs, mcp.rs, config.rs" }
+verified = { hash = "b3:d3afc9942048b8ef", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1 CI fix (macOS broken pipe in the 413 test): mcp.rs now refuses a body declared over 4 MiB from Content-Length; contents list unchanged" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5cac7b522bab1032", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read the MCP over streamable HTTP subsection against mcp.rs and main's shutdown/limits text; both hold" }
+verified = { hash = "b3:5dd7012556e9c84a", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "I1 CI fix: MCP table's 413 row says a declared over-long body is refused from Content-Length before it is read, as mcp.rs does and mcp_refuses_malformed_requests tests; rest unchanged" }
 -->
 
 ### Listening and admission
@@ -191,7 +191,7 @@ forces a preflight. Each body is one JSON-RPC message, answered by a
 | `POST` without `Mcp-Session-Id` | served by the one shared stateless server (MCP 2026-07-28 requests carry no session) |
 | `DELETE` with `Mcp-Session-Id` | ends that session: 204, or 404 if it is unknown |
 | `GET` | 405 with `Allow: POST, DELETE`: the server sends no server-initiated messages |
-| A body that isn't `Content-Type: application/json` / is over 4 MiB / isn't UTF-8 | 415 / 413 / 400 |
+| A body that isn't `Content-Type: application/json` / is over 4 MiB (refused from its `Content-Length` before it is read, when it declares one) / isn't UTF-8 | 415 / 413 / 400 |
 | `MCP-Protocol-Version` naming a revision `jstream-mcp` doesn't serve | 400 |
 
 The `Accept` header isn't checked: the answer is always JSON, which every client
