@@ -762,7 +762,8 @@ status = "planned"
 id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
-status = "planned"
+status = "review"
+prs = [363]
 note = "part 1: chat reading and the chat message source"
 
 [[item]]
