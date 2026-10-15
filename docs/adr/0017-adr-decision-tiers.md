@@ -2,14 +2,15 @@
 id = "ADR-0017"
 title = "Decision tiers: which ADRs need the maintainer"
 kind = "adr"
-status = "accepted"
+status = "superseded"
 tier = "maintainer"
+superseded_by = "docs/adr/0043-narrow-maintainer-tier.md"
 -->
 
 # ADR-0017: Decision tiers: which ADRs need the maintainer
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0043: Decision tiers v2: the maintainer decides product-level calls only](0043-narrow-maintainer-tier.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

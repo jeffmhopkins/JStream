@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:348e93b0bafdf766", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; main's repo-tree comment change and I1's daemon row both hold" }
+verified = { hash = "b3:58dc68035cf33f4d", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; crate shape unchanged" }
 -->
 
 ```
@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:ae45fe9d9e867a96", by = "agent:claude@session_01BLMb1wRFFGKk8EK5MwkMUt", note = "Re-read against .github/: the line now also names the workflow tests and the issue template next to the four workflows, Dependabot config and PR template; xtask and docs lines unchanged" }
+verified = { hash = "b3:7f90b5a4097428aa", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Re-read against main.rs, which only adds docs merge-main to the usage list: the xtask line still names docs among its commands, so the layout holds" }
 -->
 
 ```
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:4071e3975df209bc", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (#134, #153, #155, #159, #165, #169) into H1: re-read the map; the rows are main's text, and H1 adds only two windows-crate features to platform-windows (LibraryLoader, Registry), no new edge, so its row (layer 2, unsafe yes) still holds" }
+verified = { hash = "b3:81634f7eb955ea5a", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (G2 vcam-windows, G3a, E3a and others) into H1: re-read the map; rows are main's text; the platform-windows manifest now combines main's Memory and RemoteDesktop features with H1's LibraryLoader and Registry, no new jstream edge, so its row (layer 2, unsafe yes) holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -146,7 +146,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
-| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`. | **yes** |
+| 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:81cb37560b19b12c", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "ADR-0040 accepted: hotkey sentence now says deleting a binding's target removes the binding in the same undoable edit, delete.plan lists them, never a blocker (ADR-0040 §3); depends_on gains ADR-0040; the orphaned-override and shared-group bullets already match its §1-2; Built so far still lists hotkeys as not built" }
+verified = { hash = "b3:1a3374260c93e175", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Built so far keeps B3's placement/canvas and adds B6's role, item.move and scene_id (0.12); Not yet keeps scene.create role, variants, 3D geometry" }
 -->
 
 ```
@@ -341,21 +341,27 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 - **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind ID or a nested
   scene, with `settings` checked against the kind's descriptor and stored complete; no
   filters yet), scenes in display order, and items in stacking order with `source_id`,
-  protocol 0.3's 2D transform (top-left corner and scale, which ADR-0022 replaces),
-  `crop` and `visible`. Items refer to sources; they never copy them. Scene and source
+  a placement, `crop` and `visible`. The placement is a `geometry` or, until 1.0, a
+  legacy placement (protocol 0.3's 2D transform as written), and the collection has
+  its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Scenes have
+  a `role` (`scene` or `group`, set by `scene.set_role`), and `item.move` moves an item
+  to another scene keeping its id, under the same cycle check. The placement edits take
+  an optional `scene_id`, accepted only when it names the item's own scene until
+  variants exist (protocol 0.12). Items refer to sources; they never copy them. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
   built-in kinds are stubs in `jstream-core` until `jstream-sources` exists.
   Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
-  the URL checked to carry no credential. A stream key is never collection state: it
+  the URL checked to carry no credential, or `Record { path, container: mp4 }`, the path
+  checked to be absolute and to end in a file name. A stream key is never collection state: it
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
-  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
-  `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
-  variants and overrides, folders, labels, favourites and other organisation metadata,
+  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, 3D
+  geometry, `scene.create`'s optional `role`, variants and overrides (so no edit drops
+  any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
-  `YouTube`, `Record` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
+  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
   and `outputs`. Nothing is persisted yet.
 
 <a id="threading"></a>
@@ -363,7 +369,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:ba6900fcfb9b0d02", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#136, #146) into #133: prose is main's; re-read the section: the Collector row and 'collector thread ... not this cut' hold with #133's InputControl keep-alive (rings freed on the control plane); #136's bounded drain and #146's keyframe requests don't touch audio teardown" }
+verified = { hash = "b3:9b6300f85c94cfbb", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (#202 merged) into #199: took main's stamp; re-read; prose is main's; #199 changes only the ring torn-frame test; holds" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -384,15 +390,17 @@ every mix runs at the base rate divided by an integer.
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003) |
 
 **Output pipeline** (`jstream-core` `src/runtime/`), the part that is built.
-`output.start`, once the host has injected platform backends and a publish target,
-starts it and emits `output.state_changed` from the control thread. The render
+`output.start`, once the host has injected platform backends and a publish target
+(a recording output needs none), starts it and emits `output.state_changed` from the control thread. The render
 thread calls the platform capture mailbox, composites one scene on each 1/30 s
 tick, repeats the last frame when capture is empty, and reads that frame back.
 This cut encodes that CPU readback, and the readback is counted. The mixer thread
 polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
 desktop loopback. Encode threads are the
 ones inside the encoder sessions. The output thread muxes FLV and sends tags to the
-publish target. `output.start` also starts `jstream-stats`, which is not a
+publish target, or, for a recording output, muxes fragmented MP4 and writes it to the
+file, syncing each fragment (writes may block on the disk; the encoder queues absorb
+that and drop when full). `output.start` also starts `jstream-stats`, which is not a
 real-time thread: it emits `stats.tick` about once a second from the stage
 counters, and once more when the pipeline stops. The render loop publishes capture
 mailbox skips, and a tick that falls a whole period behind the clock skips to the
@@ -402,11 +410,12 @@ lock the collection. `output.stop` during
 its threads. The render and mixer threads catch a panic at their boundary
 ([R-RT-006](RULES.md#R-RT-006)); a capture error or a missing frame repeats the last
 one, and a render panic repeats the last frame until teardown. A fatal error on the
-render, mixer or output thread (a publish failure, an encoder stream that ends
+render, mixer or output thread (a publish or recording write failure, an encoder stream that ends
 before stop, a render or mixer panic) is a channel message to a watcher the control
 thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
-encoder session queues. Arc-swap snapshots, the collector thread and a GPU encode
-target are still the rows above, not this cut.
+encoder session queues. Arc-swap snapshots and a GPU encode target are still the
+rows above, not this cut. The collector so far is the mixer's own, and frees only
+input rings and their counters.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
@@ -439,7 +448,9 @@ in 20 minutes, haven't been measured.
 **In the engine:** `jstream-audio` runs S3's drift fit and PI loop with S3's tuning on
 each input's audio thread, resampling into a per-input ring indexed by engine frame
 that the mixer reads on the engine clock
-([its real-time design](../crates/jstream-audio/README.md#realtime)). It differs from
+([its real-time design](../crates/jstream-audio/README.md#realtime)). Inputs are added
+and removed through a lock-free command queue while the mixer runs, and a ring released
+by the mixer or the audio thread is freed on the collector thread. It differs from
 what S3 measured in two ways: its own windowed-sinc resampler replaces rubato, and the
 timing error is absolute, so inputs line up with each other. That combination has been
 simulated (within 0.05 ms after settling), not yet measured on hardware.
@@ -497,7 +508,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1dbe914dd531c477", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Stale via jstream-server src (I1 413 from Content-Length): transport bullet's /mcp sentence still holds" }
+verified = { hash = "b3:92b7bead00a5a859", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Cascade from protocol#design; re-read, Edits bullet says placement edits take scene_id (0.12), canvas/geometry 0.11; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -510,10 +521,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   always sent in an atomic batch (of one or more), which carries the optional
   `expected_rev` and idempotency key ([R-API-004](RULES.md#R-API-004)). Each applied
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
-  id, and placement edits take an optional `scene_id` so they can write a keyframe
-  scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
+  id, `scene.set_role` marks a scene as a group, and placement edits take an optional
+  `scene_id` so they can write a keyframe scene's override
+  ([ADR-0024](adr/0024-scene-structure.md), protocol 0.12). Until keyframe scenes are
+  built, `scene_id` may name only the item's own scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
-  outputs (protocol 0.7).
+  outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
+  0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
+  `item.set_transform`.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -532,7 +548,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0032](adr/0032-live-edits-and-undo.md)).
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
-  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+  ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
+  rather than overwrite another client's later change (protocol 0.10).
 - **Privacy screen** (planned): the action `privacy.set { on }` on the master stage, never
   undoable or batchable and with no `rev` change; every change emits
   `privacy.changed { on }` to every client and goes to the audit log
@@ -548,7 +565,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   encoder refuses a session, `output.start` fails with a stable session-limit error code
   naming the outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
-- **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
+- **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
@@ -597,11 +614,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:90489d48b902b02d", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; tool groups gain kind and about 80 KB (main), Access bullet settles no-Origin at /mcp (I1)" }
+verified = { hash = "b3:3520026dd573c7fb", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: tools.snap is 115 KB after B3 and B6, so the text says about 115 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -611,7 +628,7 @@ verified = { hash = "b3:90489d48b902b02d", by = "agent:claude@session_017CbEsAJT
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 80 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 115 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -641,7 +658,7 @@ verified = { hash = "b3:90489d48b902b02d", by = "agent:claude@session_017CbEsAJT
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:40d6041b79574568", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the one-scene paragraph against the premultiply-on-upload change: the composite still writes premultiplied linear into Rgba16Float and resolves to Rgba8UnormSrgb, blend still premultiplied src-over; source alpha handling is detailed in the crate README, not here. Steps 1-6 unchanged." }
+verified = { hash = "b3:c39815529eedb369", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: E3a's capture steps (shared NT-handle textures, fence) from main and B3's one-scene compositor placement forms both present and accurate" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -668,16 +685,20 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
    back and reports it.
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
-one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement is
-that 0.3 evaluation from `jstream-protocol`'s `legacy_quad` (crop in source pixels, scale
-against the current source size, top-left at `position`, clockwise rotation about that
-corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
+is evaluated with `jstream-protocol`'s shared formula in either of ADR-0022's forms: a
+geometry (crop in source pixels, fitted into the box by `stretch`, `fit` or `fill`,
+which is clipped to the box, then rotated about the box centre), or a legacy 0.3
+transform through `legacy_quad` (crop, scale against the current source size,
+top-left at `position`, clockwise rotation about that corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a software adapter
-first. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
-fit modes, 3D, effect packs, and the output path below.
+first. A nested scene is composited with `render_image` into an `Rgba16Float` image
+that stays on the GPU and is placed in its parent; the caller walks the nesting,
+bounded in depth. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
+3D, effect packs, and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
 texture blend: during it, the program mix is a synthetic item list whose transforms and
@@ -717,6 +738,73 @@ node per output with a video chain, and a privacy node per output. The privacy s
 comes last, so no output chain can undo it, and it fails closed: if its pass can't run,
 the output gets a black frame. None of this is built yet.
 
+<a id="browser-source"></a>
+## Browser source
+<!-- @section
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native-interop.md"]
+verified = { hash = "b3:cd6c3960b512a104", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review: sandbox is required where supported (bootstrap layout may replace the helper, or a superseding ADR), zip-size estimate marked unchecked and listed as open, pts wording and all three packet counts (2999/3000/2999) re-checked against the run JSON" }
+-->
+
+A browser source is a CEF off-screen browser
+([ADR-0021](adr/0021-browser-source.md)), not built yet. Each `OnAcceleratedPaint`
+hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
+and no fence. CEF takes the texture back into its pool when the callback returns. So the
+callback opens the handle on the wgpu D3D12 device, imports it through hal as in the GPU
+pipeline's step 2, copies it into a texture the source owns, and waits for that copy
+before it returns. The source's audio comes from CEF's audio handler as planar float PCM.
+
+**Choices made by spike S4:**
+- **Bindings:** the `cef` crate (tauri-apps/cef-rs), pinned exactly, with default
+  features off. It is generated from CEF's C API and released for each CEF version. Its
+  sys crate downloads the CEF binary distribution and builds CEF's C++ wrapper with CMake
+  and Ninja, so it needs the lint-deps allowlist entry and governance change that
+  ADR-0021 names.
+- **Helper processes:** a separate small `jstream-browser-helper.exe`, set as CEF's
+  `browser_subprocess_path`, so the engine exe never runs as a Chromium subprocess. Both
+  layouts that ADR-0021 allows measured the same.
+- **Not yet decided:** the sandbox. ADR-0021 requires it where supported. On Windows,
+  CEF sandboxes subprocesses only in its bootstrap layout, where CEF's `bootstrap.exe` is
+  the exe and loads the application as a DLL. S4 ran unsandboxed and didn't test that
+  layout. The browser source must adopt it before it ships, which may replace the helper
+  exe above, or a superseding ADR must accept running unsandboxed.
+
+**S4 result**, on the S1 machine with CEF 154.0.34 (Chromium 154.0.8037.98). Each run
+measured 30 s of the built-in test page, which has a frame counter, alpha probes and a
+440 Hz / 660 Hz stereo tone:
+
+| Run | Paint rate | Intervals over 1.5 frames | Callback p50 / p99 | CPU, all processes | Private memory |
+|---|---|---|---|---|---|
+| 1920x1080, helper is the engine exe | 60.03 fps | 3 of 1799 | 2.6 / 3.9 ms | 22% of one core | 587 MB |
+| 1920x1080, separate helper exe | 60.02 fps | 0 of 1799 | 2.2 / 3.7 ms | 21% of one core | 569 MB |
+| 3840x2160, helper is the engine exe | 60.01 fps | 1 of 1799 | 4.1 / 6.6 ms | 22% of one core | 700 MB |
+
+- **Video:** all 1800 paints per run were accelerated, with no failures. The page's frame
+  counter showed every page frame once, none skipped, repeated or out of order. The
+  alpha probes held on every frame: the page texture is transparent and premultiplied,
+  and blending it over an opaque background gave the expected colours. CEF reused about
+  250 distinct texture handles at 1080p and 430 at 4K.
+- **Audio:** CEF honoured the requested 48 kHz stereo in 480-frame (10 ms) packets. Both
+  tones came through at the right pitch and level on the right channels. The runs
+  received 2999, 3000 and 2999 packets, as expected for 30 s.
+- **Audio timestamps:** contrary to CEF's header, which documents Unix-epoch
+  milliseconds, a packet's `pts` is not. It differed from the wall clock by the same offset to the millisecond in all
+  three runs, which fits milliseconds since boot (Chromium's QPC-based `TimeTicks`).
+  That is inferred, not checked against QPC. If it holds, packets map onto the media
+  clock directly.
+- **Shutdown:** every run reported one audio error, "Socket closed unexpectedly", while
+  the browser closed. The source must treat it as the end of the stream, not a fault.
+- **Codecs:** the page reports no H.264 or AAC support, and VP8, VP9, AV1, Opus, Vorbis,
+  FLAC, MP3 and WAV playable. That is the royalty-free set ADR-0021 expects.
+- **Runtime size:** the CEF runtime is about 400 MB uncompressed, 290 MB of it
+  `libcef.dll`. Its compressed size in the zip wasn't measured, so ADR-0021's estimate
+  of 150–250 MB added to the zip is still unchecked. The runtime includes CEF's
+  `CREDITS.html`.
+
+Still open, before the browser source is built: the CEF runtime's compressed size in
+the zip, other GPU vendors and multi-GPU machines (Chromium must render on the adapter
+the engine imports on), several browsers at once, pages with video, input events, and
+the sandboxed layout.
+
 <a id="persistence"></a>
 ## Persistence, config and secrets
 <!-- @section
@@ -742,13 +830,16 @@ verified = { hash = "b3:fe28871dd73ab140", by = "agent:claude@session_01QBbMRwRu
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:a4757b3070f69873", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0035: the zip gains jstream-plugin-host.exe from M3; portable layout, state location and S2 vcam registration findings unchanged" }
+verified = { hash = "b3:f7c98d9194d6528e", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review B1: folder list now names jstream-browser-helper.exe beside the CEF runtime, matching ARCH#browser-source, with the bootstrap-layout caveat; rest unchanged" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
 `jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
-runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder.
+runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder,
+with `jstream-browser-helper.exe` for CEF's subprocesses
+([ARCH › Browser source](#browser-source); the sandbox decision may replace it with
+CEF's bootstrap layout).
 From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin host
 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). Release builds
 link the C runtime statically and need only OS components (WebView2, Media Foundation,

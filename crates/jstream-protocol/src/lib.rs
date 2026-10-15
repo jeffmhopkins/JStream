@@ -13,6 +13,7 @@ mod error;
 mod event;
 mod finite;
 mod geometry;
+mod history;
 mod id;
 mod kind;
 mod output;
@@ -24,7 +25,7 @@ mod settings;
 mod version;
 
 pub use command::{
-    Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SourceKind, Vec2,
+    Action, Batch, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole, SourceKind, Vec2,
 };
 pub use envelope::{
     Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request, Response,
@@ -34,15 +35,16 @@ pub use error::{EntityKind, ProtocolError, WireError};
 pub use event::{DropCounts, Event, OutputState};
 pub use finite::Finite32;
 pub use geometry::{
-    CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, Placed,
-    ProjectedQuad, Size, legacy_quad,
+    Canvas, CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad,
+    Placed, PlacementForm, ProjectedQuad, Size, legacy_quad,
 };
+pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path,
 };
-pub use output::{OutputInfo, OutputKind, RtmpTarget, SecretString};
+pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
 pub use query::{ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};

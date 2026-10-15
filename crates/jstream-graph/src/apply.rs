@@ -6,12 +6,13 @@
 //! edit succeeds does the working copy replace the state.
 
 use crate::deps::{self, Node};
-use crate::model::{Graph, Item, Output, Scene, Source, State};
-use crate::target::rtmp_url_problem;
+use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
+use crate::target::{record_path_problem, rtmp_url_problem};
 use jstream_protocol::{
-    Batch, Crop, Edit, EntityKind, ItemId, ItemTransform, KindDescriptor, Media, OutputId,
-    OutputKind, ParamDescriptor, ParamType, ProtocolError, Reference, Rev, RtmpTarget, SceneId,
-    Settings, SourceId, SourceKind,
+    Batch, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId, ItemTransform,
+    KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
+    RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneRole, Settings, SourceId,
+    SourceKind,
 };
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
@@ -182,6 +183,75 @@ fn item_mut(state: &mut State, (si, ii): (usize, usize)) -> Result<&mut Item, Pr
         })
 }
 
+/// The item a placement edit changes. `scene_id` is the edit's optional addressing
+/// (ADR-0024 §2): absent or the item's own scene is the item itself. Keyframe scenes,
+/// whose overrides another scene would write, aren't built yet, so any other existing
+/// scene is `invalid_argument` and a missing one `not_found`.
+fn placement_mut<'a>(
+    state: &'a mut State,
+    item_id: &ItemId,
+    scene_id: Option<&SceneId>,
+    at: usize,
+) -> Result<&'a mut Item, ProtocolError> {
+    let (si, ii) = find_item(state, item_id)?;
+    if let Some(scene_id) = scene_id
+        && scene_id != &state.scenes[si].id
+    {
+        find_scene(state, scene_id)?;
+        return Err(invalid(
+            at,
+            "scene_id",
+            format!(
+                "item `{item_id}` is in scene `{}`, and only its own scene can be named \
+                 until keyframe scenes exist",
+                state.scenes[si].id
+            ),
+        ));
+    }
+    item_mut(state, (si, ii))
+}
+
+/// Applies `item.move` and returns its inverse: `item.move` back.
+fn move_item(
+    state: &mut State,
+    item_id: &ItemId,
+    scene_id: &SceneId,
+    index: u32,
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    let (from_scene, from_index) = find_item(state, item_id)?;
+    let to_scene = find_scene(state, scene_id)?;
+    let old_scene_id = state.scenes[from_scene].id.clone();
+    // The item's final position: one past the top is allowed in another scene.
+    let slots = state.scenes[to_scene].items.len() + usize::from(to_scene != from_scene);
+    let to_index = check_index(index, slots, at, "positions in the scene")?;
+    let source_id = state.scenes[from_scene].items[from_index].source_id.clone();
+    // The scene -> source edge already exists from the old scene; it points into the
+    // source, so it can't be part of a path from the source back to the new scene.
+    if let Some(cycle) = deps::cycle(
+        state,
+        &Node::Scene(scene_id.clone()),
+        &Node::Source(source_id.clone()),
+    ) {
+        return Err(invalid(
+            at,
+            "scene_id",
+            format!(
+                "moving item `{item_id}` (source `{source_id}`) into scene `{scene_id}` \
+                 would create a cycle: {cycle}"
+            ),
+        ));
+    }
+    // No keyframe overrides exist yet, so a move can't orphan any (ADR-0040 §1).
+    let item = state.scenes[from_scene].items.remove(from_index);
+    state.scenes[to_scene].items.insert(to_index, item);
+    Ok(vec![Edit::ItemMove {
+        item_id: item_id.clone(),
+        scene_id: old_scene_id,
+        index: wire_index(from_index)?,
+    }])
+}
+
 /// Applies one edit to `state` and returns the edits that undo it.
 fn apply_edit(
     state: &mut State,
@@ -200,10 +270,21 @@ fn apply_edit(
             state.scenes.push(Scene {
                 id: scene_id.clone(),
                 name: name.clone(),
+                role: SceneRole::Scene,
                 items: Vec::new(),
             });
             Ok(vec![Edit::SceneDelete {
                 scene_id: scene_id.clone(),
+            }])
+        }
+        Edit::SceneSetRole { scene_id, role } => {
+            let si = find_scene(state, scene_id)?;
+            // No keyframe overrides exist yet, so a role change can't orphan any
+            // (ADR-0040 §1); once they do, this edit drops and its inverse restores them.
+            let old = std::mem::replace(&mut state.scenes[si].role, *role);
+            Ok(vec![Edit::SceneSetRole {
+                scene_id: scene_id.clone(),
+                role: old,
             }])
         }
         Edit::SceneRename { scene_id, name } => {
@@ -256,6 +337,12 @@ fn apply_edit(
                     index: wire_index(si)?,
                 });
             }
+            if scene.role != SceneRole::Scene {
+                inverse.push(Edit::SceneSetRole {
+                    scene_id: scene.id.clone(),
+                    role: scene.role,
+                });
+            }
             // Re-adding bottom to top puts each item back at its own index.
             for (ii, item) in scene.items.iter().enumerate() {
                 inverse.extend(restore_item(&scene.id, item, ii, ii)?);
@@ -277,6 +364,7 @@ fn apply_edit(
             item_id,
             source_id,
             transform,
+            geometry,
         } => {
             check_id(item_id.as_str(), at, "item_id")?;
             let si = find_scene(state, scene_id)?;
@@ -299,10 +387,26 @@ fn apply_edit(
                     ),
                 ));
             }
+            let placement = match (transform, geometry) {
+                (Some(_), Some(_)) => {
+                    return Err(invalid(
+                        at,
+                        "geometry",
+                        "send either `transform` or `geometry`, not both",
+                    ));
+                }
+                (None, Some(geometry)) => {
+                    check_geometry(geometry, at)?;
+                    Placement::Geometry(*geometry)
+                }
+                (transform, None) => {
+                    Placement::Legacy(transform.unwrap_or(ItemTransform::IDENTITY))
+                }
+            };
             state.scenes[si].items.push(Item {
                 id: item_id.clone(),
                 source_id: source_id.clone(),
-                transform: transform.unwrap_or(ItemTransform::IDENTITY),
+                placement,
                 crop: Crop::NONE,
                 visible: true,
             });
@@ -328,27 +432,68 @@ fn apply_edit(
                 index: wire_index(from)?,
             }])
         }
-        Edit::ItemSetTransform { item_id, transform } => {
-            let item = item_mut(state, find_item(state, item_id)?)?;
-            let old = std::mem::replace(&mut item.transform, *transform);
-            Ok(vec![Edit::ItemSetTransform {
-                item_id: item_id.clone(),
-                transform: old,
+        Edit::ItemMove {
+            item_id,
+            scene_id,
+            index,
+        } => move_item(state, item_id, scene_id, *index, at),
+        Edit::ItemSetTransform {
+            item_id,
+            scene_id,
+            transform,
+        } => {
+            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
+            let old = std::mem::replace(&mut item.placement, Placement::Legacy(*transform));
+            Ok(vec![set_placement(item_id, scene_id, old)])
+        }
+        Edit::ItemSetGeometry {
+            item_id,
+            scene_id,
+            geometry,
+        } => {
+            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
+            check_geometry(geometry, at)?;
+            let old = std::mem::replace(&mut item.placement, Placement::Geometry(*geometry));
+            Ok(vec![set_placement(item_id, scene_id, old)])
+        }
+        Edit::CanvasSetSize { width, height } => {
+            check_canvas_side(*width, at, "width")?;
+            check_canvas_side(*height, at, "height")?;
+            let old = std::mem::replace(
+                &mut state.canvas,
+                Canvas {
+                    width: *width,
+                    height: *height,
+                },
+            );
+            Ok(vec![Edit::CanvasSetSize {
+                width: old.width,
+                height: old.height,
             }])
         }
-        Edit::ItemSetCrop { item_id, crop } => {
-            let item = item_mut(state, find_item(state, item_id)?)?;
+        Edit::ItemSetCrop {
+            item_id,
+            scene_id,
+            crop,
+        } => {
+            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
             let old = std::mem::replace(&mut item.crop, *crop);
             Ok(vec![Edit::ItemSetCrop {
                 item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
                 crop: old,
             }])
         }
-        Edit::ItemSetVisible { item_id, visible } => {
-            let item = item_mut(state, find_item(state, item_id)?)?;
+        Edit::ItemSetVisible {
+            item_id,
+            scene_id,
+            visible,
+        } => {
+            let item = placement_mut(state, item_id, scene_id.as_ref(), at)?;
             let old = std::mem::replace(&mut item.visible, *visible);
             Ok(vec![Edit::ItemSetVisible {
                 item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
                 visible: old,
             }])
         }
@@ -463,6 +608,16 @@ fn apply_edit(
             }
             match kind {
                 OutputKind::Rtmp { target } => check_target(target, at, "kind.target")?,
+                OutputKind::Record { path, container } => {
+                    check_record(path, *container, at)?;
+                }
+                OutputKind::Unknown => {
+                    return Err(invalid(
+                        at,
+                        "kind.type",
+                        "is not an output kind this engine knows",
+                    ));
+                }
                 _ => return Err(unsupported(at, "kind", "this output kind")),
             }
             state.outputs.insert(
@@ -512,6 +667,66 @@ fn apply_edit(
     }
 }
 
+/// Checks a geometry an edit stores (ADR-0022): a positive size, a positive perspective
+/// if any, neutral 3D fields, since the compositor doesn't draw them yet, and finite
+/// corners. Errors name `geometry` or `geometry.<field>`.
+fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolError> {
+    if let Err(err) = geometry.validate() {
+        let name = match err {
+            GeometryError::NonPositiveSize => "geometry.size",
+            GeometryError::NonPositivePerspective => "geometry.perspective_px",
+            _ => "geometry",
+        };
+        return Err(invalid(at, name, err.to_string()));
+    }
+    let non_neutral = [
+        ("geometry.tilt_deg", geometry.tilt_deg.get() != 0.0),
+        ("geometry.turn_deg", geometry.turn_deg.get() != 0.0),
+        ("geometry.depth_px", geometry.depth_px.get() != 0.0),
+        ("geometry.perspective_px", geometry.perspective_px.is_some()),
+    ];
+    if let Some((name, _)) = non_neutral.iter().find(|(_, set)| *set) {
+        return Err(invalid(
+            at,
+            name,
+            "tilt, turn, depth and perspective are not drawn yet, so they must be neutral",
+        ));
+    }
+    // Finite fields can still put a corner past f32's range (a centre near f32::MAX).
+    geometry
+        .project()
+        .map(|_| ())
+        .map_err(|err| invalid(at, "geometry", err.to_string()))
+}
+
+fn check_canvas_side(value: u32, at: usize, name: &str) -> Result<(), ProtocolError> {
+    if value == 0 || value > MAX_CANVAS_EDGE {
+        return Err(invalid(
+            at,
+            name,
+            format!("must be from 1 to {MAX_CANVAS_EDGE}"),
+        ));
+    }
+    Ok(())
+}
+
+/// The edit that puts `placement` back on `item_id`, in its own form and with the
+/// addressing the edit it undoes used.
+fn set_placement(item_id: &ItemId, scene_id: &Option<SceneId>, placement: Placement) -> Edit {
+    match placement {
+        Placement::Legacy(transform) => Edit::ItemSetTransform {
+            item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
+            transform,
+        },
+        Placement::Geometry(geometry) => Edit::ItemSetGeometry {
+            item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
+            geometry,
+        },
+    }
+}
+
 /// Checks an RTMP target; `name` is its field path within the edit (`kind.target`).
 /// The reason never repeats the URL, which might hold a key.
 fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), ProtocolError> {
@@ -520,7 +735,31 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
             Some(problem) => Err(invalid(at, &format!("{name}.url"), problem)),
             None => Ok(()),
         },
+        RtmpTarget::Unknown => Err(invalid(
+            at,
+            &format!("{name}.type"),
+            "is not an RTMP target this engine knows",
+        )),
         _ => Err(unsupported(at, name, "this RTMP target")),
+    }
+}
+
+/// Checks a recording output's path and container.
+fn check_record(path: &str, container: RecordContainer, at: usize) -> Result<(), ProtocolError> {
+    match container {
+        RecordContainer::Mp4 => {}
+        RecordContainer::Unknown => {
+            return Err(invalid(
+                at,
+                "kind.container",
+                "is not a container this engine knows",
+            ));
+        }
+        _ => return Err(unsupported(at, "kind.container", "this container")),
+    }
+    match record_path_problem(path) {
+        Some(problem) => Err(invalid(at, "kind.path", problem)),
+        None => Ok(()),
     }
 }
 
@@ -565,11 +804,16 @@ fn restore_item(
     index: usize,
     top: usize,
 ) -> Result<Vec<Edit>, ProtocolError> {
+    let (transform, geometry) = match item.placement {
+        Placement::Legacy(transform) => (Some(transform), None),
+        Placement::Geometry(geometry) => (None, Some(geometry)),
+    };
     let mut edits = vec![Edit::ItemAdd {
         scene_id: scene_id.clone(),
         item_id: item.id.clone(),
         source_id: item.source_id.clone(),
-        transform: Some(item.transform),
+        transform,
+        geometry,
     }];
     if index != top {
         edits.push(Edit::ItemReorder {
@@ -580,12 +824,14 @@ fn restore_item(
     if item.crop != Crop::NONE {
         edits.push(Edit::ItemSetCrop {
             item_id: item.id.clone(),
+            scene_id: None,
             crop: item.crop,
         });
     }
     if !item.visible {
         edits.push(Edit::ItemSetVisible {
             item_id: item.id.clone(),
+            scene_id: None,
             visible: false,
         });
     }

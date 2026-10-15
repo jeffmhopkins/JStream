@@ -46,7 +46,7 @@ pub enum CliError {
     Control(ControlError),
     /// Writing the output failed.
     Io(io::Error),
-    /// Reading the input failed (only `mcp` reads it).
+    /// Reading the input failed (only `mcp` and `output set-key` read it).
     Read(io::Error),
 }
 

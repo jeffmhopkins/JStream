@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:b598a0e635051bab", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (F5 #163: Codec gains Hevc and Av1) into H1: re-read both; F5's text is main's and platform encoders still emit only H.264 and AAC; the IDs and errors bullet still names PlatformError::MissingComponent" }
+verified = { hash = "b3:86b920a75165ac5a", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (B3/B6/E3a/G3a era changes) into H1: re-read the section; main's text unchanged, and the IDs and errors bullet still names PlatformError::MissingComponent, which nothing new matches exhaustively" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -119,9 +119,8 @@ Contents:
   keeping the concrete fakes for test-side controls and probes, and check the
   `Send`/`Sync` bounds above.
 
-**Not yet:** a platform that delivers or consumes GPU frames (the Windows
-`GpuInterop` opens the device and encode targets; its capture and encoders don't use them
-yet), a platform implementation of `VideoDevices` (Media Foundation's source reader is
+**Not yet:** a platform that consumes GPU frames (Windows capture delivers them through
+`WgcCapture::on_gpu`, but its encoders and virtual camera don't take them yet), a platform implementation of `VideoDevices` (Media Foundation's source reader is
 C4b) and its place in `Backends`, an MJPEG `Codec` variant with a `CaptureDecoder` built
 from the platform's decoder, and encoder selection by GPU adapter.
 
@@ -129,15 +128,16 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:40dc2bf9ee897a2a", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#141/G1 crate-map rows) into I1 #153: stale via ARCH#crate-map only; I1 just dropped (not built) from the mcp and server rows; nothing here relies on them" }
+verified = { hash = "b3:c3d24539251a03a3", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: section is main's (WgcCapture::on_gpu delivers GPU frames); B3 changes nothing in platform; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
 → NV12 → encoder with no CPU copy). The types below are built in this crate, and the
-Windows `GpuInterop` opens the device and encode targets. `jstream-render` composites one
-scene on that device when the engine has one, and opens its own (software adapter first)
-when it does not; it does not write the NV12 encode target. Capture into shared textures
-and the encoders' GPU input come next.
+Windows `GpuInterop` opens the device and encode targets, and Windows capture
+(`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
+**Frame lifetime** below describes. `jstream-render` composites one scene on
+that device when the engine has one, and opens its own (software adapter first) when it
+does not; it does not write the NV12 encode target. The encoders' GPU input comes next.
 
 **Where the import lives.** The open question was whether this crate should hold `wgpu`
 types, or only an opaque handle that `jstream-render` imports. The import has to call
@@ -235,9 +235,10 @@ the same reason.
 <!-- @section
 -->
 
-- **GPU frames.** Designed and typed in [GPU frames](#gpu-frames) above. The Windows
-  `GpuInterop` opens the device and encode targets, but no platform delivers or consumes
-  GPU frames yet. How capture and the encoders reach the context is an open question in
+- **GPU frames.** Designed and typed in [GPU frames](#gpu-frames) above. Windows capture
+  delivers them; nothing consumes them yet. Capture reaches the context through a Windows
+  constructor, `WgcCapture::on_gpu(&GpuContext)`, so the trait shapes are unchanged. How
+  the encoders reach it is still open in
   [jstream-platform-windows](../jstream-platform-windows/README.md#open-questions).
 - **Device formats.** `jstream-media`'s `ChannelLayout` has mono, stereo and 5.1 only.
   **Proposed default:** backends downmix any other layout to stereo, and new layouts
