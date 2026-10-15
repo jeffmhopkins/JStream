@@ -13,13 +13,14 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:ae9bd9719a916622", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; server forwards history calls opaquely over WS and /mcp" }
+verified = { hash = "b3:a1f50d3313163f2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
 clients (the CLI, the web UI, a stdio MCP proxy) reach the engine through
 `jstream-control`'s WebSocket client, and, when the host turns it on, serves MCP's
-streamable-HTTP transport on the same port, so agents reach it directly. It is written against `dyn Control` and
+streamable-HTTP transport on the same port, so agents reach it directly. When the host
+names a UI directory, it serves the web UI's files on that port too. It is written against `dyn Control` and
 `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host app hands it a `Connector`
 that opens one session per connection. Layer 4
@@ -30,19 +31,21 @@ Contents (a first cut; [Design](#design) explains the choices):
   `Connector` type, and the `GET /api/v1/ws` upgrade handler.
 - **MCP** (`mcp.rs`): the streamable-HTTP transport at `/mcp` (`MCP_PATH`), its
   sessions, and their limits.
+- **Web UI** (`ui.rs`): the UI bundle's files from `ServerConfig::ui_dir`, with their
+  types and a Content Security Policy.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
-  origins, connection limits, the MCP switch and its limits) and `Token`, the control
-  token.
+  origins, connection limits, the MCP switch and its limits, the UI directory) and
+  `Token`, the control token.
 - **Listener** (`listener.rs`): accepts TCP connections and drops one that hasn't sent
   an accepted upgrade request in time.
-- **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every upgrade passes
+- **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every request passes
   ([R-SEC-002](../../docs/RULES.md#R-SEC-002)).
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
   session and back, with the bounded outbox that keeps a slow client from holding up
   its events.
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
-Not here yet: serving the UI assets and TLS ([Open questions](#design)).
+Not here yet: TLS and pairing ([Open questions](#design)).
 
 Why a crate and not a module of `jstream-control` or `jstream-mcp`: it owns the HTTP
 stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
@@ -54,24 +57,27 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f9dca271d67f5014", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 cascade via ARCH#protocol and control design: re-read; transport, admission, sessions, MCP and logging untouched by new edits; holds" }
+verified = { hash = "b3:8df110b52c30ddad", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; stale by cascade (ARCH protocol, control design); nothing it says depends on filter or opacity edits; holds" }
 -->
 
 ### Listening and admission
 
 `ServerConfig::new(token)` listens on `127.0.0.1` with an ephemeral port; any other
 address is the host's explicit choice ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)).
-The one route is `GET /api/v1/ws` (`jstream_control::WS_PATH`, shared with the client).
-Every upgrade request passes three checks, in this order, before a session is opened
+The API's route is `GET /api/v1/ws` (`jstream_control::WS_PATH`, shared with the
+client), with `/mcp` and the UI's files when the host turns them on. Every request, an
+upgrade or not, passes three checks, in this order, before a session is opened or a file
+served
 ([R-SEC-002](../../docs/RULES.md#R-SEC-002)):
 
 | Check | Accepted | Refused with |
 |---|---|---|
 | `Host` | `127.0.0.1`, `localhost` or `[::1]` with the bound port; the bound address; or a configured extra; without a port only on port 80 (below) | 403 |
 | `Origin` | absent, or `http://` plus the accepted `Host` (the server's own origin), or a configured extra | 403 |
-| `Authorization` | `Bearer <token>`, matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` |
+| `Authorization` | `Bearer <token>`, or `Basic` credentials whose password is the token (any user name); without `Authorization`, the offered subprotocol `jstream.token.<token>` (below). Matched by comparing BLAKE3 digests (below) | 401 with `WWW-Authenticate: Bearer` (`Basic` on the UI's paths) |
 
-`Host` and `Authorization` must appear exactly once and `Origin` at most once, and
+`Host` must appear exactly once, `Authorization` at most once (exactly once unless the
+subprotocol carries the token) and `Origin` at most once, and
 comparisons ignore ASCII case (except the token). The `Host` check defeats DNS
 rebinding: a page on an attacker's domain that resolves to `127.0.0.1` still sends its
 own name. The `Origin` check stops foreign pages, since browsers always send `Origin` on
@@ -85,12 +91,33 @@ listens on port 80, `localhost` is the same as `localhost:80` and is accepted (a
 `http://localhost` is its own origin). On any other port, the default and ephemeral
 ones included, a `Host` without a port names a different port and is refused.
 
+**`Basic` credentials.** A browser can't put a bearer token on a page load or a
+WebSocket upgrade, but it sends the HTTP `Basic` credentials it was given for an
+origin with every request to it, upgrades included (checked in Chromium). So the gate
+also accepts `Authorization: Basic base64(user:token)`: the password is the token and
+the user name is ignored. Credentials without a `:`, or that aren't base64 with
+padding, are refused like a wrong token. This is the same token presented differently,
+not a new kind of client (ADR-0006).
+
+**The token as a subprotocol.** `jstream-control`'s browser client can't rely on
+cached credentials (a UI served from elsewhere, or a browser that doesn't resend them),
+so it offers two subprotocols in `Sec-WebSocket-Protocol`: `jstream` and
+`jstream.token.<token>`. A request without `Authorization` may carry its token that
+way, on any `Sec-WebSocket-Protocol` line, in exactly one offered subprotocol; with
+`Authorization` present, only that counts. The upgrade selects `jstream` (browsers
+fail a connection whose offered subprotocols none were selected), never the token's,
+so the answer doesn't echo it, and like every header it is never logged. Both names
+are `jstream-control`'s constants, shared with the client
+([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
+
 **Extra hosts.** Each configured extra host must be `name:port` with one port from 1
 to 65535, and an IPv6 address must be in brackets (`[::1]:4455`), as it is in a
 request's `Host`. Any other entry (no port, two ports as in `name:80:80`, or a bare
 `fe80::1`) could never match, since the gate compares hosts with their port, so
 `Server::bind` refuses it (`ServerError::InvalidHost`) before opening the socket rather
-than ignoring it.
+than ignoring it. A configured extra origin is trusted as the server's own: a page there
+can use whatever credentials the browser holds for the server, a cached `Basic` password
+included.
 
 **Token compare.** `Token` keeps only the BLAKE3 digest of the token. The presented
 value is hashed with BLAKE3 too, and the two 32-byte digests are compared with
@@ -116,6 +143,59 @@ learns nothing about the server's load, and a refusal costs no session. The list
 stays on loopback by default; these bounds are what a non-loopback bind would rely on
 against a misbehaving client on the network.
 
+### The web UI
+
+With `ServerConfig::ui_dir` set (`ServerConfig::new` leaves it unset; `Server::bind`
+refuses a path that isn't a directory with `ServerError::UiDir`), every path the API
+doesn't use (anything but `/api/v1/ws`, `/mcp` and other paths under `/api` or `/mcp`)
+serves a file from that directory: the UI's built bundle, `trunk build`'s `dist`
+(`Server::ui_url` gives the address). Each request passes the gate above first,
+so the bundle is served only to holders of the token
+([ADR-0006](../../docs/adr/0006-mcp-full-access.md): every listener, the web UI
+included, requires it). A refused token is answered with `WWW-Authenticate: Basic
+realm="JStream"`, so the browser asks for a user name and password: the user pastes the
+token from the token file as the password. The browser then sends it with the bundle's
+requests and the UI's WebSocket upgrade, and the UI never handles the token. A request
+that passes disarms the header-read deadline, as on `/mcp`, so the bundle loads over a
+kept-alive connection.
+
+| Request | Answer |
+|---|---|
+| `GET` or `HEAD` of a file in the directory | 200, the file (at most 64 MiB) |
+| A directory (`/` included) | its `index.html` |
+| A missing path whose last segment has no `.` (the UI's own routes) | the root's `index.html` |
+| Any other missing path, or one under `/api` or `/mcp` | 404 |
+| A path with an empty, `.` or `..` segment, or one that holds `\`, `:` or NUL (percent-escapes decoded first) | 404 |
+| A file that resolves outside the directory (a symbolic link) | never served: 404, or the root's `index.html` for a name without a `.` |
+| Any other method | 405 with `Allow: GET, HEAD` |
+
+**Paths.** The path is percent-decoded segment by segment, and a segment that could step
+out of the directory or name a drive is refused before the file system is touched. The
+file found is then canonicalized and must still lie inside the canonicalized directory,
+which also stops a symbolic link that points out of it.
+
+**Headers.** Every answer from the directory carries `Content-Type` from the file's
+extension (`application/wasm` for `.wasm`, which browsers need to compile a module as
+it streams; `application/octet-stream` for an unknown one), `X-Content-Type-Options:
+nosniff`, `Cache-Control: no-cache` (the bundle changes with every build, and loopback
+is cheap), `Referrer-Policy: no-referrer`, and this Content Security Policy:
+
+```text
+default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'nonce-N'; style-src 'self' 'nonce-N';
+img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self';
+connect-src 'self' ws://<Host>; worker-src 'self' blob:; object-src 'none';
+base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+```
+
+Scripts, styles and connections come only from the server itself (`ws://<Host>`, the
+request's accepted `Host`, because older browsers don't match `ws:` with `'self'`), the
+WebAssembly module may be compiled, and the page can't be framed, post forms or load
+plugins. trunk's loader is an inline module script, so an HTML file's nonce
+placeholder (`{{__TRUNK NONCE__}}`, which trunk writes with `create_nonce = true`) is
+replaced on every response by a fresh nonce, 16 bytes from `getrandom` as 32 hex
+digits, and the policy names it as `'nonce-N'`. Other files get the policy without a
+nonce.
+
 ### Sessions
 
 Each accepted connection gets a fresh session from the `Connector`
@@ -136,13 +216,13 @@ task speaks the envelope
   readable. Binary frames get `malformed` too, until binary streams are designed.
   Messages over 4 MiB close the connection.
 - **Request IDs.** A `Control` session assigns its own IDs, which appear in the
-  `state.changed` events its calls cause. The task maps them back to the client's wire
+  `state.changed` and `studio.changed` events its calls cause. The task maps them back to the client's wire
   IDs, so a client matches its event to its response by the ID it chose, as in the
   protocol README's example. An event can arrive before the answer that reveals the
   mapping, so while calls are in flight it is held back, with every event after it to
   keep the order, until the answer arrives or nothing is left in flight (or 1024 events
-  are held). The last 1024 pairs are remembered. Other clients' `state.changed` events
-  pass unchanged: their IDs mean nothing to this client.
+  are held). The last 1024 pairs are remembered. Other clients' events pass unchanged:
+  their IDs mean nothing to this client.
 - **Slow clients.** The connection task never waits on the socket: what it sends goes
   into an outbox, and a writer that owns the socket's sending half sends it, one message
   at a time, while the task keeps reading the client and draining the session's events.
@@ -178,8 +258,8 @@ it on), `/mcp` (`MCP_PATH`) serves MCP's
 on the control port. Every request, whatever its method, first passes the same `Host`,
 `Origin` and token checks as an upgrade, with the same refusals (403, 401), so a
 request without `Origin` (a native agent) goes on to the token check, as on the
-WebSocket API: browsers send `Origin` on a cross-origin `fetch`, and the bearer token
-forces a preflight. Each body is one JSON-RPC message, answered by a
+WebSocket API: browsers send `Origin` on a cross-origin `fetch`, and a `POST` needs
+`Content-Type: application/json`, which forces a preflight. Each body is one JSON-RPC message, answered by a
 `jstream_mcp::Server` ([jstream-mcp › Design](../jstream-mcp/README.md#design)):
 
 | Request | Answer |
@@ -222,7 +302,7 @@ installs no subscriber; the host app does. The listener records each connection'
 address (axum's `ConnectInfo`), for logging only: admission depends on the headers
 alone.
 
-- **Refused upgrades** are logged at `warn` as `connection refused`, with the peer
+- **Refused upgrades** (and refused UI and MCP requests) are logged at `warn` as `connection refused`, with the peer
   address and the reason (`Host not allowed`, `Origin not allowed`, `missing or wrong
   control token`, `too many connections`, or `too many MCP sessions`). No header value
   is logged: not the token, nor the refused `Host` or `Origin`
@@ -243,6 +323,8 @@ alone.
   `jstream-mcp`'s own spans nest. Opening one logs `mcp session opened` with the peer
   address, and ending one `mcp session ended` with the reason (`idle`, `deleted by the
   client`, `replaced by a new initialize`, `initialize failed`). The session ID is never logged, nor any message.
+- A UI file that can't be read is logged at `warn` with the error (500 to the
+  client); the path is not logged.
 - A request that isn't a WebSocket upgrade is logged at `debug`, and so is a connection
   dropped by the header-read timeout. A connection closed by the handshake timeout logs
   `connection closed` at `info` with its code and reason, like any other close.
@@ -263,13 +345,17 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    with rustls and the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)): a TLS
    feature and its wiring. `ring` is already on the lint-deps native-code allowlist, for
    `jstream-outputs`' RTMPS, so that needs no further governance change.
-2. **Browser token.** Browsers can't set `Authorization` on a WebSocket. The client
-   design sends the token in `Sec-WebSocket-Protocol` instead
-   ([jstream-control › Design](../jstream-control/README.md#design)); the subprotocol
-   naming is not decided, so the server accepts only `Authorization` today.
-3. **UI assets.** Serving the web UI is deferred. MCP over streamable HTTP is settled
-   and built (see *MCP over streamable HTTP*); whether it should also offer SSE, once
-   the MCP server has notifications to push, is open.
+2. **Browser token.** Settled and built (see *`Basic` credentials* and *The token as
+   a subprotocol*): a page load presents the token as `Basic` credentials, and the
+   UI's upgrade either carries the same credentials (checked in Chromium) or offers
+   `jstream.token.<token>` ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
+   Pairing a remote browser with a short code instead of pasting the token is decided
+   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) and not built yet.
+3. **UI assets.** Settled and built (see *The web UI*). Open: caching with `ETag`s
+   instead of `no-cache`, and compressed variants, if the bundle grows enough to
+   matter. MCP over streamable HTTP is settled and built (see *MCP over streamable
+   HTTP*); whether it should also offer SSE, once the MCP server has notifications to
+   push, is open.
 4. **Requests without `Origin`.** Settled and built (#44): an upgrade with no `Origin`
    header is allowed, because the token is the gate, so non-browser tools (`websocat`,
    scripts) needn't invent one. An `Origin` that is present must still be the server's

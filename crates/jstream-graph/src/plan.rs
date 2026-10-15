@@ -173,6 +173,7 @@ mod tests {
                 &[Edit::SceneCreate {
                     scene_id: SceneId::new("a"),
                     name: "A".into(),
+                    role: None,
                 }],
                 None,
             )

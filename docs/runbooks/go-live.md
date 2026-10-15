@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:7fc1db95867f0e99", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 cascade via CLI usage, server and daemon design: re-read; daemon start, output.create, set-key, events, start/stop and snapshot steps unchanged; holds" }
+verified = { hash = "b3:8b5ae4cdc1600cc1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; stale through cascade (cli usage); the steps use no filter or opacity command; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:e4a96c3b7addad17", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 cascade via CLI usage: re-read; smoke.ps1 steps unchanged by this branch; holds" }
+verified = { hash = "b3:794e9f89b7a02378", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge of main: re-read; stale through cascade; smoke.ps1 unchanged; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
