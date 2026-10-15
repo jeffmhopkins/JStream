@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:b378f301b6e1e375", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (#141 WindowsCredentials, #146 F4 keyframes) into H1: re-read both; main's Credential Manager and keyframe text unchanged; the check_media_foundation bullet sits after it, now says nothing calls it yet (review N1); the Tests paragraph lists the credential tests and the MF decision, probe and edition-read tests together" }
+verified = { hash = "b3:3cae6179cf6ddd09", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (#142 StreamKeyStore) into H1: re-read both; main's WindowsCredentials/StreamKeyStore and Secret text kept as is; check_media_foundation bullet unchanged; the Tests paragraph merges #142's credential tests (non-UTF-8 read, StreamKeyStore) with the MF decision, probe and edition-read tests" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -183,8 +183,9 @@ The code is ported from spikes S1 to S3. This first cut has:
 - **`WindowsCredentials`**, the OS credential store for stream keys
   ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence),
   [R-SEC-001](../../docs/RULES.md#R-SEC-001)): `set`, `get`, `exists` and `delete` on
-  Windows Credential Manager (`CredWriteW`, `CredReadW`, `CredDeleteW`). It isn't a
-  `jstream-platform` trait; the daemon adapts it to the engine's key store.
+  Windows Credential Manager (`CredWriteW`, `CredReadW`, `CredDeleteW`). It also
+  implements `jstream-platform`'s `StreamKeyStore`, naming each output's credential
+  with `CredentialTarget::stream_key`, so a host hands it to `Engine::with_key_store`.
   - **Names:** a `CredentialTarget`, `JStream/stream-key/<output id>`. Generic
     credentials are one per-user namespace shared by every app, so the product prefix
     keeps ours apart and groups them in Credential Manager, and the kind segment keeps a
@@ -198,8 +199,9 @@ The code is ported from spikes S1 to S3. This first cut has:
     encrypts it for the user; any process running as the user can read it.
   - **Secrets:** a secret is 1 to `CRED_MAX_CREDENTIAL_BLOB_SIZE` bytes; anything else is
     `Unsupported`. The limits are copied so the checks are tested on every platform, and
-    a Windows test compares them with the SDK's. `get` returns a `Secret`, which zeroes its bytes on drop,
-    prints as `Secret(***)` and isn't `Clone`. The copy Windows returns is zeroed before
+    a Windows test compares them with the SDK's. `get` returns `jstream-platform`'s `Secret`, which zeroes its
+    bytes on drop, prints as `Secret("***")` and isn't `Clone`; a stored blob that
+    isn't UTF-8 is refused as `Unsupported`, without naming it. The copy Windows returns is zeroed before
     `CredFree`. Nothing here logs, and errors carry no secret or its length.
 
 - **`check_media_foundation`**, the Media Foundation check
@@ -227,14 +229,15 @@ packet flags, positions across a device move), the capture helpers (BGRA to NV12
 known colours, odd sizes and padded rows; the mailbox, across threads; target IDs), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the H.264
 helpers (configuration check, NV12 packing, `pts` mapping), the credential helpers
-(target names, blob limits, redaction, zeroing) and the Media Foundation check's decision
-(edition kinds and the advice for each) run on every platform. The QPC clock test, the
-start-race test (a destroyed message-only window maps to `NotFound`), the credential
-limits check, the credential round trip (a uniquely named credential written, replaced,
-read and deleted in the real store, deleted again on failure), and the Media Foundation
-probe and edition read run on Windows. Tests against real devices, the OS encoder, the
-GPU and a display are platform tests: behind the `hw-tests` feature and `#[ignore]`d,
-because CI machines may have no audio devices, no Media Foundation, no GPU and no display
+(target names, blob limits, zeroing) and the Media Foundation check's decision (edition
+kinds and the advice for each) run on every platform. The QPC clock test, the start-race
+test (a destroyed message-only window maps to `NotFound`), the credential limits check,
+the credential round trip (a uniquely named credential written, replaced, read and
+deleted in the real store, a non-UTF-8 one refused on read, deleted again on failure),
+the same through `StreamKeyStore`, and the Media Foundation probe and edition read run
+on Windows. Tests against real devices, the OS encoder, the GPU and a display are
+platform tests: behind the `hw-tests` feature and `#[ignore]`d, because CI machines may
+have no audio devices, no Media Foundation, no GPU and no display
 ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
 target, stages it and checks that the shared fence passes the staged value. The capture
 tests list the displays, capture the primary display for a second, checking the

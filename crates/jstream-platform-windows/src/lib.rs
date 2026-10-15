@@ -34,9 +34,9 @@ pub use clock::QpcClock;
 pub use clock::timebase;
 #[cfg(windows)]
 pub use codec::MfCodecs;
+pub use credential::CredentialTarget;
 #[cfg(windows)]
 pub use credential::WindowsCredentials;
-pub use credential::{CredentialTarget, Secret};
 #[cfg(windows)]
 pub use gpu::WindowsGpu;
 #[cfg(windows)]

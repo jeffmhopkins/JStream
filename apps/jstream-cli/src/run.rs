@@ -258,7 +258,9 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             });
             table(out, "", &["ID", "NAME", "ITEMS"], rows.collect())?;
         }
-        QueryResult::OutputStatus { output_id, state } => {
+        QueryResult::OutputStatus {
+            output_id, state, ..
+        } => {
             writeln!(out, "{output_id}: {}", wire_name(state))?;
         }
         QueryResult::SourceList { rev, sources } => {
@@ -289,6 +291,7 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             rev,
             sources,
             scenes,
+            ..
         } => {
             writeln!(out, "rev {rev}")?;
             writeln!(out, "sources:")?;

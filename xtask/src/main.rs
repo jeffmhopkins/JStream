@@ -55,6 +55,11 @@ fn main() -> ExitCode {
                     "docs verify",
                     "record a re-read section: <DOC#anchor> --by <who> --note <text>",
                 ),
+                (
+                    "docs review",
+                    "record a doc-level TTL review: <DOC> --by <who> --note <text>",
+                ),
+                ("docs log", "history from git: <DOC[#anchor]> [--rev <rev>]"),
                 ("docs for", "what governs a file: <repo-relative path>"),
                 (
                     "governance",
