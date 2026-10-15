@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:72750cc7858d2b9c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): main's text with binary()/BinaryStream in the trait bullet; holds" }
+verified = { hash = "b3:0cee9228843ca676", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; shared-names bullet is main's; mock still accepts virtual_cam" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -47,7 +47,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:c940af39b74255c9", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): binary() bullet at 0.18; WebSocket client binary sentence now covers the browser (array buffers) too, matching ws_web.rs's BinaryQueue/deliver; main's Failures and Connection text kept" }
+verified = { hash = "b3:dbd065bb673c1ddb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 0ba4f97 (#264 shared subprotocol constants, #277 fuzz targets and graph property suites, #285 R-TEST-004 apps); re-read main's new text beside this PR's virtual_cam text; protocol 0.18 holds; set_target refusal for a virtual camera unchanged" }
 -->
 
 ### The trait
@@ -67,7 +67,7 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
   the call, buffered until read, in emission order. It ends when the session or the
   engine goes away.
 - `binary() -> BinaryStream`: the session's binary channel, the preview frames of its
-  `preview.subscribe` streams (protocol 0.18). A session has one: opening it again
+  `preview.subscribe` streams (protocol 0.19). A session has one: opening it again
   ends the one before and the streams on it, and `preview.subscribe` fails with
   `action_failed` until it is open. Unlike events its frames are bounded: a reader
   that falls behind loses frames up to the next keyframe (`KeyframeGate`), so what it
@@ -132,7 +132,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
-    reasons), `output.set_target` on a recording output, and an `unknown` output kind,
+    reasons), `output.set_target` on a recording or virtual-camera output (the mock
+    accepts a `virtual_cam` output, as the engine does), and an `unknown` output kind,
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`

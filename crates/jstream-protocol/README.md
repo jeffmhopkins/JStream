@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:4a0cef6b58a3b6ca", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: preview cites ADR-0045 (its own small H.264 encoder session, binary frames, WebCodecs) instead of superseded ADR-0002; only the citation changed; re-read, holds" }
+verified = { hash = "b3:0911af485ca155fb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -44,7 +44,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `scene.switch`, `preview.subscribe`, `preview.unsubscribe`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp`, `record` and `virtual_cam` so far), `RtmpTarget`
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
@@ -92,10 +92,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.18 because of
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.19 because of
   the preview streams (`preview.subscribe`, `preview.unsubscribe` and the binary
-  frame); 0.17 added `scene.create`'s optional `role`, 0.16 `scene.switch`,
-  `studio.get` and `studio.changed`, 0.15 `delete.plan` and the
+  frame); 0.18 added the `virtual_cam` output kind, 0.17 `scene.create`'s optional
+  `role`, 0.16 `scene.switch`, `studio.get` and `studio.changed`, 0.15 `delete.plan` and the
   `blockers` detail on `invalid_argument`, 0.14 references
   and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
   profiles and session sharing, 0.12 groups (`scene.set_role`,
@@ -109,7 +109,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs, a recording output and two
+  canvas, legacy items, one geometry item, two RTMP outputs, a virtual camera, a recording output and two
   encoder profiles), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
   URL, recording path and encoder profile checks, and `item.set_source` and
@@ -128,7 +128,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:7e35392cbf674e30", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: stale via the regenerated protocol.snap/tools.snap, whose only change is preview.subscribe's doc citing ADR-0045 for ADR-0002; tools.snap still 154,829 bytes; holds" }
+verified = { hash = "b3:3185940baa7febfa", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -148,8 +148,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":18},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":18},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":19},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":19},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -336,7 +336,13 @@ no `..` segment and end in a file name, and
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
 so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
-record elsewhere. The
+record elsewhere. A `virtual_cam` output (0.18) has no fields: it offers the program
+video to other apps on the engine's machine as a webcam, with no audio, at the canvas
+size it has when it starts and 30 fps. `output.start` fails with `action_failed` when
+the engine has no virtual camera, the camera isn't registered on the machine, or it
+can't offer that size. It has no target either, so `output.set_target` refuses it too,
+and it encodes nothing, so its encoder profile is stored but unused. A 0.9 to 0.17
+client reads it as `Unknown`. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
@@ -700,7 +706,7 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
 ### Binary streams
 
 Preview video travels as WebSocket binary messages, one `BinaryFrame` each, alongside
-the JSON text messages of the same connection (0.18,
+the JSON text messages of the same connection (0.19,
 [ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol),
 [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). Audio meters will use the same
 frame with another kind; their fields are not designed yet beyond ADR-0028's list.

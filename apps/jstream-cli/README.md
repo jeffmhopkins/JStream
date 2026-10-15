@@ -235,7 +235,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:df95446f3ae636ec", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): stale via control design; CLI opens no binary channel and has no preview command; holds" }
+verified = { hash = "b3:1d68cead334d0f0c", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at b3e6be5 (#263 mock cycle reasons name the cycle path); re-read beside this PR's virtual_cam text (mock accepts virtual_cam, set_target refusal unchanged; protocol 0.18); jstream-control/graph/protocol tests pass; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
