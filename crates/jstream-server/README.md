@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:054ea663224ac234", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305 (dependency CRATE-jstream-control#design changed): re-read; server CSP and close-code text unaffected by the browser client's error-event handling" }
+verified = { hash = "b3:57bace941767b49d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305 merge of main 92cd698 (#309): re-read CSP and Sessions text; control's change is its browser-client test paragraph; server text unaffected" }
 -->
 
 ### Listening and admission

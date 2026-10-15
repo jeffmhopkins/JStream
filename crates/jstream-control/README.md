@@ -46,7 +46,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:25aa54d1cb0035eb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305: re-read Design against the ws_web error-handler change; Failures bullet now says the browser client ends the session on error as well as close (CSP case) and the first sets the reason; test paragraph names the native end_reason tests in ws_config.rs" }
+verified = { hash = "b3:bdb637c1725a5b51", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305 after merging main 92cd698 (#309): test paragraph now says the browser client is tested end to end through jstream-ui's Playwright specs (refused upgrade, CSP-blocked URL), linked to the e2e README; Failures bullet holds" }
 -->
 
 ### The trait
@@ -270,9 +270,13 @@ pulls `web-sys`.
 
 The native client's end-to-end tests live in `jstream-server`, which runs a
 `MockEngine` behind a real server on a loopback port and drives it with this client.
-The browser client has no automated test yet: it type-checks in CI's `wasm32` build,
-and the URL and token handling and the choice of the reason a session ended with,
-which it shares, are unit-tested natively (`ws_config.rs`).
+The browser client is tested end to end through the web UI: Playwright drives
+`jstream-ui` in Chromium against a mock daemon, connecting, failing to connect (a
+refused upgrade, and a URL the page's policy blocks) and calling the engine
+([jstream-ui end-to-end tests](../jstream-ui/tests/e2e/README.md#tests)). It also
+type-checks in CI's `wasm32` build, and the URL and token handling and the choice of
+the reason a session ended with, which it shares, are unit-tested natively
+(`ws_config.rs`).
 
 ### Open questions
 

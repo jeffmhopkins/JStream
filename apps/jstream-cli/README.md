@@ -235,7 +235,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8f797994afbe80d0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305 (dependency CRATE-jstream-control#design changed): re-read; the CLI uses the native WsControl, which this browser-only change doesn't touch" }
+verified = { hash = "b3:7d8ed0f3d3e8b8da", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305 merge of main 92cd698 (#309): re-read; CLI uses native WsControl, untouched by the browser-only change and the e2e test paragraph" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

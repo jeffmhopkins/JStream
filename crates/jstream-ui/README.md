@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:da1819386bb664ea", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line changed; design bullets untouched and exercised by the e2e specs (connect, outputs, key handling)" }
+verified = { hash = "b3:bbe0134327a8b9ce", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#305 merge of main 92cd698 (#309): took main's stamp; Connecting bullet now lists a URL the page's policy blocks among the failures that read the same; e2e connect spec confirms the alert shows and the form stays usable" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -68,8 +68,8 @@ verified = { hash = "b3:da1819386bb664ea", by = "agent:claude@session_016cfwAwen
   token in the subprotocol, which `jstream-server` accepts
   ([jstream-server › Design](../jstream-server/README.md#design)). After a disconnect the form
   shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
-  a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin
-  and an unreachable engine read the same.
+  a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin,
+  an unreachable engine and a URL the page's policy blocks read the same.
 - **The session.** `Session::connect` opens `jstream-control`'s `WsControl` and says
   `hello`. The open session is provided as Leptos context (`SessionContext`), so a
   panel calls the engine with `session.control.call(…)` and never sees the socket. The
