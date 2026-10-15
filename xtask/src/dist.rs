@@ -1,6 +1,6 @@
 //! `cargo xtask dist`: builds the portable Windows zip (ADR-0020). It builds the web UI
 //! (or takes a built one), builds the release binaries with the C runtime linked
-//! statically, refuses any binary that still imports a C runtime DLL, and zips one
+//! statically, refuses any binary that still imports a Visual C++ runtime DLL, and zips one
 //! folder that runs from wherever it is unzipped.
 //!
 //! Docs: docs/ARCHITECTURE.md#packaging
@@ -38,17 +38,12 @@ const UI_DIR: &str = "ui";
 /// `RUSTFLAGS` variable (CI sets one) replaces the config's flags instead of adding to them.
 const CRT_STATIC: &str = "-Ctarget-feature=+crt-static";
 
-/// The C runtime DLLs a binary must not import: a statically linked runtime imports none
-/// of them, and a dynamically linked one needs the Visual C++ redistributable.
-const CRT_DLLS: &[&str] = &[
-    "vcruntime",
-    "msvcp",
-    "msvcr",
-    "ucrtbase",
-    "api-ms-win-crt-",
-    "concrt",
-    "vccorlib",
-];
+/// The Visual C++ runtime DLLs a binary must not import: they come only with the Visual
+/// C++ redistributable, and a statically linked runtime imports none of them. The
+/// Universal CRT (`ucrtbase.dll`, `api-ms-win-crt-*`) is allowed: it is part of Windows
+/// 10 and 11, and `jstream.exe` imports it even with `crt-static`, from a prebuilt static
+/// library built with `/MD` (most likely WebView2's loader).
+const CRT_DLLS: &[&str] = &["vcruntime", "msvcp", "msvcr", "concrt", "vccorlib"];
 
 const USAGE: &str = "usage: cargo xtask dist [--ui-dir <built UI folder>] [--out <folder>]";
 
@@ -168,7 +163,7 @@ fn with_crt_static(rustflags: Option<String>) -> Option<String> {
     Some(format!("{flags} {CRT_STATIC}").trim_start().to_owned())
 }
 
-/// Fails when the PE image at `path` imports a C runtime DLL, so the zip never needs
+/// Fails when the PE image at `path` imports a Visual C++ runtime DLL, so the zip never needs
 /// the Visual C++ redistributable.
 fn check_no_crt_imports(path: &Path) -> Result<()> {
     let image = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
@@ -176,14 +171,14 @@ fn check_no_crt_imports(path: &Path) -> Result<()> {
     let crt: Vec<&String> = dlls.iter().filter(|dll| is_crt(dll)).collect();
     if !crt.is_empty() {
         bail!(
-            "{} imports the C runtime ({crt:?}): it must link it statically (crt-static)",
+            "{} imports the Visual C++ runtime ({crt:?}): it must link it statically (crt-static)",
             path.display()
         );
     }
     Ok(())
 }
 
-/// Whether `dll` (lowercase) is a C runtime DLL.
+/// Whether `dll` (lowercase) is a Visual C++ runtime DLL.
 fn is_crt(dll: &str) -> bool {
     CRT_DLLS.iter().any(|prefix| dll.starts_with(prefix))
 }
@@ -552,12 +547,17 @@ mod tests {
             "vcruntime140.dll",
             "vcruntime140_1.dll",
             "msvcp140.dll",
-            "ucrtbase.dll",
-            "api-ms-win-crt-runtime-l1-1-0.dll",
+            "vccorlib140.dll",
         ] {
             assert!(is_crt(dll), "{dll}");
         }
-        for dll in ["kernel32.dll", "mfplat.dll", "d3d11.dll", "ws2_32.dll"] {
+        for dll in [
+            "kernel32.dll",
+            "mfplat.dll",
+            "d3d11.dll",
+            "ucrtbase.dll",
+            "api-ms-win-crt-runtime-l1-1-0.dll",
+        ] {
             assert!(!is_crt(dll), "{dll}");
         }
     }

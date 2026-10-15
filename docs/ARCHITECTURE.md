@@ -874,7 +874,7 @@ verified = { hash = "b3:042c342d215b5bc4", by = "agent:claude@session_01TiAAtPXb
 <!-- @section
 covers = ["xtask/src/dist.rs", ".cargo/config.toml"]
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:a8489e561b5212fe", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: State bullet names the data folder and the paths module; new Building the zip bullet matches dist.rs, .cargo/config.toml and the dist CI job" }
+verified = { hash = "b3:34ed823aeee861ed", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 CI fix: dist refuses only Visual C++ runtime imports; the Universal CRT is an OS component jstream.exe imports even with crt-static (first Windows run)" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -895,7 +895,10 @@ Direct3D 12).
 - **Building the zip:** `cargo xtask dist`, on Windows with MSVC. It builds the web UI
   for release with trunk (or takes a built one with `--ui-dir`), builds `jstream.exe`,
   `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for release, and
-  fails if any of them imports a C runtime DLL. It zips them in one folder,
+  fails if any of them imports a Visual C++ runtime DLL (`vcruntime`, `msvcp`). The
+  Universal CRT (`api-ms-win-crt-*`) is allowed: it is part of Windows 10 and 11, and
+  `jstream.exe` imports it even with `crt-static` (from a prebuilt static library built
+  with `/MD`, most likely WebView2's loader). It zips them in one folder,
   `jstream-<git describe>-windows-x64`, with the UI in `ui` (where `jstream.exe` looks),
   the licenses and a `README.txt`, into `target/dist`. `.cargo/config.toml` links the C
   runtime statically for every MSVC build. A `RUSTFLAGS` variable replaces the config's
