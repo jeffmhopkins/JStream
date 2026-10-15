@@ -112,18 +112,24 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   one with no video, or one without a media backend (`SourceError::NoBackend`) fails
   there. A decode thread (`jstream-media-file`) then reads frames ahead, up to 8, or
   fewer when they, the frame shown and two more held elsewhere would pass
-  `max_decoded_bytes`; the frame's sides must be within `max_side`. The source maps its
+  `max_decoded_bytes`; the frame's sides must be within `max_side`, and every later
+  frame must have the first one's size. The source maps its
   clock time onto the file's timeline at `speed` (0.25 to 4), from where it last
   started, and shows the latest frame the timeline has reached; a speed change keeps
   the position. With `loop` the file plays again from the start after its end, the
   timeline running on; without it the last frame stays, and turning `loop` on
   afterwards plays on. With `restart_on_show` the file starts again each time the
-  program mix shows it after not showing it (`Source::show`). When the frame shown
+  program mix shows it after not showing it (`Source::show`), the first time
+  included. When the frame shown
   falls more than a second behind the timeline (it was hidden, or the decoder can't
   keep up), the source seeks instead of decoding every frame between; a seek decodes
-  from the key frame before its target and skips frames up to it. Until the decoder
+  from the key frame before its target and skips frames up to it (a looping file
+  sought past its end before its length is known plays from its start there). The
+  decode thread seeks and decodes with the shared state unlocked, so `frame` only
+  waits to take a queued frame. Until the decoder
   catches up, `next_change` asks again 10 ms later. Every setting but `file` is live.
-  A decode error stops the source: `frame` then fails with `SourceError::Decode`. The
+  A decode error, or a frame of another size, stops the source: `frame` then fails
+  with `SourceError::Decode`. The
   file's audio isn't played yet, and an audio-only file fails to create. With no file,
   the source shows one transparent pixel.
 - `display`, `webcam` and `window` are described only, with the settings B4

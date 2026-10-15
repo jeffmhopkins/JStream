@@ -428,9 +428,10 @@ the source hands out a different one, so a still image is uploaded once. The pla
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image or a video advances on the clock and a
 still one is never re-planned. Each plan is numbered (`begin_plan`), and each source
-remembers the last plan that reached it: one that a plan reaches after plans that
-didn't (its item was hidden, or its scene left the program) is told so first
-(`Source::show`), so a media file can restart. Sources run on the media clock of the
+remembers the last plan that reached it, starting from the plan current when it was
+built: one that a plan reaches after plans that didn't (its item was hidden, or its
+scene wasn't the program) is told so first (`Source::show`), so a media file can
+restart, including the first time it is shown. Sources run on the media clock of the
 backends the host injects (`with_backends`), else on a monotonic clock of the engine's
 own, and `media` sources play through those backends' media files
 (`Backends::media`); before any are injected a `media` source fails to build

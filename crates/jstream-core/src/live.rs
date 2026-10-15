@@ -14,7 +14,8 @@
 //! The thread re-plans at the earliest such time, so an animated image or a video
 //! advances on the clock; a still frame is planned once. A source that a plan reaches
 //! after plans that didn't is told it is shown again ([`Source::show`]), so a media file
-//! can restart.
+//! can restart. A source built before plans that didn't reach it (on a scene that isn't
+//! the program yet, or behind a hidden item) counts as shown again when one first does.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -71,7 +72,9 @@ struct Running {
     /// When it was built, on the media clock: its time zero.
     start: MediaTime,
     shown: Option<(Arc<VideoFrame>, Frame)>,
-    /// The last plan that reached it; 0 before the first.
+    /// The last plan that reached it, or the plan current when it was built, so the
+    /// first plan to reach it after that counts as showing it again when one between
+    /// didn't.
     planned: u64,
 }
 
@@ -207,12 +210,13 @@ impl LiveSources {
         if entry.ticket != built.ticket {
             return false;
         }
+        let plan = self.plan;
         entry.running = match built.result {
             Ok(source) => Some(Running {
                 source,
                 start: self.worker.now(),
                 shown: None,
-                planned: 0,
+                planned: plan,
             }),
             // A kind that is described but not built yet draws what it drew before C1b:
             // a `display` source shows the pipeline's capture.
@@ -244,8 +248,8 @@ impl LiveSources {
     /// The frame `source_id` shows at `now`, numbered from `versions` when it is new,
     /// and when it is next replaced. `None` when the source has no live instance.
     ///
-    /// A source the previous plan didn't reach, but an earlier one did, is shown again
-    /// first ([`Source::show`]).
+    /// A source the previous plan didn't reach, though an earlier one did or it was
+    /// built before it, is shown again first ([`Source::show`]).
     pub(crate) fn frame(
         &mut self,
         source_id: &SourceId,
@@ -255,7 +259,7 @@ impl LiveSources {
         let plan = self.plan;
         let running = self.entries.get_mut(source_id)?.running.as_mut()?;
         let at = since(now, running.start);
-        if running.planned != 0 && running.planned + 1 < plan {
+        if running.planned + 1 < plan {
             running.source.show(at);
         }
         running.planned = plan;

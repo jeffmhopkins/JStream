@@ -108,13 +108,15 @@ impl SourceKind for MediaKind {
                 drop(hold);
                 let (first, at, decoder) = first_frame(decoder, &path, &ctx.limits)?;
                 let capacity = queue_capacity(first.info().size, &path, &ctx.limits)?;
-                let player = Player::start(decoder, at, capacity, play.looping).map_err(|e| {
-                    SourceError::Decode {
-                        path: path.clone(),
-                        format: FORMAT,
-                        reason: format!("the decode thread could not start: {e}"),
-                    }
-                })?;
+                let size = first.info().size;
+                let player =
+                    Player::start(decoder, at, size, capacity, play.looping).map_err(|e| {
+                        SourceError::Decode {
+                            path: path.clone(),
+                            format: FORMAT,
+                            reason: format!("the decode thread could not start: {e}"),
+                        }
+                    })?;
                 (Arc::new(first), Some(player))
             }
             // No file: one transparent pixel, as the image kind shows.
@@ -167,18 +169,26 @@ fn first_frame(
                  built)"
             .into(),
     };
-    let video = decoder.info().video.ok_or_else(no_video)?;
-    let (w, h) = (video.size.width(), video.size.height());
-    if w > limits.max_side || h > limits.max_side {
-        return Err(SourceError::TooLarge {
+    let too_large = |size: FrameSize| {
+        let (w, h) = (size.width(), size.height());
+        (w > limits.max_side || h > limits.max_side).then(|| SourceError::TooLarge {
             path: path.to_owned(),
             what: format!("{w}x{h} is over {} px a side", limits.max_side),
-        });
+        })
+    };
+    let video = decoder.info().video.ok_or_else(no_video)?;
+    // Checked before decoding anything, and again on the frame itself: every later
+    // frame must have its size (`Player`).
+    if let Some(err) = too_large(video.size) {
+        return Err(err);
     }
     let frame = decoder
         .next_video()
         .map_err(|e| platform_error(path, e))?
         .ok_or_else(no_video)?;
+    if let Some(err) = too_large(frame.info().size) {
+        return Err(err);
+    }
     if frame.info().format != PixelFormat::Rgba8 {
         return Err(SourceError::Decode {
             path: path.to_owned(),

@@ -385,3 +385,66 @@ fn a_media_file_plays_on_the_clock_and_restarts_when_shown_again() {
     assert!(plays(&engine, 1));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// B2 of #245's review: a source built while no plan reaches it (here, behind an item
+/// created hidden) starts from the beginning when the program first shows it, rather
+/// than where its clock has run to.
+#[test]
+fn a_media_file_first_shown_long_after_it_was_built_plays_from_the_start() {
+    let dir = temp_dir("media-hidden");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: false,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media.clone()));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(false)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(true)),
+    ]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("video", "media", video),
+            add("a", "i1", "video"),
+            Edit::ItemSetVisible {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+                visible: false,
+            },
+        ]),
+    )
+    .expect("created hidden");
+    assert_eq!(shown(&engine, "video"), None, "built, but hidden");
+    assert_eq!(media.stats().opened, 1, "the file was opened");
+    engine.replan();
+    // Past the end of the one-second clip: without the restart it would show its last
+    // frame.
+    clock.advance(5000);
+    engine.replan();
+    visible(&control, true);
+    assert!(plays(&engine, 0), "first shown, it plays from the start");
+    clock.advance(100);
+    assert!(plays(&engine, 1));
+    let _ = fs::remove_dir_all(dir);
+}

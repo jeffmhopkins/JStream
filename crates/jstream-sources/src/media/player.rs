@@ -12,7 +12,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 use std::thread;
 
-use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_media::{FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{MediaDecoder, PlatformError};
 
 /// The frame length assumed when a file declares no frame rate, until two frames show
@@ -55,10 +55,12 @@ pub(super) struct Player {
 
 impl Player {
     /// Starts the decode thread on `decoder`, which has already given up its first
-    /// frame, `first`, at the start of the timeline.
+    /// frame, at `first` on the timeline and of `size`. Every later frame must have that
+    /// size, which the limits were checked against.
     pub(super) fn start(
         decoder: Box<dyn MediaDecoder>,
         first: i64,
+        size: FrameSize,
         capacity: usize,
         looping: bool,
     ) -> std::io::Result<Self> {
@@ -80,7 +82,8 @@ impl Player {
         thread::Builder::new()
             .name("jstream-media-file".into())
             .spawn(move || {
-                let run = AssertUnwindSafe(|| Decode::new(decoder, first).run(&thread_shared));
+                let run =
+                    AssertUnwindSafe(|| Decode::new(decoder, first, size).run(&thread_shared));
                 if catch_unwind(run).is_err() {
                     let mut state = lock(&thread_shared.0);
                     state.failure = Some("the decode thread panicked".into());
@@ -147,8 +150,14 @@ fn lock(mutex: &Mutex<State>) -> MutexGuard<'_, State> {
 
 /// What the thread does next.
 enum Step {
-    Seek { to: i64, generation: u64 },
-    Decode { looping: bool },
+    Seek {
+        to: i64,
+        generation: u64,
+        looping: bool,
+    },
+    Decode {
+        looping: bool,
+    },
     Stop,
 }
 
@@ -168,10 +177,12 @@ struct Decode {
     /// of them, `held`, which is shown at the position itself.
     skip_to: Option<i64>,
     held: Option<Decoded>,
+    /// The first frame's size, which every frame must have.
+    size: FrameSize,
 }
 
 impl Decode {
-    fn new(decoder: Box<dyn MediaDecoder>, first: i64) -> Self {
+    fn new(decoder: Box<dyn MediaDecoder>, first: i64, size: FrameSize) -> Self {
         let info = *decoder.info();
         let period = info
             .video
@@ -188,6 +199,7 @@ impl Decode {
             period,
             skip_to: None,
             held: None,
+            size,
         }
     }
 
@@ -203,6 +215,7 @@ impl Decode {
                         break Step::Seek {
                             to,
                             generation: state.generation,
+                            looping: state.looping,
                         };
                     }
                     if !state.ended && state.queue.len() < state.capacity {
@@ -215,9 +228,15 @@ impl Decode {
             };
             let result = match step {
                 Step::Stop => return,
-                Step::Seek { to, generation } => {
+                // Decoding and seeking run with the lock released, so `frame` never
+                // waits on the platform.
+                Step::Seek {
+                    to,
+                    generation,
+                    looping,
+                } => {
                     self.generation = generation;
-                    self.seek(to, lock(&shared.0).looping)
+                    self.seek(to, looping)
                 }
                 Step::Decode { looping } => self.decode(shared, looping),
             };
@@ -258,6 +277,20 @@ impl Decode {
         let Some(frame) = self.decoder.next_video()? else {
             return self.end(shared, looping);
         };
+        let size = frame.info().size;
+        if size != self.size {
+            // A stream whose shape changes partway: the queue and the limits were sized
+            // for the first frame.
+            return Err(PlatformError::Unsupported {
+                what: format!(
+                    "a picture size change partway through, from {}x{} to {}x{}",
+                    self.size.width(),
+                    self.size.height(),
+                    size.width(),
+                    size.height()
+                ),
+            });
+        }
         let time = micros(frame.info().pts).unwrap_or(0);
         if let Some(last) = self.last.filter(|&last| time > last) {
             self.period = time - last;
@@ -291,8 +324,14 @@ impl Decode {
         if let Some(held) = self.held.take() {
             self.queue(shared, held);
         }
-        self.skip_to = None;
+        let target = self.skip_to.take();
         let Some(last) = self.last else {
+            if let Some(target) = target.filter(|_| looping) {
+                // A seek past the end before the length was known (the container
+                // didn't say): play from the start at the target instead.
+                self.base = target;
+                return self.decoder.seek(MediaTime::zero(Timebase::MICROS));
+            }
             // Nothing in this play: a file with no frames left to show.
             return self.stop(shared);
         };
@@ -330,4 +369,150 @@ pub(super) fn micros(t: MediaTime) -> Option<i64> {
     t.rescale(Timebase::MICROS, Rounding::Down)
         .ok()
         .map(MediaTime::ticks)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::color::rgba_frame;
+    use jstream_platform::{MediaInfo, MediaVideoInfo};
+    use std::sync::mpsc::{Receiver, Sender, channel};
+    use std::time::{Duration, Instant};
+
+    const PERIOD_US: i64 = 40_000;
+
+    fn size(side: u32) -> FrameSize {
+        FrameSize::new(side, side).expect("a size")
+    }
+
+    /// A decoder for these tests: `frames` frames 40 ms apart, each of `sizes(index)`,
+    /// with or without a duration; its seeks can be made to wait for a go-ahead.
+    struct Clip {
+        info: MediaInfo,
+        frames: i64,
+        next: i64,
+        sizes: fn(i64) -> u32,
+        /// Told when a seek starts, then waited on before it finishes.
+        gate: Option<(Sender<()>, Receiver<()>)>,
+    }
+
+    impl Clip {
+        fn new(frames: i64, duration: bool, sizes: fn(i64) -> u32) -> Self {
+            Self {
+                info: MediaInfo {
+                    video: Some(MediaVideoInfo {
+                        size: size(sizes(0)),
+                        frame_period: None,
+                    }),
+                    audio: false,
+                    duration: duration
+                        .then(|| MediaTime::new(frames * PERIOD_US, Timebase::MICROS)),
+                },
+                frames,
+                next: 0,
+                sizes,
+                gate: None,
+            }
+        }
+    }
+
+    impl MediaDecoder for Clip {
+        fn info(&self) -> &MediaInfo {
+            &self.info
+        }
+
+        fn next_video(&mut self) -> Result<Option<VideoFrame>, PlatformError> {
+            if self.next >= self.frames {
+                return Ok(None);
+            }
+            let side = (self.sizes)(self.next);
+            let pixels = (side * side * 4) as usize;
+            let pts = MediaTime::new(self.next * PERIOD_US, Timebase::MICROS);
+            self.next += 1;
+            let frame = rgba_frame(size(side), vec![0; pixels], pts).expect("a frame");
+            Ok(Some(frame))
+        }
+
+        fn seek(&mut self, to: MediaTime) -> Result<(), PlatformError> {
+            if let Some((started, go)) = &self.gate {
+                let _ = started.send(());
+                let _ = go.recv();
+            }
+            self.next = micros(to).unwrap_or(0).div_euclid(PERIOD_US).max(0);
+            Ok(())
+        }
+    }
+
+    /// Waits until `done` holds of the state, or fails after five seconds.
+    fn wait(player: &Player, what: &str, done: impl Fn(&State) -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !done(&player.state()) {
+            assert!(Instant::now() < deadline, "timed out waiting for {what}");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    /// B3 of #245's review: the decode thread seeks with the lock released, so the
+    /// source can take frames while the platform seeks.
+    #[test]
+    fn a_seek_runs_without_the_lock() {
+        let mut clip = Clip::new(10, true, |_| 2);
+        let (started_tx, started) = channel();
+        let (go, go_rx) = channel();
+        clip.gate = Some((started_tx, go_rx));
+        clip.next = 1;
+        let player = Player::start(Box::new(clip), 0, size(2), 4, true).expect("a thread");
+        player.seek(200_000);
+        started
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the seek started");
+        let free = player.shared.0.try_lock().is_ok();
+        go.send(()).expect("the seek goes on");
+        assert!(free, "the state is free while the decoder seeks");
+        wait(&player, "the frame after the seek", |s| !s.queue.is_empty());
+        assert_eq!(player.state().queue[0].at, 200_000);
+    }
+
+    /// N5: a frame of another size than the first stops the source, since the limits
+    /// and the queue were sized for the first.
+    #[test]
+    fn a_size_change_partway_is_an_error() {
+        let mut clip = Clip::new(10, true, |i| if i < 3 { 2 } else { 4 });
+        clip.next = 1;
+        let player = Player::start(Box::new(clip), 0, size(2), 8, false).expect("a thread");
+        wait(&player, "the failure", |s| s.failure.is_some());
+        let state = player.state();
+        assert_eq!(
+            state.queue.len(),
+            2,
+            "the frames before the change are kept"
+        );
+        assert!(
+            state
+                .failure
+                .as_deref()
+                .is_some_and(|f| f.contains("2x2 to 4x4")),
+            "{:?}",
+            state.failure
+        );
+    }
+
+    /// N7: a looping file whose length isn't known yet, sought past its end, plays from
+    /// the start at the target rather than stopping.
+    #[test]
+    fn a_seek_past_an_unknown_end_plays_on_when_looping() {
+        let mut clip = Clip::new(5, false, |_| 2);
+        clip.next = 1;
+        let player = Player::start(Box::new(clip), 0, size(2), 4, true).expect("a thread");
+        wait(&player, "the queue to fill", |s| s.queue.len() == 4);
+        player.seek(1_000_000);
+        wait(&player, "a frame after the seek", |s| !s.queue.is_empty());
+        let state = player.state();
+        assert!(!state.ended, "it plays on");
+        assert_eq!(
+            state.queue[0].at, 1_000_000,
+            "the file's start, at the target"
+        );
+        assert_eq!(state.queue.get(1).map(|d| d.at), Some(1_040_000));
+    }
 }
