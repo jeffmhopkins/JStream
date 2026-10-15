@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:8d484cc48e9ec9b1", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Mock section says every edit but the output ones; output.status key_set always false; the 0.7 output edits, output.list and key actions answer internal and state.get reports no outputs (mock.rs action/edit/query fallthroughs)" }
+verified = { hash = "b3:1c64b1c5ad2dc41f", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#142 mock output ops) into I1 #153: re-read; main's mock/output text holds, and I1's /mcp wording in ARCH#protocol makes no claim on WsControl" }
 -->
 
 ### The trait

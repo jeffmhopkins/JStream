@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:8c01e3ac115def0d", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 touched apps/jstream-cli only for protocol 0.7 goldens and the new key_set/outputs fields; the CLI is still the remote client and doesn't link the engine; diagram and host table hold" }
+verified = { hash = "b3:2eede68a78567922", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#142 cli goldens) into I1 #153: daemon row says WebSocket API and MCP over streamable HTTP; cli row holds" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:6695f07980c68226", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Merged main (#141's platform-windows row and Credential Manager store) with G1's new jstream-vcam-proto manifest: re-read the whole map; the vcam-proto row (layer 0, no unsafe, no dependencies, pure helpers incl. the SDDL builder, no OS calls) and #141's platform-windows row both match their manifests" }
+verified = { hash = "b3:39b9546e59b31ce6", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#141 platform-windows, G1 vcam-proto rows) into I1 #153: re-read the map; mcp and server rows drop (not built), server's jstream-mcp edge is L4 on L3" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -490,7 +490,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1297cb1237ce04ea", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#150, #151, #152) into #142: only verified lines conflicted; re-read the section: the 0.7 output edits, Stream keys and output.list bullets are #142's, Transport and Slow clients unaffected by #150's test-only change" }
+verified = { hash = "b3:86dec55b53bf8101", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#142 0.7 output edits, keys, output.list; #150-152) into I1 #153: re-read; main's bullets hold and the transport bullet names /mcp when the host turns MCP on" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -588,7 +588,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:e7a22d3fc6b340a6", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: tools.snap grew to about 70 KB with the output ops; tool grouping (output tool takes the new ops) unchanged; other bullets unaffected" }
+verified = { hash = "b3:2ad8bd9f105ad138", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#142 tools.snap about 70 KB) into I1 #153: re-read; schema-size text is main's, Access bullet settles no-Origin at /mcp as built" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

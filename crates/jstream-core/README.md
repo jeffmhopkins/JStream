@@ -92,7 +92,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:cab2a58451ec8ea0", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#142) into #133: prose is main's; re-read Outputs, Stream keys and Pipeline/stop paragraphs; #133's drop order (InputControls after _streams) touches neither the output collection nor the key store and changes no described state, error or deadline" }
+verified = { hash = "b3:fc725b342b0b2d9f", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#142 outputs, stream keys; #133 drop order) into I1 #153: re-read; core text is main's, and the connector/MCP-session sentence still holds with /mcp sessions each calling Engine::connect" }
 -->
 
 ### Engine and sessions

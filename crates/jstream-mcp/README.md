@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:4d29b5c889f24117", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 changed only a test golden (key_set) in src/tests.rs; server, tools, events, jsonrpc, stdio and error bullets unchanged" }
+verified = { hash = "b3:bed288fd85924567", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#142 test golden only) into I1 #153: contents bullets unchanged; the streamable-HTTP paragraph says jstream-server serves it, feeding Server::handle" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:efc099de4381eb41", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: the output tool gains the new ops through the generated table with no code change, as the Tools section says; tools.snap regenerated; revisions, results and logging unchanged" }
+verified = { hash = "b3:4e33a06fc1523a90", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#142 output ops via generated table, tools.snap) into I1 #153: re-read Tools and the I1 Session/Async paragraphs (jstream-server /mcp, one Server per session); both hold" }
 -->
 
 ### Tools

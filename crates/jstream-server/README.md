@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:c890b3b9db54eb66", by = "agent:claude@session_01Gkayyrtq9Ahc5U37dAfdoB", note = "Re-read for #137: test-only change (shutdown tests wait on counted conditions instead of fixed sleeps; CLOSE_TIMEOUT made pub(crate) for the test). No behaviour change; the section still matches" }
+verified = { hash = "b3:a66ba3609c99df8a", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#137/#150 test-only shutdown changes) into I1 #153: contents list (mcp.rs, MCP config fields) and not-yet list re-read against lib.rs, mcp.rs, config.rs" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5b907571e1a851aa", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#150 shutdown tests) into #142: only verified lines conflicted, prose is unchanged on both sides; re-read: serve_with_shutdown and CLOSE_TIMEOUT behaviour unchanged by #150's test-only waits; message contents never logged, so set_key's key is not logged" }
+verified = { hash = "b3:1866d4b57af49a7f", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#150 shutdown tests) into I1 #153 plus review N1: MCP table now says an initialize carrying Mcp-Session-Id ends that session first, logging reason added; rest of the MCP subsection and main's shutdown text re-read against mcp.rs and tests.rs" }
 -->
 
 ### Listening and admission
