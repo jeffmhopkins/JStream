@@ -813,6 +813,8 @@ impl State {
                 buses: self.collection.bus_infos(),
                 sends: self.collection.send_infos(),
             },
+            // The mock describes no kinds, so it lists none.
+            Query::KindList => QueryResult::KindList { kinds: Vec::new() },
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(CallResult::Query { result })
@@ -2325,6 +2327,27 @@ mod tests {
             Ok(parity::COLLECTION_REV)
         );
         (engine, control)
+    }
+
+    /// `kind.list` answers with no kinds, even for kinds `with_kinds` told it about: the
+    /// mock describes none. It answers rather than failing, so a client can report a
+    /// failed `kind.list` without the mock tripping it (#401). `kind.describe` still
+    /// answers `internal`.
+    #[test]
+    fn kind_list_lists_no_kinds() {
+        let (_engine, control) = parity_engine();
+        assert_eq!(
+            query(&*control, Query::KindList),
+            Ok(QueryResult::KindList { kinds: Vec::new() })
+        );
+        let describe = Query::KindDescribe {
+            kind_id: "color".into(),
+        };
+        let refused = query(&*control, describe).expect_err("kind.describe");
+        assert!(
+            matches!(refused.protocol(), Some(ProtocolError::Internal { .. })),
+            "{refused:?}"
+        );
     }
 
     /// The answer to a history call: `(rev, step_rev, undo_depth, redo_depth)`.

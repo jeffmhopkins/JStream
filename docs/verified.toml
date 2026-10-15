@@ -291,7 +291,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:07915c072e50c894" }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:a650491efffa8c19", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Transport bullet against jstream-control README/ws_web.rs/ws_config.rs changes: browser WsControl with subprotocol token is unchanged; error-event handling is a client detail not described here, holds." }
+stamp = { hash = "b3:68844d565b849575", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: the section describes kind.list/kind.describe on the wire and says nothing about the mock's answers; the mock now listing no kinds changes no protocol fact." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:e55527bc3d425ace" }
@@ -303,7 +303,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:506d7d83f33ef2bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: the section describes kind.list/kind.describe on the wire and says nothing about the mock's answers; the mock now listing no kinds changes no protocol fact." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -738,7 +738,7 @@ stamp = { hash = "b3:3e63f714aef88590" }
 stamp = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client ends on error event, CSP reason): CLI uses the native client; exit 3 Disconnected text still holds." }
+stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the jstream-control Mock change (#401, mock kind.list answers an empty list): the CLI design states nothing about which queries the mock answers; --mock, block_on and mock-feature bullets still hold." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
@@ -807,7 +807,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c7379cddeb275056" }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Failures bullet matches ws_web.rs (onerror handler ends the session via end_reason, State::close keeps the first reason; connect reason mentions CSP); test paragraph matches connect.spec.js and ws_config.rs tests. Edited open question 3 so it no longer implies the browser client is untested (e2e via jstream-ui now covers it)." }
+stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Mock subsection against #401: edited the kind.list sentence (kind.list answers with no kinds; kind.describe and delete.plan still answer internal), checked by mock test kind_list_lists_no_kinds; the rest of the trait, async, WebSocket and open questions is unaffected." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d638c6ca8019b15d" }
@@ -831,7 +831,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:506d7d83f33ef2bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Mock subsection against #401: edited the kind.list sentence (kind.list answers with no kinds; kind.describe and delete.plan still answer internal), checked by mock test kind_list_lists_no_kinds; the rest of the trait, async, WebSocket and open questions is unaffected." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -861,7 +861,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:506d7d83f33ef2bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: mock.rs now answers kind.list with an empty list; the Mock bullet (in-memory implementation for testing clients) still holds, no API change." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -879,7 +879,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:5f946069d7342839", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "C9 merged with C10: the Live sources paragraph keeps C10's Painter text and adds that a media file decodes ahead on a thread of its own (so frame calls under the lock never draw or decode), begin_plan and the last plan that reached each source, Source::show (restart, first showing included), Backends::media, NoBackend before injection, and the rebuild on injection. engine.rs (set_media in with_backends, set_source_media, begin_plan in plan_with) and live.rs (set_media beside set_audio_scope, plan/planned, show; install sets planned and still shares painters) match it. tests.rs, tests/audio.rs: FakeMediaDecoders as Backends.media. tests/sources.rs: the two media-file tests (restart when shown again; first showing long after build, #245 B2) beside C10's waveform test; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
+stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the jstream-control Mock change (#401): the differential script (tests.rs) does not call kind.list, so 'the engine's answers are the mock's' still holds; 'unimplemented calls answer internal, as the mock does' still true for kind.describe and delete.plan." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
 stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
@@ -2205,7 +2205,7 @@ stamp = { hash = "b3:eaa109533b8798d8" }
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client error-event handling, CSP wording, open question 3 edit): server-side checks, subprotocol token and CSP description unaffected, holds." }
+stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against the jstream-control Mock change (#401, mock kind.list answers an empty list): the server design never states the mock's query answers; admission, UI, sessions and MCP text unaffected." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d638c6ca8019b15d" }
@@ -2421,10 +2421,10 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:041c75b0f70d216e", by = "agent:u3a-builder", note = "Re-read after merging main; main changed only the connecting bullet (a URL the page policy blocks reads the same as other refused upgrades); this PR's events, selection, scenes and sources, form and routing bullets still match the code" }
+stamp = { hash = "b3:afe0c93fed5dda24", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401 and the jstream-control Mock change: Scenes and sources now says the mock lists no kinds and a failed kind.list offers none but shows its error like any failed call (problem bar, per Routing); rest unchanged." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
+stamp = { hash = "b3:88e3c0efc173cecd", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401 and the jstream-control Mock change: Scenes and sources now says the mock lists no kinds and a failed kind.list offers none but shows its error like any failed call (problem bar, per Routing); rest unchanged." }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -2475,13 +2475,13 @@ stamp = { hash = "b3:a412fc9db0bf618b", by = "agent:u3a-builder", note = "Re-rea
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:f7fbf7c2d86d19fc", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
+stamp = { hash = "b3:78cd518298c93fde", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401 and the jstream-control Mock change: Scenes and sources now says the mock lists no kinds and a failed kind.list offers none but shows its error like any failed call (problem bar, per Routing); rest unchanged." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
 stamp = { hash = "b3:125bc106442671d6", by = "agent:u3a-builder", note = "Re-read after merging main; events, selection, scenes and sources, properties form and routing bullets still match the code; the sources.rs test fixture only gained audio: None for main's SourceInfo field" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:9f1fbe6853555dbc", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+stamp = { hash = "b3:1ff80710c34616bc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: Store bullet now lists list_kinds among the call helpers; Studio's fields (kinds, last failed call) unchanged." }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -2532,7 +2532,7 @@ stamp = { hash = "b3:a412fc9db0bf618b", by = "agent:u3a-builder", note = "Re-rea
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:f7fbf7c2d86d19fc", by = "agent:u3a-builder", note = "Re-read after merging main (stamps moved to docs/verified.toml, text unchanged); contents list still matches app.rs, host.rs, store.rs, panels/ and canvas/" }
+stamp = { hash = "b3:78cd518298c93fde", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against #401: Store bullet now lists list_kinds among the call helpers; Studio's fields (kinds, last failed call) unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."body"]
 stamp = { hash = "b3:984dd6f77ea95af9", by = "agent:u3a-builder", note = "Re-read after merging main; connect and inspectorPage fixtures as described; all 18 tests run locally" }
