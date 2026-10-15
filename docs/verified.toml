@@ -876,7 +876,7 @@ stamp = { hash = "b3:d7db1d06b04d10fc" }
 stamp = { hash = "b3:edefe86e076ea4e3" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:6b3823368b150ab6", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: added that a media input also gets D6's activity gain (when_shown, agreeing with the feeder's audible-while-shown); Audio sources and Live sources text otherwise holds against audio_sources.rs, live.rs, activity.rs; re-read" }
+stamp = { hash = "b3:25fb6c59e89459db", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "B2 (round 4/5): reworded the media input's activity-gain sentence: the feeder hands sound on only while the program's plan reaches the source (end_plan), whatever the gain; traced activity.rs weighted_gains (always nested scenes as roots), audio.rs sync and engine publish_render planning only program; re-read the Audio sources text" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:4b7f99a329a36029" }
@@ -1107,7 +1107,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:1cfcb78c8b9d5f89", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: delay-load sentence merges #328's unit-test-harness wording with C9's MfMediaDecoders DLLs (mfplat, mfreadwrite); re-read, holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:6b3823368b150ab6", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: stale only through core#design; daemon text unchanged by C9b; re-read, holds" }
+stamp = { hash = "b3:25fb6c59e89459db", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Stale only through core#design's B2 rewording of the media input's gain sentence; daemon design text doesn't depend on it; re-read, holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:2c41053918072ae6" }
