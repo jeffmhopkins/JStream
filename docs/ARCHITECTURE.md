@@ -726,7 +726,7 @@ the output gets a black frame. None of this is built yet.
 ## Browser source
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:df9dc95bad832d19", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "New section: S4 result from the maintainer's Windows run (zip s4-results-20261014-222955), each figure checked against same/separate/4k JSON; bindings and helper choice match spike README; sandbox left open per ADR-0021" }
+verified = { hash = "b3:cd6c3960b512a104", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review: sandbox is required where supported (bootstrap layout may replace the helper, or a superseding ADR), zip-size estimate marked unchecked and listed as open, pts wording and all three packet counts (2999/3000/2999) re-checked against the run JSON" }
 -->
 
 A browser source is a CEF off-screen browser
@@ -746,10 +746,11 @@ before it returns. The source's audio comes from CEF's audio handler as planar f
 - **Helper processes:** a separate small `jstream-browser-helper.exe`, set as CEF's
   `browser_subprocess_path`, so the engine exe never runs as a Chromium subprocess. Both
   layouts that ADR-0021 allows measured the same.
-- **Not yet decided:** the sandbox. On Windows, CEF sandboxes subprocesses only in its
-  bootstrap layout, where CEF's `bootstrap.exe` is the exe and loads the application as a
-  DLL. S4 ran unsandboxed and didn't test that layout, so the browser source has to pick
-  it or run unsandboxed before it ships.
+- **Not yet decided:** the sandbox. ADR-0021 requires it where supported. On Windows,
+  CEF sandboxes subprocesses only in its bootstrap layout, where CEF's `bootstrap.exe` is
+  the exe and loads the application as a DLL. S4 ran unsandboxed and didn't test that
+  layout. The browser source must adopt it before it ships, which may replace the helper
+  exe above, or a superseding ADR must accept running unsandboxed.
 
 **S4 result**, on the S1 machine with CEF 154.0.34 (Chromium 154.0.8037.98). Each run
 measured 30 s of the built-in test page, which has a frame counter, alpha probes and a
@@ -767,10 +768,10 @@ measured 30 s of the built-in test page, which has a frame counter, alpha probes
   and blending it over an opaque background gave the expected colours. CEF reused about
   250 distinct texture handles at 1080p and 430 at 4K.
 - **Audio:** CEF honoured the requested 48 kHz stereo in 480-frame (10 ms) packets. Both
-  tones came through at the right pitch and level on the right channels. One run
-  received 2999 packets and another 3000, as expected for 30 s.
-- **Audio timestamps:** a packet's `pts` is not Unix-epoch milliseconds, as CEF's header
-  says. It differed from the wall clock by the same offset to the millisecond in all
+  tones came through at the right pitch and level on the right channels. The runs
+  received 2999, 3000 and 2999 packets, as expected for 30 s.
+- **Audio timestamps:** contrary to CEF's header, which documents Unix-epoch
+  milliseconds, a packet's `pts` is not. It differed from the wall clock by the same offset to the millisecond in all
   three runs, which fits milliseconds since boot (Chromium's QPC-based `TimeTicks`).
   That is inferred, not checked against QPC. If it holds, packets map onto the media
   clock directly.
@@ -779,12 +780,14 @@ measured 30 s of the built-in test page, which has a frame counter, alpha probes
 - **Codecs:** the page reports no H.264 or AAC support, and VP8, VP9, AV1, Opus, Vorbis,
   FLAC, MP3 and WAV playable. That is the royalty-free set ADR-0021 expects.
 - **Runtime size:** the CEF runtime is about 400 MB uncompressed, 290 MB of it
-  `libcef.dll`. Its compressed size in the zip wasn't measured. The runtime includes
-  CEF's `CREDITS.html`.
+  `libcef.dll`. Its compressed size in the zip wasn't measured, so ADR-0021's estimate
+  of 150–250 MB added to the zip is still unchecked. The runtime includes CEF's
+  `CREDITS.html`.
 
-Still open: other GPU vendors and multi-GPU machines (Chromium must render on the
-adapter the engine imports on), several browsers at once, pages with video, input
-events, and the sandboxed layout.
+Still open, before the browser source is built: the CEF runtime's compressed size in
+the zip, other GPU vendors and multi-GPU machines (Chromium must render on the adapter
+the engine imports on), several browsers at once, pages with video, input events, and
+the sandboxed layout.
 
 <a id="persistence"></a>
 ## Persistence, config and secrets
@@ -811,13 +814,16 @@ verified = { hash = "b3:fe28871dd73ab140", by = "agent:claude@session_01QBbMRwRu
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:a4757b3070f69873", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited per ADR-0035: the zip gains jstream-plugin-host.exe from M3; portable layout, state location and S2 vcam registration findings unchanged" }
+verified = { hash = "b3:f7c98d9194d6528e", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review B1: folder list now names jstream-browser-helper.exe beside the CEF runtime, matching ARCH#browser-source, with the bootstrap-layout caveat; rest unchanged" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
 `jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
-runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder.
+runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder,
+with `jstream-browser-helper.exe` for CEF's subprocesses
+([ARCH › Browser source](#browser-source); the sandbox decision may replace it with
+CEF's bootstrap layout).
 From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin host
 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). Release builds
 link the C runtime statically and need only OS components (WebView2, Media Foundation,

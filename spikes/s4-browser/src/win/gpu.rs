@@ -489,8 +489,11 @@ impl Compositor {
         self.gpu.check()?;
         let copied_at = Instant::now();
 
-        let (page_row, composite_row) = self.composite()?;
+        // A recorded wgpu error explains a failed composite, and must not be left behind to
+        // fail the next paint too.
+        let composited = self.composite();
         self.gpu.check()?;
+        let (page_row, composite_row) = composited?;
         Ok(Frame {
             open_ms: ms(opened_at - start),
             copy_ms: ms(copied_at - opened_at),
