@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e9892aea2e4a1928", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; per-session undo history wording holds; server forwards delete.plan as an opaque query" }
+verified = { hash = "b3:c2c953c7e753de42", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: open question 2 now names ADR-0044's subprotocols and says the server still accepts only Authorization; server code unchanged" }
 -->
 
 ### Listening and admission
@@ -265,8 +265,10 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    `jstream-outputs`' RTMPS, so that needs no further governance change.
 2. **Browser token.** Browsers can't set `Authorization` on a WebSocket. The client
    design sends the token in `Sec-WebSocket-Protocol` instead
-   ([jstream-control › Design](../jstream-control/README.md#design)); the subprotocol
-   naming is not decided, so the server accepts only `Authorization` today.
+   ([jstream-control › Design](../jstream-control/README.md#design)): the subprotocols
+   `jstream` and `jstream.token.<token>`, of which the server selects `jstream`
+   ([ADR-0044](../../docs/adr/0044-leptos-web-ui.md)). The browser client sends them;
+   the server accepts only `Authorization` until it implements that.
 3. **UI assets.** Serving the web UI is deferred. MCP over streamable HTTP is settled
    and built (see *MCP over streamable HTTP*); whether it should also offer SSE, once
    the MCP server has notifications to push, is open.

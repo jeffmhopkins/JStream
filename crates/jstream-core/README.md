@@ -151,7 +151,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0b6a236efa7b9362", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#197 B9 delete.plan): re-read with protocol #design's blockers text; B9 changed no core design text; audio.sync still beside both live.sync calls (delete.plan mutates nothing); holds" }
+verified = { hash = "b3:493a0d89f06121c9", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: stale via ARCH#protocol and control#design (browser client, token subprotocol); InProcessControl and engine design untouched" }
 -->
 
 ### Engine and sessions

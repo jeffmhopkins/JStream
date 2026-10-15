@@ -53,6 +53,13 @@ const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
          C and assembly for the primitives (no media code). Used by jstream-outputs for rtmps://",
     ),
     (
+        "prettyplease",
+        None,
+        "`links = \"prettyplease03\"` only enforces one version per graph; its build script prints \
+         cfg declarations and checks that key, and compiles nothing. Reached through leptos_macro \
+         (jstream-ui, ADR-0044)",
+    ),
+    (
         "wasm-bindgen-shared",
         None,
         "`links = \"wasm_bindgen\"` only enforces one version per graph; its build script sets \

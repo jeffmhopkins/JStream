@@ -211,3 +211,11 @@ relied_on = "Source of the text source's bundled font (crates/jstream-sources/as
 review_every = "365d"
 status = "ok"
 checked_note = "Re-read: LICENSE is the Apache License 2.0, and src/hinted/Roboto-Regular.ttf is on main with the SHA-256 the jstream-sources README records"
+
+[[external]]
+id = "trunk"
+url = "https://github.com/trunk-rs/trunk"
+relied_on = "trunk builds a Rust wasm32 binary into a static site (index.html, the wasm-bindgen JavaScript glue, the .wasm and assets) from an index.html with data-trunk links, and uses the wasm-bindgen CLI matching Cargo.lock's wasm-bindgen when one is on PATH (ADR-0044, crates/jstream-ui/README.md#build)"
+review_every = "180d"
+status = "unverified"
+checked_note = "Release v0.21.14's linux binary built jstream-ui with a wasm-bindgen 0.2.129 CLI on PATH; the page itself was not reachable from the session"

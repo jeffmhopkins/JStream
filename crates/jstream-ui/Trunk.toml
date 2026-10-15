@@ -1,0 +1,5 @@
+# `trunk build` (see README.md#build). The output goes to `dist/`.
+
+[build]
+target = "index.html"
+dist = "dist"
