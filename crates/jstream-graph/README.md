@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:05048be4fcdc3569", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1: added The collection file paragraph (format, migrations, load by replaying edits, kind_version refusal, errors without values) and its tests, against persist/mod.rs and persist/tests.rs; Model, Applying, Reading unchanged" }
+verified = { hash = "b3:e358952cac01ddeb", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 after merging B3: collection file paragraph now covers the canvas and the two placement forms (exactly one of transform/geometry), rebuild order starts with canvas.set_size, tests list adds placement and canvas refusals; B3's model and apply prose untouched" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -115,8 +115,9 @@ stored transform and no geometry. `Source::to_info`,
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 1), `rev`, scenes in display order with their items bottom first
-(each with its transform, crop and `visible`), sources ordered by ID (with
+(`SCHEMA_VERSION`, now 1), `rev`, the `canvas`, scenes in display order with their
+items bottom first (each with its placement in its own form, a legacy `transform` or a
+`geometry`, exactly one of them, then its crop and `visible`), sources ordered by ID (with
 `kind_version`, the descriptor version a `builtin` source's settings follow, ADR-0025),
 and outputs ordered by ID. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -129,8 +130,9 @@ the engine's; this crate does no I/O.
   own objects, so a newer field is never silently dropped by the next save.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
-  graph with the caller's kinds: scenes, then sources (each after the sources its
-  settings refer to), then items with their crop and visibility, then outputs. A
+  graph with the caller's kinds: the canvas size, scenes, then sources (each after the
+  sources its settings refer to), then items in their placement form with their crop
+  and visibility, then outputs. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error; nothing is partly loaded. Then `rev` is set
@@ -152,13 +154,14 @@ property test: a seeded generator applies 6000 random
 batches. After each successful one, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged.
-The collection file's tests (`persist/tests.rs`): saving the parity collection plus a
-source whose settings refer to a later one must produce exactly the checked-in
+The collection file's tests (`persist/tests.rs`): saving the parity collection (a 1280×720
+canvas, legacy and geometry items) plus a source whose settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
-references, cycles, unknown kinds, a credential in a URL, a kind version mismatch).
+references, cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
+item with both or neither placement form, an invalid geometry or canvas).
 
 <a id="follow-ups"></a>
 ## Not yet

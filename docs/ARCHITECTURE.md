@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:e39a8376b6d18fa3", by = "agent:claude@session_01BGy3upvXzToxUvRvRa77KM", note = "D4 adds only a dev-dependency (assert_no_alloc) to jstream-audio's Cargo.toml; its row (layer 2, summary, unsafe no) is unchanged" }
+verified = { hash = "b3:daf440043f0b1d9b", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 merge of main (B3): graph Cargo.toml still adds only serde and thiserror, external; rows unchanged" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -804,7 +804,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:c83cb54378672e70", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1: Collections bullet now says graph checks a loaded collection like edits and core saves atomically after every change; kind versions are recorded per ADR-0025 (mismatch refused until kind migrations exist); other bullets untouched" }
+verified = { hash = "b3:d04415a3dbef1a24", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "B1 after B3: persist/ now also saves the canvas and geometry placements; Collections bullet (versioned JSON, migrations, checked like edits, core saves atomically) still holds" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in

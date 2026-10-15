@@ -108,7 +108,14 @@ fn an_empty_collection_round_trips() {
     let json = graph.to_collection_json();
     assert_eq!(
         serde_json::from_str::<Value>(&json).ok(),
-        Some(json!({"schema_version": 1, "rev": 0, "scenes": [], "sources": [], "outputs": []}))
+        Some(json!({
+            "schema_version": 1,
+            "rev": 0,
+            "canvas": {"width": 1920, "height": 1080},
+            "scenes": [],
+            "sources": [],
+            "outputs": []
+        }))
     );
     assert_eq!(load(&json), Ok(graph));
 }
@@ -264,5 +271,42 @@ fn migrations_run_in_order_from_the_file_version() {
     assert_eq!(
         migrate_with(&mut newer, &migrations),
         Err(LoadError::Version { found: 4 })
+    );
+}
+
+/// Each item has exactly one placement form, and the canvas and a geometry pass the
+/// same checks as their edits.
+#[test]
+fn placements_and_the_canvas_are_checked() {
+    // `i4` in scene `b` has a geometry; `i3` in scene `a` a legacy transform.
+    let both = edit_file(|v| {
+        v["scenes"][0]["items"][0]["transform"] = v["scenes"][1]["items"][0]["transform"].clone();
+    });
+    let neither = edit_file(|v| {
+        v["scenes"][0]["items"][0]
+            .as_object_mut()
+            .map(|o| o.remove("geometry"));
+    });
+    for file in [both, neither] {
+        assert_eq!(
+            load(&file),
+            Err(LoadError::Parse(
+                "item `i4`: exactly one of `transform` and `geometry` must be set".into()
+            ))
+        );
+    }
+
+    let flat = edit_file(|v| v["scenes"][0]["items"][0]["geometry"]["size"]["height"] = json!(0.0));
+    assert!(
+        matches!(load(&flat), Err(LoadError::Invalid { ref object, .. }) if object == "item `i4`"),
+        "{:?}",
+        load(&flat)
+    );
+
+    let canvas = edit_file(|v| v["canvas"]["width"] = json!(0));
+    assert!(
+        matches!(load(&canvas), Err(LoadError::Invalid { ref object, .. }) if object == "the canvas"),
+        "{:?}",
+        load(&canvas)
     );
 }

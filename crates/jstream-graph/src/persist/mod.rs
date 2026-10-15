@@ -13,10 +13,10 @@
 //!
 //! Docs: docs/ARCHITECTURE.md#persistence, docs/RULES.md#R-API-003, crates/jstream-graph/README.md#purpose
 
-use crate::Graph;
+use crate::{Graph, Placement};
 use jstream_protocol::{
-    Crop, Edit, ItemId, ItemTransform, OutputId, OutputKind, ProtocolError, Rev, SceneId, Settings,
-    SourceId, SourceKind,
+    Canvas, Crop, Edit, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, ProtocolError,
+    Rev, SceneId, Settings, SourceId, SourceKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -93,6 +93,7 @@ pub enum LoadError {
 struct File {
     schema_version: u32,
     rev: Rev,
+    canvas: Canvas,
     /// In display order.
     scenes: Vec<FileScene>,
     /// Ordered by ID.
@@ -115,7 +116,12 @@ struct FileScene {
 struct FileItem {
     id: ItemId,
     source_id: SourceId,
-    transform: ItemTransform,
+    /// A legacy placement (ADR-0022): exactly one of `transform` and `geometry` is set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    transform: Option<ItemTransform>,
+    /// A placement as a box on the canvas.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    geometry: Option<ItemGeometry>,
     crop: Crop,
     visible: bool,
 }
@@ -151,6 +157,7 @@ impl Graph {
         let file = File {
             schema_version: SCHEMA_VERSION,
             rev: self.rev,
+            canvas: state.canvas,
             scenes: state
                 .scenes
                 .iter()
@@ -160,12 +167,19 @@ impl Graph {
                     items: scene
                         .items
                         .iter()
-                        .map(|item| FileItem {
-                            id: item.id.clone(),
-                            source_id: item.source_id.clone(),
-                            transform: item.transform,
-                            crop: item.crop,
-                            visible: item.visible,
+                        .map(|item| {
+                            let (transform, geometry) = match item.placement {
+                                Placement::Legacy(transform) => (Some(transform), None),
+                                Placement::Geometry(geometry) => (None, Some(geometry)),
+                            };
+                            FileItem {
+                                id: item.id.clone(),
+                                source_id: item.source_id.clone(),
+                                transform,
+                                geometry,
+                                crop: item.crop,
+                                visible: item.visible,
+                            }
                         })
                         .collect(),
                 })
@@ -253,10 +267,20 @@ fn migrate_with(value: &mut Value, migrations: &[Migration]) -> Result<(), LoadE
 }
 
 /// The edits that build `file`'s collection from an empty one, each with the object it
-/// creates for the error message. Scenes come first, empty and in display order; then
-/// sources, each after the sources its settings refer to; then items, and outputs.
+/// creates for the error message. The canvas comes first (when not the default), then
+/// scenes, empty and in display order; then sources, each after the sources its
+/// settings refer to; then items, and outputs.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
+    if file.canvas != graph.state.canvas {
+        edits.push((
+            "the canvas".to_owned(),
+            Edit::CanvasSetSize {
+                width: file.canvas.width,
+                height: file.canvas.height,
+            },
+        ));
+    }
     for scene in &file.scenes {
         edits.push((
             format!("scene `{}`", scene.id),
@@ -275,13 +299,19 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
     for scene in &file.scenes {
         for item in &scene.items {
             let object = format!("item `{}`", item.id);
+            if item.transform.is_some() == item.geometry.is_some() {
+                return Err(LoadError::Parse(format!(
+                    "{object}: exactly one of `transform` and `geometry` must be set"
+                )));
+            }
             edits.push((
                 object.clone(),
                 Edit::ItemAdd {
                     scene_id: scene.id.clone(),
                     item_id: item.id.clone(),
                     source_id: item.source_id.clone(),
-                    transform: Some(item.transform),
+                    transform: item.transform,
+                    geometry: item.geometry,
                 },
             ));
             if item.crop != Crop::NONE {

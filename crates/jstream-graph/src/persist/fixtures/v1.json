@@ -1,11 +1,42 @@
 {
   "schema_version": 1,
   "rev": 2,
+  "canvas": {
+    "width": 1280,
+    "height": 720
+  },
   "scenes": [
     {
       "id": "b",
       "name": "B",
-      "items": []
+      "items": [
+        {
+          "id": "i4",
+          "source_id": "cam",
+          "geometry": {
+            "center": {
+              "x": 640.0,
+              "y": 360.0
+            },
+            "size": {
+              "width": 320.0,
+              "height": 180.0
+            },
+            "fit_mode": "fill",
+            "rotation_deg": 0.0,
+            "tilt_deg": 0.0,
+            "turn_deg": 0.0,
+            "depth_px": 0.0
+          },
+          "crop": {
+            "left": 0,
+            "top": 0,
+            "right": 0,
+            "bottom": 0
+          },
+          "visible": true
+        }
+      ]
     },
     {
       "id": "a",
