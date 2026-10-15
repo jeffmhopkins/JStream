@@ -1812,7 +1812,7 @@ impl State {
             // nothing to restart otherwise, which is no failure.
             Action::AudioResetLoudness {} => {
                 self.routing.reset_loudness();
-                return Ok(CallResult::Action {});
+                return Ok(CallResult::action());
             }
             Action::SceneSwitch { scene_id } => {
                 if self.studio.switch(self.graph.state(), &scene_id)? {

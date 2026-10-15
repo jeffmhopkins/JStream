@@ -538,7 +538,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:a02f3d2816aa83bf", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (e1e2a94) into pairing: main took protocol 0.18 for virtual_cam, so pairing ships as 0.19; re-read main's text beside this PR's pairing text and checked every pairing version mention says 0.19 and virtual_cam's stays 0.18; holds" }
+verified = { hash = "b3:6a7d646d8dea24c5", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -680,7 +680,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:6ae5b6bb90cc519e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
+verified = { hash = "b3:65fa80ef24b99059", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

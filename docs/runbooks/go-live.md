@@ -36,7 +36,7 @@ verified = { hash = "b3:18cd4472efb91ec3", by = "agent:claude@session_01WbL3WRbc
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:336b7adb18bc9d53", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
+verified = { hash = "b3:e0ce2b285d29a4d0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -100,7 +100,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:e5ef4614b0ffbc23", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
+verified = { hash = "b3:2363e773d506d1ce", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

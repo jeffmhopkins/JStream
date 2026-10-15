@@ -14,8 +14,7 @@ use crate::encoder::EncoderProfile;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::id::{
-    BusId, DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId,
-    SourceId,
+    BusId, DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId,
 };
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;

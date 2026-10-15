@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5147b8af968798bb", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at Q3 (#309): the design text is main's (Playwright against a mock daemon); D5's mock additions (buses, sends, audio) are additive to the state the mock daemon serves; holds" }
+verified = { hash = "b3:eb9eb061f9cf3467", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

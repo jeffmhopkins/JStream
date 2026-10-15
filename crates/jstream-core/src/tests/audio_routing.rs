@@ -106,7 +106,7 @@ fn the_mixer_follows_edits_and_undo_and_meters_tick() {
         action: Action::AudioResetLoudness {},
     };
     let done = block_on(control.call(reset.clone())).expect("reset");
-    assert_eq!(done.result, CallResult::Action {});
+    assert_eq!(done.result, CallResult::action());
 
     // Once the program stops, no meters go out and a reset is still no failure.
     detach();

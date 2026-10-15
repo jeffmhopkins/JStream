@@ -710,7 +710,7 @@ impl State {
                 });
             }
             // The mock runs no mixer, so there is no loudness to reset.
-            Action::AudioResetLoudness {} => return Ok(CallResult::Action {}),
+            Action::AudioResetLoudness {} => return Ok(CallResult::action()),
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {

@@ -50,8 +50,8 @@ pub use geometry::{
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{
-    BusId, ClientId, DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId,
-    Rev, SceneId, SourceId,
+    BusId, ClientId, DeviceId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev,
+    SceneId, SourceId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
