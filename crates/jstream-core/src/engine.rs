@@ -34,6 +34,7 @@ use jstream_protocol::{
     OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
     SecretString, SourceId,
 };
+use jstream_sources::AudioScope;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -85,10 +86,14 @@ struct Shared {
     /// Where the collection is saved, if the host named a file. Taken before the
     /// collection lock, never while holding it, so the disk write happens outside it.
     collection_file: Mutex<Option<CollectionFile>>,
+    /// The program mix's latest audio: the mixer thread pushes each block, and the
+    /// `waveform` and `spectrum` sources draw it.
+    audio_scope: Arc<AudioScope>,
 }
 
 impl Default for Engine {
     fn default() -> Self {
+        let audio_scope = Arc::new(AudioScope::new());
         Self {
             shared: Arc::new_cyclic(|shared: &Weak<Shared>| Shared {
                 state: Mutex::new({
@@ -96,12 +101,14 @@ impl Default for Engine {
                     state.graph = Graph::new().with_kinds(crate::kinds::builtin());
                     let host: Weak<dyn LiveHost> = shared.clone();
                     state.live = LiveSources::new(host);
+                    state.live.set_audio_scope(Arc::clone(&audio_scope));
                     state
                 }),
                 snapshots: SnapshotWorker::default(),
                 keys: Mutex::new(None),
                 audit: Audit::default(),
                 collection_file: Mutex::new(None),
+                audio_scope,
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -364,6 +371,11 @@ impl Engine {
     /// The ledger the pipeline's [`DropGuard`](crate::drops::DropGuard) removes from.
     pub(crate) fn drop_ledger(&self) -> Arc<Mutex<DropLedger>> {
         Arc::clone(&self.drops)
+    }
+
+    /// The scope the program mix's audio goes to, for the mixer thread.
+    pub(crate) fn audio_scope(&self) -> Arc<AudioScope> {
+        Arc::clone(&self.shared.audio_scope)
     }
 
     /// A thread that emits `stats.tick` about once a second until `stop` is set.

@@ -60,7 +60,8 @@ state machine. Contents:
   with `set_source_frame` wins over the live one, and a kind that is only described
   draws nothing, except that a `display` source shows the output pipeline's capture
   on the render thread (see *Live sources* and *Snapshots* in [Design](#design)).
-  Audio-only kinds make no frames and have no live source.
+  Audio-only kinds make no frames and have no live source. The `waveform` and
+  `spectrum` sources draw the program mix's audio from the engine's `AudioScope`.
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
   on, added when the source is created or turned on and removed when it is deleted or
@@ -115,7 +116,8 @@ state machine. Contents:
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/audio.rs`,
-  `src/tests/audio_routing.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
+  `src/tests/audio_routing.rs`, `src/tests/sources.rs`, `tests/mcp.rs`,
+  `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
   end), the shared parity fixture, a differential run against
@@ -148,7 +150,8 @@ state machine. Contents:
   stand-in (`src/tests/audio.rs`: the defaults while there is none, sources added and
   deleted while an output runs, an unavailable device or application that leaves the
   output running, a failed stream reopened, an application found again under a new
-  process ID, and a settings change reopening its input), the output edits and the
+  process ID, a settings change reopening its input, and the program mix reaching the
+  engine's audio scope while an output runs), the output edits and the
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
@@ -167,7 +170,13 @@ state machine. Contents:
   source's activity gain following scene switches, shown and hidden items and undo
   (`activity.rs` checks reachability itself); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
-  off closes its input and its meter and turning it on opens them again. The parity
+  off closes its input and its meter and turning it on opens them again. The live
+  sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
+  source built and rebuilt, a stored frame winning over the live source, a kind that
+  isn't built showing the capture, a missing file showing nothing, an animated image
+  advancing on the clock, on the sources thread by itself and after a clock swap, and
+  a `waveform` source painted
+  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
 Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
@@ -435,7 +444,12 @@ animation restarts with it. A build that fails is logged at `warn` with the sour
 and an error that never names a host path, and the source draws nothing; a kind that
 is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 (`audio_input`, `desktop_audio`, `app_audio`, whose descriptors have no video) get no
-`Source`: the program stage records them (*Audio sources*).
+`Source`: the program stage records them (*Audio sources*). Every source is built with
+the engine's one `jstream_sources::AudioScope` in its `Context`: the mixer thread
+pushes each program block into it, and the `waveform` and `spectrum` sources draw its
+latest 2048 samples. The program mix runs only while the program stage does, so with
+no output running they draw silence, and once settled on it they are checked every
+250 ms rather than every frame.
 
 **Audio sources.** `audio_sources::AudioSources` holds, under the collection lock, the
 `jstream_sources::AudioTarget` of every audio-only source, or none while the source's
@@ -483,17 +497,23 @@ the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version onl
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image or a video advances on the clock and a
-still one is never re-planned. Each plan is numbered (`begin_plan`), and each source
-remembers the last plan that reached it, starting from the plan current when it was
-built: one that a plan reaches after plans that didn't (its item was hidden, or its
-scene wasn't the program) is told so first (`Source::show`), so a media file can
-restart, including the first time it is shown. Sources run on the media clock of the
-backends the host injects (`with_backends`), else on a monotonic clock of the engine's
-own. A clock swap restarts every running source's timing and drops the re-plan timed
-on the old clock: the thread re-plans at once on the new one. `media` sources play
-through the injected backends' media files (`Backends::media`); before any are
-injected a `media` source fails to build (`NoBackend`), and injecting them rebuilds
-every source. `collection` asset
+still one is never re-planned. A source with a `jstream_sources::Painter` (the
+`waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
+FFT each 1/30 s) is painted by that thread just before each re-plan, holding no engine
+lock, so under the collection lock the plan only takes the frame painted last;
+`install`, `sync` and a clock swap hand the thread the running painters and their time
+zeros. Every other built kind makes its frames when built, or (a `media` file) decodes
+them ahead on a thread of its own, so the plan's `frame` calls under the lock never
+draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
+last plan that reached it, starting from the plan current when it was built: one that
+a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
+program) is told so first (`Source::show`), so a media file can restart, including
+the first time it is shown. Sources run on the media clock of the backends the host
+injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
+restarts every running source's timing and drops the re-plan timed on the old clock:
+the thread re-plans at once on the new one. `media` sources play through the injected
+backends' media files (`Backends::media`); before any are injected a `media` source
+fails to build (`NoBackend`), and injecting them rebuilds every source. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
 for every `app` reference, the asset is unreadable and the source draws nothing.
 
@@ -862,7 +882,9 @@ begins and raises the stop flag; the output thread, once it sees the flag, sends
 the encoders queued until then and tells the target that deadline
 (`LivePublish::stop_by`; the default does nothing). Once it passes, or a send fails
 while stopping, the thread drops the packets still queued, counts them in
-`output_packets`, and calls `finish`. A failure while stopping is logged, not
+`output_packets`, and calls `finish`. It checks the deadline before each of a pass's
+video and audio sends, so a slow target keeps it past the deadline by one send at
+most. A failure while stopping is logged, not
 reported: the output is already on its way to `stopped`. The stop does not count on
 the target honoring the deadline (#138): it waits for a publishing output thread
 only until the deadline plus 500 ms (`OUTPUT_GRACE`), then returns without it and
@@ -898,7 +920,10 @@ release it before taking the collection lock. A source must not call back into t
 engine while that mutex is held. A stopping program stage detaches its mixer from the
 audio routing under the collection lock, which is why it is never dropped while that
 lock is held, as its final `stats.tick` already requires. The master's meters are
-atomics the mixer thread writes and the sampler reads, with no lock. The snapshot compositor belongs to the snapshot
+atomics the mixer thread writes and the sampler reads, with no lock. The `jstream-sources`
+thread builds sources and paints the painted ones (*Live sources*) holding no engine
+lock, then takes the collection lock only to install a build or re-plan, which asks
+each live source for a frame it already has. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The render snapshot is published under the collection
 lock (which makes the control side its one writer) and loaded by the render thread
@@ -1048,8 +1073,10 @@ it draws the capture filling the frame. It repeats the last capture when the mai
 is empty, and reads the frame back. This cut encodes that CPU readback, and the
 readback is counted. The mixer thread polls the media clock and pushes 48 kHz stereo
 blocks mixed from the audio sources' inputs (see *Audio sources* in Design; the
-microphone and the desktop loopback while the collection has none), and meters each
-master block's true peak and loudness. Once the stage is up, the engine routes the
+microphone and the desktop loopback while the collection has none), meters each
+master block's true peak and loudness, and also pushes each block into the engine's
+audio scope for the `waveform` and `spectrum` sources (a lock-free ring: no lock, no
+allocation). Once the stage is up, the engine routes the
 collection's buses, faders and sends into its mixer until it stops (see *Audio
 routing* in Design). Every running output shares that one program stage (capture,
 render, mixer, audio inputs); the first `output.start` builds it and the

@@ -1,6 +1,6 @@
 //! The `Source` and `SourceKind` seams, and what a source is created with.
 
-use crate::SourceError;
+use crate::{AudioScope, SourceError};
 use jstream_media::{MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::MediaDecoders;
 use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
@@ -14,10 +14,12 @@ use std::sync::Arc;
 /// Sources are created by their [`SourceKind`] from a complete, already validated
 /// settings map. Creating one may block (an image is read and decoded then), so it never
 /// happens on a real-time thread. Asking for a frame doesn't block on I/O or allocate
-/// for the built-in kinds: frames are made when the source is created or updated, or
-/// decoded ahead on a thread of the source's own (`media`, which hands each over under a
-/// short lock), and handed out as shared [`Arc`]s, so the render thread can hold one
-/// past the next update.
+/// for the built-in kinds, and frames are handed out as shared [`Arc`]s, so the render
+/// thread can hold one past the next update. Most make their frames when created or
+/// updated; a `media` file decodes them ahead on a thread of its own and hands each
+/// over under a short lock; a source whose frames follow something live (the
+/// `waveform` and `spectrum` kinds) draws them in its [`Painter`] instead, and `frame`
+/// hands out the one painted last.
 pub trait Source: Send {
     /// The frame to show at `at`, the time since the source started on the media clock
     /// (ADR-0014, docs/adr/0014-media-clock.md). A time before the start shows the
@@ -50,6 +52,25 @@ pub trait Source: Send {
     /// [`SourceError::NotLive`] when a non-live parameter changed, and
     /// [`SourceError::Setting`] when a value doesn't have its descriptor's type.
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError>;
+
+    /// What draws this source's frames ahead of [`frame`](Self::frame), for a source
+    /// whose frames follow something live; `None` (the default) for one whose frames are
+    /// made on create and update.
+    fn painter(&self) -> Option<Arc<dyn Painter>> {
+        None
+    }
+}
+
+/// Draws a source's next frame, off any lock the caller of [`Source::frame`] holds.
+///
+/// Drawing a frame can take milliseconds (a whole frame's pixels, an FFT), so a host
+/// that asks for frames under a lock calls `paint` before it takes that lock, when
+/// [`Source::next_change`] said the frame is due, and `frame` then hands the painted
+/// frame out at once. Painting allocates only while the source's pool of frames grows,
+/// or when every frame in it is still held.
+pub trait Painter: Send + Sync {
+    /// Draws the frame to show at `at`, on the same clock as [`Source::frame`].
+    fn paint(&self, at: MediaTime);
 }
 
 /// A source kind: its descriptor (`kind.describe`) and how to create its sources.
@@ -78,6 +99,9 @@ pub struct Context {
     pub assets: AssetRoots,
     /// Size limits for decoded assets.
     pub limits: Limits,
+    /// The program mix's audio, which the `waveform` and `spectrum` sources draw.
+    /// `None` draws silence.
+    pub audio: Option<Arc<AudioScope>>,
     /// The platform's media files (ADR-0031): what the `media` kind demuxes and decodes
     /// with. `None` until the host injects the platform's backends; `media` sources
     /// then fail with [`SourceError::NoBackend`].
@@ -89,6 +113,7 @@ impl std::fmt::Debug for Context {
         f.debug_struct("Context")
             .field("assets", &self.assets)
             .field("limits", &self.limits)
+            .field("audio", &self.audio)
             .field("media", &self.media.as_ref().map(|_| "MediaDecoders"))
             .finish()
     }

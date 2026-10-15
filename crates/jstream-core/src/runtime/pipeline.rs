@@ -54,6 +54,7 @@ use jstream_protocol::{
     RateControl as ProfileRate,
 };
 use jstream_render::{Compositor, OpenOptions, Reclaimed, RenderError, ResourceCache};
+use jstream_sources::AudioScope;
 
 use crate::audio::{MasterMetering, MixerHandles};
 use crate::audio_sources::{AudioInputs, Wanted};
@@ -894,8 +895,13 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         let stop = Arc::clone(&stop);
         let fail = fail_tx;
         let collector = mixer_collector;
+        let out = MixOut {
+            inputs: audio_inputs,
+            format,
+            scope: engine.audio_scope(),
+        };
         let mixing = Mixing { mixer, metering };
-        move || mixer_thread(mixing, clock, audio_inputs, format, stop, fail, &collector)
+        move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -1625,27 +1631,28 @@ fn push_each<T>(targets: &mut Vec<T>, mut push: impl FnMut(&T) -> bool, mut reti
     }
 }
 
+/// Where the mixer thread's blocks go.
+struct MixOut {
+    /// The encoder sessions the program hands the thread.
+    inputs: Receiver<AudioInput>,
+    /// The blocks' format.
+    format: AudioFormat,
+    /// What the `waveform` and `spectrum` sources draw.
+    scope: Arc<AudioScope>,
+}
+
 /// The mixer thread's boundary: a panic is caught and reported as fatal. The encoders
 /// then get no more audio, so the outputs cannot keep running.
 fn mixer_thread(
     mixing: Mixing,
     clock: Arc<dyn MediaClock>,
-    inputs: Receiver<AudioInput>,
-    format: AudioFormat,
+    out: &MixOut,
     stop: Arc<AtomicBool>,
     fail: Sender<PipelineEvent>,
     collector: &Collector,
 ) {
     let result = panic::catch_unwind(AssertUnwindSafe(|| {
-        mixer_loop(
-            mixing,
-            clock.as_ref(),
-            &inputs,
-            format,
-            &stop,
-            &fail,
-            collector,
-        );
+        mixer_loop(mixing, clock.as_ref(), out, &stop, &fail, collector);
     }));
     if let Err(panic) = result {
         report(
@@ -1662,22 +1669,28 @@ struct Mixing {
     metering: MasterMetering,
 }
 
-/// Mixes on the media clock, meters the master, and pushes each block into every encoder session the
-/// program has handed it, letting go of one that has finished. A rejected block or a
-/// poll error is fatal: both mean the mixer and the encoder disagree about the format,
-/// which no retry fixes.
+/// Mixes on the media clock, meters the master, and pushes each block into the audio
+/// scope (which neither locks nor allocates) and into every encoder session the program
+/// has handed it, letting go of one that has finished. A rejected block or a poll error
+/// is fatal: both mean the mixer and the encoder disagree about the format, which no
+/// retry fixes.
 fn mixer_loop(
     Mixing {
         mut mixer,
         mut metering,
     }: Mixing,
     clock: &dyn MediaClock,
-    inputs: &Receiver<AudioInput>,
-    format: AudioFormat,
+    out: &MixOut,
     stop: &AtomicBool,
     fail: &Sender<PipelineEvent>,
     collector: &Collector,
 ) {
+    let MixOut {
+        inputs,
+        format,
+        scope,
+    } = out;
+    let format = *format;
     let samples_len = mixer.config().block_frames.saturating_mul(2);
     let mut samples = vec![0.0f32; samples_len];
     let mut targets: Vec<AudioInput> = Vec::new();
@@ -1685,6 +1698,7 @@ fn mixer_loop(
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
                 metering.process(&samples);
+                scope.push(format.sample_rate(), &samples);
                 targets.extend(inputs.try_iter());
                 let mut rejected = None;
                 // The mix itself does not allocate. `AudioInput::push` takes an owned
@@ -1817,6 +1831,13 @@ fn output_loop(job: OutputJob) {
                     failed = ended("video", end);
                 }
             }
+        }
+        // Checked again between the two sends, so a target that ignores the deadline
+        // keeps the thread past it by one send at most, inside `OUTPUT_GRACE`, and
+        // what is left is still counted before the stop reads the final drops.
+        if drain.is_some_and(|deadline| Instant::now() >= deadline) {
+            abandoned = true;
+            break;
         }
         if failed.is_none() && !audio_done {
             match audio.recv_timeout(Duration::from_millis(2)) {

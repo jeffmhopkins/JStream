@@ -266,6 +266,35 @@ fn a_settings_change_reopens_the_input_and_stopping_clears_the_status() {
     assert_eq!(status(&engine, "mic"), None);
 }
 
+#[test]
+fn the_program_mix_feeds_the_audio_scope_while_an_output_runs() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let scope = engine.audio_scope();
+    let mut window = [0.0f32; 256];
+    assert_eq!(
+        scope.latest(&mut window),
+        (0, 0),
+        "no mix before an output runs"
+    );
+
+    // The default microphone and desktop inputs each deliver a steady 0.25: the scope
+    // sees their mix (the mixer's latency and resampler settle first).
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(
+        eventually(|| {
+            audio.deliver(480, 0.25);
+            clock.advance(10_000);
+            let (_, rate) = scope.latest(&mut window);
+            rate == 48_000 && window.iter().any(|&s| s > 0.1)
+        }),
+        "the scope saw no audio: {window:?}"
+    );
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+}
+
 /// The routing (D5) finds the inputs the program stage opens: an audio source that
 /// records is metered in `meters.tick`. Turning its audio off closes its input and drops
 /// its meter, and doesn't bring the default microphone and desktop back; turning it on

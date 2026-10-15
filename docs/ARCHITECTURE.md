@@ -358,11 +358,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
   built-in kinds come from `jstream-sources`. The engine runs a source of each one
-  whose kind is built (`color`, `image`, `media` and `text`), rebuilt when its settings
-  change, and the program mix shows its frames, animations and videos advancing on the
-  media clock. The audio-only kinds (`audio_input`, `desktop_audio`, `app_audio`) have
-  no `Source`: while an output runs, the engine records each as a mixer input, routed
-  as its audio and sends say.
+  whose kind is built (`color`, `image`, `media`, `text`, `waveform` and `spectrum`),
+  rebuilt when its settings change, and the program mix shows its frames, animations
+  and videos advancing on the media clock. The audio-only kinds (`audio_input`,
+  `desktop_audio`, `app_audio`) have no `Source`: while an output runs, the engine
+  records each as a mixer input, routed as its audio and sends say.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
   container: mp4 }`, the path checked to be absolute and to end in a file name, or

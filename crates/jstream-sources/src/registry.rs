@@ -6,6 +6,7 @@ use crate::color::ColorKind;
 use crate::describe::described;
 use crate::image::ImageKind;
 use crate::media::MediaKind;
+use crate::scope::{SpectrumKind, WaveformKind};
 use crate::text::TextKind;
 use crate::{Context, Source, SourceError, SourceKind};
 use jstream_protocol::{KindDescriptor, Settings};
@@ -18,8 +19,8 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0031, docs/adr/0031-source-types-and-decoding-scope.md).
-    /// `color`, `image`, `media` and `text` produce frames. `audio_input`,
-    /// `desktop_audio` and `app_audio` are audio-only: the engine records them, and
+    /// `color`, `image`, `media`, `text`, `waveform` and `spectrum` produce frames.
+    /// `audio_input`, `desktop_audio` and `app_audio` are audio-only: the engine records them, and
     /// `create` fails with [`SourceError::AudioOnly`]. `display`, `webcam` and `window`
     /// are described only, so their sources can be created and configured but fail to
     /// start with [`SourceError::NotBuilt`].
@@ -32,6 +33,8 @@ impl Registry {
         add(Box::new(ImageKind::new()));
         add(Box::new(MediaKind::new()));
         add(Box::new(TextKind::new()));
+        add(Box::new(WaveformKind::new()));
+        add(Box::new(SpectrumKind::new()));
         for kind in audio::kinds() {
             add(Box::new(kind));
         }
