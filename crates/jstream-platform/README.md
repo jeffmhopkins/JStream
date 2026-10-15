@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:f7828f81626ffbed", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 cascade from ARCH#threading: re-read; the only change there is the CLAP plugin hosts paragraph's build status and dry-signal bypass, which this section doesn't rely on or mention; holds" }
+verified = { hash = "b3:f3bb30b377a9616c", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (#231 D7b): stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:45b30ccaf148f3ea", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 cascade from ARCH#threading: re-read; the only change there is the CLAP plugin hosts paragraph's build status and dry-signal bypass, which this section doesn't rely on or mention; holds" }
+verified = { hash = "b3:6f0cfa47e9ecaccc", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

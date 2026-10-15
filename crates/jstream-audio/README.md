@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:319c37c56c3fbc38", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: re-read; new insert_host_filter bullet (input, bus, output tap; master refused; block initialised and host ready) against handle.rs and cmd.rs add_host_filter, host.rs tests bullet and no_alloc CLAP-filter mention against the tests; rest unchanged" }
+verified = { hash = "b3:cab93ffe9cf6a487", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -176,7 +176,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:c57be892976fae28", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1: re-read; new CLAP filters paragraph against rt/host.rs (write n, read n-depth, latency depth*block+plugin, dry fallback with same latency, miss counters, 2 ms crossfade capped at a block, non-finite to 0, reset bumps reset_seq) and chain.rs Kernel::Host / FilterBook spec Option; rest unchanged" }
+verified = { hash = "b3:387c9b98aac2c785", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

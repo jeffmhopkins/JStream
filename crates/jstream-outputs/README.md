@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:ce77c8baea74d8fc", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 cascade from ARCH#threading: re-read; the only change there is the CLAP plugin hosts paragraph's build status and dry-signal bypass, which this section doesn't rely on or mention; holds" }
+verified = { hash = "b3:c74e75d93c65788d", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (#231 D7b): stale via ARCH#threading only; text is main's, re-checked it names no render-snapshot loader, holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
