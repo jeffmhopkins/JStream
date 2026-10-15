@@ -51,7 +51,8 @@ fn kernel(x: f32) -> f32 {
 // A separable kernel of `radius` texels around the output pixel's centre, mapped into the
 // input, with clamp-to-edge texel loads. The result is normalised by its weight sum
 // (Lanczos weights don't sum to exactly 1) and clamped to a valid premultiplied colour,
-// which cuts the kernels' overshoot at hard edges.
+// which cuts the kernels' overshoot at hard edges. This assumes SDR input: an HDR value
+// above 1 would be clipped.
 fn resample(pos: vec2<f32>, radius: i32) -> vec4<f32> {
     let t = pos * frame.in_size / frame.out_size - vec2<f32>(0.5);
     let base = floor(t);

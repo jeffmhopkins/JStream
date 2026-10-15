@@ -717,7 +717,7 @@ verified = { hash = "b3:d7965698ca1720f8", by = "agent:claude@session_01BL6HM3DJ
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:6816b108bb21cd78", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1a: re-read; the merge changes no text here, filters still draw one premultiplied image into one of the filter's output_size, chain runtime unbuilt; holds" }
+verified = { hash = "b3:1195b360cb25311f", by = "agent:claude", note = "re-read the filter sentence after the allow removal and SDR note; apply_filter unchanged; holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

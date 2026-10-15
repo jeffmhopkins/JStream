@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:053ac98672bbf6f2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1a: re-read Purpose; the merge only moves FrameSync staging and narrows an allow in filter/; Purpose still points filters at #filters and the chain runtime at V0; holds" }
+verified = { hash = "b3:be8bab039bec8b0a", by = "agent:claude", note = "re-read after dropping the spent unused_imports allow on filter's re-export and adding the SDR note; Purpose states neither; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:3f30ac3a78313d15", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1a: re-read Design against compositor.rs apply_filter (staging now after encode) and aspect_ratio; no new thread, I/O or steady-path allocation; holds" }
+verified = { hash = "b3:3dfdd2c22d83fd79", by = "agent:claude", note = "re-read after the allow removal and a shader comment; no pass, thread or allocation changed; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:1950a37251dc34dd", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V1a: harness bullets now say FrameSync staged after recording and frame.time wraps daily, matching compositor.rs and prelude.wgsl; aspect_ratio text (settings, output_size, crop/pad 1:1, stretch kernels) unchanged and matches filter/aspect; holds" }
+verified = { hash = "b3:9e3bc630bc3f8409", by = "agent:claude", note = "N2: the V1a resampling sentence now records the SDR assumption of the [0, a] clamp, matching ratio.wgsl's resample; rest of the section re-read, unchanged, holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -338,7 +338,8 @@ the input's larger dimension as the output's larger one (1920x1080 stretched to 
 math saturates instead of overflowing, so a size past the adapter's limit fails as
 `TooLarge` when the layer is made. Crop and pad copy input pixels 1:1 with an offset
 (no scaling); only stretch resamples, as bilinear, Catmull-Rom bicubic (4x4 texel loads)
-or Lanczos-3 (6x6 texel loads), normalised and clamped to a valid premultiplied colour.
+or Lanczos-3 (6x6 texel loads), normalised and clamped to a valid premultiplied colour
+(an SDR assumption: values above 1 are clipped).
 The kernels are not widened for a downscale, so a large shrink along one axis can alias.
 
 The multi-pass filters (V2): not yet.
