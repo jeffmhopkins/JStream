@@ -972,7 +972,7 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:cc39789a9b4f72e9" }
+stamp = { hash = "b3:ce827dbec6eb98f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main with #376 (ledger) into #306: only input changed is src/tests/sources.rs; the sources-thread paragraph (re-plans at next_change on the injected or own clock; a clock swap re-plans at once) matches the test now on a FakeClock; holds" }
 
 ["CRATE-jstream-core#purpose"."body"]
 stamp = { hash = "b3:5609012e8331a22f", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
@@ -1062,7 +1062,7 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:cc39789a9b4f72e9" }
+stamp = { hash = "b3:ce827dbec6eb98f1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main with #376 (ledger) into #306: only input changed is src/tests/sources.rs (animation test on a FakeClock via set_source_clock), which the purpose text doesn't describe; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/tests/mcp.rs"]
 stamp = { hash = "b3:678b488c706f11fa" }
