@@ -125,18 +125,10 @@ impl Compositor {
     /// A failed `stage` may already have armed the queue's next submit: the platform
     /// attaches the fences to whichever submit happens next.
     pub fn render(&mut self, scene: &Scene<'_>, readback: bool) -> Result<Output, RenderError> {
-        color::validate(scene.background)?;
-        self.prepare(scene)?;
-        self.stage_sources(scene)?;
+        self.load(scene)?;
         let width = scene.canvas.width();
         let height = scene.canvas.height();
         self.ensure_targets(width, height)?;
-        self.ensure_vertex_buffer()?;
-        if !self.vertices.is_empty() {
-            self.gpu
-                .queue
-                .write_buffer(&self.vertex_buffer, 0, &self.vertices);
-        }
 
         let readback_buffer = if readback {
             Some(self.readback_buffer(width, height)?)
@@ -149,12 +141,13 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render"),
             });
-        self.record(&mut encoder, scene);
+        let targets = self
+            .targets
+            .as_ref()
+            .expect("invariant: ensure_targets just set them");
+        self.composite(&mut encoder, &targets.working_view, scene);
+        self.resolve(&mut encoder, targets);
         if let Some(buffer) = &readback_buffer {
-            let targets = self
-                .targets
-                .as_ref()
-                .expect("invariant: ensure_targets just set them");
             encoder.copy_texture_to_buffer(
                 wgpu::TexelCopyTextureInfo {
                     texture: &targets.output,
@@ -179,15 +172,49 @@ impl Compositor {
         }
         self.gpu.queue.submit([encoder.finish()]);
 
+        let output = targets.output.clone();
         let pixels = match readback_buffer {
             Some(buffer) => Some(map_snapshot(&self.gpu.device, buffer, width, height)?),
             None => None,
         };
-        let targets = self
-            .targets
-            .as_ref()
-            .expect("invariant: ensure_targets just set them");
-        Ok(Output::new(targets.output.clone(), width, height, pixels))
+        Ok(Output::new(output, width, height, pixels))
+    }
+
+    /// Composites `scene` into a new [`Image`] that a later scene on this compositor can
+    /// place, as a nested scene is placed in its parent.
+    ///
+    /// The image is the composite pass alone: premultiplied linear light in
+    /// `Rgba16Float`, the same format as an upload, with no resolve to sRGB and no
+    /// readback. Placing it filters exactly at partly transparent edges, and nothing is
+    /// quantised to 8 bits between the levels. Each call allocates its own texture, so
+    /// an image stays valid across later renders; it is freed when dropped. The
+    /// submit is ordered before the next one on this queue, so a later `render` that
+    /// places the image samples the finished composite.
+    ///
+    /// # Errors
+    /// As for [`Self::render`], apart from [`RenderError::Readback`].
+    pub fn render_image(&mut self, scene: &Scene<'_>) -> Result<Image, RenderError> {
+        self.load(scene)?;
+        let width = scene.canvas.width();
+        let height = scene.canvas.height();
+        let target = texture(
+            &self.gpu.device,
+            "jstream-render-layer",
+            width,
+            height,
+            image::LAYER_FORMAT,
+            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        );
+        let view = target.create_view(&wgpu::TextureViewDescriptor::default());
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-layer"),
+            });
+        self.composite(&mut encoder, &view, scene);
+        self.gpu.queue.submit([encoder.finish()]);
+        Ok(image::layer(&self.maker(), target, width, height))
     }
 
     /// The device images and targets are created on.
@@ -429,57 +456,75 @@ impl Compositor {
         Ok(())
     }
 
-    fn record(&self, encoder: &mut wgpu::CommandEncoder, scene: &Scene<'_>) {
-        let targets = self
-            .targets
-            .as_ref()
-            .expect("invariant: ensure_targets just set them");
+    /// Validates `scene`, builds its vertices, stages its frame holds and writes the
+    /// vertex buffer: everything before the passes are recorded.
+    fn load(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
+        color::validate(scene.background)?;
+        self.prepare(scene)?;
+        self.stage_sources(scene)?;
+        self.ensure_vertex_buffer()?;
+        if !self.vertices.is_empty() {
+            self.gpu
+                .queue
+                .write_buffer(&self.vertex_buffer, 0, &self.vertices);
+        }
+        Ok(())
+    }
+
+    /// The composite pass: clear `target` (`Rgba16Float`) to the background and draw
+    /// the items, premultiplied linear.
+    fn composite(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        target: &wgpu::TextureView,
+        scene: &Scene<'_>,
+    ) {
         let clear = premultiplied_linear(scene.background);
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("jstream-render-composite"),
-                color_attachments: &[Some(color_attachment(
-                    &targets.working_view,
-                    wgpu::LoadOp::Clear(wgpu::Color {
-                        r: f64::from(clear[0]),
-                        g: f64::from(clear[1]),
-                        b: f64::from(clear[2]),
-                        a: f64::from(clear[3]),
-                    }),
-                ))],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            if !self.draws.is_empty() {
-                pass.set_pipeline(&self.composite);
-                pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-                for draw in &self.draws {
-                    pass.set_bind_group(0, scene.items[draw.index].image.bind_group(), &[]);
-                    pass.draw(
-                        draw.first_vertex..draw.first_vertex + VERTICES_PER_ITEM,
-                        0..1,
-                    );
-                }
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("jstream-render-composite"),
+            color_attachments: &[Some(color_attachment(
+                target,
+                wgpu::LoadOp::Clear(wgpu::Color {
+                    r: f64::from(clear[0]),
+                    g: f64::from(clear[1]),
+                    b: f64::from(clear[2]),
+                    a: f64::from(clear[3]),
+                }),
+            ))],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        if !self.draws.is_empty() {
+            pass.set_pipeline(&self.composite);
+            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            for draw in &self.draws {
+                pass.set_bind_group(0, scene.items[draw.index].image.bind_group(), &[]);
+                pass.draw(
+                    draw.first_vertex..draw.first_vertex + VERTICES_PER_ITEM,
+                    0..1,
+                );
             }
         }
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("jstream-render-resolve"),
-                color_attachments: &[Some(color_attachment(
-                    &targets.output_view,
-                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                ))],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            pass.set_pipeline(&self.resolve);
-            pass.set_bind_group(0, &targets.resolve_bind, &[]);
-            pass.draw(0..3, 0..1);
-        }
+    }
+
+    /// The resolve pass: the FP16 working target to the straight sRGB output.
+    fn resolve(&self, encoder: &mut wgpu::CommandEncoder, targets: &Targets) {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("jstream-render-resolve"),
+            color_attachments: &[Some(color_attachment(
+                &targets.output_view,
+                wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+            ))],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.resolve);
+        pass.set_bind_group(0, &targets.resolve_bind, &[]);
+        pass.draw(0..3, 0..1);
     }
 
     fn readback_buffer(&self, width: u32, height: u32) -> Result<wgpu::Buffer, RenderError> {
