@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:b60399007c57e381", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: stale only via ARCH#protocol's transport bullet (browser client); R-API rules untouched and unaffected" }
+verified = { hash = "b3:027aa172b5f16304", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: rule text unchanged; re-read, holds for an additive minor at 0.16" }
 -->
 
 <a id="R-API-001"></a>

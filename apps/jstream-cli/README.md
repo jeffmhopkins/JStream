@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:cac7e37dcf08f749", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239, #221, #235, #197, #238) into B6-f: re-read; contents list holds" }
+verified = { hash = "b3:889d8fc912b3ef44", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; contents hold with B6-f's commands and scene switch/studio get" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:00552cf966cc5c18", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: re-read; this branch's Edits/Reads text holds; main's B9 changes touch no CLI command" }
+verified = { hash = "b3:a5ec524c34e496eb", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; scene switch and studio get rows hold beside B6-f's set_role/item.move/set_geometry rows" }
 -->
 
 ```sh
@@ -83,6 +83,8 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `hello` | the `hello`/`welcome` handshake |
 | `state get` | query `state.get` |
 | `scene list` | query `scene.list` |
+| `scene switch <scene-id>` | action `scene.switch` (a cut to that scene) |
+| `studio get` | query `studio.get` (the scene on program) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |
@@ -144,7 +146,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
-  the `state.changed` event it causes; an event an undo or redo caused ends with
+  the `state.changed` (or `studio.changed`) event it causes; an event an undo or redo caused ends with
   `undo` or `redo`. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
@@ -232,7 +234,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6e017ea466bdae5a", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: stale via control#design, which gained the browser WsControl and token subprotocol; the CLI still uses the native client with Authorization and a token file, unchanged" }
+verified = { hash = "b3:8f6199e548006e27", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; B6-f's placement and ROLE text and B10's studio.changed note both hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

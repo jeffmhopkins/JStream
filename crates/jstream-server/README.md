@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:ae9bd9719a916622", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): re-read; server forwards history calls opaquely over WS and /mcp" }
+verified = { hash = "b3:af1b4ddd791f615c", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge into B10: re-read; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b6bcfb6b534f4521", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: open question 2 now names ADR-0045's subprotocols and the no-token Basic path, and still says the server accepts only Authorization today (true on main); server code unchanged" }
+verified = { hash = "b3:53aa1d07722e01de", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; studio.changed rewrite holds" }
 -->
 
 ### Listening and admission
@@ -136,13 +136,13 @@ task speaks the envelope
   readable. Binary frames get `malformed` too, until binary streams are designed.
   Messages over 4 MiB close the connection.
 - **Request IDs.** A `Control` session assigns its own IDs, which appear in the
-  `state.changed` events its calls cause. The task maps them back to the client's wire
+  `state.changed` and `studio.changed` events its calls cause. The task maps them back to the client's wire
   IDs, so a client matches its event to its response by the ID it chose, as in the
   protocol README's example. An event can arrive before the answer that reveals the
   mapping, so while calls are in flight it is held back, with every event after it to
   keep the order, until the answer arrives or nothing is left in flight (or 1024 events
-  are held). The last 1024 pairs are remembered. Other clients' `state.changed` events
-  pass unchanged: their IDs mean nothing to this client.
+  are held). The last 1024 pairs are remembered. Other clients' events pass unchanged:
+  their IDs mean nothing to this client.
 - **Slow clients.** The connection task never waits on the socket: what it sends goes
   into an outbox, and a writer that owns the socket's sending half sends it, one message
   at a time, while the task keeps reading the client and draining the session's events.
