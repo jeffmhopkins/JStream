@@ -1,10 +1,13 @@
 //! `docs merge-main`: merges `origin/main` and resolves conflicts that are only between
-//! two `verified` stamps, by taking main's stamp (docs/DOCS.md#verification).
+//! stamps, by taking main's side (docs/DOCS.md#verification).
 //!
-//! Parallel PRs that re-verify the same section conflict on its `verified` line. The hash
-//! covers the section's inputs, so after the merge the section has to be re-read against
-//! the combined change anyway; which stamp the merge keeps doesn't matter, only that the
-//! section is reported as stale. Every other conflict is left untouched for a person.
+//! Parallel PRs that re-verify the same input of a section conflict on its ledger entry
+//! (ADR-0053). Neither side re-read the combination, so after the merge the section has to
+//! be re-read anyway; which entry the merge keeps doesn't matter, only that the section is
+//! reported as stale. A branch from before ADR-0053 also conflicts on the inline
+//! `verified` lines main moved to the ledger; main's side (no line) is taken the same way,
+//! and inline stamps the branch added are then moved by `docs migrate`. Every other
+//! conflict is left untouched for a person.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -12,7 +15,7 @@ use std::process::{Command, Output};
 
 use anyhow::{Context, Result, bail};
 
-use super::{hash, is_tracked, load, parse};
+use super::{hash, is_tracked, ledger, load, parse};
 
 /// The branch `merge-main` merges, and the remote it is fetched from.
 const REMOTE: &str = "origin";
@@ -23,6 +26,8 @@ const BRANCH: &str = "main";
 pub(crate) struct Merge {
     /// Sections whose conflicting stamp was resolved to main's, as `DOC#anchor`.
     pub(crate) stamps: Vec<String>,
+    /// What `docs migrate` did after the merge, when the branch still had inline stamps.
+    pub(crate) migrated: Option<super::Migrate>,
     /// Conflicted files left for a person, with the reason.
     pub(crate) refused: Vec<(String, String)>,
     /// Whether the merge was committed.
@@ -81,6 +86,7 @@ pub(crate) fn merge_main(root: &Path) -> Result<Merge> {
     let mut report = Merge::default();
     if out.status.success() {
         report.committed = true;
+        report.migrated = migrate_inline(root)?;
         report.stale = stale_sections(root)?;
         return Ok(report);
     }
@@ -109,7 +115,13 @@ pub(crate) fn merge_main(root: &Path) -> Result<Merge> {
         let resolved = if has(" 2") && has(" 3") {
             std::fs::read_to_string(root.join(path))
                 .map_err(|e| format!("not readable as text: {e}"))
-                .and_then(|text| resolve(path, &text))
+                .and_then(|text| {
+                    if path == ledger::PATH {
+                        resolve_ledger(&text)
+                    } else {
+                        resolve(path, &text)
+                    }
+                })
         } else {
             Err("not modified on both sides".to_owned())
         };
@@ -122,12 +134,41 @@ pub(crate) fn merge_main(root: &Path) -> Result<Merge> {
             Err(why) => report.refused.push((path.to_owned(), why)),
         }
     }
+    report.stamps.sort();
+    report.stamps.dedup();
     if report.refused.is_empty() {
         git_ok(root, &["commit", "-q", "--no-edit"])?;
         report.committed = true;
+        report.migrated = migrate_inline(root)?;
         report.stale = stale_sections(root)?;
     }
     Ok(report)
+}
+
+/// After a merge commit: runs `docs migrate` and commits what it changed, if anything, so
+/// inline stamps a branch from before ADR-0053 added reach the ledger.
+fn migrate_inline(root: &Path) -> Result<Option<super::Migrate>> {
+    let m = super::migrate(root)?;
+    git_ok(root, &["add", "-u"])?;
+    if root.join(ledger::PATH).exists() {
+        git_ok(root, &["add", "--", ledger::PATH])?;
+    }
+    if git(root, &["diff", "--cached", "--quiet"])?
+        .status
+        .success()
+    {
+        return Ok(None);
+    }
+    git_ok(
+        root,
+        &[
+            "commit",
+            "-q",
+            "-m",
+            "docs: move inline verified stamps to docs/verified.toml (ADR-0053)",
+        ],
+    )?;
+    Ok(Some(m))
 }
 
 /// One conflict hunk: the 0-based line ranges its two sides occupy once resolved to that
@@ -137,14 +178,9 @@ struct Hunk {
     theirs: (usize, usize),
 }
 
-/// Resolves every conflict in `text` (the conflicted contents of `path`) to main's side,
-/// provided each conflict is only between `verified` lines of `@section` blocks on both
-/// sides. Returns the resolved text and the sections whose stamp was taken from main, or
-/// why the file is left alone.
-fn resolve(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
-    if !is_tracked(path) {
-        return Err("not a tracked doc".to_owned());
-    }
+/// The two sides of a conflicted file, each as if resolved wholly to that side, and the
+/// line ranges the conflict hunks occupy in each; or why the markers can't be read.
+fn sides(text: &str) -> Result<(String, String, Vec<Hunk>), String> {
     let (mut ours, mut theirs) = (Vec::new(), Vec::new());
     let mut hunks = Vec::new();
     // Which side the current line belongs to: 0 both, 1 ours, 2 base (dropped), 3 theirs.
@@ -186,7 +222,48 @@ fn resolve(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
     if hunks.is_empty() {
         return Err("no conflict markers".to_owned());
     }
-    let (ours, theirs) = (ours.concat(), theirs.concat());
+    Ok((ours.concat(), theirs.concat(), hunks))
+}
+
+/// Resolves every conflict in the ledger to main's side (ADR-0053). Any conflict there is
+/// between stamps, and a section whose entry is taken from main is stale whenever the
+/// branch changed that input, so it is reported for a re-read. The result must parse; it is
+/// rewritten canonically. Returns it and the sections whose stamp differs from the
+/// branch's.
+pub(super) fn resolve_ledger(text: &str) -> Result<(String, Vec<String>), String> {
+    let (ours, theirs, _) = sides(text)?;
+    let parse = |t: &str, side: &str| {
+        ledger::Ledger::parse(t).map_err(|e| format!("{side} doesn't parse: {e}"))
+    };
+    let (ours, theirs) = (
+        parse(&ours, "this branch's side")?,
+        parse(&theirs, "main's side")?,
+    );
+    let stamps = theirs
+        .sections
+        .iter()
+        .filter(|(k, v)| ours.sections.get(*k) != Some(v))
+        .map(|(k, _)| k.clone())
+        .chain(
+            ours.sections
+                .keys()
+                .filter(|k| !theirs.sections.contains_key(*k))
+                .cloned(),
+        )
+        .collect();
+    Ok((theirs.render(), stamps))
+}
+
+/// Resolves every conflict in `text` (the conflicted contents of `path`) to main's side,
+/// provided each conflict is only between inline `verified` lines of `@section` blocks
+/// (either side may have none, as when main moved them to the ledger). Returns the
+/// resolved text and the sections whose stamp was in conflict, or why the file is left
+/// alone.
+fn resolve(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
+    if !is_tracked(path) {
+        return Err("not a tracked doc".to_owned());
+    }
+    let (ours, theirs, hunks) = sides(text)?;
     let mut stamps = Vec::new();
     for (text, is_main) in [(&ours, false), (&theirs, true)] {
         let doc = parse::parse(path, text, &mut Vec::new());
@@ -202,12 +279,7 @@ fn resolve(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
                     s.meta.is_some() && s.block.is_some_and(|(open, close)| open < k && k < close)
                 });
                 match section {
-                    Some(s) if stamp => {
-                        if is_main {
-                            let id = doc.meta_str("id").unwrap_or(&doc.path);
-                            stamps.push(format!("{id}#{}", s.anchor));
-                        }
-                    }
+                    Some(s) if stamp => stamps.push(super::section_key(&doc, &s.anchor)),
                     _ => {
                         return Err(format!(
                             "a conflict outside `@section` `verified` lines (line {} on {})",
@@ -223,46 +295,36 @@ fn resolve(path: &str, text: &str) -> Result<(String, Vec<String>), String> {
             }
         }
     }
+    stamps.sort();
     stamps.dedup();
     Ok((theirs, stamps))
 }
 
-/// Sections whose `verified` stamp doesn't match the tree, or that need one and have
+/// Sections whose ledger stamp doesn't match their inputs, or that need one and have
 /// none, as `DOC#anchor`.
 pub(crate) fn stale_sections(root: &Path) -> Result<Vec<String>> {
     let l = load(root)?;
     let by_path: BTreeMap<&str, &parse::Doc> =
         l.docs.iter().map(|d| (d.path.as_str(), d)).collect();
     let files = hash::Files::new(root, &l.files);
+    // A ledger that doesn't parse holds no stamps: everything is stale.
+    let ledger = ledger::Ledger::read(root).unwrap_or_default();
     let mut stale = Vec::new();
     for doc in &l.docs {
         for s in &doc.sections {
             let Some(meta) = &s.meta else { continue };
-            let strings = |k: &str| -> Vec<String> {
-                meta.get(k)
-                    .and_then(|v| v.as_array())
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|x| x.as_str().map(str::to_owned))
-                            .collect()
-                    })
-                    .unwrap_or_default()
-            };
-            let (covers, deps) = (strings("covers"), strings("depends_on"));
+            let (covers, deps) = (
+                super::strings(meta, "covers"),
+                super::strings(meta, "depends_on"),
+            );
             if covers.is_empty() && deps.is_empty() {
                 continue;
             }
-            let stored = meta
-                .get("verified")
-                .and_then(|v| v.get("hash"))
-                .and_then(|h| h.as_str());
-            let now = hash::section_hash(doc, &s.anchor, &covers, &deps, &files, &by_path).ok();
-            if stored.is_none() || stored != now.as_deref() {
-                stale.push(format!(
-                    "{}#{}",
-                    doc.meta_str("id").unwrap_or(&doc.path),
-                    s.anchor
-                ));
+            let key = super::section_key(doc, &s.anchor);
+            let fresh = hash::inputs(doc, &s.anchor, &covers, &deps, &files, &by_path)
+                .is_ok_and(|i| ledger::diff(ledger.sections.get(&key), &i).is_empty());
+            if !fresh {
+                stale.push(key);
             }
         }
     }
