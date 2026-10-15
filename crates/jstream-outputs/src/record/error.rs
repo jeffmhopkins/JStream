@@ -82,7 +82,10 @@ pub enum RecordError {
 }
 
 impl RecordError {
-    /// Whether the recording is over: every error but [`RecordError::Packet`].
+    /// Whether the recording is over (or, for an error from [`Recorder::create`],
+    /// never started): every error but [`RecordError::Packet`].
+    ///
+    /// [`Recorder::create`]: super::Recorder::create
     pub fn ends_recording(&self) -> bool {
         !matches!(self, Self::Packet(_))
     }
