@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:94bc36b1c6c84705", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#229 B1/B2: intro now names the sample pacer among the cross-platform parts (matches lib.rs); Pacing bullet says a timed sample from an earlier run is dropped (StreamState.run in stream.rs)" }
+verified = { hash = "b3:05a93ce954b3825f", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c: Registration bullet now says the product registers through jstream-daemon --register-vcam; rest unchanged" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -66,8 +66,9 @@ Windows 11 ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)):
   no interactive user can write), capped at 1 MiB with one older file.
 - **Registration.** `DllRegisterServer` (`regsvr32`, elevated) writes
   `HKLM\Software\Classes\CLSID\{…}` with `InprocServer32` pointing at the DLL and
-  `ThreadingModel = Both`; `DllUnregisterServer` removes it. The app's
-  `--register-vcam` step, the engine-side producer and the `VirtualCam` output are G3.
+  `ThreadingModel = Both`; `DllUnregisterServer` removes it. The product registers it
+  the same way without `regsvr32`: `jstream-daemon --register-vcam`, through
+  `jstream-platform-windows` ([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 
 The DLL only opens the shared objects. The engine creates them, with the contract's DACL
 (`sddl_objects`), in `jstream-platform-windows`.
@@ -83,7 +84,7 @@ and the example on Windows.
 <!-- @section
 covers = ["crates/jstream-vcam-windows/examples/**"]
 depends_on = ["docs/ARCHITECTURE.md#packaging"]
-verified = { hash = "b3:18c72d66665a66d2", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#193: vcam_smoke now prints samples per producer frame; README says it should stay near 1; steps unchanged" }
+verified = { hash = "b3:fb953fcce4578ecb", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c (Packaging changed): regsvr32 steps still apply to vcam_smoke; nothing else changed" }
 -->
 
 `examples/vcam_smoke` stands in for the engine side: it publishes the ring, the fence and

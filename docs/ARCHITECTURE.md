@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:32198d880d34be9b", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2: only daemon doc comments changed; daemon host row (loads and saves --collection, not the UI yet) re-read and holds" }
+verified = { hash = "b3:fd2f10fecf76c5ac", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6): daemon row is main's (loads and saves --collection) plus registering the virtual camera (--register-vcam); diagram unchanged" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:32198d880d34be9b", by = "agent:claude@session_01YKRrREb5
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S) ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -850,7 +850,7 @@ verified = { hash = "b3:725834769c696156", by = "agent:claude@session_01WYFCTjMh
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:a34329174da15f35", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#193: hardware bullet now says RequestSample is paced to at most 30 a second; rest unchanged" }
+verified = { hash = "b3:026533f994053898", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c: virtual camera bullet says jstream-daemon --register-vcam is that mode until the app exists, with the startup moved-folder warning; unregister waits for the app" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -870,7 +870,10 @@ Direct3D 12).
 - **Virtual camera:** the app registers the COM media source from its own folder the first
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
   because Frame Server ignores per-user registration. The app can unregister the source and
-  detects a moved folder. Spike S2 (Windows 11 25H2, build 26200) found:
+  detects a moved folder. Until the desktop app exists, `jstream-daemon --register-vcam` is
+  that mode, and the daemon warns at startup when the registration names another folder
+  ([jstream-daemon › Usage](../apps/jstream-daemon/README.md#usage)); unregistering waits
+  for the app. Spike S2 (Windows 11 25H2, build 26200) found:
   - **Per user (`HKCU`) doesn't work.** `MFCreateVirtualCamera` succeeds, but
     `IMFVirtualCamera::Start` fails with `0x80070003`, and Frame Server never loads the
     DLL.

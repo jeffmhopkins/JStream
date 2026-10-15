@@ -26,6 +26,9 @@ mod gpu;
 #[cfg(any(windows, test))]
 mod n_edition;
 mod vcam;
+// Its path comparison is tested on every platform.
+#[cfg(any(windows, test))]
+mod vcam_register;
 mod video_device;
 
 #[cfg(windows)]
@@ -46,5 +49,9 @@ pub use gpu::WindowsGpu;
 pub use n_edition::check_media_foundation;
 #[cfg(windows)]
 pub use vcam::WindowsVcam;
+#[cfg(windows)]
+pub use vcam_register::{
+    VCAM_DLL, VcamRegistration, is_elevated, register_vcam, run_elevated, vcam_registration,
+};
 #[cfg(windows)]
 pub use video_device::{MfMjpegDecoder, MfVideoDevices};
