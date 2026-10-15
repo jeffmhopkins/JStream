@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:d8077027baf70ffa", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#222 C1b) into png 0.18: kept main's C1b text; png 0.18 only changes the test-only decode_png helper; purpose holds" }
+verified = { hash = "b3:0ccda6723c3bb204", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -34,7 +34,8 @@ state machine. Contents:
   `with_publish_opener`, `with_key_store`, `with_audit`, `with_history_limit` and
   `with_collection_file`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
-  frame of a source; `output_stats` reads the running pipeline; `output_kind` reads a
+  frame of a source; `output_stats` reads a running output's pipeline counters
+  (`output_stats_of` names the output); `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
   injected `StreamKeyStore`, never under the collection lock. It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys, the undo
@@ -61,11 +62,13 @@ state machine. Contents:
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
   compositor.
-- **Runtime** (`runtime/`): the `output.start` pipeline. The render thread reads the
-  platform capture mailbox, composites the program mix from the render snapshot the
-  control side publishes (`runtime/render.rs`) and reads the frame back. The mixer
-  thread polls the media clock. Encode threads live in the encoder sessions. The
-  output thread muxes FLV and publishes it
+- **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
+  one program stage: the render thread reads the platform capture mailbox, composites
+  the program mix from the render snapshot the control side publishes
+  (`runtime/render.rs`) and reads the frame back, and the mixer thread polls the media
+  clock. Encode threads live in the encoder sessions, one per encoder profile in use,
+  shared by the outputs on that profile. Each output's own thread muxes FLV and
+  publishes it, or muxes MP4 and records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
 - **History** (`history.rs`): per-client undo and redo
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
@@ -86,7 +89,7 @@ state machine. Contents:
   registers the capture cell, both encode sessions, both mixer inputs, the mix
   bus, and the packets the output thread drops (muxer rejects and what a stop's
   drain abandons) and the publish link's, and a sampler thread
-  emits a tick about once a second until the pipeline stops.
+  emits a tick about once a second until the last output stops.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -107,7 +110,9 @@ state machine. Contents:
   a publish opener connecting that fake server on every start (start, media, stop,
   twice) and one that cannot connect, a recording output writing MP4 to a temp dir
   (renamed into place on stop, refused when the file exists or the path is not
-  absolute on this machine, no `.part` file left by a failed start), overload drops from a
+  absolute on this machine, no `.part` file left by a failed start), recording while
+  streaming on one shared encoder session (and separate sessions on separate
+  profiles), a render panic failing both outputs, overload drops from a
   fake encoder and the mixer reported in `stats.tick`, render and mixer panics
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
   the hidden `Engine::with_cpu_compositor`), the output edits and the stream-key
@@ -135,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:d6099f4bbc46f9f2", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Merge of main (#222 C1b) into png 0.18: kept main's C1b text and Dependencies list (png still listed); png 0.18 only changes the test-only decode_png helper; holds" }
+verified = { hash = "b3:0a1d6d40d7cae6a3", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
 -->
 
 ### Engine and sessions
@@ -415,13 +420,15 @@ an ended stream stays ended.
 
 [R-RT-004](../../docs/RULES.md#R-RT-004) says overload drops are counted and reported in
 `stats.tick`. The stages already count. The engine does not count a second time.
-`output.start` registers one [`DropSource`](src/drops.rs) per stage of that run and
-starts a sampler thread, `jstream-stats`, that calls
-[`Engine::emit_stats_tick`](src/engine.rs) about once a second. The sampler is not a
-real-time thread. Stopping the pipeline joins it and removes the sources, which
-latches their last totals so the next tick does not shrink, then emits one final
-tick, so the run's last drops are reported when it stops (before `stopped`, or
-after `failed`). `seq` starts at 1.
+The `output.start` that opens the program stage registers its sources (capture,
+render, mixer inputs, mix bus) and starts a sampler thread, `jstream-stats`, that
+calls [`Engine::emit_stats_tick`](src/engine.rs) about once a second. Each encoder
+session registers its two sources (input and subscriber drops) when it opens, and each
+output its own (muxer, stop drain, publish link) when it starts, so a tick sums every running
+output. The sampler is not a real-time thread. Removing a source latches its last
+totals so the next tick does not shrink. When the last output stops, the program
+stage joins the sampler and emits one final tick, so the run's last drops are
+reported when it stops (before `stopped`, or after `failed`). `seq` starts at 1.
 Registering two sources for the same drop adds it twice.
 
 A source reports running totals. The tick is the sum, so a client subtracts the previous
@@ -482,6 +489,20 @@ the call's arguments, and no response, event or query carries it. The crate-root
 `output.status`, the events, every span and event the engine traces, and the audit
 entries.
 
+**Encoder profiles.** An output's `encoder_profile` (collection state, set with
+`output.set_encoder`) picks the encoding its next start opens, or the protocol's
+`EncoderProfile::DEFAULT` when it has none. Running outputs share an encoder session
+when they have the same key: the profile ID and its settings as they were at start
+(the mix is always program until video mixes exist). So `encoder.update` or
+`output.set_encoder` on a running output changes nothing until it restarts, and an
+output started after the update opens a session of its own rather than joining one
+with stale settings. `output.status` reports, per running output, the profile, the
+other outputs on the same session and whether its video encoder is a hardware one,
+plus the video sessions and hardware sessions open
+([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)); it does not
+guess a hardware cap. A hardware session limit fails the start with the encoder's own
+error for now, not a session-limit code.
+
 **Placeholder.** With no backends, the actions only move a state machine, as
 `jstream-control`'s mock does. The protocol defines an action's response as "accepted"
 and reports progress as events, so that is what the engine does:
@@ -504,17 +525,22 @@ stop or a failure, and no session sits idle before the start. The opener runs af
 opens; its error fails the start like a launch failure (`failed`, then
 `action_failed` with `opening the publish target: <reason>`), and the opener is kept.
 Its error text must not carry a stream key
-([R-SEC-001](../../docs/RULES.md#R-SEC-001)); `connect_rtmp`'s does not. The call checks the output is idle and that no other pipeline is running,
+([R-SEC-001](../../docs/RULES.md#R-SEC-001)); `connect_rtmp`'s does not. Starts run one at a time (a second waits for the first to settle; a stop never
+waits for a start). The call checks the output is idle,
 takes the publish target, records an in-flight generation, emits `starting`, and
-drops the collection lock before it opens devices or joins anything. It then waits,
+drops the collection lock before it opens devices or joins anything. When no other
+output is running it opens the program stage and waits,
 up to 10 s, for the render thread to open the software compositor; that bound only
 keeps a stuck adapter from blocking the call, and the GPU tests raise it because
-lavapipe can open slower than that on a loaded CI runner. Success emits `active`.
+lavapipe can open slower than that on a loaded CI runner. When others are running it shares
+theirs. It then gets the encoder session for its key (opening one if no running
+output has it), opens its sink, subscribes to the session and starts its output
+thread, and returns once that thread has started the sink. Success emits `active`.
 Failure emits `failed` and `action_failed`, and drops a one-shot publish target so
-the host sets another before retrying (an opener is kept). A second start while one pipeline is up, or
-while a start is still in flight, fails with `action_failed` and leaves that
-pipeline alone. `output.stop` on an `active` pipeline emits `stopping`, drops it
-outside the lock (its drop sets the stop flag and joins the threads; the output
+the host sets another before retrying (an opener is kept); the other outputs keep
+running. `output.stop` on an `active` output emits `stopping`, drops its pipeline
+outside the lock (the program stage and an encoder session stop with the last output
+on them) (its drop sets the stop flag and joins the threads; the output
 thread's drain is bounded, see the RTMP paragraph below), then emits
 `stopped`. `output.stop` during the in-flight start cancels that generation, emits
 `stopping`, waits until the start has dropped whatever it opened, then emits
@@ -529,7 +555,7 @@ per keyframe, every two seconds) and renames the file to `path` when the output
 stops. The file is opened in `launch`, after the devices and encoders and before the
 threads, so a path that can't be recorded to (one not absolute on this machine, an existing
 file or `.part`, a missing directory) fails the start with `action_failed` and `opening the recording: <reason>`.
-Until the compositor has opened, the recording is provisional: a start that fails
+Until the start has succeeded, the recording is provisional: a start that fails
 after opening the file removes the `.part` file, so it doesn't block the next start,
 and so does one whose init segment can't be written (`DiskFull` or `Write` from
 `Recorder::create`).
@@ -537,23 +563,27 @@ Once `active`, the `.part` file is kept whatever happens: a write error (a full 
 among them) settles `failed` and leaves it readable up to its last fragment, and a
 failed rename at stop is logged with the `.part` path. A packet the muxer rejects is
 dropped and counted in `output_packets`. Disk writes run on the output thread and
-may block; the encoder subscriber queues absorb that and drop when full. Only one
-pipeline runs at a time, so recording while streaming waits for shared encoders (F3).
+may block; the encoder subscriber queues absorb that and drop when full, without
+holding up a stream on the same session.
 
 Once the pipeline is `active`, a fatal error on any pipeline thread is sent on a
 channel: a `send_tag` or `poll` failure, a recording write failure, an encoder stream that ends before the
 pipeline was told to stop (the encoder failed, or its session closed), and the
-render and mixer failures below.
+render and mixer failures below. A render or mixer failure goes to every output on
+the program stage; an output's own failure (its sink, its encoder session) only to the
+outputs it reaches.
 A watcher the control thread started settles `failed`, emits `output.state_changed`,
-and drops the pipeline so the render and mixer threads stop. The watcher holds weak
+and drops the output's pipeline; the last output to go stops the render and mixer
+threads. The watcher holds weak
 pointers between messages, so it does not keep the engine alive: dropping
 the last engine handle and its sessions joins the pipeline. `output_stats` is then
 empty. `failed` counts as idle, and a later start needs a new one-shot target or an opener. That
-start waits until the failed pipeline has finished joining, so the new devices do
-not overlap the old teardown. The same holds when a
+start waits until a failed program stage has finished joining, so the new devices do
+not overlap the old teardown; it never joins a program stage that has failed. The same holds when a
 start fails after `launch` returned threads (a failure reported before `active`, or
 the watcher not starting): `failed` is emitted, and the next start waits until that
-pipeline has joined. A stop's join also holds off a start of another output. The
+pipeline has joined. A stop's join that takes the program stage down also holds off
+a start of another output; one that leaves it running does not. The
 wait also ends if that teardown panics, so a later start is not left waiting on a
 join that already unwound. If the teardown panics during `output.stop`, the output
 settles `failed` instead of staying `stopping`, and the panic reaches the caller. A
@@ -580,14 +610,19 @@ capture when the mailbox is empty, and reads the composite back as RGBA8 because
 cut has no GPU encode target. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
-the snapshot it held to the output's `jstream-collector` thread. The GPU images the
-cache frees go there too, so nothing the render thread lets go of is freed on it
-([R-RT-003](../../docs/RULES.md#R-RT-003)). The thread clears the stopped marker
+the snapshot it held to the program stage's `jstream-collector` thread. The GPU images the
+cache frees go there too, and so does the input of an encoder session that has
+finished (the session may already be gone, leaving that input the last reference to
+its shared state and channel), so nothing the render thread lets go of is freed on it
+([R-RT-003](../../docs/RULES.md#R-RT-003)). The mixer thread hands a finished audio
+input to the same collector. The thread clears the stopped marker
 before its first load (`SeqCst`, then a fence), and publishes it again when it stops
 or a fatal error stops its drawing, so `RenderHub::caught_up` treats it as caught up
 ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading), "Live-value handover"; only
-tests poll it until live edits exist). The collector ends when the render thread
-drops its sender, and `Running` joins it right after the render thread. The compositor
+tests poll it until live edits exist). The collector ends when the render and mixer
+threads have dropped their senders, and the program stage (`Program`) joins it right
+after them. While the stage has no encoder session it draws nothing but still adopts
+each new snapshot, so it never holds a gesture up. The compositor
 and its cache drop on the render thread when it exits, after the tick loop. What it rides out
 and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 - **Recoverable:** a capture error or a missing frame repeats the last capture (a
@@ -640,9 +675,13 @@ stops reading while the deadline runs out.
 ### Locking
 
 `std::sync::Mutex` locks, always taken in one order: a session's identity lock (held
-by `hello` while it registers the client), then the engine's collection lock, then
-the pipeline gate, then a subscription queue's. The drop ledger is its own mutex, and
-so is the audit sink's handle, which is only cloned under it (see *Audit log*).
+by `hello` while it registers the client), then the start lock (held by
+`output.start` for the whole start, so starts run one at a time; nothing else takes
+it), then the engine's collection lock, then the pipeline gate, then a subscription
+queue's. The program stage's encoder session registry and failure fan-out are leaf
+locks, taken with no engine lock held; the render and mixer threads take neither. The
+drop ledger is its own mutex, and so is the audit sink's handle, which is only cloned
+under it (see *Audit log*).
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. The snapshot compositor belongs to the snapshot
@@ -769,7 +808,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:87fed6ac34327e35", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: carried E1's output-pipeline paragraph over (program mix from the render snapshot, capture fallback, render collector) with main's recording and stats text; matches pipeline.rs and runtime/render.rs" }
+verified = { hash = "b3:65493ddbfc38461c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5/N7: last sentence now says the mixer also has its own collector for input rings, beside the program stage's collector the render and mixer threads feed; push_each now takes a retire closure, behaviour unchanged" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -783,25 +822,35 @@ Design) at the encoder size: the program scene and the scenes it nests, with eve
 it draws the capture filling the frame. It repeats the last capture when the mailbox
 is empty, and reads the frame back. This cut encodes that CPU readback, and the
 readback is counted. The mixer thread polls the media clock and pushes 48 kHz stereo
-blocks from the microphone and the desktop loopback. Encode threads are the ones
-inside the encoder sessions. The output thread muxes FLV and sends tags to the
-publish target, or, for a recording output, muxes fragmented MP4 and writes it to the
-file, syncing each fragment (writes may block on the disk; the encoder queues absorb
-that and drop when full). `output.start` also starts `jstream-stats`, which is not a
-real-time thread: it emits `stats.tick` about once a second from the stage counters,
-and once more when the pipeline stops. The render loop publishes capture mailbox
-skips, and a tick that falls a whole period behind the clock skips to the current
-tick and counts the skipped ones in `render_ticks`. None of those threads lock the
-collection: the render thread reads the render snapshot, and what it lets go of goes
-to the output's `jstream-collector` thread. `output.stop` during `starting` cancels
-that start and emits `stopped` only after the start has dropped its threads. The
-render and mixer threads catch a panic at their boundary
-([R-RT-006](../../docs/RULES.md#R-RT-006)); a capture error or a missing frame repeats
-the last one, and a render panic repeats the last frame until teardown. A fatal error
-on the render, mixer or output thread (a publish or recording write failure, an
-encoder stream that ends before stop, a render or mixer panic) is a channel message
-to a watcher the control thread started; the watcher emits `failed` and stops the
-pipeline. Frame hand-off is the encoder session queues. The audio and outputs
+blocks from the microphone and the desktop loopback. Every running output shares that
+one program stage (capture, render, mixer); the first `output.start` builds it and the
+last `output.stop` tears it down, and starts are serialized. Encode threads are the
+ones inside the encoder sessions: outputs with the same encoder profile share one
+session, and the render and mixer threads take a new session's inputs from a channel,
+never a lock, and hand a finished session's input to the collector rather than drop
+it. While the stage has no session it
+draws nothing but still adopts the latest render snapshot. Each output has its own
+output thread. An output leaving a session others still use takes what is queued for
+it and goes; the last one drains the encoders. The output thread muxes FLV and sends
+tags to the publish target, or, for a recording output, muxes fragmented MP4 and
+writes it to the file, syncing each fragment (writes may block on the disk; the
+encoder queues absorb that and drop when full). The `output.start` that opens the
+program stage also starts `jstream-stats`, which is not a real-time thread: it emits
+`stats.tick` about once a second from the stage counters, and once more when the last
+output stops. The render loop publishes capture mailbox skips, and a tick that falls a
+whole period behind the clock skips to the current tick and counts the skipped ones in
+`render_ticks`. None of those threads lock the collection: the render thread reads the
+render snapshot, and what the render and mixer threads let go of (replaced snapshots,
+GPU images, finished sessions' inputs) goes to the program stage's
+`jstream-collector` thread. `output.stop` during `starting` cancels that start and
+emits `stopped` only after the start has dropped its threads. The render and mixer
+threads catch a panic at their boundary ([R-RT-006](../../docs/RULES.md#R-RT-006)); a
+capture error or a missing frame repeats the last one, and a render panic repeats the
+last frame until teardown. A fatal error on the render, mixer or output thread (a
+publish or recording write failure, an encoder stream that ends before stop, a render
+or mixer panic) is a channel message to a watcher the control thread started; the
+watcher emits `failed` and stops the pipeline. A program-stage failure reaches every
+running output. Frame hand-off is the encoder session queues. The audio and outputs
 snapshots and a GPU encode target are still rows of the ARCH thread table, not this
-cut. The mixer has its own collector so far, which frees only input rings and their
+cut. The mixer also has its own collector, which frees only input rings and their
 counters.

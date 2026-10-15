@@ -107,35 +107,35 @@ fn field(at: usize, name: &str) -> String {
     format!("edits.{at}.{name}")
 }
 
-fn invalid(at: usize, name: &str, reason: impl Into<String>) -> ProtocolError {
+pub(crate) fn invalid(at: usize, name: &str, reason: impl Into<String>) -> ProtocolError {
     ProtocolError::InvalidArgument {
         field: field(at, name),
         reason: reason.into(),
     }
 }
 
-fn not_found(entity: EntityKind, id: &str) -> ProtocolError {
+pub(crate) fn not_found(entity: EntityKind, id: &str) -> ProtocolError {
     ProtocolError::NotFound {
         entity,
         id: id.to_owned(),
     }
 }
 
-fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
+pub(crate) fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
     ProtocolError::AlreadyExists {
         entity,
         id: id.to_owned(),
     }
 }
 
-fn check_id(id: &str, at: usize, name: &str) -> Result<(), ProtocolError> {
+pub(crate) fn check_id(id: &str, at: usize, name: &str) -> Result<(), ProtocolError> {
     if id.is_empty() {
         return Err(invalid(at, name, "must not be empty"));
     }
     Ok(())
 }
 
-fn check_name(value: &str, at: usize) -> Result<(), ProtocolError> {
+pub(crate) fn check_name(value: &str, at: usize) -> Result<(), ProtocolError> {
     if value.trim().is_empty() {
         return Err(invalid(at, "name", "must not be empty"));
     }
@@ -260,6 +260,9 @@ fn apply_edit(
     at: usize,
     running: &BTreeSet<OutputId>,
 ) -> Result<Vec<Edit>, ProtocolError> {
+    if let Some(applied) = crate::encoder::apply(state, edit, at) {
+        return applied;
+    }
     match edit {
         Edit::SceneCreate { scene_id, name } => {
             check_id(scene_id.as_str(), at, "scene_id")?;
@@ -625,6 +628,7 @@ fn apply_edit(
                 Output {
                     id: output_id.clone(),
                     kind: kind.clone(),
+                    encoder_profile: None,
                 },
             );
             Ok(vec![Edit::OutputDelete {
@@ -658,10 +662,17 @@ fn apply_edit(
                 .outputs
                 .remove(output_id)
                 .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
-            Ok(vec![Edit::OutputCreate {
-                output_id: output.id,
+            let mut inverse = vec![Edit::OutputCreate {
+                output_id: output.id.clone(),
                 kind: output.kind,
-            }])
+            }];
+            if let Some(profile_id) = output.encoder_profile {
+                inverse.push(Edit::OutputSetEncoder {
+                    output_id: output.id,
+                    profile_id: Some(profile_id),
+                });
+            }
+            Ok(inverse)
         }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
     }

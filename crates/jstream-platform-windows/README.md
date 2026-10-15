@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:f3bac4bd838f397a", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (H7b ADR-0042 covers, #214, #217 and others) into H1: re-read the section; main's text and covers kept; H1's check_media_foundation bullet and its Tests entries (decision everywhere, probe and edition read on Windows) match n_edition.rs" }
+verified = { hash = "b3:d4ca9e3f2c92bf32", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b, #148 MF N editions): stamp-only conflict, main's text taken; F3 wrote nothing here that C1b or #148 changes; holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

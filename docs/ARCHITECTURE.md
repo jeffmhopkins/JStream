@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:27c03211dbd9d783", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b: kinds sentence now says the engine runs a source per built kind (color, image), rebuilt on settings change, and the program mix shows its frames with animations on the media clock; matches core live.rs" }
+verified = { hash = "b3:64f0eaa7c2254edb", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b, #148): Built so far takes C1b's live-sources sentence (engine runs color/image sources, program mix shows their frames on the media clock) with F3's outputs-with-encoder_profile and encoder-profile sentences; collection-file line holds" }
 -->
 
 ```
@@ -357,23 +357,29 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   built-in kinds come from `jstream-sources`. The engine runs a source of each one
   whose kind is built (`color` and `image`), rebuilt when its settings change, and
   the program mix shows its frames, animations advancing on the media clock.
-  Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
-  the URL checked to carry no credential, or `Record { path, container: mp4 }`, the path
-  checked to be absolute and to end in a file name. A stream key is never collection state: it
-  lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
+  Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
+  target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
+  container: mp4 }`, the path checked to be absolute and to end in a file name. A stream
+  key is never collection state: it lives in the OS credential store
+  ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
+  H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
+  rate), checked against the ranges the protocol states. An output with no profile uses
+  the engine's default; a profile an output uses can't be deleted. The mix is always
+  `Program` until video mixes exist, so outputs share a session by profile alone.
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, 3D
   geometry, `scene.create`'s optional `role`, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
-  `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
-  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
-  and `outputs`. Nothing is persisted yet.
+  `background`, hotkeys, an output's mix, buses and chains, the
+  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
+  `outputs` and `encoders`. The collection file saves everything built so
+  far, encoder profiles and each output's profile included ([Persistence](#persistence)).
 
 <a id="threading"></a>
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:b53354403aab317a", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: took main's pointer paragraph in place of the output-pipeline detail; E1's model text (render snapshot through arc-swap, generation stamp, Collector row naming both collectors) stays as the engine-wide model and doesn't contradict core #runtime" }
+verified = { hash = "b3:7d2feead6f32e91a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: Collector row now says the program stage's collector is fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs) and the mixer's own frees input rings; matches launch_program, push_each and Program::drop (render, mixer, then collector); render-snapshot paragraph holds" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -391,7 +397,7 @@ every mix runs at the base rate divided by an integer.
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One per running output for its render thread, and the mixer's own for the mixer and audio threads. |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release. |
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
 next to its code, which that section covers: the output pipeline in
@@ -461,8 +467,8 @@ the last one showed allocates no texture: an unchanged frame is not uploaded aga
 each nested scene is redrawn into the layer it had. An image no frame references is
 retired, then freed once the GPU has finished the last frame that used it (a
 `Queue::on_submitted_work_done` fence the cache polls without blocking). The render
-thread hands those images, and each render snapshot it replaces, to the output's
-collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
+thread hands those images, and each render snapshot it replaces, to the program
+stage's collector thread ([R-RT-003](RULES.md#R-RT-003)). The render thread stamps its
 reader slot as the handover below says. When a fatal error stops its drawing it
 publishes the stopped marker too: it adopts nothing more and only repeats the frame it
 last drew until teardown. The audio and outputs snapshots are not built.
@@ -506,7 +512,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:c6712b07b626e302", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#214 ADR-0041) into #217, stamp-only conflicts: re-read; main's text taken as is; no asset path rules here" }
+verified = { hash = "b3:0ace1d479994c64d", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#217 asset paths): #217 adds ':' to the rejected asset-path forms and changes no text F3 wrote here; F3's encoder profile, protocol 0.13 and program-stage text hold beside it" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -527,7 +533,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
-  `item.set_transform`.
+  `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
+  configure encoder profiles, and `output.set_encoder` points an output at one or back
+  at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -558,13 +566,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   off. Preview streams show the pre-master stage (the editing view) by
   default; a client asks for the post-master stage to see what viewers see, and only
   that stage is covered by the privacy screen.
-- **Encoder sessions** (planned): `output.status` reports, per output, whether it shares
-  an encoder session and with which outputs, plus the hardware sessions in use. When the
-  encoder refuses a session, `output.start` fails with a stable session-limit error code
-  naming the outputs that hold sessions, with no fallback to a software encoder
+- **Encoder sessions** (protocol 0.13): `output.status` reports, per running output,
+  its encoder session's profile and the other outputs sharing it, plus the sessions and
+  hardware sessions in use. A profile's settings at start count, so an output started
+  after `encoder.update` gets a session of its own. Planned: when the encoder refuses a
+  session, `output.start` fails with a stable session-limit error code naming the
+  outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the
+  `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); later `audio.levels`).
@@ -612,11 +622,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:3520026dd573c7fb", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: tools.snap is 115 KB after B3 and B6, so the text says about 115 KB" }
+verified = { hash = "b3:1d46418cbe17e23b", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: noun tools now canvas, encoder, history, item, kind, output, scene, source, state, video (13 tools in tests.rs); tools.snap measured 138647 bytes, text says about 140 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -626,7 +636,7 @@ verified = { hash = "b3:3520026dd573c7fb", by = "agent:claude@session_01Vy4KuKBC
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 115 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 140 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -813,7 +823,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:333fc86c8cb74fff", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6): persist/ now also stores scene roles; Collections and Asset files bullets hold" }
+verified = { hash = "b3:d1beab0a225fcf85", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#205): Collections bullet holds with encoder profiles added to the file as optional fields at schema_version 1; rest unchanged" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
