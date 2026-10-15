@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:b6654e4f2b866422", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#135 publish opener) into #136: resolved the Tests bullet conflict by keeping both lists (stalled-stop and stop-deadline RTMP tests, rt_panic_is_reported via with_cpu_compositor, and #135's opener tests); Engine bullet names with_publish_opener, Drop counts bullet names the stop drain; both match the code" }
+verified = { hash = "b3:c27c2ac1685b8f21", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#136 bounded stop, #141, #146) into B4: took main's text and verified line; re-read with B4's Kinds bullet and 'real source kinds' in Not here yet; #136's Tests and Drop counts bullets and B4's additions are independent and both match the code" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -92,7 +92,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:06ae65a234c20a76", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#135 publish opener) into #136: re-read Pipeline, failure, stop, drop table and RTMP paragraphs; #135's one-shot vs opener wording and #136's bounded 2 s stop drain (stop_by, Stop drain row) coexist without contradiction: an opened target is a LivePublish, so it gets stop_by like a one-shot one; Locking unchanged" }
+verified = { hash = "b3:8c56f6d2e436f59e", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main into B4: main's Pipeline/stop-drain paragraphs kept as they are; B4's Queries bullet (kind queries via Graph::query with built-in kinds), serde_json as a normal dependency, and Not yet (real source kinds) re-read beside them; no contradiction" }
 -->
 
 ### Engine and sessions
