@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:a99fab47a410b882", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#184 B6 groups, item.move, history) into ADR-0042: text is main's; this PR's only covered change is lib.rs's Docs: line; holds" }
+verified = { hash = "b3:9f9bd74ed157256e", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (#182 H7b): re-read; Tests bullet (src/tests/collection.rs, batches/undo/redo saved, reload) and Collection file bullet hold; main changed no core prose" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -122,7 +122,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6e833283d64b1b83", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#184 B6 history/undo of role and item.move) into ADR-0042: text is main's; this PR's only covered change is lib.rs's Docs: line; holds" }
+verified = { hash = "b3:3ca7612494ac158c", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (#182): re-read Collection file subsection against engine.rs and collection.rs; unchanged" }
 -->
 
 ### Engine and sessions
