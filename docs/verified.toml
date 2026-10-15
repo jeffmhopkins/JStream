@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:ce352d59894aa491", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main after #370 and #359: re-read; main's new jstream-effects row kept, youtube and sources rows cite ADR-0051 and match their Cargo summaries; holds" }
+stamp = { hash = "b3:ac26fce01ad1c55f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#370) into #320: crate-map body unchanged from the reviewed head except main's own edits; jstream-outputs row (RTMP client, recording, vcam runs in jstream-core's runtime) holds" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -60,7 +60,7 @@ stamp = { hash = "b3:ac31564403d9a839" }
 stamp = { hash = "b3:24f40f915476b541" }
 
 ["ARCH#crate-map"."file:crates/jstream-outputs/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:2bdf736999b99a35" }
+stamp = { hash = "b3:65f39753685d6476", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the crate map after merging main: the jstream-outputs row now matches its Cargo.toml summary (RTMP(S) client, recording; vcam output runs in jstream-core's runtime, runtime/vcam.rs); other rows unchanged by this PR." }
 
 ["ARCH#crate-map"."file:crates/jstream-platform-windows/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:70046124f5cf9949" }
@@ -81,7 +81,7 @@ stamp = { hash = "b3:45a0daff6f397ade" }
 stamp = { hash = "b3:419939266a782736" }
 
 ["ARCH#crate-map"."file:crates/jstream-sources/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:3baf4488e4a21b5d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 in the youtube and sources rows, matching their Cargo summaries; holds" }
+stamp = { hash = "b3:52e89dfb02c9534f" }
 
 ["ARCH#crate-map"."file:crates/jstream-types/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:e7dbb93ef26bf6b8" }
@@ -99,7 +99,7 @@ stamp = { hash = "b3:504280e9852eb46f" }
 stamp = { hash = "b3:24cef673281620f5" }
 
 ["ARCH#crate-map"."file:crates/jstream-youtube/Cargo.toml#jstream-meta"]
-stamp = { hash = "b3:87341bdb2fc70e6f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 in the youtube and sources rows, matching their Cargo summaries; holds" }
+stamp = { hash = "b3:dba3adb97afc2dd5" }
 
 ["ARCH#data-model"."body"]
 stamp = { hash = "b3:d72def29f6861e6d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; audio paragraph says protocol 0.19; not-yet list drops VirtualCam as main did; holds" }
@@ -279,7 +279,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (the YouTube bullet and the protocol README it covers); holds" }
+stamp = { hash = "b3:d638c6ca8019b15d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B5, filters join the audio edits once they are in the protocol, the mixer has chains since D7b; rest holds at 0.19" }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -321,7 +321,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:ed9f76ff08fab65c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main: stale via the protocol README, where main added absolute-path rules and this branch only an ADR-0051 link; the YouTube bullet cites ADR-0051; holds" }
+stamp = { hash = "b3:69a83bcc7bc7abfe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:e08032e34676ac01" }
@@ -423,7 +423,7 @@ stamp = { hash = "b3:4a9ea9ae5014f95c" }
 stamp = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Re-read against main.rs, which only adds docs merge-main to the usage list: the xtask line still names docs among its commands, so the layout holds" }
 
 ["ARCH#repo-layout"."file:xtask/src/main.rs"]
-stamp = { hash = "b3:8dc9a0c76e46621c" }
+stamp = { hash = "b3:0c6fb015c0446730", by = "agent:claude", note = "xtask/src/main.rs only changed the merge-main help line; the layout and the xtask command list still hold." }
 
 ["ARCH#shape"."body"]
 stamp = { hash = "b3:67ff057d2d135aa7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; the daemon row's --ui-dir mention matches main.rs; holds" }
@@ -471,19 +471,19 @@ stamp = { hash = "b3:ff923b70ae781b73" }
 stamp = { hash = "b3:56b6301e2e6a132b" }
 
 ["CLAUDE#docs-duty"."body"]
-stamp = { hash = "b3:7444919d28801154", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 in this section and DOCS#verification; the ledger, migrate and merge-main bullets are otherwise unchanged and still hold" }
+stamp = { hash = "b3:a0e7244abd1e0409", by = "agent:claude", note = "Added the --from wave/<name> form of merge-main and the link to the waves runbook; both match xtask/src/docs/mod.rs and docs/runbooks/waves.md." }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#notes"]
 stamp = { hash = "b3:7baf4e16b6cfdff1", by = "agent:claude", note = "Whole #376 change to DOCS#verification and #notes re-read: per-input ledger stamps, the guarantee that a merge never leaves a section falsely fresh and a conflict usually leaves it stale, verify writing only changed inputs (removal-only and unchanged verifies record no note), and the last note on each entry covering the PR. docs-duty's verify, generate, migrate, merge-main and never-edit-the-ledger duties still hold" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:591d0929c5ce1215", by = "agent:claude", note = "Whole #376 change to DOCS#verification and #notes re-read: per-input ledger stamps, the guarantee that a merge never leaves a section falsely fresh and a conflict usually leaves it stale, verify writing only changed inputs (removal-only and unchanged verifies record no note), and the last note on each entry covering the PR. docs-duty's verify, generate, migrate, merge-main and never-edit-the-ledger duties still hold" }
+stamp = { hash = "b3:df8b08f4a74bee6c", by = "agent:claude", note = "Added the --from wave/<name> form of merge-main and the link to the waves runbook; both match xtask/src/docs/mod.rs and docs/runbooks/waves.md." }
 
 ["CLAUDE#pr-loop"."body"]
 stamp = { hash = "b3:d756a751285910f0", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read the PR loop against ADR-0043: item 7 now lists the narrowed maintainer tier and says everything else is agent tier, proxy format cited from ADR-0043" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#output"]
-stamp = { hash = "b3:f5210ab62bcb0970", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0054 round 2: auto-merge still waits for every required check incl. review-gate; Windows checks arrive after the gate, which item 1's wording covers" }
+stamp = { hash = "b3:8b4ecdcf072341c3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0055: auto-merge still waits for the base branch's required checks; on wave/* that is review-gate, which item 1 covers" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#rounds"]
 stamp = { hash = "b3:1d8bae6753e4ae8d" }
@@ -810,7 +810,7 @@ stamp = { hash = "b3:c7379cddeb275056" }
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Failures bullet matches ws_web.rs (onerror handler ends the session via end_reason, State::close keeps the first reason; connect reason mentions CSP); test paragraph matches connect.spec.js and ws_config.rs tests. Edited open question 3 so it no longer implies the browser client is untested (e2e via jstream-ui now covers it)." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; stale only through a dependency where the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051; this section's text does not depend on that ADR's content; holds" }
+stamp = { hash = "b3:d638c6ca8019b15d" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -882,10 +882,10 @@ stamp = { hash = "b3:f8d3caba075c6078", by = "agent:claude@session_01PpGi5RaafND
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:8435aa7720df2206", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main: stale via the protocol README design, where main added absolute-path rules and this branch only an ADR-0051 link; engine design names neither; holds" }
+stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; stale only through a dependency where the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051; this section's text does not depend on that ADR's content; holds" }
+stamp = { hash = "b3:d638c6ca8019b15d" }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -1410,7 +1410,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:8435aa7720df2206", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main: stale via the protocol README design, where main added absolute-path rules and this branch only an ADR-0051 link; graph text names neither; holds" }
+stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1533,7 +1533,7 @@ stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
 
 ["CRATE-jstream-media#purpose"."body"]
-stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (README and packet.rs doc); the Codec and packet text is unchanged; holds" }
+stamp = { hash = "b3:e204cadb57ccceae", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the enhanced-RTMP link; ADR-0041 keeps ADR-0009/0034's RTMP/RTMPS with enhanced RTMP for HEVC/AV1, so the text holds" }
 
 ["CRATE-jstream-media#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-media"]
 stamp = { hash = "b3:18137b74917731cc" }
@@ -1557,7 +1557,7 @@ stamp = { hash = "b3:1d2c5fbae960d299" }
 stamp = { hash = "b3:92a44864b9ef193c" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/packet.rs"]
-stamp = { hash = "b3:841d98d687ec8849", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (README and packet.rs doc); the Codec and packet text is unchanged; holds" }
+stamp = { hash = "b3:b08d0b0fd25d7ae1" }
 
 ["CRATE-jstream-media#purpose"."file:crates/jstream-media/src/pixel.rs"]
 stamp = { hash = "b3:12eb4553ad7e5ab1" }
@@ -1569,10 +1569,10 @@ stamp = { hash = "b3:3969b618c2c6f598" }
 stamp = { hash = "b3:d6dfe064425156bb" }
 
 ["CRATE-jstream-mux#purpose"."body"]
-stamp = { hash = "b3:d3a56f7eedf0de15", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (README, depends_on, lib.rs Docs line); the RTMP(S) container text is unchanged; holds" }
+stamp = { hash = "b3:be26765b746b53d7", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ADR-0041, whose only change is text (review N2): the Context bullet is rewrapped and the follow-on list names jstream-media and ARCH's protocol section; the decision is unchanged, so this section holds" }
 
 ["CRATE-jstream-mux#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (README, depends_on, lib.rs Docs line); the RTMP(S) container text is unchanged; holds" }
+stamp = { hash = "b3:e204cadb57ccceae" }
 
 ["CRATE-jstream-mux#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mux"]
 stamp = { hash = "b3:cc699c75167f9edd" }
@@ -1580,8 +1580,8 @@ stamp = { hash = "b3:cc699c75167f9edd" }
 ["CRATE-jstream-mux#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
 
-["CRATE-jstream-mux#purpose"."dep:docs/adr/0051-youtube-without-a-required-oauth-client.md"]
-stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (README, depends_on, lib.rs Docs line); the RTMP(S) container text is unchanged; holds" }
+["CRATE-jstream-mux#purpose"."dep:docs/adr/0041-youtube-interaction-scope-v3.md"]
+stamp = { hash = "b3:acbf94ce5b03cce1" }
 
 ["CRATE-jstream-mux#purpose"."file:crates/jstream-mux/Cargo.toml"]
 stamp = { hash = "b3:1474bbecc72bdf29" }
@@ -1614,13 +1614,13 @@ stamp = { hash = "b3:655a50861b8f8ac2" }
 stamp = { hash = "b3:db7b56b6ec192456" }
 
 ["CRATE-jstream-mux#purpose"."file:crates/jstream-mux/src/lib.rs"]
-stamp = { hash = "b3:6e5013d99f034114", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (README, depends_on, lib.rs Docs line); the RTMP(S) container text is unchanged; holds" }
+stamp = { hash = "b3:20caa632a5d049a6" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:e4faaf718eb106d5", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main after #371: re-read; main's hard-link move on finish kept as merged; this branch only re-points the generic RTMP/RTMPS output citation to ADR-0051; holds" }
+stamp = { hash = "b3:593d770c1aad557d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#371 recorder no-replace move) into #320: re-read; main's recorder bullet (hard link then unlink, placeholder fallback) and Tests text beside this PR's line that the virtual-camera output runs in jstream-core's runtime; both hold" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
-stamp = { hash = "b3:2ef270bb1b4e0cc6" }
+stamp = { hash = "b3:230ac9edc35e19b9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main: rtmp and record modules as lib.rs says; Output trait still later; vcam output is in jstream-core runtime (runtime/vcam.rs), and the jstream-core README#runtime anchor exists; deps unchanged." }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main (ADR-0053 stamp ledger): ARCH#threading's only change on this branch is the rewrap plus 'would contradict it' and the marker cleared to a value below every generation; this section doesn't restate that and still agrees with it" }
@@ -1628,11 +1628,11 @@ stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1K
 ["CRATE-jstream-outputs#purpose"."dep:docs/adr/0031-source-types-and-decoding-scope.md"]
 stamp = { hash = "b3:04b853b872d31424" }
 
-["CRATE-jstream-outputs#purpose"."dep:docs/adr/0051-youtube-without-a-required-oauth-client.md"]
-stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (README, depends_on, lib.rs Docs line); the generic RTMP/RTMPS output is kept by ADR-0051; holds" }
+["CRATE-jstream-outputs#purpose"."dep:docs/adr/0041-youtube-interaction-scope-v3.md"]
+stamp = { hash = "b3:acbf94ce5b03cce1" }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/lib.rs"]
-stamp = { hash = "b3:351e5c668972affd", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (README, depends_on, lib.rs Docs line); the generic RTMP/RTMPS output is kept by ADR-0051; holds" }
+stamp = { hash = "b3:ec7b0f2e7ed0db4a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main: rtmp and record modules as lib.rs says; Output trait still later; vcam output is in jstream-core runtime (runtime/vcam.rs), and the jstream-core README#runtime anchor exists; deps unchanged." }
 
 ["CRATE-jstream-outputs#purpose"."file:crates/jstream-outputs/src/record/error.rs"]
 stamp = { hash = "b3:5576f34b8fef4acc" }
@@ -1686,7 +1686,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:ce352d59894aa491", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main: stale via ARCH#crate-map, which gains only the effects row and ADR-0051 links; GPU frame design untouched; holds" }
+stamp = { hash = "b3:ac26fce01ad1c55f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via ARCH#crate-map only; the jstream-platform row it relies on (GpuInterop with wgpu types) is unchanged; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
@@ -1701,7 +1701,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:ac6493f8088539b9", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
-stamp = { hash = "b3:2be2f089c9d04f4e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; stale only through a dependency where the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051; this section's text does not depend on that ADR's content; holds" }
+stamp = { hash = "b3:e204cadb57ccceae" }
 
 ["CRATE-jstream-platform#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform"]
 stamp = { hash = "b3:4179d522e3055d3d" }
@@ -1929,7 +1929,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:8435aa7720df2206", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main: re-read; main's absolute-path rules kept as merged; this branch only re-points the YouTube commands' citation to ADR-0051; holds" }
+stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2196,7 +2196,7 @@ stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client error-event handling, CSP wording, open question 3 edit): server-side checks, subprotocol token and CSP description unaffected, holds." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; stale only through a dependency where the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051; this section's text does not depend on that ADR's content; holds" }
+stamp = { hash = "b3:d638c6ca8019b15d" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:9bcfb0336f6adad9" }
@@ -2271,7 +2271,7 @@ stamp = { hash = "b3:4a9ea9ae5014f95c" }
 stamp = { hash = "b3:ba182674aa6f4948", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 N1: Windows walk split out of open_inside into walk_below (takes the already-resolved path below the root); Assets paragraph's walk description unchanged and still holds; Tests sentence now says the Windows test refuses links both at resolve and in the walk on its own" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
-stamp = { hash = "b3:2e3b05c6b81e422d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; stale only through a dependency where the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051; this section's text does not depend on that ADR's content; holds" }
+stamp = { hash = "b3:dfba6103702005f0" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199" }
@@ -2613,13 +2613,13 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
 ["CRATE-jstream-youtube#purpose"."body"]
-stamp = { hash = "b3:887a004b8d38f003", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051, with section citations marked kept by ADR-0051 (README, error.rs, oauth.rs, lib.rs, Cargo summary); scopes, quota and client text unchanged; holds" }
+stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via platform#purpose (Audio and FakeAudioIo lines); Secret and OAuthTokenStore text unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
 stamp = { hash = "b3:ac6493f8088539b9" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
-stamp = { hash = "b3:52b27d1ffa7b6a0b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051, with section citations marked kept by ADR-0051 (README, error.rs, oauth.rs, lib.rs, Cargo summary); scopes, quota and client text unchanged; holds" }
+stamp = { hash = "b3:e3b27ea549009815" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/RULES.md#R-DEP-006"]
 stamp = { hash = "b3:8efb19c99c8be969" }
@@ -2627,8 +2627,8 @@ stamp = { hash = "b3:8efb19c99c8be969" }
 ["CRATE-jstream-youtube#purpose"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
 
-["CRATE-jstream-youtube#purpose"."dep:docs/adr/0051-youtube-without-a-required-oauth-client.md"]
-stamp = { hash = "b3:be1f28d6eccd927b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051, with section citations marked kept by ADR-0051 (README, error.rs, oauth.rs, lib.rs, Cargo summary); scopes, quota and client text unchanged; holds" }
+["CRATE-jstream-youtube#purpose"."dep:docs/adr/0041-youtube-interaction-scope-v3.md"]
+stamp = { hash = "b3:acbf94ce5b03cce1" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/fixtures/broadcast_bind.json"]
 stamp = { hash = "b3:8da9c74a2b289be3" }
@@ -2670,7 +2670,7 @@ stamp = { hash = "b3:d388d0682e80ff41" }
 stamp = { hash = "b3:8b26b2ef26103774" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/error.rs"]
-stamp = { hash = "b3:7070dec4a775093f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051, with section citations marked kept by ADR-0051 (README, error.rs, oauth.rs, lib.rs, Cargo summary); scopes, quota and client text unchanged; holds" }
+stamp = { hash = "b3:a175ce9c54120d89" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/fake.rs"]
 stamp = { hash = "b3:072de4248097ea45" }
@@ -2685,7 +2685,7 @@ stamp = { hash = "b3:a1b77e31232697af" }
 stamp = { hash = "b3:2a7db87174f1fd6d" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/lib.rs"]
-stamp = { hash = "b3:c0f36ba10d5d19df", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051, with section citations marked kept by ADR-0051 (README, error.rs, oauth.rs, lib.rs, Cargo summary); scopes, quota and client text unchanged; holds" }
+stamp = { hash = "b3:b597181b25e55fbd" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/live.rs"]
 stamp = { hash = "b3:37cfb6646affdb72" }
@@ -2700,13 +2700,13 @@ stamp = { hash = "b3:49badb1e6e8761a0" }
 stamp = { hash = "b3:a9e8a37ad1f0f16f" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/oauth.rs"]
-stamp = { hash = "b3:4a59346b1a818179", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051, with section citations marked kept by ADR-0051 (README, error.rs, oauth.rs, lib.rs, Cargo summary); scopes, quota and client text unchanged; holds" }
+stamp = { hash = "b3:f2c643e2a1704b86" }
 
 ["CRATE-jstream-youtube#purpose"."file:crates/jstream-youtube/src/oauth/tests.rs"]
 stamp = { hash = "b3:b593d1da7528ba61" }
 
 ["DOCS#bootstrap"."body"]
-stamp = { hash = "b3:e81f0d324bdcfa8a", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "Renumbered ADR-0050 to ADR-0053 (0050-0052 taken in open PRs): only the ADR number changed in the bootstrap bullets and xtask/src/docs comments and commit message; ledger behavior unchanged" }
+stamp = { hash = "b3:3618e07efce8b93a", by = "agent:claude", note = "merge-main now takes --from wave/<name> (merge.rs refuses any other branch); the bullet says so." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/backrefs.rs"]
 stamp = { hash = "b3:ba285841b70c7e29", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
@@ -2730,10 +2730,10 @@ stamp = { hash = "b3:e9526047eb0b1865", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:cf8e0a09cd4967b1", by = "agent:claude", note = "Whole #376 change re-read (ADR-0053): ledger.rs stores one stamp per input (body, file:, dep:) in docs/verified.toml as a header, a stamp line and a trailing blank line, canonical and sorted; restamp writes only changed or new entries and drops removed ones, never rewriting body on a removal-only or unchanged verify (B6); the fixture test merges restamp-written ledgers with git and checks merge-main's main-side resolution leaves conflicts stale; check names changed inputs; migrate replaces rehash; merge-main takes main's ledger side and migrates; log reads ledger history. The bootstrap bullets still hold" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/merge.rs"]
-stamp = { hash = "b3:1cafe38c6ec5f8cb", by = "agent:claude", note = "Whole #376 change re-read (ADR-0053): ledger.rs stores one stamp per input (body, file:, dep:) in docs/verified.toml as a header, a stamp line and a trailing blank line, canonical and sorted; restamp writes only changed or new entries and drops removed ones, never rewriting body on a removal-only or unchanged verify (B6); the fixture test merges restamp-written ledgers with git and checks merge-main's main-side resolution leaves conflicts stale; check names changed inputs; migrate replaces rehash; merge-main takes main's ledger side and migrates; log reads ledger history. The bootstrap bullets still hold" }
+stamp = { hash = "b3:328d159373ee8353", by = "agent:claude", note = "merge-main now takes --from wave/<name> (merge.rs refuses any other branch); the bullet says so." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/mod.rs"]
-stamp = { hash = "b3:4d3446f6d8977b9f", by = "agent:claude", note = "Whole #376 change re-read (ADR-0053): ledger.rs stores one stamp per input (body, file:, dep:) in docs/verified.toml as a header, a stamp line and a trailing blank line, canonical and sorted; restamp writes only changed or new entries and drops removed ones, never rewriting body on a removal-only or unchanged verify (B6); the fixture test merges restamp-written ledgers with git and checks merge-main's main-side resolution leaves conflicts stale; check names changed inputs; migrate replaces rehash; merge-main takes main's ledger side and migrates; log reads ledger history. The bootstrap bullets still hold" }
+stamp = { hash = "b3:308d1911eb5e8c08", by = "agent:claude", note = "merge-main now takes --from wave/<name> (merge.rs refuses any other branch); the bullet says so." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/parse.rs"]
 stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
@@ -2844,10 +2844,10 @@ stamp = { hash = "b3:ef6690600d49a5a1", by = "agent:claude@session_01QBbMRwRuZe7
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 
 ["REVIEW#output"."body"]
-stamp = { hash = "b3:f5210ab62bcb0970", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0054 round 2: paragraph now says only the required Windows checks gate the merge; review-gate.yml dispatches after-review.yml with a queued/running/passed guard; decide block unchanged" }
+stamp = { hash = "b3:8b4ecdcf072341c3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0055: added that a PR into a wave/* branch gets no after-review dispatch (review-gate.yml returns early on base wave/*); verdict format and decide unchanged" }
 
 ["REVIEW#output"."file:.github/workflows/review-gate.yml"]
-stamp = { hash = "b3:08b1aae01d19a89f", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0054 round 2: paragraph now says only the required Windows checks gate the merge; review-gate.yml dispatches after-review.yml with a queued/running/passed guard; decide block unchanged" }
+stamp = { hash = "b3:3d6bc12184fe6fba", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0055: added that a PR into a wave/* branch gets no after-review dispatch (review-gate.yml returns early on base wave/*); verdict format and decide unchanged" }
 
 ["ROADMAP#m0"."body"]
 stamp = { hash = "b3:20d931da187bfda8", by = "agent:claude@session_01NkygLFZ2oeJS1F938ivbtc", note = "#190 review N5: Demo line now says S1-S4 each have a written result (S4's is ARCH#browser-source); Track B bullets unchanged" }
@@ -2880,7 +2880,7 @@ stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:7ab4accbf98f6662" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:67db5c5c268db5d0", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; stale only through a dependency where the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051; this section's text does not depend on that ADR's content; holds" }
+stamp = { hash = "b3:d638c6ca8019b15d" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
@@ -2936,6 +2936,39 @@ stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCt
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; step 7 (Ctrl-C prints stopped, exits 0) holds with #301's bounded close wait; default limits are non-zero; holds" }
 
+["RUNBOOK-WAVES#current"."body"]
+stamp = { hash = "b3:c40bfcab7de124d7", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }
+
+["RUNBOOK-WAVES#current"."dep:docs/DOCS.md#verification"]
+stamp = { hash = "b3:df8b08f4a74bee6c", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }
+
+["RUNBOOK-WAVES#landing"."body"]
+stamp = { hash = "b3:6ae91e98d6488857", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
+
+["RUNBOOK-WAVES#landing"."dep:REVIEW.md#gather"]
+stamp = { hash = "b3:8bf3f0afb967b2ae", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
+
+["RUNBOOK-WAVES#landing"."dep:docs/adr/0055-wave-branches.md#decision"]
+stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
+
+["RUNBOOK-WAVES#owner"."body"]
+stamp = { hash = "b3:3a71f5c50a47e8d9", by = "agent:claude", note = "Sync PRs now auto-merge with mergeMethod MERGE, matching ADR-0055's sync-PR bullet and the ruleset allowing merge commits." }
+
+["RUNBOOK-WAVES#owner"."dep:docs/adr/0055-wave-branches.md#decision"]
+stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Sync PRs now auto-merge with mergeMethod MERGE, matching ADR-0055's sync-PR bullet and the ruleset allowing merge commits." }
+
+["RUNBOOK-WAVES#protocol"."body"]
+stamp = { hash = "b3:df9a842e2252a01f", by = "agent:claude", note = "New. Keeps the queue order by routing every PROTOCOL_VERSION bump to the earliest wave." }
+
+["RUNBOOK-WAVES#protocol"."dep:docs/adr/0055-wave-branches.md#consequences"]
+stamp = { hash = "b3:27ef1830af9f4a1c", by = "agent:claude", note = "New. Keeps the queue order by routing every PROTOCOL_VERSION bump to the earliest wave." }
+
+["RUNBOOK-WAVES#which-wave"."body"]
+stamp = { hash = "b3:30468b372b42a1aa", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
+
+["RUNBOOK-WAVES#which-wave"."dep:docs/adr/0055-wave-branches.md#decision"]
+stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
+
 ["SECURITY#scope"."body"]
 stamp = { hash = "b3:06282b84a1425ad4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: control API bullet now names the TLS-only pairing page and the device-only cookie, per R-SEC-002's amended text; other bullets unchanged" }
 
@@ -2950,4 +2983,70 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-004"]
 stamp = { hash = "b3:f3e3a293b719fe8d" }
+
+["THREAT-MODEL#assets"."body"]
+stamp = { hash = "b3:fc8f9e4fe919b269", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-001"]
+stamp = { hash = "b3:69c6131f3f1bd0fd" }
+
+["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-004"]
+stamp = { hash = "b3:f3e3a293b719fe8d" }
+
+["THREAT-MODEL#browser"."body"]
+stamp = { hash = "b3:48f170cbe7bd4d5f", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#browser"."dep:docs/adr/0021-browser-source.md"]
+stamp = { hash = "b3:64d21faa19974bc3" }
+
+["THREAT-MODEL#mcp"."body"]
+stamp = { hash = "b3:e1430f5016c0cb1e", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#mcp"."dep:docs/adr/0006-mcp-full-access.md"]
+stamp = { hash = "b3:fbe7c61707faa7bd" }
+
+["THREAT-MODEL#mcp"."dep:docs/adr/0036-mcp-events-polling-tool.md"]
+stamp = { hash = "b3:528a4d728be121b6" }
+
+["THREAT-MODEL#pairing"."body"]
+stamp = { hash = "b3:f912fc0a9873c9db", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "#358 B1: narrowed to what ADR-0047 and R-SEC-002 promise: a paired browser holds only its device token, and the cookie never carries the control token" }
+
+["THREAT-MODEL#pairing"."dep:docs/adr/0044-pairing-remote-browsers.md"]
+stamp = { hash = "b3:5670e6a5758601b2" }
+
+["THREAT-MODEL#pairing"."dep:docs/adr/0047-browser-pairing-page-and-device-cookie.md"]
+stamp = { hash = "b3:8042c8d8d5117226" }
+
+["THREAT-MODEL#plugins"."body"]
+stamp = { hash = "b3:e1e053e960486735", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#plugins"."dep:docs/RULES.md#R-SEC-003"]
+stamp = { hash = "b3:e62d5f1a75c6baa0" }
+
+["THREAT-MODEL#plugins"."dep:docs/adr/0035-clap-plugins-out-of-process.md"]
+stamp = { hash = "b3:56b6301e2e6a132b" }
+
+["THREAT-MODEL#secrets"."body"]
+stamp = { hash = "b3:af6cc0745d67f50d", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-001"]
+stamp = { hash = "b3:69c6131f3f1bd0fd" }
+
+["THREAT-MODEL#secrets"."dep:docs/RULES.md#R-SEC-004"]
+stamp = { hash = "b3:f3e3a293b719fe8d" }
+
+["THREAT-MODEL#server"."body"]
+stamp = { hash = "b3:c4b6a3e7a16f884b", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "#358 B1: Accepted now names the control token cached by a browser through the Basic prompt (gate.rs Basic path, ADR-0047 consequences); rest unchanged" }
+
+["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
+stamp = { hash = "b3:9bcfb0336f6adad9" }
+
+["THREAT-MODEL#server"."dep:docs/adr/0006-mcp-full-access.md"]
+stamp = { hash = "b3:fbe7c61707faa7bd" }
+
+["THREAT-MODEL#vcam"."body"]
+stamp = { hash = "b3:22d241d0aeefeac2", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+
+["THREAT-MODEL#vcam"."dep:docs/adr/0020-portable-windows-distribution.md"]
+stamp = { hash = "b3:febfe552adc09d5b" }
 
