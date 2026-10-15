@@ -463,8 +463,9 @@ The filters run before the fader and sends the routing sets, which leave them al
 When only settings changed, each changed filter is updated in place
 (`FilterControl::set`), so a gate's envelope or a delay line carries on; a new kind, a
 reorder, or a limiter's look-ahead (its latency) rebuilds the chain. A filter the mixer
-refuses is bypassed and logged at `warn`, never an edit failure, and a reopened input
-gets its chain again. Each input is opened by asking the platform
+refuses to add is bypassed, and new settings it refuses (a full command queue) leave
+the filter on its old ones until the next pass tries again; each refusal is logged at
+`warn`, never an edit failure, and a reopened input gets its chain again. Each input is opened by asking the platform
 for the format the device delivers (`AudioIo::input_format`), adding the mixer input
 in that format, and opening the stream with the input's producer as its handler; a
 stream that opens in another format is closed and tried again. An `audio_input`

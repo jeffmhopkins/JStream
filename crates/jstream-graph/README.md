@@ -173,7 +173,7 @@ the batch **touched**.
   the source has a channel (a `scene` source sends nothing of its own). Every gain is
   checked with the protocol's `gain_db_problem` (−100 to +24 dB). A send always runs
   from a source to a bus, so buses can't form a cycle (buses never feed buses); a
-  routing check comes with filters.
+  routing check comes with keyed (sidechain) filters.
 - **Groups and moves** ([ADR-0024](../../docs/adr/0024-scene-structure.md) §1):
   `scene.set_role` changes a scene's role and is undone by the previous role.
   `scene.create` sets the `role` it names, or `scene` when it names none.
@@ -246,8 +246,8 @@ the engine's; this crate does no I/O.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
   graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
-  sources its settings refer to), then items in their placement form with their crop
-  and visibility, opacity and blend, then every source's filters, then encoder
+  sources its settings refer to), then every source's filters, then items in their
+  placement form with their crop and visibility, opacity and blend, then encoder
   profiles, then outputs with their profiles, then the buses (the master renamed or
   faded as saved), each source's audio and the sends (with a `send.remove` of a
   default master send the file doesn't list; a file without `sends`, such as one saved
@@ -323,12 +323,14 @@ no error quotes a credential-like value placed where a number, key or tag belong
 
 Planned, and kept possible by the private fields of the model types:
 
-- **Filters and effects:** `filters[]` on sources (applied wherever the source is
-  placed) and `effects[]` on items (per placement), with their edits.
+- **Effects and more chains:** `effects[]` on items (per placement), which a collection
+  reserves and must leave empty for now, with their edits; filter chains on buses,
+  scenes, the master and outputs
+  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)).
 - **Kind versions.** The engine's kinds come from `jstream-sources`. The collection file
   records each source's kind version but refuses a mismatch: settings migrations per
   kind, and keeping the data of a source whose kind is missing, come later.
-- Blend modes and opacity on placements (B7). Legacy placements go in 1.0, whose
+- Blend modes other than `normal` on placements. Legacy placements go in 1.0, whose
   collection migration converts them
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) decision 5).
 - Keyframe scenes (`variant_of`, per-item `overrides`, `item.clear_override`) and the
