@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:7cd4b8f078f2dcab", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review N6/N7: pipeline.rs module docs and push_each test only; Runtime bullet holds" }
+verified = { hash = "b3:41bd606ba62a9b24", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b): C1b's Live sources and Kinds bullets are main's; the shared program stage Runtime bullet holds beside them (live sources run on the control side and the render thread reads their frames from the render snapshot)" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -50,10 +50,14 @@ state machine. Contents:
   change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)),
-  taken from `jstream-sources`' built-in registry. Nothing renders from their settings
-  yet; frames still come from `set_source_frame`, except that a `display` source with
-  no stored frame shows the output pipeline's capture on the render thread (see
-  *Snapshots*).
+  taken from `jstream-sources`' built-in registry.
+- **Live sources** (`live.rs`): a running `jstream-sources` source for every source
+  in the collection, built when it is created, rebuilt when its settings change and
+  dropped when it is deleted, on the engine's `jstream-sources` thread. The program
+  mix shows their frames and advances animations on the media clock. A frame stored
+  with `set_source_frame` wins over the live one, and a kind that is only described
+  draws nothing, except that a `display` source shows the output pipeline's capture
+  on the render thread (see *Live sources* and *Snapshots* in [Design](#design)).
 - **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -123,8 +127,8 @@ state machine. Contents:
   leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
-Not here yet: live values, rendering from the source registry, the audio and outputs
-snapshots, a GPU encode target, and the platform's Windows devices. See
+Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
+the platform's Windows devices. See
 [Design › Not yet](#design).
 
 Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
@@ -136,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3dcccba7ea476df7", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#217 asset paths): #217 adds ':' to the rejected asset-path forms and changes no text F3 wrote here; F3's encoder profile, protocol 0.13 and program-stage text hold beside it" }
+verified = { hash = "b3:ef1b96c7380c96f5", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b): C1b's Live sources subsection and publish_render re-plan are main's and touch no runtime code; F3's program-stage, collector and encoder-profile paragraphs hold against pipeline.rs" }
 -->
 
 ### Engine and sessions
@@ -176,8 +180,8 @@ and the pipeline compositor), `jstream-platform` (backend traits the host inject
 the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its drop
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
-publisher and the recording file sink), `jstream-sources` (the built-in kind
-descriptors), `png`
+publisher and the recording file sink), `jstream-sources` (the built-in kinds: their
+descriptors and the sources that draw them), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
@@ -323,8 +327,9 @@ draws nothing.
 **The render snapshot.** `snapshot::plan` copies the program scene, the scenes it
 reaches, the frames they place and the passes that draw them (`schedule`, made once
 here) into an immutable `Shot`. The engine re-plans after every applied batch, undo
-and redo, every `set_source_frame` and a collection file's load, under the collection
-lock, and `RenderHub::publish` stores
+and redo, every `set_source_frame`, a collection file's load, a live source's build
+and a live source's next frame (see *Live sources*), under the collection lock, and
+`RenderHub::publish` stores
 it through `arc-swap` as the next render generation only when it draws something new
 (the canvas, the scenes, their placements or the frames' versions differ). So a batch
 that changes nothing on program, or a frame for a source no program scene shows,
@@ -344,6 +349,33 @@ encoder size). Without a program scene the output is the capture filling it, or 
 A `display` source with no stored frame shows the pipeline's capture on the render
 thread and nothing in `video.snapshot`, which has no capture; a stored frame wins.
 That mapping holds until per-source capture exists.
+
+**Live sources.** `live::LiveSources` keeps one running `jstream-sources` `Source` per
+source in the collection with a built-in kind, built from the registry
+(`Registry::create`) with the source's settings. `sync` runs under the collection lock
+after every applied batch, undo and redo and a collection file's load: it queues a
+build for a source that is new or whose settings changed, and drops the instance of a
+deleted one. Building reads and decodes files, so it runs on `jstream-sources`, a
+thread the engine starts with its first build, never under the collection lock; the
+thread then installs the source under the lock and re-plans. Each build is numbered,
+and only the latest build asked for a source installs, so a slow build can't replace
+a newer one. Until its build installs, a source keeps showing what it showed before,
+or nothing. A changed setting always rebuilds the source, live or not, so an
+animation restarts with it. A build that fails is logged at `warn` with the source ID
+and an error that never names a host path, and the source draws nothing; a kind that
+is only described (`NotBuilt`) draws nothing silently.
+
+`snapshot::plan_with` asks for the frame of each source an item it reaches places:
+the stored frame if `set_source_frame` gave one, else the live source's frame at the
+current time, counted from when the source was built. A live frame is shared with
+the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version only when
+the source hands out a different one, so a still image is uploaded once. The plan also
+returns the earliest time one of its frames changes (`Source::next_change`), and the
+thread re-plans then, so an animated image advances on the clock and a still one is
+never re-planned. Sources run on the media clock of the backends the host injects
+(`with_backends`), else on a monotonic clock of the engine's own. `collection` asset
+references resolve in the collection file's folder; without a collection file, and
+for every `app` reference, the asset is unreadable and the source draws nothing.
 
 `Engine::set_source_frame` stores the latest straight sRGB RGBA8 frame for a source
 id. It changes no `rev` and emits no event, and a frame may arrive before the source
@@ -760,8 +792,11 @@ The daemon's `--collection` option, which turns this on, is a later item.
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- The daemon's `--collection` option and audit file, and rendering sources from
-  `jstream-sources`' registry, so settings change what renders.
+- The daemon's `--collection` option and audit file, and an `app` asset folder for
+  live sources.
+- Reporting a source that failed to build to clients (it is only logged), and
+  updating a source in place for a change to a `live` setting instead of rebuilding
+  it.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one

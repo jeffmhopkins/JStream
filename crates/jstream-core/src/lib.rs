@@ -27,6 +27,7 @@ mod engine;
 mod events;
 mod history;
 mod kinds;
+mod live;
 mod outputs;
 mod runtime;
 mod session;
