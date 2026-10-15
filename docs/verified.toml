@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:7c383fd8b20f53d3", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: re-read; added the jstream-ui-e2e row (layer 6, test-only harness under crates/jstream-ui/tests/e2e/mock-daemon, depends on control+server, no unsafe); lint-deps passes" }
+stamp = { hash = "b3:5359a037fc331799", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2: re-read; added the jstream-anim row (layer 0, no dependencies, no unsafe, ADR-0049 keyframe-scene model); summary matches its Cargo.toml; lint-deps passes" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -28,6 +28,9 @@ stamp = { hash = "b3:8bc8c6ff8e57508b" }
 
 ["ARCH#crate-map"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:f7c235327227029b" }
+
+["ARCH#crate-map"."file:crates/jstream-anim/Cargo.toml#jstream-meta"]
+stamp = { hash = "b3:324421806c43a0e9" }
 
 ["ARCH#crate-map"."file:crates/jstream-audio/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:9ffc9ae352b160a3" }
@@ -493,6 +496,24 @@ stamp = { hash = "b3:89b1e86ad3fad6c9" }
 
 ["CONTRIBUTING#how-changes-land"."dep:docs/RULES.md#R-GOV-005"]
 stamp = { hash = "b3:7b29924362b09367" }
+
+["CRATE-jstream-anim#purpose"."body"]
+stamp = { hash = "b3:a0a805f885d30fab", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2: new crate; re-read every bullet against lib.rs, keyframe.rs and switch.rs: Field names, Props/Value, opacity check, Override::apply live follow, write/clear/reset/drop_unless/restore/undo inverses, no empty override, plan_switch Motion cases and order, tests list incl. 5000-step seeded walk" }
+
+["CRATE-jstream-anim#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-anim"]
+stamp = { hash = "b3:b8899defbfc5633d" }
+
+["CRATE-jstream-anim#purpose"."dep:docs/adr/0049-keyframe-scene-model-and-evaluation.md#decision"]
+stamp = { hash = "b3:9c6d163607e3e736" }
+
+["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/keyframe.rs"]
+stamp = { hash = "b3:2e12b8e6492c03f1" }
+
+["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/lib.rs"]
+stamp = { hash = "b3:004397303f25f6d3" }
+
+["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/switch.rs"]
+stamp = { hash = "b3:a124ac2cdf2f7c77" }
 
 ["CRATE-jstream-audio#filters"."body"]
 stamp = { hash = "b3:534b97e562940a00", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D8 round 1 (N2): re-read; no_alloc sentence now separates the master bus's own chain from the master chain and output tap chain, and Not yet says the kernels' cost is what's measured" }
@@ -1617,10 +1638,10 @@ stamp = { hash = "b3:4a6d6e6f01f968f4" }
 stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 
 ["CRATE-jstream-platform#gpu-frames"."body"]
-stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3 cascade from ARCH#crate-map: only the jstream-ui-e2e test-harness row was added; GPU frame design untouched; holds" }
+stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:7c383fd8b20f53d3" }
+stamp = { hash = "b3:5359a037fc331799" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
