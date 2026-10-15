@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:f1d4642d89ab2230", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#198, #190, #173) into C1a: re-read; graph code untouched; Kind versions bullet (kinds from jstream-sources) holds" }
+verified = { hash = "b3:a4ec811e21b6c0ee", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; graph prose unchanged by the merge and still matches model/, apply.rs and read.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -26,8 +26,8 @@ codes, so the engine passes them to clients unchanged.
 - `Graph`: the `State` plus its `rev`, and the kind descriptors it validates `builtin`
   sources against. The engine supplies them (`Graph::with_kinds`); they are not
   collection state, and `Graph::new()` describes none.
-- `State`: the `sources`, keyed by ID, the `scenes` in display order, and the
-  `outputs`, keyed by ID.
+- `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
+  in display order, and the `outputs`, keyed by ID.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -35,7 +35,10 @@ codes, so the engine passes them to clients unchanged.
   capture. `source.duplicate` makes a separate copy under a new ID. Removing an item
   never deletes its source.
 - `Scene`: a name and its items in stacking order, bottom first.
-- `Item`: the source it places, a `transform`, a `crop` and `visible`.
+- `Item`: the source it places, a `Placement`, a `crop` and `visible`. `Placement` is
+  one of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two forms: a
+  `Geometry` (a box on the canvas) or a `Legacy` 0.3 `ItemTransform`, kept exactly as
+  written. Only an edit changes the form.
 - `Output`: an ID and an `OutputKind` (so far RTMP to a generic URL, or a recording
   to an MP4 file). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
@@ -68,6 +71,15 @@ goes up by exactly one, and the result carries the **inverse batch**.
   setting as `<source>.settings.<param>`), and the client removes them first, in the
   same batch if it likes. Rejecting rather than cascading keeps each edit's effect, and
   its inverse, limited to the object it names.
+- **Canvas and geometry** ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)):
+  `canvas.set_size` accepts each side from 1 to `MAX_CANVAS_EDGE` (8192) and moves no
+  item. `item.add` stores its `geometry`, or else its `transform` (the identity when
+  omitted) as a legacy placement; sending both is `invalid_argument`.
+  `item.set_geometry` and `item.set_transform` replace the placement, and each one's
+  inverse restores the previous placement in its own form, so a conversion undoes to
+  `item.set_transform`. A geometry is checked before it is stored: a positive size and
+  perspective, finite corners, and neutral tilt, turn, depth and perspective until the
+  compositor draws 3D; each failure names its field (`edits.N.geometry.tilt_deg`).
 - **Outputs** (`target.rs` checks the URL): `output.create` and `output.set_target`
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
@@ -95,12 +107,16 @@ with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
 unknown kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
 `not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
-display order, items bottom first, outputs ordered by ID; `Source::to_info`,
+display order, items bottom first, outputs ordered by ID. `state.get` carries the
+canvas. A geometry item reads its `geometry`, and the deprecated `transform` view the
+protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
+stored transform and no geometry. `Source::to_info`,
 `Scene::to_info`, `Item::to_info` and `Output::to_info` convert single objects. Reads change nothing.
 
 **Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
 edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds, and through
 settings references, one case per edge-adding edit), settings checks and defaults,
+placement conversions and their inverses, geometry and canvas validation,
 delete rejection by references, output URL checks and the refused delete of a running
 output, exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
@@ -127,8 +143,7 @@ Planned, and kept possible by the private fields of the model types:
 - **Kind versions.** The engine's kinds come from `jstream-sources`. Kind versions on
   stored settings, migrations, and keeping data for a missing kind come with
   persistence.
-- The collection canvas and item `geometry` of
-  [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md), replacing the protocol's
-  2D `ItemTransform`, which an item keeps as a legacy placement until 1.0 unless an
-  `item.set_geometry` replaces it; and blend modes.
+- Blend modes and opacity on placements (B7). Legacy placements go in 1.0, whose
+  collection migration converts them
+  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) decision 5).
 - Item lookup is a linear scan over scenes. An ID index can come once collections grow.
