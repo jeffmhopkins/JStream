@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:edf5009f933857d6", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (U0, U3b, U4, U5, B6-r, B10) into U2: purpose unchanged by main; web UI and token bullets hold" }
+verified = { hash = "b3:90a6615e74f01227", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N3): re-read; config.rs/error.rs contents bullets still accurate with check_limits and InvalidLimit; holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:83ee56d2ea651e19", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (#246 landed) into ADR-0044 PR: open question 2 now links ADR-0044 as decided and not built; rest is #246's text as merged; holds" }
+verified = { hash = "b3:0dd84c65dc8c5366", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N3): Connection limits now says Server::bind refuses a zero limit or timeout (incl. max_mcp_sessions, mcp_idle_timeout) with ServerError::InvalidLimit before opening the socket, matching lib.rs/config.rs; rest unchanged" }
 -->
 
 ### Listening and admission
@@ -131,6 +131,10 @@ the default:
 | `max_connections` | 32 open WebSocket connections | An upgrade that passes the checks above gets 503 and no session. The slot is taken just before the upgrade and freed when the connection ends. |
 | `header_read_timeout` | 10 s from accept to an accepted upgrade request | The connection is dropped, unanswered. |
 | `handshake_timeout` | 10 s from accept to a successful `hello` | The connection is closed with close code 1008 (see *Sessions*). |
+
+`Server::bind` refuses a zero limit or timeout, and a zero `max_mcp_sessions` or
+`mcp_idle_timeout` (see *MCP over streamable HTTP*), with `ServerError::InvalidLimit` before opening the
+socket, since the server would refuse or drop everything.
 
 The header-read timeout is kept on the socket, by the listener (`listener.rs`), since
 hyper's own isn't reachable through `axum::serve`: until the upgrade handler accepts a

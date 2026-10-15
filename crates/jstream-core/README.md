@@ -908,7 +908,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:9cb93b65cd929904", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (C5 audio sources, B9) into D7b: kept C5's audio-sources sentences and D7b's mixer-collector sentence (rings, removed buses' state, filter chains and filters, per retire.rs); re-read; holds" }
+verified = { hash = "b3:e32c3a137fa9841b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 cascade from ARCH#threading wording edits: re-read the render-thread paragraph; 'clears the stopped marker before its first load (SeqCst, then a fence)' still matches render.rs and the reworded ARCH text; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

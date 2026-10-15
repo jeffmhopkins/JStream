@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:2fe1e753ac46d93d", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b cascade from ARCH#threading (Collector row: the mixer's own collector also frees removed buses' state, filter chains and filters): re-read; rule text unchanged; chains and filters retired via the collector are within R-RT-003" }
+verified = { hash = "b3:f8b9b1ee9a99ff2a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 cascade from ARCH#threading wording-only edits (marker clear value, rule links, grammar): re-read; rule text unchanged and consistent" }
 -->
 
 <a id="R-RT-001"></a>

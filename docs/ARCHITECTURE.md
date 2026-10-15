@@ -390,7 +390,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:5062054110900026", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "D7b (#228 N5): re-read; Collector row now says the mixer's own collector also frees removed buses' state, filter chains and filters (retire.rs Retired::Bus/Chain/Kernel); mixer row (filters with keys, latency compensation) still the model; rest unchanged" }
+verified = { hash = "b3:4d742abbbe3bbce5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143: re-read; marker is now cleared to a value below every generation (render.rs STARTING=0, set in RenderReader::start; #139 N1's 'last adopted generation' wording doesn't match the code), R-RT-001/002 linked in the fence sentence (#139 N2), #216 N2 grammar (would contradict it); rest unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -415,7 +415,7 @@ next to its code, which that section covers: the output pipeline in
 [`jstream-core`'s runtime](../crates/jstream-core/README.md#runtime) and the audio and
 mixer threads in [`jstream-audio`'s real-time design](../crates/jstream-audio/README.md#realtime)
 ([ADR-0042](adr/0042-narrow-hot-architecture-sections.md)). Neither may contradict this
-model; a change that would edits it in the same PR.
+model; a change that would contradict it edits it in the same PR.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
@@ -502,15 +502,16 @@ aren't held while it is stopped or parked (no output running, nothing to render,
 device to mix for). Before it stops or parks it publishes a stopped marker in place of
 its generation, and it shows nothing while marked. Each reader's slot starts as
 the stopped marker, so a gesture committed before a thread has ever run waits on
-nothing. On starting or resuming it clears the marker before it loads a snapshot, and
-reads the parameter channels only after that load. So if the control side saw the
+nothing. On starting or resuming it clears the marker before it loads a snapshot, to a
+value below every generation (so it counts as caught up with nothing until it adopts
+one), and reads the parameter channels only after that load. So if the control side saw the
 marker and released a gesture, the thread's next load comes after the committing
 snapshot was published and already carries the committed value. That needs a store
 then load on each side (the thread clears the marker then loads the snapshot; the
 control side publishes the snapshot then reads the marker), which release and acquire
 alone don't order: the marker and generation stores and reads are `SeqCst`, with a
 `SeqCst` fence between each side's store and its load. A fence doesn't allocate, lock
-or wait, so R-RT-001 and R-RT-002 still hold.
+or wait, so [R-RT-001](RULES.md#R-RT-001) and [R-RT-002](RULES.md#R-RT-002) still hold.
 
 The privacy flag ([ADR-0027](adr/0027-program-master-and-output-chains.md)) will also
 reach the render and mixer threads through a parameter channel, not a snapshot rebuild,
@@ -523,7 +524,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:e3759c009695f67a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into ADR-0044 PR: stale through server design; transport bullet (UI, Basic, subprotocol) unchanged; holds" }
+verified = { hash = "b3:63ee98719da1d766", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N3): re-read against ServerConfig::check_limits and ServerError::InvalidLimit; section has no connection-limit text; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -649,7 +650,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:b7e9fc969c2bf475", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: re-read; Origin/preflight reasoning from round 1 intact, main unchanged here; holds" }
+verified = { hash = "b3:6b841edd4ddfb24c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N2): re-read against the open-early timeout in server.rs; section covers tools, events, access, nothing about hello timing; holds" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun

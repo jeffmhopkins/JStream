@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:8b5981f1d5487f45", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main at 0.16 (B5 B9 B10 F3 B6-f B2-f3 A3 A6 U0 D7b ...), now protocol 0.17: re-read against both sides; this PR only adds role: None to test constructors here; main's text holds" }
+verified = { hash = "b3:35541b5409acc9e5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N2): re-read; contents list and 'needs no async runtime' still hold (the open-early timeout uses a std thread timer)" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:8b856d3325bb3c0d", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through server design; same token/Host/Origin checks on /mcp; holds" }
+verified = { hash = "b3:53376b85650efcc8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#143 (#140 N2): Session and identity now says a hello unanswered within 3 s (OPEN_EARLY_TIMEOUT) doesn't hold initialize/server-discover and the next tool call retries; Async section still true (timer thread, no runtime); rest holds" }
 -->
 
 ### Tools
@@ -145,7 +145,9 @@ client introduces itself: at `initialize` (handshake-based revisions) with
 `jstream-server` closes a connection that hasn't completed its handshake within its
 handshake timeout ([jstream-server › Design](../jstream-server/README.md#design)), so the
 session must open before the agent goes idle, not at its first tool call. If that
-`hello` fails, the request still succeeds, and a client that skips both (a stateless
+`hello` fails, or isn't answered within 3 s (well under that handshake timeout, so an
+engine that accepted the connection and then hangs doesn't hold `initialize` until it
+closes), the request still succeeds, and a client that skips both (a stateless
 client going straight to `tools/call`) gets its `hello` before the next tool call that
 needs the engine, which reports a failure. Later names don't change the session.
 `describe_api`, argument errors and `events` reads never call the engine
