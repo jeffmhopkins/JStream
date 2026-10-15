@@ -7,6 +7,7 @@
 //! Device open and thread joins happen after it is released. Subscribers are woken only
 //! after the lock is released.
 
+use crate::audio::{AudioRouting, MixerHandles};
 use crate::audio_sources::AudioSources;
 use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
@@ -18,13 +19,15 @@ use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, OpenPublish, OutputStats,
-    Pending, PipelineEvent, RenderHub, Running, launch, launch_program, parts_from,
+    Pending, PipelineEvent, RenderHub, Running, VcamOut, launch, launch_program, launch_vcam,
+    parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
 use crate::studio::Studio;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_graph::Graph;
+use jstream_media::FrameSize;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
@@ -250,6 +253,7 @@ impl Engine {
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
             state.audio.sync(state.graph.state());
+            state.route_audio();
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             *file = Some(opened);
@@ -287,7 +291,8 @@ impl Engine {
     /// collection has no such output. A host reads its target here when it opens the
     /// publish target for `output.start`, and its key from the store it injected. A
     /// recording output (`OutputKind::Record`) needs no publish target: the engine
-    /// opens its file itself.
+    /// opens its file itself. Nor does the virtual camera (`OutputKind::VirtualCam`),
+    /// which publishes to the backends' [`VcamSink`](jstream_platform::VcamSink).
     pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
         lock(&self.shared.state)
             .graph
@@ -303,14 +308,20 @@ impl Engine {
     /// A start still needs a publish target ([`with_publish`](Self::with_publish))
     /// or an opener ([`with_publish_opener`](Self::with_publish_opener)). Without
     /// either it fails with `action_failed` and changes no output state. A recording
-    /// output needs neither: its start records to the file the collection names.
+    /// output needs neither: its start records to the file the collection names. Nor
+    /// does a virtual-camera output: its start publishes the program, video only, to
+    /// `backends.vcam` at the canvas size. The engine keeps that sink for its whole
+    /// life, starting it on each such start and stopping it on the stop.
     #[must_use]
-    pub fn with_backends(mut self, backends: Backends) -> Self {
+    pub fn with_backends(mut self, mut backends: Backends) -> Self {
         // Animated sources run on the platform's media clock from here on.
         lock(&self.shared.state)
             .live
             .set_clock(Arc::clone(&backends.clock));
         let host = self.host();
+        let vcam = backends.vcam.take();
+        host.has_vcam.store(vcam.is_some(), Ordering::Release);
+        *lock(&host.vcam) = vcam;
         *lock(&host.backends) = Some(backends);
         self
     }
@@ -404,6 +415,51 @@ impl Engine {
                 None
             }
         }
+    }
+
+    /// Routes the collection's audio into the program's mixer, until the returned
+    /// closure is called, when the program stops. The closure holds the collection, not
+    /// the [`MediaHost`], like the ticker.
+    pub(crate) fn attach_mixer(&self, mixer: MixerHandles) -> Box<dyn FnOnce() + Send> {
+        let generation = {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            let inputs = state.audio.inputs();
+            state.routing.attach(mixer, state.graph.state(), &inputs)
+        };
+        let shared = Arc::clone(&self.shared);
+        Box::new(move || lock(&shared.state).routing.detach(generation))
+    }
+
+    /// Adds kinds the built-in registry doesn't have: the parity fixture's `mic`, an
+    /// audio kind with no parameters.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_extra_kinds(self, kinds: Vec<jstream_protocol::KindDescriptor>) -> Self {
+        {
+            let mut state = lock(&self.shared.state);
+            let graph = std::mem::take(&mut state.graph);
+            state.graph = graph.with_kinds(kinds);
+        }
+        self
+    }
+
+    /// Emits one `meters.tick` now, if the program mixer runs. The stats ticker calls
+    /// this about ten times a second.
+    #[cfg(test)]
+    pub(crate) fn emit_meters_tick(&self) {
+        let mut wake = Vec::new();
+        lock(&self.shared.state).emit_meters(&mut wake);
+        wake_all(wake);
+    }
+
+    /// Lists `input` as audio source `source_id`'s mixer input, as the program stage
+    /// does when it opens one, and routes it as the collection says.
+    #[cfg(test)]
+    pub(crate) fn set_audio_input(&self, source_id: SourceId, input: jstream_audio::InputControl) {
+        let mut state = lock(&self.shared.state);
+        state.audio.insert_input(source_id, input);
+        state.route_audio();
     }
 
     /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
@@ -910,11 +966,25 @@ impl Engine {
             }
             let key = encode_key(&state.graph, &output_id);
             let publish = match (
-                record_path(&state.graph, &output_id),
+                own_target(&state.graph, &output_id),
                 youtube_broadcast(&state.graph, &output_id),
                 &youtube,
             ) {
-                (Some(path), _, _) => Target::Record(path),
+                (Some(OwnTarget::Record(path)), _, _) => Target::Record(path),
+                (Some(OwnTarget::Vcam(canvas)), _, _) => {
+                    let sink = lock(&host.vcam).take();
+                    let Some(sink) = sink else {
+                        let reason = if host.has_vcam.load(Ordering::Acquire) {
+                            "the virtual camera is in use by another output"
+                        } else {
+                            "this engine has no virtual camera"
+                        };
+                        return Err(ProtocolError::ActionFailed {
+                            reason: reason.into(),
+                        });
+                    };
+                    Target::Vcam(VcamOut::new(sink, Arc::clone(&host.vcam)), canvas)
+                }
                 (None, Some(broadcast_id), Some(youtube)) => Target::YouTube {
                     broadcast_id,
                     youtube: Arc::clone(youtube),
@@ -982,7 +1052,7 @@ impl Engine {
         };
         let (fail_tx, fail_rx) = mpsc::channel();
         let mut health = None;
-        let launched = publish.open(&output_id).and_then(|(destination, watch)| {
+        let launched = publish.open(&output_id).and_then(|(opened, watch)| {
             health = watch;
             let program = match program {
                 Some(program) => program,
@@ -992,15 +1062,25 @@ impl Engine {
                     program
                 }
             };
-            launch(
-                self,
-                program,
-                key,
-                destination,
-                output_id.clone(),
-                generation,
-                fail_tx,
-            )
+            match opened {
+                Opened::Muxed(destination) => launch(
+                    self,
+                    program,
+                    key,
+                    destination,
+                    output_id.clone(),
+                    generation,
+                    fail_tx,
+                ),
+                Opened::Vcam(vcam, canvas) => launch_vcam(
+                    program,
+                    vcam,
+                    canvas,
+                    output_id.clone(),
+                    generation,
+                    fail_tx,
+                ),
+            }
         });
         // A link change the output thread reported before `active` is replayed once
         // the start settles; the watcher takes every later one.
@@ -1325,14 +1405,31 @@ fn encode_key(graph: &Graph, output_id: &OutputId) -> EncodeKey {
     (profile_id, profile)
 }
 
-/// Where a recording output in the collection records to, or `None` when the output
-/// is not a recording (or not in the collection).
-fn record_path(graph: &Graph, output_id: &OutputId) -> Option<PathBuf> {
+/// Where an output the engine sends to itself goes, rather than to a publish target
+/// the host opens.
+enum OwnTarget {
+    /// A recording, to this file.
+    Record(PathBuf),
+    /// The virtual camera, at the canvas size.
+    Vcam(FrameSize),
+}
+
+/// Where a recording output in the collection records to, or the size a virtual camera
+/// runs at. `None` when the output needs a publish target (or is not in the
+/// collection).
+fn own_target(graph: &Graph, output_id: &OutputId) -> Option<OwnTarget> {
     match graph.state().output(output_id)?.kind() {
         OutputKind::Record {
             path,
             container: RecordContainer::Mp4,
-        } => Some(PathBuf::from(path)),
+        } => Some(OwnTarget::Record(PathBuf::from(path))),
+        OutputKind::VirtualCam => {
+            let canvas = graph.state().canvas();
+            // The graph keeps both sides above zero, so this always succeeds.
+            FrameSize::new(canvas.width, canvas.height)
+                .ok()
+                .map(OwnTarget::Vcam)
+        }
         _ => None,
     }
 }
@@ -1349,11 +1446,13 @@ fn youtube_broadcast(graph: &Graph, output_id: &OutputId) -> Option<String> {
 }
 
 /// Where a start sends its output: a one-shot publish target the host set, the opener
-/// it calls once the locks are released, a recording file, or a YouTube broadcast.
+/// it calls once the locks are released, a recording file, the virtual camera, or a
+/// YouTube broadcast.
 enum Target {
     Ready(Box<dyn LivePublish>),
     Open(OpenPublish),
     Record(PathBuf),
+    Vcam(VcamOut, FrameSize),
     /// A `youtube` output: the ingest is read from the Live API when it opens.
     YouTube {
         broadcast_id: String,
@@ -1368,9 +1467,16 @@ struct HealthTarget {
     stream_id: String,
 }
 
+/// A start's opened target: a stream the output thread muxes, or the virtual camera.
+enum Opened {
+    Muxed(Destination),
+    Vcam(VcamOut, FrameSize),
+}
+
 impl Target {
     /// Puts a one-shot target back for the next start, when this one refused
-    /// before `starting`. An opener was never taken out of the host.
+    /// before `starting`. An opener was never taken out of the host. The virtual
+    /// camera's sink goes back to the host when its [`VcamOut`] drops.
     fn give_back(self, host: &MediaHost) {
         if let Target::Ready(publish) = self {
             *lock(&host.publish) = Some(publish);
@@ -1380,13 +1486,14 @@ impl Target {
     /// Where to send the output, and for a `youtube` output the stream to watch. Runs
     /// the opener, or reads the YouTube ingest and connects, outside the engine's locks.
     /// A recording's file is opened by `launch`, once the frame size is known.
-    fn open(self, output_id: &OutputId) -> Result<(Destination, Option<HealthTarget>), String> {
+    fn open(self, output_id: &OutputId) -> Result<(Opened, Option<HealthTarget>), String> {
         match self {
-            Target::Ready(publish) => Ok((Destination::Publish(publish), None)),
+            Target::Ready(publish) => Ok((Opened::Muxed(Destination::Publish(publish)), None)),
             Target::Open(open) => open(output_id)
-                .map(|publish| (Destination::Publish(publish), None))
+                .map(|publish| (Opened::Muxed(Destination::Publish(publish)), None))
                 .map_err(|err| format!("opening the publish target: {err}")),
-            Target::Record(path) => Ok((Destination::Record(path), None)),
+            Target::Record(path) => Ok((Opened::Muxed(Destination::Record(path)), None)),
+            Target::Vcam(vcam, canvas) => Ok((Opened::Vcam(vcam, canvas), None)),
             Target::YouTube {
                 broadcast_id,
                 youtube,
@@ -1396,7 +1503,7 @@ impl Target {
                     .connect(&ingest)
                     .map_err(|err| format!("connecting to YouTube's ingest: {err}"))?;
                 Ok((
-                    Destination::Publish(publish),
+                    Opened::Muxed(Destination::Publish(publish)),
                     Some(HealthTarget {
                         youtube,
                         broadcast_id,
@@ -1624,7 +1731,8 @@ fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     }
 }
 
-/// Wakes every 100 ms so a stop joins promptly, and emits once those waits add up to a second.
+/// Wakes every 100 ms so a stop joins promptly, emits `meters.tick` on each wake, and
+/// `stats.tick` once those waits add up to a second.
 fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<AtomicBool>) {
     let mut waited_ms = 0u32;
     while !stop.load(Ordering::Relaxed) {
@@ -1632,6 +1740,9 @@ fn stats_ticker(shared: Arc<Shared>, ledger: Arc<Mutex<DropLedger>>, stop: Arc<A
         if stop.load(Ordering::Relaxed) {
             break;
         }
+        let mut wake = Vec::new();
+        lock(&shared.state).emit_meters(&mut wake);
+        wake_all(wake);
         waited_ms += 100;
         if waited_ms < 1_000 {
             continue;
@@ -1695,6 +1806,8 @@ struct State {
     render: Arc<RenderHub>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
+    /// The program mixer's controls while it runs: it follows the collection's audio.
+    routing: AudioRouting,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
 }
@@ -1870,10 +1983,10 @@ impl State {
         Ok(result)
     }
 
-    /// What follows every applied batch, undo and redo: the outputs follow the
-    /// collection, a deleted source's stored frame goes (unless the same edits made a
-    /// new source under its id), `state.changed` is emitted, and the program scene is
-    /// reconciled (ADR-0030).
+    /// What follows every applied batch, undo and redo: the outputs, the live sources and
+    /// the program mixer follow the collection, a deleted source's stored frame goes
+    /// (unless the same edits made a new source under its id), `state.changed` is
+    /// emitted, and the program scene is reconciled (ADR-0030).
     fn changed(
         &mut self,
         client_id: &ClientId,
@@ -1886,6 +1999,7 @@ impl State {
         self.outputs.sync(self.graph.state());
         self.live.sync(self.graph.state());
         self.audio.sync(self.graph.state());
+        self.route_audio();
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
                 && self.graph.state().source(source_id).is_none()
@@ -1921,6 +2035,12 @@ impl State {
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
+            // Restarts the master's integrated loudness, if the mixer runs; there is
+            // nothing to restart otherwise, which is no failure.
+            Action::AudioResetLoudness {} => {
+                self.routing.reset_loudness();
+                return Ok(CallResult::Action { result: None });
+            }
             Action::SceneSwitch { scene_id } => {
                 if self.studio.switch(self.graph.state(), &scene_id)? {
                     // The program mix shows the new scene from the next frame: a cut.
@@ -2002,6 +2122,28 @@ impl State {
             });
         render.publish(shot);
         live.wake_at(wake);
+    }
+
+    /// Brings the program mixer in line with the collection's audio, the audio sources'
+    /// inputs included.
+    fn route_audio(&mut self) {
+        let inputs = self.audio.inputs();
+        self.routing.sync(self.graph.state(), &inputs);
+    }
+
+    /// Emits a `meters.tick` if the program mixer runs, first routing any audio source
+    /// input the program stage opened since the last one.
+    fn emit_meters(&mut self, wake: &mut Vec<Waker>) {
+        if self.audio.take_inputs_changed() {
+            self.route_audio();
+        }
+        let inputs = self.audio.inputs();
+        let meters = self.routing.meters(self.graph.state(), &inputs);
+        drop(inputs);
+        if let Some((sources, buses)) = meters {
+            self.subscribers
+                .emit(&Event::MetersTick { sources, buses }, wake);
+        }
     }
 
     fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {

@@ -15,9 +15,8 @@ use std::fmt;
 
 /// What an output is and where it sends. Serialized with an internal `type` tag.
 ///
-/// RTMP(S) to a generic URL or a YouTube broadcast, and recording to a file, are
-/// configurable so far. The virtual camera of the data model comes later as a new
-/// variant.
+/// RTMP(S) to a generic URL or a YouTube broadcast, recording to a file and the
+/// virtual camera are configurable so far.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -42,6 +41,13 @@ pub enum OutputKind {
         /// The file format.
         container: RecordContainer,
     },
+    /// The virtual camera: the program video, offered to other apps on the engine's
+    /// machine as a webcam. Video only: it has no audio, no target and no stream key.
+    /// It runs at the canvas size the collection has when it starts, at 30 fps.
+    /// `output.start` fails with `action_failed` when the engine has no virtual camera,
+    /// when the camera is not registered on the machine, or when it can't offer that
+    /// size (the Windows camera offers only 1920×1080, the default canvas).
+    VirtualCam,
     /// A kind this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a kind from a newer server, so a client from 0.9 on can still read
     /// `output.list` and `state.get` when a later kind is configured. The engine
@@ -284,13 +290,26 @@ mod tests {
         assert_eq!(serde_json::from_value::<OutputKind>(wire).ok(), Some(kind));
     }
 
+    #[test]
+    fn virtual_cam_wire_form() {
+        let wire = json!({"type": "virtual_cam"});
+        assert_eq!(
+            serde_json::to_value(OutputKind::VirtualCam).ok(),
+            Some(wire.clone())
+        );
+        assert_eq!(
+            serde_json::from_value::<OutputKind>(wire).ok(),
+            Some(OutputKind::VirtualCam)
+        );
+    }
+
     /// A kind, target or container from a newer server parses as `Unknown`, so an
     /// older client can still read the message that carries it.
     #[test]
     fn later_kinds_parse_as_unknown() {
         let parse = |value| serde_json::from_value::<OutputKind>(value).ok();
         assert_eq!(
-            parse(json!({"type": "virtual_cam", "device": "x"})),
+            parse(json!({"type": "ndi", "name": "x"})),
             Some(OutputKind::Unknown)
         );
         assert_eq!(
