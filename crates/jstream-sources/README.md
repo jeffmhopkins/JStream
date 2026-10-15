@@ -28,12 +28,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   reading and decoding a file, so it never runs on a real-time thread.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
-  `Arc<VideoFrame>`. The built-in kinds make their frames when created or updated, so
-  `frame` neither blocks nor allocates, and a frame handed out stays valid after an
-  update. `next_change(at)` says when that frame is next replaced (`None`: never), so
+  `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks nor allocates, and
+  a frame handed out stays valid after an update. Most make their frames when created
+  or updated; the `waveform` and `spectrum` kinds draw theirs in a `Painter` instead,
+  and `frame` hands out the one painted last. `next_change(at)` says when that frame is next replaced (`None`: never), so
   a renderer can skip re-uploading a still. `update(settings)` applies a change to
   `live` parameters only; `needs_restart(descriptor, old, new)` says when a change
-  needs a new source instead.
+  needs a new source instead. `painter()` (default `None`) returns the source's
+  `Painter`.
+- `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
+  whose frames follow something live. Drawing can take milliseconds, so a host that
+  asks for frames under a lock paints before taking it, when `next_change` said a
+  frame is due (the engine's `jstream-sources` thread does). Painting allocates only
+  while the source's frame pool grows, or when every pooled frame is still held.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
@@ -53,7 +60,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `zune-jpeg`'s internal planes, which for a progressive JPEG hold the whole image's
   coefficients (2 bytes per sample of each colour component, so 6 bytes a pixel for
   full-resolution YCbCr) while it decodes, bounded only by the side
-  limit.
+  limit. `Context` also carries the `AudioScope` the `waveform` and `spectrum`
+  sources draw; with none they draw silence.
+- `AudioScope`: the latest audio of one mix, as mono (the mean of left and right), in
+  a lock-free ring of 16384 samples (341 ms at 48 kHz) stored as atomics. One thread
+  pushes interleaved stereo blocks; any number read the latest window of up to 2048
+  samples. Neither locks nor allocates, so the engine's mixer thread pushes every
+  program block into it ([R-RT-003](../../docs/RULES.md#R-RT-003)). The read is a
+  seqlock: a push claims the slots it is about to overwrite before it writes them, and
+  a read retries when a claim reached a slot it copied, so it never returns a window
+  mixed from two passes of the ring. The analysis (the FFT included) runs in the
+  source's `Painter`, on the thread that paints, never on the mixer thread
+  ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)'s audio → render
+  path).
 
 **Kinds.**
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
@@ -99,6 +118,29 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 12
   with an outline) within `max_decoded_bytes`; otherwise `create` or `update` fails
   naming `text`.
+- `waveform` and `spectrum` (C10) draw the latest 2048 samples (43 ms at 48 kHz) of
+  the `Context`'s `AudioScope`, which in the engine is the program mix. `create`
+  paints the first frame; after that their `Painter` draws a new one each 1/30 s tick
+  of `at` (`next_change` is the next tick; with no scope, `None`), row by row into a
+  pool of up to four frames reused once no one holds them, so a frame handed out
+  never changes and, once the pool has filled, painting doesn't allocate. `frame`
+  only hands out the frame painted last, and a live change is drawn by the next
+  paint. When the scope's ring hasn't moved for 250 ms (no output runs, so the
+  program mix doesn't), they draw silence; once every level has fallen to it, they
+  keep their frame and `next_change` checks every 250 ms instead of every tick. `width` and `height` need a new source, and four frames of that size
+  must fit `max_decoded_bytes`; `color`, `background`, `smoothing` and `scale` are
+  live. `smoothing` (0 to 0.99) is how slowly a level falls: a rise shows at once,
+  and each tick keeps that share of the gap. The `waveform` (640x160 by default)
+  draws each pixel column from its lowest to its highest sample, on a `linear` scale
+  or a `db` one from -60 dBFS (quiet audio shows). The `spectrum` (640x240) is a
+  2048-point real FFT (`realfft`, planned on create, run with buffers made on create)
+  of the Hann-windowed samples, drawn as `bars` (1 to 1024, live, 64 by default) of
+  each bar's loudest bin, in dB from -90 dBFS to a full-scale sine's 0, up to
+  20 kHz (or half the sample rate). The `scale` spreads frequencies `log` from
+  20 Hz (each octave as wide, the default) or `linear` from 0 Hz, and a bar narrower
+  than a bin shows its nearest bin. Bars at least three pixels wide have a
+  one-pixel gap. Both read the program mix only: a bus or a single source needs the
+  protocol's bus entity and a per-source tap in the mixer first.
 - `display`, `media`, `webcam` and `window` are described only, with the settings B4
   gave them: sources of them can be created and configured, and `create` fails with
   `SourceError::NotBuilt`.
@@ -146,10 +188,10 @@ undecodable file is an error from `create`, never from the edit that set it.
 
 **Dependencies.** `jstream-media` (frames and the media clock), `jstream-protocol`
 (descriptors, settings and references), `serde_json` (setting values), `thiserror`
-(`SourceError`), and the pure-Rust decoders `png`, `zune-jpeg` with `zune-core`,
-`image-webp` and `gif`, and for fonts `skrifa` (with `read-fonts`, `font-types`,
-`bytemuck`, `yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with default
-features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
+(`SourceError`), the pure-Rust decoders `png`, `zune-jpeg` with `zune-core`,
+`image-webp` and `gif`, `realfft` (with `rustfft`, scalar only) for the spectrum's
+FFT, and for fonts `skrifa` (with `read-fonts`, `font-types`, `bytemuck`, `yoke` and
+`once_cell`) and `ab_glyph_rasterizer`, each with default features off. `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
 (RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
@@ -165,4 +207,12 @@ temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
 the test's header describes. `tests/text.rs` draws with the bundled font: wrapping,
 alignment, padding, outline, live updates, font assets and limits, plus golden PNGs in
-`tests/data/text` (`JSTREAM_BLESS=1` rewrites them).
+`tests/data/text` (`JSTREAM_BLESS=1` rewrites them). The scope's unit tests check the
+ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
+window), the frame ticks and easing, and draw both kinds from known audio: each
+waveform column's range, the dB scale, a tone lighting its own spectrum bar, every
+log bar showing, smoothing and a still ring falling to silence, a silent source
+settling on one frame and polling slowly until a live change redraws it, and which
+settings are live. `tests/scope_no_alloc.rs`, its own binary under `assert_no_alloc`'s allocator,
+checks that a push, a read, and painting and taking both kinds' frames don't allocate
+once the pool has filled.

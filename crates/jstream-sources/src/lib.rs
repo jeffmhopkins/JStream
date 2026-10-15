@@ -5,7 +5,8 @@
 //!
 //! Built so far: `color` (a solid RGBA colour of a given size), `image` (PNG, JPEG,
 //! WebP and GIF, animated GIF and WebP included, decoded with pure-Rust crates) and
-//! `text` (a string drawn with a TrueType or OpenType font, read with `skrifa`). The
+//! `text` (a string drawn with a TrueType or OpenType font, read with `skrifa`), and
+//! `waveform` and `spectrum` (the latest audio of an [`AudioScope`]). The
 //! audio-only kinds (`audio_input`, `desktop_audio` and `app_audio`) make no frames: the
 //! engine records the [`AudioTarget`] their settings name. The other built-in kinds are
 //! described only. Driving sources from the engine's render
@@ -22,10 +23,12 @@ mod describe;
 mod error;
 mod image;
 mod registry;
+mod scope;
 mod source;
 mod text;
 
 pub use audio::AudioTarget;
 pub use error::SourceError;
 pub use registry::Registry;
-pub use source::{AssetRoots, Context, Limits, Source, SourceKind, needs_restart};
+pub use scope::AudioScope;
+pub use source::{AssetRoots, Context, Limits, Painter, Source, SourceKind, needs_restart};

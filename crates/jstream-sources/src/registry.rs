@@ -5,6 +5,7 @@ use crate::audio;
 use crate::color::ColorKind;
 use crate::describe::described;
 use crate::image::ImageKind;
+use crate::scope::{SpectrumKind, WaveformKind};
 use crate::text::TextKind;
 use crate::{Context, Source, SourceError, SourceKind};
 use jstream_protocol::{KindDescriptor, Settings};
@@ -30,6 +31,8 @@ impl Registry {
         add(Box::new(ColorKind::new()));
         add(Box::new(ImageKind::new()));
         add(Box::new(TextKind::new()));
+        add(Box::new(WaveformKind::new()));
+        add(Box::new(SpectrumKind::new()));
         for kind in audio::kinds() {
             add(Box::new(kind));
         }
