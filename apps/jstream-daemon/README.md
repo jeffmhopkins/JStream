@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f8c1170ccbd8db7f", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; main changed no prose here, I1's MCP-on text holds and main.rs crate doc now matches it (review B4)" }
+verified = { hash = "b3:b99d083014b5a7b9", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "B10: only the serve.rs and daemon.rs tests changed (they now read the first scene's studio.changed); prose unaffected" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -127,7 +127,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:c28d1d5e113b3ec0", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#147 C6 nested scene rendering) into F2b; took main's verified line and re-read; serve.rs unchanged by either side's core change; bullets hold" }
+verified = { hash = "b3:c49b674c37b7b2e4", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "B10: re-read; only tests changed to expect studio.changed after the first scene; design text unaffected" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

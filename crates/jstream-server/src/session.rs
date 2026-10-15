@@ -253,13 +253,9 @@ impl IdMap {
     /// The event ready to send next, rewritten to the wire ID, or `None` if the front
     /// event must wait for an answer still in flight.
     fn next_ready(&mut self, calls_in_flight: bool) -> Option<Event> {
-        let front = self.held.front()?;
-        let waiting = match front {
-            Event::StateChanged {
-                client_id,
-                request_id: Some(session),
-                ..
-            } if Some(client_id) == self.client_id.as_ref() => {
+        let front = self.held.front_mut()?;
+        let waiting = match caused_by(front) {
+            Some((client_id, Some(session))) if Some(client_id) == self.client_id.as_ref() => {
                 !self.pairs.iter().any(|(s, _)| s == session)
                     && calls_in_flight
                     && self.held.len() <= MAX_HELD_EVENTS
@@ -270,17 +266,31 @@ impl IdMap {
             return None;
         }
         let mut event = self.held.pop_front()?;
-        if let Event::StateChanged {
-            client_id,
-            request_id: Some(request_id),
-            ..
-        } = &mut event
-            && Some(&*client_id) == self.client_id.as_ref()
+        if let Some((client_id, Some(request_id))) = caused_by(&mut event)
+            && Some(client_id) == self.client_id.as_ref()
             && let Some((_, wire)) = self.pairs.iter().find(|(s, _)| s == request_id)
         {
             *request_id = wire.clone();
         }
         Some(event)
+    }
+}
+
+/// The client and request an event names as its cause: `state.changed` and
+/// `studio.changed`. Their request IDs are the session's, rewritten to the wire's.
+fn caused_by(event: &mut Event) -> Option<(&ClientId, &mut Option<RequestId>)> {
+    match event {
+        Event::StateChanged {
+            client_id,
+            request_id,
+            ..
+        }
+        | Event::StudioChanged {
+            client_id,
+            request_id,
+            ..
+        } => Some((client_id, request_id)),
+        _ => None,
     }
 }
 

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:a655b1c4ad444569", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: parity bullet now says the collection has a recording output and recording path rejections, matching parity.rs" }
+verified = { hash = "b3:576b7b2d6eb44eb7", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "B10: re-read; the Commands, Queries and Events bullets list scene.switch, studio.get and studio.changed, version line now 0.10" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -33,7 +33,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `item.set_crop`, `item.set_visible`, `source.create`, `source.rename`,
   `source.set_settings`, `source.duplicate`, `source.delete`, `output.create`,
   `output.set_target`, `output.delete`), with `ItemTransform`, `Crop` and `SourceKind`;
-  `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
+  `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
+  `scene.switch`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
 - **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
@@ -41,7 +42,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `video.snapshot`, `kind.list` and `kind.describe`,
+  `output.list`, `output.status`, `video.snapshot`, `kind.list`, `kind.describe` and
+  `studio.get`,
   with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo` and `ItemInfo`
   shapes the collection reads report. `video.snapshot` returns the program mix as a PNG.
 - **Kinds and settings** (`kind.rs`, `settings.rs`,
@@ -52,8 +54,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No kind is defined here.
-- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `events.dropped` and
-  `stats.tick`.
+- **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
+  `events.dropped` and `stats.tick`.
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, and `WireError`, its wire form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs, `Rev`, and
@@ -68,7 +70,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
   transform. A negative scale is not refused: `from_legacy` returns the drawn outline
   and flags the reflection, which geometry cannot store. These types are not
-  messages. `PROTOCOL_VERSION` is 0.9 because of the `record` output kind; 0.8 added
+  messages. `PROTOCOL_VERSION` is 0.10 because of `scene.switch`, `studio.get` and
+  `studio.changed`; 0.9 added the `record` output kind, 0.8
   the kind queries and settings, 0.7 the output edits, `output.list`, the key actions
   and `key_set`, `stats.tick` is the 0.6 addition and `video.snapshot` the 0.5 one, and
   the geometry wire surface ships as a later minor. `ItemTransform`'s schema description names
@@ -93,7 +96,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:1eebe9000cc00689", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's 0.9 record kind and Compatibility/OQ8; #166 changed only parity.rs and the mock, no wire type" }
+verified = { hash = "b3:85907fc92a2ea62a", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "B10: Action classification mentions runtime state; studio.get query and studio.changed event documented (0.10); OQ5 settled by ADR-0030; geometry version line updated" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -156,8 +159,8 @@ of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
 - **Edit** (`Edit`): changes the collection state, the data that is saved in the
   collection file and that `rev` counts. Undoable, batchable, atomic.
 - **Action** (`Action`): has effects outside the collection state, such as network,
-  devices, files, secrets or time (starting an output, going live, storing a stream
-  key, OAuth). Never undoable or
+  devices, files, secrets, time or runtime state (starting an output, going live,
+  storing a stream key, OAuth, switching the program scene). Never undoable or
   batchable. The response only says the action was accepted; progress arrives as
   events (`output.state_changed`).
 
@@ -303,6 +306,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `false`). Neither is collection state, so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
+- `studio.get`: the scene on program (`program_scene`, omitted only while the collection
+  has no scene). Runtime state, not collection state
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
+  Added in 0.10.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
@@ -361,6 +368,13 @@ After `welcome`, the server pushes every event to every client.
   to `rev`, a gap shows that an event was missed.
 - `output.state_changed {output_id, state}` reports runtime state, which is not part of
   the collection, so it carries no `rev`.
+- `studio.changed {program_scene?, client_id, request_id?}` reports a new scene on
+  program, with the request that caused it: a `scene.switch`, or a batch that created
+  the collection's first scene (it goes on program) or deleted the program scene
+  (program moves to the first scene left, or to none). For a batch it follows the
+  batch's `state.changed`. A switch to the scene already on program emits nothing.
+  Program is runtime state, so it carries no `rev`
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). Added in 0.10.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -477,8 +491,8 @@ function in this crate so the compositor and the UI share one implementation.
   reflected quad.
 
 These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.9 because of the
-`record` output kind; 0.8 added the kind queries and settings, the outputs are 0.7,
+`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.10 because of the
+program scene calls; 0.9 added the `record` output kind, 0.8 added the kind queries and settings, the outputs are 0.7,
 `stats.tick` the 0.6 addition and `video.snapshot` the 0.5 one. ADR-0022
 names the geometry additions as 0.4, which already shipped with `events.dropped`;
 the geometry wire surface ships as a later minor, under
@@ -530,9 +544,10 @@ described above.
    carries no command (it applies a batch of edits the engine already holds), so
    R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
    (`live.set`, `live.cancel`, `live.changed`), committed by one batch.
-5. **Actions that change collection state.** `studio.transition` changes the program
-   scene, which is saved in the collection. Is it an action that also bumps `rev`, or an
-   edit plus a separate "run transition" action?
+5. **Actions that change collection state.** Settled by
+   [ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md): the program
+   scene is runtime state, not collection state, so `scene.switch` is an action that
+   changes no `rev`, and no action changes collection state.
 6. **Idempotency.** How long the engine remembers keys (count or time), and whether a
    reused key with a different batch is an error (`idempotency_key_reused`).
 7. **Event subscriptions.** Every client gets every event in this cut, including

@@ -17,6 +17,7 @@ use crate::runtime::{
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
+use crate::studio::Studio;
 use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
@@ -827,7 +828,7 @@ impl Engine {
     fn video_snapshot(&self) -> SnapshotReply {
         let shot = {
             let state = lock(&self.shared.state);
-            snapshot::plan(&state.graph, &state.frames)
+            snapshot::plan(&state.graph, state.studio.program(), &state.frames)
         };
         self.shared.snapshots.request(shot)
     }
@@ -1163,6 +1164,8 @@ struct State {
     frames: BTreeMap<SourceId, Frame>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
+    /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
+    studio: Studio,
 }
 
 impl State {
@@ -1175,7 +1178,7 @@ impl State {
     ) -> Result<CallResult, ProtocolError> {
         match call {
             Call::Batch(batch) => self.batch(client_id, request_id, &batch, wake),
-            Call::Action { action } => self.action(action, wake),
+            Call::Action { action } => self.action(client_id, request_id, action, wake),
             Call::Query { query } => self.query(&query),
             _ => Err(not_implemented("this kind of call")),
         }
@@ -1230,17 +1233,30 @@ impl State {
             },
             wake,
         );
+        // A batch that deleted the program scene, or created the first scene, moves
+        // program; that event follows the batch's `state.changed`.
+        if self.studio.reconcile(self.graph.state()) {
+            self.emit_studio(client_id, request_id, wake);
+        }
         Ok(CallResult::Batch { rev: applied.rev })
     }
 
     fn action(
         &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
         action: Action,
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
+            Action::SceneSwitch { scene_id } => {
+                if self.studio.switch(self.graph.state(), &scene_id)? {
+                    self.emit_studio(client_id, request_id, wake);
+                }
+                return Ok(CallResult::Action {});
+            }
             other => return Err(not_implemented(other.name())),
         };
         for state in self.outputs.transition(&output_id, start)? {
@@ -1255,7 +1271,8 @@ impl State {
         Ok(CallResult::Action {})
     }
 
-    /// Collection reads go to `Graph::query`; `output.status` reads the outputs.
+    /// Collection reads go to `Graph::query`; `output.status` reads the outputs and
+    /// `studio.get` the studio state.
     fn query(&self, query: &Query) -> Result<CallResult, ProtocolError> {
         let result = match self.graph.query(query) {
             Some(result) => result?,
@@ -1266,10 +1283,25 @@ impl State {
                     state: self.outputs.state(output_id)?,
                     key_set: false,
                 },
+                Query::StudioGet => QueryResult::StudioGet {
+                    program_scene: self.studio.program().cloned(),
+                },
                 other => return Err(not_implemented(other.name())),
             },
         };
         Ok(CallResult::Query { result })
+    }
+
+    /// `studio.changed` with the scene now on program, caused by `request_id`.
+    fn emit_studio(&mut self, client_id: &ClientId, request_id: &RequestId, wake: &mut Vec<Waker>) {
+        self.subscribers.emit(
+            &Event::StudioChanged {
+                program_scene: self.studio.program().cloned(),
+                client_id: client_id.clone(),
+                request_id: Some(request_id.clone()),
+            },
+            wake,
+        );
     }
 
     fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {

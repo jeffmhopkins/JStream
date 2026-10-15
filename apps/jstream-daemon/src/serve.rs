@@ -143,6 +143,11 @@ mod tests {
             }
             other => panic!("expected state.changed, got {other:?}"),
         }
+        // The first scene went on program.
+        assert!(matches!(
+            timely(events.next()).await,
+            Some(Event::StudioChanged { .. })
+        ));
         let status = timely(second.call(Call::Query {
             query: Query::OutputStatus {
                 output_id: OutputId::new("out_1"),

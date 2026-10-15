@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:2623ed8268e70844", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#147 C6 nested scene rendering) into F2b; took main's verified line and re-read; C6's snapshot/nesting text and F2b's recording text (no publish target needed, four recording tests) both present and accurate" }
+verified = { hash = "b3:8d510dac4de372fb", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "B10: re-read after lib.rs gained the ADR-0030 Docs reference; Studio and Tests bullets accurate" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -46,6 +46,9 @@ state machine. Contents:
   still come from `set_source_frame`. `jstream-sources` replaces them.
 - **Snapshot** (`snapshot.rs`): `video.snapshot`, the program mix read back as a PNG
   on the engine's own snapshot thread, which owns the snapshot compositor.
+- **Studio** (`studio.rs`): which scene is on program, runtime state under the
+  collection lock that `scene.switch` sets and `studio.get` reads
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. The render thread reads the
   platform capture mailbox, composites one scene and reads the frame back. The mixer
   thread polls the media clock. Encode threads live in the encoder sessions. The
@@ -85,7 +88,9 @@ state machine. Contents:
   the hidden `Engine::with_cpu_compositor`), the output edits and the stream-key
   actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces), and an MCP agent (`jstream-mcp`, a
-  dev-dependency) driving the engine in-process.
+  dev-dependency) driving the engine in-process, `scene.switch` and the program
+  scene's rules (in `tests.rs`, the differential script and `studio.rs`), and a
+  snapshot that follows program.
 
 Not here yet: per-client undo, the audit log, persistence, real source kinds, arc-swap
 snapshots, a GPU encode target, and the platform's Windows devices. See
@@ -100,7 +105,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c6fc31d036233f3d", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose is F2b's Recording paragraph plus main's; re-read against sink.rs, pipeline.rs and engine.rs on the merged tree" }
+verified = { hash = "b3:ebdedb0a15faa46e", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "B10: re-read after lib.rs gained the ADR-0030 Docs reference; Program scene, Calls and Snapshots text match engine.rs and studio.rs" }
 -->
 
 ### Engine and sessions
@@ -188,8 +193,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   (`not_found` for an unknown one) and fills `key_set` from the key store after the
   collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
-- **Actions**: `output.start` and `output.stop` (see *Outputs* below), and
-  `output.set_key` and `output.clear_key` (see *Stream keys* below).
+- **Actions**: `output.start` and `output.stop` (see *Outputs* below),
+  `output.set_key` and `output.clear_key` (see *Stream keys* below), and
+  `scene.switch` (see *Program scene* below).
+- **`studio.get`** reads the program scene under the collection lock.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -200,14 +207,27 @@ with `internal`, so the two are not compared. The mock stays the reference clien
 were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
 
+### Program scene
+
+The program scene is runtime state in `studio.rs`, under the collection lock beside the
+outputs' state, not in the graph
+([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). `scene.switch`
+sets it (`not_found` for a scene the collection doesn't have) and emits
+`studio.changed`, with no `rev` change; a switch to the scene already on program emits
+nothing. After every applied batch the engine reconciles it: the collection's first
+scene goes on program when it is created, a deleted program scene gives way to the
+first scene left (or none), and a reorder never moves it. A batch that moves program
+emits `studio.changed` right after its `state.changed`, naming the same request. The
+mock applies the same rules, and the differential script holds the two to each other.
+Nothing is persisted, so a restart starts with the first scene on program. Only a cut
+exists; transitions and the preview scene come later.
+
 ### Snapshots
 
 `video.snapshot` returns the program mix as a PNG
-([jstream-protocol › Design](../jstream-protocol/README.md#design)). Until studio
-state exists, that scene is the first one in display order. `Program` will follow
-`program_scene` once studio mode is built
-([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)); that state is M2
-([ROADMAP › M2](../../ROADMAP.md#m2)). An empty collection is an opaque black canvas.
+([jstream-protocol › Design](../jstream-protocol/README.md#design)): the program
+scene, read under the collection lock when the shot is copied, so a snapshot after a
+`scene.switch` shows the new scene. An empty collection is an opaque black canvas.
 
 The canvas is [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s default,
 1920×1080. `canvas.set_size` is not a message yet, so every snapshot uses that size.
@@ -227,8 +247,8 @@ levels below it draws nothing (logged at `debug`). Width is not bounded: an imag
 stays alive until the last pass that places it, so a scene with *k* distinct nested
 scene sources holds *k* canvas-sized FP16 textures at once. The graph already rejects cycles at every
 edit that adds nesting; if a copied shot had one, the scene source that closes it
-draws nothing. The live pipeline's render thread (`runtime/`) still composites one
-scene and does not draw nested scenes yet.
+draws nothing. The live pipeline's render thread (`runtime/`) still composites the
+capture alone, not a scene, so it does not follow program yet.
 
 `Engine::set_source_frame` stores the latest straight sRGB RGBA8 frame for a source
 id. It changes no `rev` and emits no event, and a frame may arrive before the source

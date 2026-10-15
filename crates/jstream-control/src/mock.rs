@@ -6,7 +6,8 @@
 //! the outputs' runtime state and an in-memory stand-in for the stream-key store, and
 //! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
-//! stream-key actions, `state.changed` and `output.state_changed` events. Each
+//! stream-key actions, `scene.switch` and the program scene it sets (`studio.get`),
+//! and `state.changed`, `studio.changed` and `output.state_changed` events. Each
 //! [`MockEngine::connect`] opens one client session. It does no undo, persistence or
 //! real output work.
 
@@ -196,6 +197,10 @@ struct State {
     /// How many sessions have completed `hello`; numbers the client IDs.
     clients: u64,
     subscribers: Vec<Weak<Mutex<Queue>>>,
+    /// The scene on program: runtime state, not counted by `rev`. Follows the engine's
+    /// rules (ADR-0030): the first scene created goes on program, and a deleted program
+    /// scene gives way to the first scene left.
+    program: Option<SceneId>,
 }
 
 /// The collection state that `rev` counts. Cloned to apply a batch atomically.
@@ -248,7 +253,7 @@ impl State {
     ) -> Result<CallResult, ProtocolError> {
         match call {
             Call::Batch(batch) => self.batch(client_id, request_id, batch),
-            Call::Action { action } => self.action(action),
+            Call::Action { action } => self.action(client_id, request_id, action),
             Call::Query { query } => self.query(query),
             _ => Err(unimplemented_by_mock("this kind of call")),
         }
@@ -294,7 +299,26 @@ impl State {
             client_id: client_id.clone(),
             request_id: Some(request_id.clone()),
         });
+        let kept = self
+            .program
+            .as_ref()
+            .is_some_and(|id| self.collection.scene_index(id).is_some());
+        if !kept {
+            let first = self.collection.scenes.first().map(|scene| scene.id.clone());
+            if first != self.program {
+                self.program = first;
+                self.emit_program(client_id, request_id);
+            }
+        }
         Ok(CallResult::Batch { rev })
+    }
+
+    fn emit_program(&mut self, client_id: &ClientId, request_id: &RequestId) {
+        self.emit(Event::StudioChanged {
+            program_scene: self.program.clone(),
+            client_id: client_id.clone(),
+            request_id: Some(request_id.clone()),
+        });
     }
 
     /// The outputs that are running: every state but `stopped` and `failed`.
@@ -322,8 +346,21 @@ impl State {
         });
     }
 
-    fn action(&mut self, action: Action) -> Result<CallResult, ProtocolError> {
+    fn action(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        action: Action,
+    ) -> Result<CallResult, ProtocolError> {
         let (output_id, start) = match action {
+            Action::SceneSwitch { scene_id } => {
+                self.collection.existing_scene(&scene_id)?;
+                if self.program.as_ref() != Some(&scene_id) {
+                    self.program = Some(scene_id);
+                    self.emit_program(client_id, request_id);
+                }
+                return Ok(CallResult::Action {});
+            }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
             Action::OutputSetKey { output_id, key } => {
@@ -425,6 +462,9 @@ impl State {
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
                 outputs: self.collection.output_infos(),
+            },
+            Query::StudioGet => QueryResult::StudioGet {
+                program_scene: self.program.clone(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -1565,7 +1605,8 @@ mod tests {
             poll_event(&mut leaving_events, Waker::noop()),
             Poll::Ready(None)
         );
-        assert_eq!(drain(&mut staying_events).len(), 2);
+        // The unknown event, `state.changed`, and `studio.changed` for the first scene.
+        assert_eq!(drain(&mut staying_events).len(), 3);
     }
 
     #[test]
@@ -1635,7 +1676,8 @@ mod tests {
         assert_eq!(batch(&*control, Batch::single(create("b"))), Ok(Rev(2)));
         assert_eq!(batch(&*control, keyed.clone()), Ok(Rev(1)));
         assert_eq!(engine.rev(), Rev(2));
-        assert_eq!(drain(&mut events).len(), 2, "a retry emits nothing");
+        // Two `state.changed`, and `studio.changed` for the first scene.
+        assert_eq!(drain(&mut events).len(), 3, "a retry emits nothing");
         // Keys are per client: another client's identical key is a new batch.
         let other = connected(&engine);
         let error = batch(&*other, keyed).expect_err("scene a exists");
@@ -1692,6 +1734,11 @@ mod tests {
         let expected = vec![
             Event::StateChanged {
                 rev: Rev(1),
+                client_id: ClientId::new("mock_2"),
+                request_id: Some(response.id.clone()),
+            },
+            Event::StudioChanged {
+                program_scene: Some(SceneId::new("a")),
                 client_id: ClientId::new("mock_2"),
                 request_id: Some(response.id),
             },

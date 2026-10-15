@@ -35,6 +35,9 @@ Commands:
   hello                            handshake with the engine and print the session
   state get                        print the whole collection state (query state.get)
   scene list                       list the scenes (query scene.list)
+  scene switch <scene-id>          put a scene on program, with a cut (action
+                                   scene.switch)
+  studio get                       print the scene on program (query studio.get)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   output list                      list the configured outputs (query output.list)
@@ -246,6 +249,10 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["hello"] => Command::Hello,
         ["state", "get"] => Command::Query(Query::StateGet),
         ["scene", "list"] => Command::Query(Query::SceneList),
+        ["scene", "switch", id] => Command::Action(Action::SceneSwitch {
+            scene_id: SceneId::new(*id),
+        }),
+        ["studio", "get"] => Command::Query(Query::StudioGet),
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -271,7 +278,7 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         [word, ..] => {
             let known = [
                 "help", "version", "hello", "state", "scene", "source", "item", "output", "video",
-                "edit", "events", "mcp",
+                "studio", "edit", "events", "mcp",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -641,6 +648,17 @@ mod tests {
             ok(&["output", "clear-key", "o"]).command,
             Command::Action(Action::OutputClearKey { output_id: id() })
         );
+        assert_eq!(
+            ok(&["scene", "switch", "s"]).command,
+            Command::Action(Action::SceneSwitch {
+                scene_id: SceneId::new("s")
+            })
+        );
+        assert_eq!(
+            ok(&["studio", "get"]).command,
+            Command::Query(Query::StudioGet)
+        );
+        assert!(err(&["studio"]).starts_with("wrong arguments for `"));
     }
 
     #[test]

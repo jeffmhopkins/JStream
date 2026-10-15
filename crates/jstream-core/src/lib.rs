@@ -12,7 +12,7 @@
 //! sums and emits one about once a second while it runs. There is no undo, audit log
 //! or persistence yet.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#threading, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0030-studio-state-and-scene-switching.md
 
 #![forbid(unsafe_code)]
 
@@ -24,6 +24,7 @@ mod outputs;
 mod runtime;
 mod session;
 mod snapshot;
+mod studio;
 #[cfg(test)]
 mod tests;
 

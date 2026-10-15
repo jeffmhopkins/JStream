@@ -123,17 +123,22 @@ struct Placed {
 /// Everything `draw` needs, owned so the collection lock can be dropped first.
 pub(crate) struct Shot {
     rev: Rev,
-    /// The first scene in display order. `None` when the collection has no scene.
+    /// The scene on program (ADR-0030). `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
     /// The frames the copied scenes place, by source.
     frames: BTreeMap<SourceId, Frame>,
 }
 
-/// Copies the program scene and the scenes it nests, at `graph`'s current revision.
-pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
+/// Copies the program scene `program` and the scenes it nests, at `graph`'s current
+/// revision.
+pub(crate) fn plan(
+    graph: &Graph,
+    program: Option<&SceneId>,
+    frames: &BTreeMap<SourceId, Frame>,
+) -> Shot {
     let state = graph.state();
-    let program = state.scenes().first().map(|scene| scene.id().clone());
+    let program = program.cloned();
     let mut shot = Shot {
         rev: graph.rev(),
         program: program.clone(),

@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:ed042041866f86ba", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166) into F2b: only the CLI README's edit-form wording changed under apps/**; diagram (outputs list includes record) and host table hold" }
+verified = { hash = "b3:60f37040c2986ceb", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "B10: apps changes are the CLI's two commands and daemon tests; shape text unaffected" }
 -->
 
 ```
@@ -165,8 +165,8 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:39a005ebabd81f23", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; ADR-0040 hotkey sentence and depends_on are main's; Built so far still lists Record { path, container: mp4 } with its path checks" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0030-studio-state-and-scene-switching.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
+verified = { hash = "b3:50d118f8c6289bc5", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "B10: studio removed from the collection tree; Program bullet says program/preview are runtime state (ADR-0030) with the first-scene and deleted-scene rules; Built so far notes core holds program" }
 -->
 
 ```
@@ -181,7 +181,6 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ├── folders        Folder { id, name }   ordered, one level; organising only
 ├── labels         Label { id, name, icon, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
-├── studio         { program_scene, preview_scene }   (studio-mode state)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
@@ -197,9 +196,12 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
                    kind: Rtmp { target: Generic { url } | YouTube { broadcast_binding } } | Record { path, container } | VirtualCam
 ```
 
-- `Program` and `Preview` are mixes driven by the studio state. `Program` shows
-  `program_scene`, including any transition in progress. A `VideoMix` with input
-  `Program` follows it.
+- `Program` and `Preview` are mixes driven by the studio state: `program_scene` and
+  `preview_scene`, which are runtime state beside the outputs' state, not part of the
+  collection or its `rev` ([ADR-0030](adr/0030-studio-state-and-scene-switching.md)).
+  `Program` shows `program_scene`, including any transition in progress. A `VideoMix`
+  with input `Program` follows it. The collection's first scene goes on program when it
+  is created, and a deleted program scene gives way to the first scene left.
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
   Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
   shares everything with the other placements of that source except its own placement,
@@ -357,7 +359,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   variants and overrides, folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
   `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
-  and `outputs`. Nothing is persisted yet.
+  and `outputs`. Nothing is persisted yet. The program scene is built in
+  `jstream-core` (runtime state; no preview scene yet).
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -503,7 +506,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f7428a0902cef033", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; no message, edit, query or transport rule changed by the mock/parity merge; record kind bullet still says 0.9" }
+verified = { hash = "b3:f2f8aaacace913b5", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "B10: re-read after the clippy fix in session.rs (caused_by comparison); text unchanged and still accurate" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -525,9 +528,14 @@ The wire format, versioning, error codes and compatibility policy are designed i
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
   `output.status` reports only `key_set`.
-- **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
+- **Actions** (`output.start`, `scene.switch`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
+- **Program scene** (protocol 0.10, [ADR-0030](adr/0030-studio-state-and-scene-switching.md)):
+  the action `scene.switch { scene_id }` puts a scene on program with a cut, with no
+  `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
+  change of it, including the ones a batch causes by creating the first scene or
+  deleting the program scene.
 - **Transitions** (planned, [ADR-0029](adr/0029-transitions.md)): edits create, update and
   delete presets (each with a kind and a settings map or patch,
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)), set the default,
@@ -604,11 +612,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:9b8fb2677f948e39", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#169 Y2, #153 I1) into F2b round 2: took main's verified line and re-read; I1's /mcp text; tools.snap unchanged by round 2 (Unknown variants are schemars-skipped)" }
+verified = { hash = "b3:a47ef9f327038ad9", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "B10: studio is now among the built tool nouns; rest unchanged" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`item`, `kind`, `output`, `scene`, `source`, `state`, `studio` and `video` so far; `audio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
