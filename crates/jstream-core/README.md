@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:70d2032f8475c156", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "D6: Audio bullet names activity.rs and when_shown; test list adds the activity-gain engine test; holds against engine.rs, audio.rs, activity.rs" }
+verified = { hash = "b3:91e0c7812431e300", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: D5's Audio bullet and tests as on main, plus D6's activity-gain additions; holds against engine.rs, audio.rs, activity.rs" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -182,7 +182,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:735bb20406d25a97", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "D6: Audio routing gains the activity-gain bullet (roots, reachability, min(1, sum), ramp, sync on scene.switch and after reconcile); Not yet now lists transition-weighted gains (T1) instead of D6" }
+verified = { hash = "b3:5b697bdecbe6e96f", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: Audio routing is main's plus D6's activity-gain bullet; Not yet lists transition-weighted gains (T1); holds" }
 -->
 
 ### Engine and sessions
@@ -484,7 +484,9 @@ the source hands out a different one, so a still image is uploaded once. The pla
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image advances on the clock and a still one is
 never re-planned. Sources run on the media clock of the backends the host injects
-(`with_backends`), else on a monotonic clock of the engine's own. `collection` asset
+(`with_backends`), else on a monotonic clock of the engine's own. A clock swap
+restarts every running source's timing and drops the re-plan timed on the old clock:
+the thread re-plans at once on the new one. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
 for every `app` reference, the asset is unreadable and the source draws nothing.
 

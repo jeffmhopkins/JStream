@@ -423,7 +423,7 @@ tags (`@v4`) and branches are not allowed. Dependabot keeps the pins current
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
-applies_to = ["crates/**"]
+applies_to = ["crates/**", "apps/**"]
 -->
 Every bug fix includes a test that fails without the fix.
 
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:7dae89ee6a46a896", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; D5's additions are the 0.19 minor bump per R-API-001; holds" }
+verified = { hash = "b3:2348bc7076ff2d66", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): R-API-003 holds: schema stays 1 and a pre-D5 v1 file now loads with its audio sources' master sends, as it did on main" }
 -->
 
 <a id="R-API-001"></a>
@@ -619,6 +619,7 @@ This table is the **only** list of check names that `enforced_by` may cite as `c
 | `pr-title` | Conventional Commit title | yes | M0 |
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
+| `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | build and unit tests on macOS | no until M3 | M0 |
 | `sweep` | weekly scheduled sweep into one issue: `cargo deny`, docs due for review, `cargo update --dry-run`, override audit list; link and fact checks later ([DOCS › Time-based review](DOCS.md#ttl)) | n/a | M1 |
 

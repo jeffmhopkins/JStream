@@ -94,30 +94,45 @@ impl Transport {
     }
 
     /// Closes the connection cleanly: for TLS, sends `close_notify` first so the server
-    /// sees an orderly end rather than a truncated session; then shuts the socket down
-    /// in both directions.
+    /// sees an orderly end rather than a truncated session; then shuts down the
+    /// socket's sending side, so the server sees a FIN.
+    ///
+    /// The receiving side stays open until the transport is dropped, so whatever the
+    /// server still sends (its own `close_notify`, a late `onStatus`) can be read. A
+    /// shutdown in both directions would let Windows abort the connection instead of
+    /// sending the FIN whenever the server's data sits unread, such as TLS 1.3 session
+    /// tickets, and the server's stack could then discard `close_notify` unread (#243).
     ///
     /// A socket the peer has already disconnected or reset counts as shut down, at
     /// either step. With a [write deadline](Self::set_write_deadline) set, sending
     /// `close_notify` (and whatever TLS data is still queued ahead of it) is bounded
     /// by it like any other write (#209).
     ///
+    /// The socket is shut down even when sending `close_notify` fails, so the peer
+    /// sees the connection end without waiting for the transport to be dropped (#236).
+    ///
     /// # Errors
     /// Transport errors while sending `close_notify` or shutting the socket down;
-    /// [`TimedOut`](io::ErrorKind::TimedOut) when the write deadline passes first.
+    /// [`TimedOut`](io::ErrorKind::TimedOut) when the write deadline passes first. A
+    /// failed `close_notify` is the error returned when both steps fail.
     pub fn shutdown(&mut self) -> io::Result<()> {
-        if let Link::Tls(s) = &mut self.link {
+        let notified = if let Link::Tls(s) = &mut self.link {
             s.conn.send_close_notify();
             // Through `Write::flush`, which honours the write deadline.
-            match Write::flush(self) {
-                Err(e) if peer_gone(&e) => return Ok(()),
-                result => result?,
-            }
-        }
-        match self.tcp().shutdown(Shutdown::Both) {
-            Err(e) if peer_gone(&e) => Ok(()),
-            result => result,
-        }
+            Write::flush(self)
+        } else {
+            Ok(())
+        };
+        let closed = self.tcp().shutdown(Shutdown::Write);
+        unless_peer_gone(notified).and(unless_peer_gone(closed))
+    }
+}
+
+/// `result`, with an error that says the peer is already gone counted as success.
+fn unless_peer_gone(result: io::Result<()>) -> io::Result<()> {
+    match result {
+        Err(e) if peer_gone(&e) => Ok(()),
+        result => result,
     }
 }
 
