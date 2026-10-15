@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ecab67f3287f072a", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "Merge of main (U3b, U4) into U5 plus round 1 B1: Connecting bullet now says the desktop connect needs jstream-server's subprotocol token (#246) and fails like any refused connect until then; main's canvas and outputs text unchanged; holds" }
+verified = { hash = "b3:e421987c584208b8", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b round 2 after merging main (U4/U5): re-read; main's canvas and desktop host text unaffected; outputs panel still treats virtual_cam as newer than the page (outputs.rs start_blocker/describe_kind); holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

@@ -184,7 +184,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:3adfd7e06d55a743", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge of main at 0.17, now 0.18: re-read; backends still carry no virtual camera sink (serve.rs unchanged, wiring left to the daemon's owner); holds" }
+verified = { hash = "b3:ed9aaa7318133665", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b round 2 after merging main (U5): re-read; daemon backends still carry no virtual camera sink (serve.rs vcam: None); this PR changes no daemon code; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

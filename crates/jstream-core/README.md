@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:68bd9590660e714f", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b: only change since last verify is a clippy identity_op fix in a vcam.rs unit test; re-read the vcam text again, holds" }
+verified = { hash = "b3:0d66f2f2199716a3", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b round 2 (B1/B2): re-read against the camera-thread rework. Runtime bullet now says the camera thread converts and publishes what the render thread sends through a tap (vcam.rs run_camera/VcamTap); Tests bullet adds refusal while another output uses the camera; intro line holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -162,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:6cac103890dd5b95", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b: only change since last verify is a clippy identity_op fix in a vcam.rs unit test; re-read the vcam text again, holds" }
+verified = { hash = "b3:8fa6500680e8da99", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b round 2 (B1/B2): Virtual camera paragraph rewritten for jstream-vcam thread: tap and thread share only the stop flag and two bounded channels (no lock, R-RT-003), try_send drops+counts in output drops, BGRA convert/fit on the camera thread, stop waits like any output thread, leaving tap goes to the collector, in-use error (N2). Collector sentence now names the tap (Garbage::Vcam); per-tick allocation list says the tap reuses handed-back buffers and the BGRA frame is allocated on the camera thread; fatal list holds" }
 -->
 
 ### Engine and sessions
@@ -946,7 +946,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:f516868b82bc8fe5", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b: only change since last verify is a clippy identity_op fix in a vcam.rs unit test; re-read the vcam text again, holds" }
+verified = { hash = "b3:01984854d01e39b9", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b round 2 (B1/B2): runtime text says each output but a camera has an output thread that muxes; the camera thread publishes what the tap sends, the tap taken from a channel and handed to the collector when it leaves (pipeline.rs render_loop, launch_vcam); stage draws while it has a session or a camera" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
