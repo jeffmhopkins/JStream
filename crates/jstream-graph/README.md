@@ -143,7 +143,7 @@ the batch **touched**.
   name, and one that could carry a credential (`user:password@`, a query or a
   fragment). A recording's `path` is rejected (field `kind.path`) when it is empty,
   over 4096 bytes, has control characters or a `..` segment, is not absolute (`/…`,
-  `\…`, `C:\…` or `C:/…`, the same on every platform, as for an absolute asset), or
+  `\…`, `C:\…` or `C:/…`, the same on every platform), or
   doesn't end in a file name; whether it is absolute on the engine's own machine, and
   whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
   `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and

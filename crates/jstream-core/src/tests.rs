@@ -2314,9 +2314,15 @@ mod cpu_pipeline {
         thread::sleep(Duration::from_millis(10));
     }
 
-    /// Pumps until `done`, for at most five seconds.
+    /// How long `pump_until` and `wait_until` keep trying. It only bounds how long a
+    /// failing test hangs, it is not a timing assertion: these tests pass in well under
+    /// a second, but a loaded CI or workspace run can starve the pipeline threads for
+    /// seconds at a time (#392).
+    const HANG_BOUND: Duration = Duration::from_secs(30);
+
+    /// Pumps until `done`, for at most `HANG_BOUND`.
     fn pump_until(clock: &FakeClock, audio: &FakeAudioIo, mut done: impl FnMut() -> bool) -> bool {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + HANG_BOUND;
         while Instant::now() < deadline {
             if done() {
                 return true;
@@ -2326,8 +2332,9 @@ mod cpu_pipeline {
         done()
     }
 
+    /// Waits until `done`, for at most `HANG_BOUND`.
     fn wait_until(mut done: impl FnMut() -> bool) -> bool {
-        let deadline = Instant::now() + Duration::from_secs(5);
+        let deadline = Instant::now() + HANG_BOUND;
         while Instant::now() < deadline {
             if done() {
                 return true;
