@@ -110,7 +110,7 @@ pub struct ItemGeometry {
 ///
 /// x points right and y down, with (0, 0) at the top-left corner. A `scene` source's
 /// native size is the canvas size, and a mix renders the canvas fitted inside its
-/// resolution. Missing (from a server older than 0.10) parses as the 1920×1080 default.
+/// resolution. Missing (from a server older than 0.11) parses as the 1920×1080 default.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct Canvas {
     /// Width in pixels, greater than zero.
@@ -141,7 +141,7 @@ impl Default for Canvas {
 #[non_exhaustive]
 pub enum PlacementForm {
     /// A 0.3 `ItemTransform`, evaluated every frame against the source's current size.
-    /// What a server older than 0.10 stores, so a missing field parses as this.
+    /// What a server older than 0.11 stores, so a missing field parses as this.
     #[default]
     Legacy,
     /// An [`ItemGeometry`]: a box on the canvas.
@@ -1094,7 +1094,7 @@ mod tests {
     }
 
     #[test]
-    fn canvas_and_placement_form_parse_their_pre_0_10_defaults() {
+    fn canvas_and_placement_form_parse_their_pre_0_11_defaults() {
         assert_eq!(
             Canvas::default(),
             Canvas {

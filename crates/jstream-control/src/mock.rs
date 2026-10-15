@@ -296,6 +296,7 @@ impl State {
             rev,
             client_id: client_id.clone(),
             request_id: Some(request_id.clone()),
+            cause: None,
         });
         Ok(CallResult::Batch { rev })
     }
@@ -1778,6 +1779,7 @@ mod tests {
                 rev: Rev(1),
                 client_id: ClientId::new("mock_2"),
                 request_id: Some(response.id),
+                cause: None,
             },
             changed(OutputState::Starting),
             changed(OutputState::Active),

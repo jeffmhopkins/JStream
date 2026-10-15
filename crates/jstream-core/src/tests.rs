@@ -3,6 +3,8 @@
 //! fixture), events, the placeholder outputs, and a differential run against
 //! `jstream-control`'s mock engine.
 
+mod history;
+
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
@@ -491,11 +493,13 @@ fn events_reach_every_subscriber_in_order() {
             rev: Rev(1),
             client_id: agent.client_id().expect("agent"),
             request_id: Some(by_agent.id),
+            cause: None,
         },
         Event::StateChanged {
             rev: Rev(2),
             client_id: user.client_id().expect("user"),
             request_id: Some(by_user.id),
+            cause: None,
         },
         changed(OutputState::Starting),
         changed(OutputState::Active),
@@ -701,6 +705,7 @@ fn the_engine_answers_like_the_mock() {
                 rev,
                 client_id: ClientId::new("client"),
                 request_id,
+                cause: None,
             },
             other => other,
         }

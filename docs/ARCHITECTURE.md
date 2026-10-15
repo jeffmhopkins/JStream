@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:62953f73495e27af", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: re-read; crate shape unchanged by the merge" }
+verified = { hash = "b3:d46a278a46d73d8a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; crate shape unchanged" }
 -->
 
 ```
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:5139a324778fbe13", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: depends_on from main (ADR-0040); Built so far lists placement forms and canvas at protocol 0.10, outputs incl. recording; matches graph model" }
+verified = { hash = "b3:dfe3957b0f391551", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Built so far says canvas at protocol 0.11; rest holds" }
 -->
 
 ```
@@ -343,7 +343,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   filters yet), scenes in display order, and items in stacking order with `source_id`,
   a placement, `crop` and `visible`. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
-  its `canvas` (protocol 0.10); non-neutral 3D geometry is still rejected. Items refer to sources; they never copy them. Scene and source
+  its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Items refer to sources; they never copy them. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
@@ -504,7 +504,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:3850ed1f5f33e5dc", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: Edits bullet merged (record output kind 0.9; canvas.set_size and item.set_geometry 0.10 deprecating item.set_transform); Queries bullet holds" }
+verified = { hash = "b3:270ba00746021a51", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Edits bullet says canvas.set_size/item.set_geometry are protocol 0.11; B2's History bullet at 0.10 holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -522,7 +522,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9. `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
-  ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.10), which deprecates
+  ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
@@ -542,7 +542,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0032](adr/0032-live-edits-and-undo.md)).
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
-  ([ADR-0032](adr/0032-live-edits-and-undo.md)).
+  ([ADR-0032](adr/0032-live-edits-and-undo.md)). It refuses with `undo_conflict`
+  rather than overwrite another client's later change (protocol 0.10).
 - **Privacy screen** (planned): the action `privacy.set { on }` on the master stage, never
   undoable or batchable and with no `rev` change; every change emits
   `privacy.changed { on }` to every client and goes to the audit log
@@ -607,11 +608,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:002f7a312e6e20f4", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: re-read against regenerated tools.snap; holds" }
+verified = { hash = "b3:f87823856265c90a", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: grouped tools list includes canvas and history; tools.snap now about 102 KB, so the text says about 100 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -621,7 +622,7 @@ verified = { hash = "b3:002f7a312e6e20f4", by = "agent:claude@session_01SS5BBdaw
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 95 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 100 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

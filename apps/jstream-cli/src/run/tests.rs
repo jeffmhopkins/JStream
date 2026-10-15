@@ -713,6 +713,7 @@ fn events_golden_unknown_skipped_and_an_ended_stream_is_disconnected() {
         rev: Rev(9),
         client_id: ClientId::new("other"),
         request_id: None,
+        cause: None,
     });
     drop(control); // the session goes away: the stream ends after what it buffered
     let mut out = Vec::new();

@@ -176,6 +176,20 @@ source: crates/jstream-protocol/src/fixtures.rs
             "query"
           ],
           "type": "object"
+        },
+        {
+          "$ref": "#/$defs/HistoryCall",
+          "description": "Undo or redo one of this client's own steps (ADR-0032). Carries no command: the\nengine applies a batch of edits it already holds.",
+          "properties": {
+            "kind": {
+              "const": "history",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -230,11 +244,48 @@ source: crates/jstream-protocol/src/fixtures.rs
             "result"
           ],
           "type": "object"
+        },
+        {
+          "description": "The undo or redo was applied (or had already been applied under its idempotency\nkey).",
+          "properties": {
+            "kind": {
+              "const": "history",
+              "type": "string"
+            },
+            "redo_depth": {
+              "description": "How many steps the client can redo.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the undo or redo produced."
+            },
+            "step_rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the step's batch originally produced. It names the step."
+            },
+            "undo_depth": {
+              "description": "How many steps the client can still undo.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "rev",
+            "step_rev",
+            "undo_depth",
+            "redo_depth"
+          ],
+          "type": "object"
         }
       ]
     },
     "Canvas": {
-      "description": "The collection's canvas: every scene's coordinate space, in whole pixels.\n\nx points right and y down, with (0, 0) at the top-left corner. A `scene` source's\nnative size is the canvas size, and a mix renders the canvas fitted inside its\nresolution. Missing (from a server older than 0.10) parses as the 1920×1080 default.",
+      "description": "The collection's canvas: every scene's coordinate space, in whole pixels.\n\nx points right and y down, with (0, 0) at the top-left corner. A `scene` source's\nnative size is the canvas size, and a mix renders the canvas fitted inside its\nresolution. Missing (from a server older than 0.11) parses as the 1920×1080 default.",
       "properties": {
         "height": {
           "description": "Height in pixels, greater than zero.",
@@ -478,7 +529,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "**Deprecated** since 0.10 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
+              "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
             },
             "type": {
               "const": "item.add",
@@ -512,7 +563,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "**Deprecated** since 0.10 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
+          "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -943,6 +994,17 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The collection state moved to a new revision: one per applied batch (or undo).\nClients holding a copy of the state re-query, or apply the change if they made it.",
           "properties": {
+            "cause": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/HistoryDirection"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`undo` or `redo` when a history call made the change; absent for a batch."
+            },
             "client_id": {
               "$ref": "#/$defs/ClientId",
               "description": "The client whose request caused it."
@@ -1100,6 +1162,87 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "HistoryCall": {
+      "description": "An undo or redo request, sent as `{\"kind\":\"history\",\"op\":{\"type\":\"history.undo\"}}`.",
+      "properties": {
+        "expected_rev": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Rev"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`.\nChecked before anything else about the history. Omitted means apply against\nwhatever is current."
+        },
+        "idempotency_key": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdempotencyKey"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Makes a retry safe, sharing the client's batch keys: a retried undo whose answer\nwas lost gets the original result and does not undo a second step."
+        },
+        "op": {
+          "$ref": "#/$defs/HistoryOp",
+          "description": "Which way to move through the client's history."
+        }
+      },
+      "required": [
+        "op"
+      ],
+      "type": "object"
+    },
+    "HistoryDirection": {
+      "description": "A direction through a client's history: the `cause` of a `state.changed` that an\nundo or redo produced, and the `direction` of a `history_empty` error.",
+      "oneOf": [
+        {
+          "const": "undo",
+          "description": "Backward: an undo.",
+          "type": "string"
+        },
+        {
+          "const": "redo",
+          "description": "Forward again: a redo.",
+          "type": "string"
+        }
+      ]
+    },
+    "HistoryOp": {
+      "description": "What a [`HistoryCall`] asks for. Serialized with an internal `type` tag holding the\ncall's name (`history.undo`).",
+      "oneOf": [
+        {
+          "description": "Undoes the client's most recent step that is not undone yet: applies its inverse\nand moves it to the redo stack. Fails with `history_empty` when there is none, and\nwith `undo_conflict` when another client has since changed what the step touched.",
+          "properties": {
+            "type": {
+              "const": "history.undo",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Applies the client's most recently undone step again and moves it back to the\nundo stack. The client's next batch clears what can be redone.",
+          "properties": {
+            "type": {
+              "const": "history.redo",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "IdempotencyKey": {
       "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
       "type": "string"
@@ -1187,7 +1330,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         "placement": {
           "$ref": "#/$defs/PlacementForm",
           "default": "legacy",
-          "description": "Which form its placement is stored in. Missing (from a server older than 0.10)\nparses as `legacy`."
+          "description": "Which form its placement is stored in. Missing (from a server older than 0.11)\nparses as `legacy`."
         },
         "source_id": {
           "$ref": "#/$defs/SourceId",
@@ -1195,7 +1338,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "transform": {
           "$ref": "#/$defs/ItemTransform",
-          "description": "**Deprecated** since 0.10 (ADR-0022), removed in 1.0: read `geometry`. For a\nlegacy item, the stored transform exactly as written. For a geometry item, a\nview computed from the geometry alone: the box's rotated top-left corner, its\nrotation, and scale (1, 1)."
+          "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: read `geometry`. For a\nlegacy item, the stored transform exactly as written. For a geometry item, a\nview computed from the geometry alone: the box's rotated top-left corner, its\nrotation, and scale (1, 1)."
         },
         "visible": {
           "description": "Whether it is drawn.",
@@ -1212,7 +1355,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "ItemTransform": {
-      "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n**Deprecated** since 0.10 (ADR-0022) and removed in 1.0, with `item.set_transform`,\n`item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning\nbelow.\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
+      "description": "A protocol 0.3 placement: where a scene item sits until it is stored as\n[`ItemGeometry`](crate::ItemGeometry).\n\n**Deprecated** since 0.11 (ADR-0022) and removed in 1.0, with `item.set_transform`,\n`item.add`'s `transform` and `ItemInfo.transform`. Until then it keeps the meaning\nbelow.\n\n`position` is the top-left corner in canvas pixels, `scale` is relative to the\nsource's current size, and `rotation_deg` turns clockwise about that corner.\nADR-0022 (`docs/adr/0022-item-transform-and-canvas.md`) does not extend this struct\nwith 3D fields. The replacement is [`ItemGeometry`](crate::ItemGeometry): a box,\nrotation about its centre, and a fit mode. Until 1.0 a legacy placement keeps this\nmeaning, and [`legacy_quad`](crate::legacy_quad) evaluates it. Crop is [`Crop`],\napplied before the transform.\n\nEvery number is a [`Finite32`], so a non-finite or out-of-range number is rejected at\ndeserialization as `malformed`.",
       "properties": {
         "position": {
           "$ref": "#/$defs/Vec2",
@@ -1736,7 +1879,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "oneOf": [
         {
           "const": "legacy",
-          "description": "A 0.3 `ItemTransform`, evaluated every frame against the source's current size.\nWhat a server older than 0.10 stores, so a missing field parses as this.",
+          "description": "A 0.3 `ItemTransform`, evaluated every frame against the source's current size.\nWhat a server older than 0.11 stores, so a missing field parses as this.",
           "type": "string"
         },
         {
@@ -2028,7 +2171,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "height": 1080,
                 "width": 1920
               },
-              "description": "The canvas every scene is laid out on. Missing (from a server older than 0.10)\nparses as 1920×1080."
+              "description": "The canvas every scene is laid out on. Missing (from a server older than 0.11)\nparses as 1920×1080."
             },
             "outputs": {
               "default": [],
@@ -2692,6 +2835,52 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "An undo or redo would overwrite another client's work: a batch that client\napplied after the step changed a property the step sets, created or deleted an\nobject the step creates or deletes, or made the step's edits no longer apply.\nNothing was applied, and the step was dropped from the history, so the next undo\nreaches the step before it.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose batch conflicts."
+            },
+            "code": {
+              "const": "undo_conflict",
+              "type": "string"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision that batch produced."
+            },
+            "step_rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the step's batch originally produced."
+            }
+          },
+          "required": [
+            "code",
+            "step_rev",
+            "client_id",
+            "rev"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "There is nothing to undo, or nothing to redo.",
+          "properties": {
+            "code": {
+              "const": "history_empty",
+              "type": "string"
+            },
+            "direction": {
+              "$ref": "#/$defs/HistoryDirection",
+              "description": "Which way the call asked to move."
+            }
+          },
+          "required": [
+            "code",
+            "direction"
+          ],
+          "type": "object"
+        },
+        {
           "description": "An action was accepted for processing but could not be carried out.",
           "properties": {
             "code": {
@@ -2750,5 +2939,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.10"
+  "title": "JStream protocol 0.11"
 }

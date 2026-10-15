@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:410fe3dfd7850640", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (A5 #166, F2b #170) into B3 at 0.10: re-read; contents list holds for args.rs/run.rs with outputs (main) and geometry: None plus the StateGet canvas field ignored by the table printer (B3)" }
+verified = { hash = "b3:75e80f9d5bfc8517", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2 history 0.10) into B3 at 0.11: re-read; contents list holds for args.rs/run.rs with B2's history cause and B3's geometry: None" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:d0d64aed7dc16f17", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: merged the Edits bullet (main's output forms and settings gap, B3's 0.10 canvas.set_size/item.set_geometry not in the CLI) and the Reads bullet (main's outputs listing and output status, B3's geometry transform-view columns and --json-only canvas); matches args.rs, run.rs and run/tests.rs goldens" }
+verified = { hash = "b3:bfbfdab2c4076796", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Edits bullet now says protocol 0.11's canvas.set_size/item.set_geometry are not in the CLI; B2's undo/redo cause suffix and exit-code row hold" }
 -->
 
 ```sh
@@ -103,7 +103,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
   protocol is supported except settings. `source.set_settings`, and `source.create`
   with settings, need a JSON argument form the CLI doesn't have yet, so a source it
-  creates gets its kind's defaults. Protocol 0.10's `canvas.set_size`,
+  creates gets its kind's defaults. Protocol 0.11's `canvas.set_size`,
   `item.set_geometry` and `item.add`'s `geometry`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)) are not in the CLI
   yet; `item.add` sends neither placement, so its item is a legacy one. Several edits on one line go as **one atomic batch**: one new
@@ -127,7 +127,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
-  the `state.changed` event it causes. With `--json`, each result is one line of JSON
+  the `state.changed` event it causes; an event an undo or redo caused ends with
+  `undo` or `redo`. With `--json`, each result is one line of JSON
   on stdout: the `welcome` for `hello`, the protocol `Response` (request ID and result)
   for a call, and each event as the protocol serializes it. Events of a kind this
   protocol version doesn't know are skipped, as the protocol asks.
@@ -204,14 +205,14 @@ for example:
 | 17 | `invalid_argument` |
 | 18 | `action_failed` |
 | 19 | `internal` |
-| 20 | an error code this CLI doesn't know (from a newer engine) |
+| 20 | an error code this CLI doesn't know (from a newer engine), and `undo_conflict` and `history_empty`, which answer only a `history` call, which the CLI doesn't send |
 
 <a id="design"></a>
 ## Design
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e801c8e28dd8f5ec", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: re-read; parsing, block_on, connector, mock, writers and MCP proxy bullets hold; the mock now has both main's outputs and B3's canvas/geometry" }
+verified = { hash = "b3:e8613ebfa1f33687", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; parsing, connector, mock and MCP proxy bullets hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

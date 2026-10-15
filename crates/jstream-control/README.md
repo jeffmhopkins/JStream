@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:37347e34d53d39a2", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: re-read; trait, errors, mock and ws bullets hold with the mock's outputs/recordings (main) and canvas/geometry (B3)" }
+verified = { hash = "b3:03b5a5e95e7b2c05", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; call() now covers history calls (B2) and the mock keeps canvas/geometry (B3); holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:ff231f7fe4132a4f", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: Mock reads bullet merged: output.list and outputs from main, canvas and item placement (transform or geometry plus its view) from B3; edit checks list keeps main's recording checks and B3's geometry_view/check_canvas_side; matches mock.rs" }
+verified = { hash = "b3:21a987fc74e7a497", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; mock reads bullet (canvas, placement forms, outputs) and B2's history text hold against mock.rs" }
 -->
 
 ### The trait
@@ -56,9 +56,9 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
   keys its undo history and audit-log entries
   ([ADR-0013](../../docs/adr/0013-command-model.md)). A second `hello` returns the same
   identity.
-- `call(Call) -> Response`: one batch, action or query. The implementation chooses the
-  request ID and returns it in the `Response`, so the caller can match the
-  `state.changed` event its batch causes. Before `hello` it fails with
+- `call(Call) -> Response`: one batch, action, query or history call (undo, redo). The
+  implementation chooses the request ID and returns it in the `Response`, so the caller
+  can match the `state.changed` event its batch or history call causes. Before `hello` it fails with
   `handshake_required`.
 - `events() -> EventStream`: an independent subscription to every event emitted after
   the call, buffered until read, in emission order. It ends when the session or the
