@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1e583a28e2b0b269", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main into #253: stale via jstream-server#design, whose only change is that the subprotocol names come from jstream-control; daemon design names no subprotocol, holds" }
+verified = { hash = "b3:33fee77bfbd72c7e", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (#264, #285, Q1 #277, #284) into C9: main only restamped; MfMediaDecoders in Live on Windows and delay-load list unchanged; re-read" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
