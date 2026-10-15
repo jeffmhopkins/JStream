@@ -117,6 +117,11 @@ jobs:
             fi
           } > "$RUNNER_TEMP/sweep/docs.md"
 
+      # Roadmap entries in docs/progress.toml that the merged history contradicts
+      # (docs/DOCS.md#generated). Needs the full history checked out above.
+      - name: Roadmap progress
+        run: target/debug/xtask docs progress > "$RUNNER_TEMP/sweep/progress.md"
+
       # `--verbose` also lists the dependencies held back by a version requirement or the
       # toolchain ("Unchanged … (available: …)").
       - name: cargo update --dry-run
@@ -182,6 +187,10 @@ jobs:
             echo "## Docs due for review"
             echo
             cat "$s/docs.md"
+            echo
+            echo "## Roadmap progress"
+            echo
+            cat "$s/progress.md"
             echo
             echo "## Dependency updates"
             echo
