@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:f8fec75ecf0af180", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:1f4896b294eac7be", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "#300 B1: re-read; this PR's one edit adds the video filter chain runtime to Not in this cut and points at Filters, which is accurate (passes here, chain runtime V0). Nothing else in Purpose is touched by filter/ or apply_filter; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c17ddc66af14c910", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:c6f92718a23abe96", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "#300 B1: re-read against apply_filter and filter/pass.rs. apply_filter is a separate submit beside render; its per-draw buffers, views and bind group and its per-call output layer are described in Filters. 'Does not allocate per item on the steady path' still holds: nothing calls apply_filter on the render thread until V0. Passes, resources and placement text unchanged" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:70c4b4131cfd19bb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Group modules (pack, aspect, multipass, assets) and the descriptor test described as built" }
+verified = { hash = "b3:f603b69b2c4f09ec", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "#300 N1/N2: staging now follows a successful encode, right before the submit (compositor.rs apply_filter); frame.time's precision and daily jump stated as prelude.wgsl now says. Rest re-read against filter/; holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -304,7 +304,10 @@ kinds.
   so a filter can change the source's reported size (aspect ratio, padding).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
-  that move or hold frames. An imported input's `FrameSync` is staged before the submit.
+  that move or hold frames. An imported input's `FrameSync` is staged once the pass has
+  recorded, right before the submit. The prelude's `frame.time` is that time wrapped
+  to a day (better than 10 ms in an `f32`) and jumps back once a day, so a kind that
+  moves with time computes its phase on the CPU in `f64` and passes it in its `Params`.
 - A pass records fullscreen draws through `Ctx::draw`. Every filter shader is appended
   to one prelude (`prelude.wgsl`) that defines the fullscreen triangle, the bindings
   (input, a linear clamp sampler, a `Frame` uniform with the input, output and aux

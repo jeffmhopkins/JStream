@@ -717,7 +717,7 @@ verified = { hash = "b3:d7965698ca1720f8", by = "agent:claude@session_01BL6HM3DJ
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:9ba79b329d2ac3c8", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:1c8cd31b07b3719a", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "#300 B1: re-read the whole section against this PR's diff. Its one text edit, the built-in video filter sentence, matches filter/ and Compositor::apply_filter (one premultiplied Rgba16Float image to another of the filter's output_size; the chain runtime not built). The rest is unchanged by the PR and by the merge of B7's branch; holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
