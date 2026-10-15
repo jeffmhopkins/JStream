@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
+stamp = { hash = "b3:ce352d59894aa491", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main after #370 and #359: re-read; main's new jstream-effects row kept, youtube and sources rows cite ADR-0051 and match their Cargo summaries; holds" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -1617,7 +1617,7 @@ stamp = { hash = "b3:db7b56b6ec192456" }
 stamp = { hash = "b3:6e5013d99f034114", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "re-read after the #376 ledger merge; the #367 diff against main here is only ADR-0041 links re-pointed to ADR-0051 (README, depends_on, lib.rs Docs line); the RTMP(S) container text is unchanged; holds" }
 
 ["CRATE-jstream-outputs#purpose"."body"]
-stamp = { hash = "b3:cfcb6044c7a4e3a7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against PR #370 diff: URLs-and-keys bullet now states Rejected redacts the key, then cuts code/description to 512 chars (MAX_REMOTE_TEXT) and replaces control chars with spaces, matching rejected()/remote_text() in rtmp/publisher.rs and its new tests; rest of section unaffected by the merge." }
+stamp = { hash = "b3:e64ca3f3be183119", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main after #370: re-read; main's rejection-text cap (512 chars, controls to spaces) kept, matches publisher.rs; the generic RTMP/RTMPS output cites ADR-0051; holds" }
 
 ["CRATE-jstream-outputs#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-outputs"]
 stamp = { hash = "b3:2ef270bb1b4e0cc6" }
@@ -1686,7 +1686,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge cascade from ARCH#crate-map: re-read; the crate-map body is unchanged apart from the stamp move, nothing in it bears on GPU frames; holds" }
+stamp = { hash = "b3:ce352d59894aa491", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 merge of main: stale via ARCH#crate-map, which gains only the effects row and ADR-0051 links; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
