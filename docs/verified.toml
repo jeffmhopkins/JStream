@@ -291,7 +291,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:07915c072e50c894" }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:0586c86d070168f2" }
+stamp = { hash = "b3:a650491efffa8c19", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Transport bullet against jstream-control README/ws_web.rs/ws_config.rs changes: browser WsControl with subprotocol token is unchanged; error-event handling is a client detail not described here, holds." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:e55527bc3d425ace" }
@@ -312,10 +312,10 @@ stamp = { hash = "b3:9a3b07169c7cbb0e" }
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/ws_config.rs"]
-stamp = { hash = "b3:d7db1d06b04d10fc" }
+stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Transport bullet against jstream-control README/ws_web.rs/ws_config.rs changes: browser WsControl with subprotocol token is unchanged; error-event handling is a client detail not described here, holds." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/ws_web.rs"]
-stamp = { hash = "b3:edefe86e076ea4e3" }
+stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Transport bullet against jstream-control README/ws_web.rs/ws_config.rs changes: browser WsControl with subprotocol token is unchanged; error-event handling is a client detail not described here, holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/Cargo.toml"]
 stamp = { hash = "b3:7b1e34adc5bd9026" }
@@ -738,7 +738,7 @@ stamp = { hash = "b3:3e63f714aef88590" }
 stamp = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4b7f99a329a36029" }
+stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client ends on error event, CSP reason): CLI uses the native client; exit 3 Disconnected text still holds." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
@@ -807,7 +807,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c7379cddeb275056" }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:4b7f99a329a36029", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): stale via graph persist only; the mock has no collection file; text holds" }
+stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Failures bullet matches ws_web.rs (onerror handler ends the session via end_reason, State::close keeps the first reason; connect reason mentions CSP); test paragraph matches connect.spec.js and ws_config.rs tests. Edited open question 3 so it no longer implies the browser client is untested (e2e via jstream-ui now covers it)." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d638c6ca8019b15d" }
@@ -840,13 +840,13 @@ stamp = { hash = "b3:9a3b07169c7cbb0e" }
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/ws_config.rs"]
-stamp = { hash = "b3:d7db1d06b04d10fc" }
+stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Failures bullet matches ws_web.rs (onerror handler ends the session via end_reason, State::close keeps the first reason; connect reason mentions CSP); test paragraph matches connect.spec.js and ws_config.rs tests. Edited open question 3 so it no longer implies the browser client is untested (e2e via jstream-ui now covers it)." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/ws_web.rs"]
-stamp = { hash = "b3:edefe86e076ea4e3" }
+stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Failures bullet matches ws_web.rs (onerror handler ends the session via end_reason, State::close keeps the first reason; connect reason mentions CSP); test paragraph matches connect.spec.js and ws_config.rs tests. Edited open question 3 so it no longer implies the browser client is untested (e2e via jstream-ui now covers it)." }
 
 ["CRATE-jstream-control#purpose"."body"]
-stamp = { hash = "b3:e353197aa1bfa71e", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; mock keeps buses and sends beside main's virtual camera; holds" }
+stamp = { hash = "b3:207b0b037d768e5a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-control#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-control"]
 stamp = { hash = "b3:107caa6f41f5bf25" }
@@ -870,16 +870,16 @@ stamp = { hash = "b3:9a3b07169c7cbb0e" }
 stamp = { hash = "b3:f37b52c47e4cc8a1" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/ws_config.rs"]
-stamp = { hash = "b3:d7db1d06b04d10fc" }
+stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/ws_web.rs"]
-stamp = { hash = "b3:edefe86e076ea4e3" }
+stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
 stamp = { hash = "b3:f8d3caba075c6078", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4b7f99a329a36029" }
+stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
 stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
@@ -978,7 +978,7 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:cc39789a9b4f72e9" }
+stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
 
 ["CRATE-jstream-core#purpose"."body"]
 stamp = { hash = "b3:5609012e8331a22f", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
@@ -1068,7 +1068,7 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:cc39789a9b4f72e9" }
+stamp = { hash = "b3:3cd98602d56cf92b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: PR changes only src/tests/sources.rs, moving the animation-by-itself test onto FakeClock via set_source_clock (#293); the Tests list and engine description still hold." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/tests/mcp.rs"]
 stamp = { hash = "b3:678b488c706f11fa" }
@@ -2193,7 +2193,7 @@ stamp = { hash = "b3:eaa109533b8798d8" }
 stamp = { hash = "b3:4347075071d4ca18", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4b7f99a329a36029" }
+stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client error-event handling, CSP wording, open question 3 edit): server-side checks, subprotocol token and CSP description unaffected, holds." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:d638c6ca8019b15d" }
@@ -2385,10 +2385,10 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:de38d89391222d92", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at Q3 (#309): the design text is main's (Playwright against a mock daemon); D5's mock additions (buses, sends, audio) are additive to the state the mock daemon serves; holds" }
+stamp = { hash = "b3:263637b2f03e8558", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:4b7f99a329a36029" }
+stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -2493,7 +2493,7 @@ stamp = { hash = "b3:063a37f95f399bff" }
 stamp = { hash = "b3:e05f245bcdd1b64e" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
-stamp = { hash = "b3:b902e392dbb641e7" }
+stamp = { hash = "b3:efa2f5546b0a7902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: connect.spec.js change adds a CSP console-error allowance via consoleErrors.allow, consistent with the 'Console errors fail a test unless allowed' bullet; fixtures and setup unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/outputs.spec.js"]
 stamp = { hash = "b3:dfb621a5b9890b97" }
@@ -2508,13 +2508,13 @@ stamp = { hash = "b3:ef446217a71d1fdc" }
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:3973811d2b41bfa3", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
+stamp = { hash = "b3:744e22f629ca14db", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet against connect.spec.js: the policy-refused test is no longer test.fail and asserts an alert and Connect re-enabled; text matches." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
 stamp = { hash = "b3:e05f245bcdd1b64e" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
-stamp = { hash = "b3:b902e392dbb641e7" }
+stamp = { hash = "b3:efa2f5546b0a7902", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet against connect.spec.js: the policy-refused test is no longer test.fail and asserts an alert and Connect re-enabled; text matches." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/outputs.spec.js"]
 stamp = { hash = "b3:dfb621a5b9890b97" }
