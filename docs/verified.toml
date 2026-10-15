@@ -12,7 +12,7 @@ stamp = { hash = "b3:4dd2ed0785be217e" }
 stamp = { hash = "b3:64d21faa19974bc3" }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge of main at #376: re-read; only inline stamps moved to verified.toml; the jstream-effects L3 row (protocol only, no GPU, no unsafe) and the anim row still match their Cargo.toml; lint-deps passes" }
+stamp = { hash = "b3:cd31f7547d7b81f1", by = "agent:claude", note = "Re-read after merging #359/#370: keeps main's jstream-effects and jstream-anim rows and this PR's jstream-plugin-clap row; lint-deps passes" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -1689,7 +1689,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe" }
 stamp = { hash = "b3:3c3b2d799f3dc3f1", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2 cascade from ARCH#crate-map: only the layer-0 jstream-anim row was added; GPU frame design untouched; holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:67aac90f371b18ec", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 merge cascade from ARCH#crate-map: re-read; the crate-map body is unchanged apart from the stamp move, nothing in it bears on GPU frames; holds" }
+stamp = { hash = "b3:cd31f7547d7b81f1", by = "agent:claude", note = "Re-read: the crate map adds jstream-effects (L3, safe) and the CLAP wrapper; jstream-render still cannot hold unsafe, so the import stays in platform crates" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:6412cfa1dc90c301" }
