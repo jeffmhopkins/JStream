@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:0ec40aba8ca53527", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Review B3: jstream-sources' manifest summary now cites ADR-0041 for the YouTube chat message source, matching its row; re-read every row against its manifest's jstream-meta view, and the youtube and sources rows (both re-pointed 0034 -> 0041) match their summaries" }
+verified = { hash = "b3:8f1f411b25391cdc", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (C1a adds jstream-sources L4) into E3b: core's cfg(windows) dev-dependency on platform-windows (L2) stays strictly lower; main's sources row matches its manifest; holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

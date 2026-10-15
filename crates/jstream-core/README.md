@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:280a330c50e3e9fe", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#172 E1 arc-swap render snapshots, #167 jstream-youtube) into C1a: re-read; resolved Kinds bullet: descriptors taken from jstream-sources' registry (kinds.rs) plus E1's display-capture exception; E1's Snapshot bullet kept; Not here yet keeps E1's audio/outputs snapshots with C1a's rendering from the source registry in place of real source kinds" }
+verified = { hash = "b3:5000b661aeec85f6", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (C1a jstream-sources) into E3b: main's kinds and sources text sits beside E3b's Runtime and Tests additions; re-read, no overlap; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -139,7 +139,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3003b5047d1bc0e9", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the YouTube ADR link in ARCH#protocol and protocol README#design (0034 -> 0041); main's E1 text kept; holds" }
+verified = { hash = "b3:aac4bf3d732d6e1e", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (C1a) into E3b: main's source-kind text and E3b's capture import, scaled capture and GPU-path render text are independent; holds" }
 -->
 
 ### Engine and sessions
