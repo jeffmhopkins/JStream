@@ -49,7 +49,7 @@ mod native {
 
 #[cfg(target_arch = "wasm32")]
 mod web {
-    use crate::canvas::preview::{H264Feed, Step};
+    use crate::canvas::preview::{H264Feed, JpegSlot, Step};
     use jstream_control::protocol::{BinaryHeader, PreviewCodec};
     use leptos::web_sys::js_sys::{Array, Function, Object, Reflect, Uint8Array};
     use leptos::web_sys::wasm_bindgen::closure::Closure;
@@ -141,21 +141,23 @@ mod web {
         }
     }
 
-    /// JPEG decoding through `createImageBitmap`, one picture at a time. While one is
-    /// decoding, only the newest picture waits, so a slow decode shows the latest
-    /// picture instead of a backlog.
+    /// JPEG decoding through `createImageBitmap`, one picture at a time (see
+    /// [`JpegSlot`]).
     struct Jpegs {
         painter: Rc<Painter>,
-        busy: Cell<bool>,
-        pending: RefCell<Option<Vec<u8>>>,
+        slot: RefCell<JpegSlot<Vec<u8>>>,
     }
 
-    /// Decodes and draws one JPEG, or keeps it as the newest waiting one.
-    fn decode_jpeg(jpegs: &Rc<Jpegs>, payload: &[u8]) -> Result<(), String> {
-        if jpegs.busy.get() {
-            *jpegs.pending.borrow_mut() = Some(payload.to_vec());
-            return Ok(());
+    /// Decodes and draws one JPEG now, or keeps it as the newest waiting one.
+    fn show_jpeg(jpegs: &Rc<Jpegs>, payload: &[u8]) -> Result<(), String> {
+        let now = jpegs.slot.borrow_mut().offer(payload.to_vec());
+        match now {
+            Some(picture) => decode_jpeg(jpegs, &picture),
+            None => Ok(()),
         }
+    }
+
+    fn decode_jpeg(jpegs: &Rc<Jpegs>, payload: &[u8]) -> Result<(), String> {
         let parts = Array::of1(&Uint8Array::from(payload));
         let blob = construct(
             "Blob",
@@ -169,34 +171,27 @@ mod web {
             "createImageBitmap",
             &[blob],
         )?;
-        // One-shot closures free themselves once called, and hold the decoder state
-        // alive until then, so a decode still running when the screen goes is harmless.
-        let done = {
+        // One one-shot function handles both outcomes: the promise settles exactly
+        // once, so it is always called, and so always freed. It holds the decoder
+        // state alive until then, so a decode still running when the screen goes is
+        // harmless.
+        let settle = {
             let jpegs = Rc::clone(jpegs);
-            Closure::once_into_js(move |bitmap: JsValue| {
-                jpegs.painter.draw(bitmap);
-                next_jpeg(&jpegs);
+            Closure::once_into_js(move |value: JsValue| {
+                // A bitmap has `close`; a rejection's error doesn't.
+                if Reflect::has(&value, &JsValue::from_str("close")).unwrap_or(false) {
+                    jpegs.painter.draw(value);
+                }
+                let next = jpegs.slot.borrow_mut().settled();
+                if let Some(picture) = next {
+                    // A picture the browser refuses is skipped; the next one may decode.
+                    let _shown = decode_jpeg(&jpegs, &picture);
+                }
             })
         };
-        let failed = {
-            let jpegs = Rc::clone(jpegs);
-            Closure::once_into_js(move |_: JsValue| next_jpeg(&jpegs))
-        };
-        call(&promise, "then", &[done, failed])?;
-        jpegs.busy.set(true);
+        call(&promise, "then", &[settle.clone(), settle])?;
+        jpegs.slot.borrow_mut().started();
         Ok(())
-    }
-
-    /// A decode finished: start on the newest waiting picture, if any.
-    fn next_jpeg(jpegs: &Rc<Jpegs>) {
-        jpegs.busy.set(false);
-        let waiting = jpegs.pending.borrow_mut().take();
-        if let Some(payload) = waiting
-            && !jpegs.painter.closed.get()
-        {
-            // A picture the browser refuses is skipped; the next one may decode.
-            let _shown = decode_jpeg(jpegs, &payload);
-        }
     }
 
     /// The `<canvas>` the preview is drawn in, and the decoders that feed it.
@@ -248,8 +243,7 @@ mod web {
             };
             let jpegs = Rc::new(Jpegs {
                 painter: Rc::clone(&painter),
-                busy: Cell::new(false),
-                pending: RefCell::new(None),
+                slot: RefCell::new(JpegSlot::default()),
             });
             Some(Screen {
                 canvas,
@@ -346,13 +340,14 @@ mod web {
         }
 
         fn jpeg(&mut self, payload: &[u8]) -> Result<(), String> {
-            decode_jpeg(&self.jpegs, payload)
+            show_jpeg(&self.jpegs, payload)
         }
     }
 
     impl Drop for Screen {
         fn drop(&mut self) {
             self.painter.closed.set(true);
+            self.jpegs.slot.borrow_mut().close();
             if let Some(decoder) = self.decoder.take() {
                 let _closed = call(&decoder, "close", &[]);
             }

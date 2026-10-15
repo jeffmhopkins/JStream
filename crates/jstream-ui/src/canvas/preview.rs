@@ -138,6 +138,62 @@ impl H264Feed {
     }
 }
 
+/// The JPEG decode slot: one picture decodes at a time, and while it does only the
+/// newest that arrives waits, so a slow decode shows the latest picture instead of a
+/// backlog, and the last picture is never lost.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JpegSlot<T> {
+    busy: bool,
+    waiting: Option<T>,
+    closed: bool,
+}
+
+impl<T> Default for JpegSlot<T> {
+    fn default() -> Self {
+        JpegSlot {
+            busy: false,
+            waiting: None,
+            closed: false,
+        }
+    }
+}
+
+impl<T> JpegSlot<T> {
+    /// A picture arrived. Returns it if it should be decoded now; otherwise keeps it as
+    /// the newest waiting one, replacing any older.
+    pub fn offer(&mut self, picture: T) -> Option<T> {
+        if self.closed {
+            return None;
+        }
+        if self.busy {
+            self.waiting = Some(picture);
+            return None;
+        }
+        Some(picture)
+    }
+
+    /// The decode of a picture `offer` or `settled` returned has started.
+    pub fn started(&mut self) {
+        self.busy = true;
+    }
+
+    /// The decode finished, drawn or not. Returns the newest waiting picture, to be
+    /// decoded now.
+    pub fn settled(&mut self) -> Option<T> {
+        self.busy = false;
+        if self.closed {
+            return None;
+        }
+        self.waiting.take()
+    }
+
+    /// The screen is gone: nothing more is decoded.
+    pub fn close(&mut self) {
+        self.closed = true;
+        self.waiting = None;
+    }
+}
+
 /// Where the preview stands, for the canvas's placeholder text.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PreviewState {
@@ -224,6 +280,24 @@ mod tests {
         assert_eq!(feed.step(false, &delta, 0), Step::Decode { key: false });
         feed.reset();
         assert_eq!(feed.step(false, &delta, 0), Step::Skip);
+    }
+
+    #[test]
+    fn the_newest_jpeg_waits_and_none_is_lost() {
+        let mut slot = JpegSlot::default();
+        assert_eq!(slot.offer(1), Some(1));
+        slot.started();
+        assert_eq!(slot.offer(2), None);
+        assert_eq!(slot.offer(3), None, "replaces 2");
+        assert_eq!(slot.settled(), Some(3));
+        slot.started();
+        assert_eq!(slot.settled(), None, "nothing waiting");
+        assert_eq!(slot.offer(4), Some(4), "idle again");
+        slot.started();
+        assert_eq!(slot.offer(5), None);
+        slot.close();
+        assert_eq!(slot.settled(), None, "nothing restarts after close");
+        assert_eq!(slot.offer(6), None);
     }
 
     #[test]
