@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b4650be831c06275", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: src change is one envelope test; contents list and layer description unchanged" }
+verified = { hash = "b3:0911af485ca155fb", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -121,7 +121,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:7aa5f3f591196354", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 (N2): sentence now says non-integer numbers are f64; rest is main's text" }
+verified = { hash = "b3:3185940baa7febfa", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

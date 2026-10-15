@@ -162,7 +162,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5f83b0d81693f253", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 merge of main: stale via protocol design's number sentence only; engine text unaffected" }
+verified = { hash = "b3:976f16cf7c1baa87", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at bcb6766 (#275 serde_json float_roundtrip); re-read main's float sentence beside this PR's virtual_cam text; no wire change, protocol stays 0.18; protocol/control/graph tests pass; holds" }
 -->
 
 ### Engine and sessions
