@@ -235,3 +235,11 @@ relied_on = "KeyboardEvent.code values name physical keys independently of layou
 review_every = "365d"
 status = "unverified"
 checked_note = "Not fetched: the build container's proxy refused the host; the names follow the spec as widely implemented by browsers"
+
+[[external]]
+id = "playwright"
+url = "https://playwright.dev/"
+relied_on = "@playwright/test drives Chromium headless from a test runner with fixtures, HTTP Basic credentials per browser context (httpCredentials), a launch executablePath and expected failures (test.fail); the web UI's end-to-end tests (crates/jstream-ui/tests/e2e/README.md)"
+review_every = "180d"
+status = "unverified"
+checked_note = "@playwright/test 1.56.1 ran the e2e suite with Chromium 141 headless shell and full build; the page itself was not re-read from the session"

@@ -13,7 +13,8 @@ use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, Hello,
     IdempotencyKey, ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError,
-    ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SourceId, SourceKind, parity,
+    ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SceneRole, SourceId, SourceKind,
+    parity,
 };
 use std::future::Future;
 use std::pin::pin;
@@ -129,6 +130,21 @@ fn switch_call(scene: &str) -> Call {
             scene_id: SceneId::new(scene),
         },
     }
+}
+
+fn move_call(item: &str, scene: &str) -> Call {
+    Call::Batch(Batch::single(Edit::ItemMove {
+        item_id: ItemId::new(item),
+        scene_id: SceneId::new(scene),
+        index: 0,
+    }))
+}
+
+fn role_call(scene: &str, role: SceneRole) -> Call {
+    Call::Batch(Batch::single(Edit::SceneSetRole {
+        scene_id: SceneId::new(scene),
+        role,
+    }))
 }
 
 fn code(error: &ControlError) -> Option<&'static str> {
@@ -886,6 +902,29 @@ fn the_engine_answers_like_the_mock() {
         Call::Batch(Batch::single(webcam())),
         Call::Batch(Batch::single(create("a")).expecting(Rev(1))),
         Call::Batch(Batch::single(add("a", "i9", "webcam")).expecting(Rev(2))),
+        // Groups: `b` is a group placed in `a` through `i2`. Moving `i1` into it is
+        // undoable and redoable, moving `i2` into it would nest `b` in itself, a role is
+        // only a listing hint so `b` turns into a plain scene and back, and a missing
+        // item or scene is refused.
+        move_call("i1", "b"),
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Undo,
+        )),
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Redo,
+        )),
+        // After the redo, `i1` is in `b`.
+        Call::Query {
+            query: Query::ItemList {
+                scene_id: SceneId::new("b"),
+            },
+        },
+        move_call("i2", "b"),
+        move_call("ghost", "b"),
+        move_call("i3", "ghost"),
+        role_call("b", SceneRole::Scene),
+        role_call("b", SceneRole::Group),
+        role_call("ghost", SceneRole::Group),
         // The parity collection reorders `b` first, so `b` goes on program: switching to
         // `a` moves it, a second switch is a no-op, and deleting `a` below (`b` can't go
         // while `a` nests it) moves it back to `b`.
