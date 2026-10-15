@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:9a542442725677b7", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line gained the e2e README sections; contents list holds" }
+verified = { hash = "b3:08b55219268cede9", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of U1's branch (Q3 e2e, protocol 0.20) plus round 2: Canvas bullet (boxes over the live program preview) replaces U1's 'not hooked up yet' line, which this PR makes false; rest holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -50,7 +50,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:eefbe5c98c6bffda", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 ready round: merged main 94fb25d (D5 #240 audio, 0.19); protocol now 0.20: stale via cascades; UI says the preview stream is not hooked up; holds" }
+verified = { hash = "b3:071102f46a7e3721", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of U1's branch plus round 2: the JPEG settle closure holds only Jpegs/Painter (no Control), so disconnecting still closes the socket; no new styles; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -117,14 +117,14 @@ verified = { hash = "b3:eefbe5c98c6bffda", by = "agent:claude@session_016ERA9mo5
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:86004ad7b2d055e3", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Preview bullet now says JPEG decodes one at a time with only the newest waiting (screen.rs Jpegs/next_jpeg); rest re-checked against preview.rs and mod.rs; JPEG path re-run in Chromium against the daemon" }
+verified = { hash = "b3:b036630977cd2e9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Round 2: intro now says preview.rs also decides when each JPEG decodes (JpegSlot, tested); Preview bullet's one-at-a-time, newest-waits wording matches screen.rs show_jpeg/decode_jpeg; rest re-checked" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
 handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads the
 scene and sends the edits; `preview.rs` chooses the preview stream and decides what
-to do with each H.264 frame. These are pure and tested natively (`model.rs` against
+to do with each H.264 frame and when each JPEG decodes. These are pure and tested natively (`model.rs` against
 `MockEngine`). `screen.rs` decodes and draws the preview in the browser, and `mod.rs`
 is the component.
 
