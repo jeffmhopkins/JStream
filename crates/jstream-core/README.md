@@ -98,7 +98,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:19497c642ff3bf93", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: cascade from ARCH#protocol and protocol/control design; core undo and batch handling are edit-agnostic, so set_role/item.move/scene_id need no core text" }
+verified = { hash = "b3:c5445474186ceb7a", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): cascade only; core's batch/undo text is edit-agnostic, holds with both changes" }
 -->
 
 ### Engine and sessions

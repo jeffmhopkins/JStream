@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:c19da4f693f9f99b", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: Commands list gains scene.set_role, item.move and SceneRole; PROTOCOL_VERSION 0.9 for groups, earlier minors kept (version.rs)" }
+verified = { hash = "b3:196d0f78f0cf223e", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): no main changes to protocol sources; B6's 0.9 commands list holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -80,8 +80,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
-  support, not wire types. One batch that builds a small collection, the exact answer
-  to every collection read of it, and the exact error for batches rejected against it.
+  support, not wire types. One batch that builds a small collection with two RTMP
+  outputs, the exact answer to every collection read of it (`output.list` included),
+  and the exact error for batches rejected against it (RTMP URL checks included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -94,7 +95,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:5aded4b4439a77ca", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "B6: new Groups and placement addressing subsection matches command.rs/query.rs (role omitted for scene, item.move index rules, scene_id own-scene only); cycle-edit list, scene.list bullet and Undo paragraph updated; geometry paragraph says 0.9" }
+verified = { hash = "b3:d111cef0a02261eb", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (A5 #166 CLI/mock outputs, #149, H7a, C7 spike) into B6 (0.9): no main changes to protocol design text; B6's groups/addressing subsection still matches command.rs/query.rs" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
