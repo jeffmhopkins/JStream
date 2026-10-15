@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use jstream_control::Control;
 use jstream_media::{ChannelLayout, Timebase};
-use jstream_platform::fake::{FakeAudioIo, FakeClock, FakeCodecs};
+use jstream_platform::fake::{FakeAudioIo, FakeClock, FakeCodecs, FakeVideoDevices};
 use jstream_platform::{Backends, Capture};
 use jstream_platform_windows::{QpcClock, WgcCapture, WindowsGpu};
 use jstream_protocol::{DropCounts, Event, OutputId};
@@ -42,7 +42,8 @@ fn an_output_composites_wgc_frames_on_the_gpu() {
         .expect("a primary display");
     // The fake audio has its own clock, which never moves: the mixer mixes silence.
     let audio_clock = FakeClock::new(Timebase::MICROS);
-    let audio = FakeAudioIo::new(audio_clock, 48_000, ChannelLayout::Stereo).expect("audio");
+    let audio =
+        FakeAudioIo::new(audio_clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
     let backends = Backends {
         clock: Arc::new(QpcClock::new().expect("QPC clock")),
         capture: Arc::new(capture),
@@ -50,6 +51,7 @@ fn an_output_composites_wgc_frames_on_the_gpu() {
         codecs: Arc::new(FakeCodecs),
         gpu: Arc::new(WindowsGpu::new()),
         vcam: None,
+        video_devices: Arc::new(FakeVideoDevices::new(audio_clock)),
     };
     let engine = Engine::new()
         .with_output(OutputId::new("yt"))
