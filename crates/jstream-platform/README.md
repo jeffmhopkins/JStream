@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:81b6a8eea823805b", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Dependency only (E1 changed ARCH threading): platform traits and fakes untouched; nothing here describes the render snapshot or collector" }
+verified = { hash = "b3:b153c125af53c8bb", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (F5 #163 media codecs, C6 #147): platform purpose names encoder/decoder traits, not codec lists; HEVC/AV1 in media changes nothing here; E1 note still holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
