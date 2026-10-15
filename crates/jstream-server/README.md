@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:83ee56d2ea651e19", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (#246 landed) into ADR-0044 PR: open question 2 now links ADR-0044 as decided and not built; rest is #246's text as merged; holds" }
+verified = { hash = "b3:81b5fa2b0e767808", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 amended for /pair and the cookie, neither built yet; the gate described here is the current code and remains true until the implementation PR, which will update it; holds" }
 -->
 
 ### Listening and admission

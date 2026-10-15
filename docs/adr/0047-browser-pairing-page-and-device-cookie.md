@@ -2,14 +2,14 @@
 id = "ADR-0047"
 title = "A browser pairs on a token-free page and keeps its device token in a cookie"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0047: A browser pairs on a token-free page and keeps its device token in a cookie
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
