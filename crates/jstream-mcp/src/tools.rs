@@ -1,16 +1,17 @@
 //! The tool table, generated from the protocol's JSON Schema, and the decoding of tool
 //! arguments into protocol calls.
 //!
-//! Tools are grouped by noun (docs/ARCHITECTURE.md#mcp): every edit, action and query in
-//! `jstream_protocol::json_schema()` is named `noun.verb`, and the `noun` tool takes it as
-//! its `op` argument. So a command added to the protocol shows up here with no code
+//! Tools are grouped by noun (docs/ARCHITECTURE.md#mcp): every edit, action, query and
+//! history call (`history.undo`, `history.redo`) in `jstream_protocol::json_schema()` is
+//! named `noun.verb`, and the `noun` tool takes it as its `op` argument. So a command added to the protocol shows up here with no code
 //! change. Three fixed tools sit beside the groups: `batch` (several edits, atomically),
 //! `describe_api` (the whole protocol schema) and `events` (the engine's events, read
 //! with a cursor).
 
 use crate::events::{BUFFER_CAPACITY, PAGE_SIZE};
 use jstream_protocol::{
-    Action, Batch, Call, Edit, IdempotencyKey, ProtocolError, Query, Rev, json_schema,
+    Action, Batch, Call, Edit, HistoryCall, HistoryOp, IdempotencyKey, ProtocolError, Query, Rev,
+    json_schema,
 };
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -24,12 +25,14 @@ pub(crate) const DESCRIBE_TOOL: &str = "describe_api";
 /// The tool that returns the engine's events after a cursor.
 pub(crate) const EVENTS_TOOL: &str = "events";
 
-/// How the protocol classifies an op (ADR-0013), plus queries, which only read.
+/// How the protocol classifies an op (ADR-0013), plus queries, which only read, and
+/// history calls, which undo or redo the session's own steps (ADR-0032).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum OpClass {
     Edit,
     Action,
     Query,
+    History,
 }
 
 impl OpClass {
@@ -38,7 +41,13 @@ impl OpClass {
             OpClass::Edit => "edit",
             OpClass::Action => "action",
             OpClass::Query => "query",
+            OpClass::History => "history call",
         }
+    }
+
+    /// Whether the op takes `expected_rev` and `idempotency_key`.
+    fn takes_rev(self) -> bool {
+        matches!(self, OpClass::Edit | OpClass::History)
     }
 }
 
@@ -100,6 +109,7 @@ impl Tools {
             ("Edit", OpClass::Edit),
             ("Action", OpClass::Action),
             ("Query", OpClass::Query),
+            ("HistoryOp", OpClass::History),
         ] {
             for variant in variants(defs, def) {
                 let Some(name) = variant
@@ -191,11 +201,11 @@ impl Tools {
                 None => format!("unknown op `{tag}`; expected one of {}", expected()),
             }));
         };
-        if op.class != OpClass::Edit
-            && (args.expected_rev.is_some() || args.idempotency_key.is_some())
+        if !op.class.takes_rev() && (args.expected_rev.is_some() || args.idempotency_key.is_some())
         {
             return Err(malformed(format!(
-                "`expected_rev` and `idempotency_key` apply to edits only, and `{tag}` is {} {}",
+                "`expected_rev` and `idempotency_key` apply to edits and history calls only, \
+                 and `{tag}` is {} {}",
                 if op.class == OpClass::Action {
                     "an"
                 } else {
@@ -216,6 +226,11 @@ impl Tools {
             OpClass::Query => Call::Query {
                 query: from_value::<Query>(args.op, "op")?,
             },
+            OpClass::History => Call::History(HistoryCall {
+                op: from_value::<HistoryOp>(args.op, "op")?,
+                expected_rev: args.expected_rev,
+                idempotency_key: args.idempotency_key,
+            }),
         };
         Ok(Invocation::Call(call))
     }
@@ -386,15 +401,26 @@ fn group_tool(defs: &Map<String, Value>, noun: &str, ops: &[(Op, Value)]) -> Too
             "oneOf": ops.iter().map(|(_, schema)| schema.clone()).collect::<Vec<_>>(),
         }),
     );
+    if has(OpClass::History) {
+        description.push_str(
+            " Undo and redo apply to this session's own edits only, never another client's: \
+             each raises the state `rev` by one, and is refused with `undo_conflict` when \
+             another client has since changed what the step touched (the step is then \
+             dropped), or `history_empty` when there is nothing to undo or redo. They \
+             accept `expected_rev` and `idempotency_key`.",
+        );
+    }
+    if has(OpClass::Edit) || has(OpClass::History) {
+        for name in ["expected_rev", "idempotency_key"] {
+            properties.insert(name.into(), batch_property(defs, name));
+        }
+    }
     if has(OpClass::Edit) {
         description.push_str(
             " An edit is applied as a batch of one: it is undoable, it raises the state `rev` \
              by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to \
              apply several edits atomically.",
         );
-        for name in ["expected_rev", "idempotency_key"] {
-            properties.insert(name.into(), batch_property(defs, name));
-        }
     }
     if has(OpClass::Action) {
         description.push_str(
@@ -506,10 +532,11 @@ pub(crate) fn check_tool_names_are_valid() {
             }
         }
     }
-    // Every edit, action and query in the schema reaches exactly one group tool.
+    // Every edit, action, query and history op in the schema reaches exactly one group
+    // tool.
     let schema = json_schema();
     let defs = schema["$defs"].as_object().cloned().unwrap_or_default();
-    let in_schema: usize = ["Edit", "Action", "Query"]
+    let in_schema: usize = ["Edit", "Action", "Query", "HistoryOp"]
         .iter()
         .map(|def| variants(&defs, def).count())
         .sum();
@@ -521,7 +548,8 @@ pub(crate) fn check_tool_names_are_valid() {
 mod tests {
     use super::{Invocation, Tools};
     use jstream_protocol::{
-        Action, Batch, Call, Edit, IdempotencyKey, OutputId, ProtocolError, Query, Rev, SceneId,
+        Action, Batch, Call, Edit, HistoryCall, HistoryOp, IdempotencyKey, OutputId, ProtocolError,
+        Query, Rev, SceneId,
     };
     use serde_json::{Value, json};
 
@@ -569,6 +597,24 @@ mod tests {
             query: Query::SceneList,
         };
         assert_eq!(query, Ok(Invocation::Call(expected)));
+
+        let undo = decode(
+            "history",
+            json!({"op": {"type": "history.undo"}, "expected_rev": 4, "idempotency_key": "u"}),
+        );
+        let expected = Call::History(
+            HistoryCall::new(HistoryOp::Undo)
+                .expecting(Rev(4))
+                .with_idempotency_key(IdempotencyKey::new("u")),
+        );
+        assert_eq!(undo, Ok(Invocation::Call(expected)));
+        let redo = decode("history", json!({"op": {"type": "history.redo"}}));
+        assert_eq!(
+            redo,
+            Ok(Invocation::Call(Call::History(HistoryCall::new(
+                HistoryOp::Redo
+            ))))
+        );
         assert_eq!(decode("describe_api", json!({})), Ok(Invocation::Describe));
         assert_eq!(
             decode("events", json!({})),
@@ -605,7 +651,10 @@ mod tests {
             "scene",
             json!({"op": {"type": "scene.list"}, "expected_rev": 1}),
         ));
-        assert!(r.contains("edits only") && r.contains("a query"), "{r}");
+        assert!(
+            r.contains("edits and history calls only") && r.contains("a query"),
+            "{r}"
+        );
         let r = reason(decode(
             "output",
             json!({"op": {"type": "output.stop", "output_id": "o"}, "idempotency_key": "k"}),

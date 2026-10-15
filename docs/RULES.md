@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:3419f508dc0e9c6a", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b round 2: rule text unchanged; R-API-001 says additions are minor, and the record kind's break of 0.7/0.8 output reads is now stated in protocol README#design and left to the maintainer as open question 8" }
+verified = { hash = "b3:8856d9130337d3e9", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): 0.10 adds the history call kind, two error codes and optional cause, all additive; no rule text changed" }
 -->
 
 <a id="R-API-001"></a>
