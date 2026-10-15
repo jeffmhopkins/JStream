@@ -36,8 +36,7 @@ struct Shared {
     failure: OnceLock<PlatformError>,
     captured: AtomicU64,
     skipped: AtomicU64,
-    /// Frames the decoder rejected (dropped, per the `CaptureDecoder` contract). Not in
-    /// `CaptureStats` yet, which has no field for it.
+    /// Frames the decoder rejected (dropped, per the `CaptureDecoder` contract).
     decode_failures: AtomicU64,
     /// Set when the stream is dropped: the thread stops after its current read.
     stop: AtomicBool,
@@ -166,6 +165,7 @@ impl CaptureStream for MfStream {
         CaptureStats {
             frames_captured: self.shared.captured.load(Ordering::Relaxed),
             frames_skipped: self.shared.skipped.load(Ordering::Relaxed),
+            frames_undecodable: self.shared.decode_failures.load(Ordering::Relaxed),
         }
     }
 }
