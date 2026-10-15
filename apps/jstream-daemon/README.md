@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f8c1170ccbd8db7f", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; main changed no prose here, I1's MCP-on text holds and main.rs crate doc now matches it (review B4)" }
+verified = { hash = "b3:6777f086abb3388a", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 B1 finding: Not-here-yet now says the engine can load and save a collection file but the daemon doesn't wire --collection yet (A6); rest unchanged" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -46,7 +46,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 
 Not here yet: serving the web UI (it waits on `jstream-server`,
 [jstream-server › Design](../../crates/jstream-server/README.md#design)),
-`--collection` (the engine has no persistence), a default port and a default token file
+`--collection` (the engine can load and save a collection file, but the daemon doesn't
+wire it yet), a default port and a default token file
 location ([Design › Open questions](#open-questions)).
 
 Why a crate: it is a host binary of its own (ADR-0020 ships `jstream-daemon.exe` next
@@ -57,7 +58,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:96e6a64a7ccf1aed", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; mcp endpoint line and options match main.rs/args.rs" }
+verified = { hash = "b3:f0074e842b9bc57a", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205: args.rs only rewords the --collection refusal (daemon wires no collection file yet); the usage bullet 'refused with a usage error that says it is not supported yet' still holds" }
 -->
 
 ```sh
@@ -127,7 +128,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:c7f7d44f2c11602c", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#170, #174) into B8 #171: re-read; daemon injects no audit sink and nothing from main changes that" }
+verified = { hash = "b3:81409d4a8cf737e0", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b, #148 MF N editions): stamp-only conflict, main's text taken; F3 wrote nothing here that C1b or #148 changes; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

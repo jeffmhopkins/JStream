@@ -10,6 +10,7 @@
 use crate::command::{Action, Batch};
 use crate::error::{ProtocolError, WireError};
 use crate::event::Event;
+use crate::history::HistoryCall;
 use crate::id::{ClientId, RequestId, Rev};
 use crate::query::{Query, QueryResult};
 use crate::version::ProtocolVersion;
@@ -106,6 +107,9 @@ pub enum Call {
         /// The query.
         query: Query,
     },
+    /// Undo or redo one of this client's own steps (ADR-0032). Carries no command: the
+    /// engine applies a batch of edits it already holds.
+    History(HistoryCall),
 }
 
 /// A successful answer to a [`Request`].
@@ -133,6 +137,18 @@ pub enum CallResult {
     Query {
         /// The result.
         result: QueryResult,
+    },
+    /// The undo or redo was applied (or had already been applied under its idempotency
+    /// key).
+    History {
+        /// The revision the undo or redo produced.
+        rev: Rev,
+        /// The revision the step's batch originally produced. It names the step.
+        step_rev: Rev,
+        /// How many steps the client can still undo.
+        undo_depth: u32,
+        /// How many steps the client can redo.
+        redo_depth: u32,
     },
 }
 

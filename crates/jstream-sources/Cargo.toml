@@ -1,0 +1,29 @@
+[package]
+name = "jstream-sources"
+version = "0.0.0"
+description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour and image sources."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 4
+summary = "`Source` trait plus built-ins (ADR-0031): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message (ADR-0041) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates."
+unsafe_allowed = false
+
+[lints]
+workspace = true
+
+[dependencies]
+# Image decoders (ADR-0031: pure-Rust image crates, the same on every platform).
+gif.workspace = true
+image-webp.workspace = true
+jstream-media.workspace = true
+jstream-protocol.workspace = true
+png.workspace = true
+# Settings values and the kind descriptors' defaults (ADR-0025).
+serde_json.workspace = true
+thiserror.workspace = true
+zune-core.workspace = true
+zune-jpeg.workspace = true
