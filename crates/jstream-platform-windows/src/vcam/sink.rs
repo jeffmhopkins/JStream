@@ -664,16 +664,18 @@ mod hw_tests {
         while Instant::now() < deadline {
             n += 1;
             vcam.publish(solid_frame(n)).unwrap();
+            let (mut actual, mut flags, mut time) = (0u32, 0u32, 0i64);
             let mut sample = None;
-            // SAFETY: plain call on a live reader; `sample` is a valid out-pointer.
+            // SAFETY: plain call on a live reader; every out-pointer is a valid local
+            // (synchronous ReadSample is E_POINTER without the flags).
             unsafe {
                 reader
                     .ReadSample(
                         MF_SOURCE_READER_FIRST_VIDEO_STREAM.0 as u32,
                         0,
-                        None,
-                        None,
-                        None,
+                        Some(&mut actual),
+                        Some(&mut flags),
+                        Some(&mut time),
                         Some(&mut sample),
                     )
                     .unwrap();
