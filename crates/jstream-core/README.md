@@ -114,7 +114,8 @@ state machine. Contents:
   emits a tick about once a second until the last output stops. The same thread emits
   `meters.tick` about ten times a second.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/audio.rs`,
-  `src/tests/audio_routing.rs`, `tests/mcp.rs`, `tests/scenarios.rs`):
+  `src/tests/audio_routing.rs`, `src/tests/sources.rs`, `tests/mcp.rs`,
+  `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
   end), the shared parity fixture, a differential run against
@@ -167,7 +168,13 @@ state machine. Contents:
   source's activity gain following scene switches, shown and hidden items and undo
   (`activity.rs` checks reachability itself); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
-  off closes its input and its meter and turning it on opens them again. The parity
+  off closes its input and its meter and turning it on opens them again. The live
+  sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
+  source built and rebuilt, a stored frame winning over the live source, a kind that
+  isn't built showing the capture, a missing file showing nothing, an animated image
+  advancing on the clock, on the sources thread by itself and after a clock swap, and
+  a `waveform` source painted
+  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
 Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and

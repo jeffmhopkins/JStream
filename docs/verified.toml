@@ -975,7 +975,7 @@ stamp = { hash = "b3:c9688aabcb558c82" }
 stamp = { hash = "b3:6f655f91387885e8", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at #376: re-read; Live sources painter text (painted off-lock before re-plan, shared by install/sync/clock swap), Audio sources scope paragraph, Locking sources-thread text and the RTMP stop-drain sentence (deadline checked before each of a pass's sends) match live.rs and output_loop" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:58348552ada47a3b", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 merge of main at #376: re-read; Live sources says waveform/spectrum draw the engine's AudioScope; Tests list has the scope, painted-by-the-sources-thread, D5 and D6 tests; matches engine.rs, live.rs, pipeline.rs and tests" }
+stamp = { hash = "b3:fcde4323e9d405da", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10 round 5 (B5): Tests bullet now lists src/tests/sources.rs and its live-source tests by behaviour, ending with a_waveform_source_is_painted_by_the_sources_thread, checked against that file's nine tests; Live sources bullet says waveform/spectrum draw the AudioScope; src/tests/audio.rs's scope test and D5/D6 tests are listed" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
