@@ -13,13 +13,14 @@ use std::env;
 
 /// The Media Foundation DLLs the daemon imports from: `mfplat.dll` (`MfCodecs`,
 /// `MfVideoDevices`, `MfMediaDecoders`), `mf.dll` (`MfVideoDevices`), `mfreadwrite.dll`
-/// (`MfVideoDevices`, `MfMediaDecoders`), and `mfsensorgroup.dll` (`WindowsVcam`), which N editions also lack and Windows 10 has
-/// without `MFCreateVirtualCamera` (`WindowsVcam::start` checks for it before calling
-/// it). Only DLLs the binary imports from belong here. The linker ignores one it doesn't
-/// with warning LNK4199, and that warning doesn't fail CI: rustc reports it through the
-/// `linker_messages` lint, which ignores `-D warnings`. What catches a stale entry is
-/// `tests/delay_load.rs`, which requires each DLL in its own copy of this list to be in
-/// the built binary's delay-import table and none in its import table.
+/// (`MfVideoDevices`, `MfMediaDecoders`), and `mfsensorgroup.dll` (`WindowsVcam`),
+/// which N editions also lack and Windows 10 has without `MFCreateVirtualCamera`
+/// (`WindowsVcam::start` checks for it before calling it). Only DLLs the binary imports
+/// from belong here. The linker ignores one it doesn't with warning LNK4199, and that
+/// warning doesn't fail CI: rustc reports it through the `linker_messages` lint, which
+/// ignores `-D warnings`. What catches a stale entry is `tests/delay_load.rs`, which
+/// requires each DLL in its own copy of this list to be in the built binary's
+/// delay-import table and none in its import table.
 const MEDIA_FOUNDATION: [&str; 4] = [
     "mfplat.dll",
     "mf.dll",
