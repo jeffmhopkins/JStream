@@ -66,7 +66,9 @@ envelope ([jstream-protocol › Design](../jstream-protocol/README.md#design)):
   engine goes away.
 - `binary() -> BinaryStream`: the session's binary channel, the preview frames of its
   `preview.subscribe` streams (protocol 0.20). A session has one: opening it again
-  ends the one before and the streams on it, and `preview.subscribe` fails with
+  ends the stream returned before (in-process it also ends that channel's preview
+  streams; over WebSocket the engine's streams go on into the new one), and
+  `preview.subscribe` fails with
   `action_failed` until it is open. Unlike events its frames are bounded: a reader
   that falls behind loses frames up to the next keyframe (`KeyframeGate`), so what it
   reads decodes. The default implementation is a stream that ends at once, for an

@@ -194,7 +194,11 @@ impl WsControl {
                 let Some(text) = data.as_string() else {
                     if let Some(buffer) = data.dyn_ref::<js_sys::ArrayBuffer>() {
                         let bytes = js_sys::Uint8Array::new(buffer).to_vec();
-                        deliver(&bytes, &state.borrow());
+                        // Out of the borrow before waking: a waker may poll at once.
+                        let queue = state.borrow().binary.clone();
+                        if let Some(queue) = queue {
+                            deliver(&bytes, &queue);
+                        }
                     }
                     return;
                 };
@@ -408,10 +412,7 @@ fn wake(waker: Option<Waker>) {
 
 /// Queues one binary message for the binary channel. A frame this client can't read
 /// is skipped, as the protocol asks.
-fn deliver(bytes: &[u8], state: &State) {
-    let Some(queue) = state.binary.as_ref() else {
-        return;
-    };
+fn deliver(bytes: &[u8], queue: &RefCell<BinaryQueue>) {
     let Ok(frame) = BinaryFrame::parse(bytes) else {
         return;
     };

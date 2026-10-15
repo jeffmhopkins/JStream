@@ -78,7 +78,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `events.dropped`, `stats.tick` and `meters.tick`.
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
-  their defaults and range checks, shared by every implementation), and the binary
+  their defaults and range checks, which the engine applies), and the binary
   frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
   `to_bytes`/`parse` and `BinaryError`, and `KeyframeGate`, the drop rule every hop that
   queues frames applies ([Binary streams](#design)).

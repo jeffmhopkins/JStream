@@ -547,7 +547,7 @@ keyframe; one whose queue is full isn't drawn. H.264 runs on a `jstream-encode`
 session), VBR, with a keyframe every 2 s, reopened when the picture size changes; its
 packets go out with the `rev` of the picture they encode. If it can't be opened the
 stream falls back to JPEG when the client accepts JPEG, and ends with an end frame
-otherwise, as it does after 30 failed draws in a row or a panic on the thread. When a
+otherwise, as it does when more than 30 draws in a row fail, or after a panic on the thread. When a
 frame finds the queue full, the stream's frames are dropped up to the next keyframe,
 which the hub then forces (`KeyframeGate`).
 
