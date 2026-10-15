@@ -17,7 +17,7 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:a22174667355c2b7", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: stale via daemon Usage; prerequisites unchanged by --youtube-client (YouTube section stays A4's); holds" }
+verified = { hash = "b3:77449835cb5b2393", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (the YouTube client is now described as optional); runbook text unaffected; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +36,7 @@ verified = { hash = "b3:a22174667355c2b7", by = "agent:claude@session_01YKRrREb5
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:d8ead57483365a7e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: stale via daemon Usage; generic RTMP steps unchanged; holds" }
+verified = { hash = "b3:47afd37bd313ce48", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (the YouTube client is now described as optional); runbook text unaffected; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -99,7 +99,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:9dba22fff3d8ca09", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: stale via daemon Usage; the smoke script passes no YouTube client, so the daemon logs YouTube unavailable; steps hold" }
+verified = { hash = "b3:e53eb3227d83a665", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via daemon Usage (the YouTube client is now described as optional); runbook text unaffected; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

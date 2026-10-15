@@ -27,8 +27,9 @@ Options:
   --log-level <spec>   the log filter, as `target=level` directives and an
                        optional default level (default: RUST_LOG, else info)
   --youtube-client <path>
-                       Windows: the Google OAuth client for YouTube sign-in,
-                       the JSON Google Cloud gives for a Desktop app client
+                       Windows, optional: your own Google OAuth client for
+                       YouTube sign-in, the JSON Google Cloud gives for a
+                       Desktop app client
                        (default: JSTREAM_YOUTUBE_CLIENT_ID and
                        JSTREAM_YOUTUBE_CLIENT_SECRET; without them YouTube is
                        unavailable)

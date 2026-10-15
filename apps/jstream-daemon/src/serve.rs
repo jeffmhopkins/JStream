@@ -69,7 +69,7 @@ pub fn engine(
     Ok(engine)
 }
 
-/// YouTube (ADR-0041), when the daemon has the app's OAuth client and somewhere to keep
+/// YouTube (ADR-0041), when the daemon has the user's OAuth client and somewhere to keep
 /// the account's refresh token: Windows Credential Manager. Elsewhere, and without a
 /// client, `youtube.status` answers `unavailable`. Never fails the start: a transport
 /// that can't be built is logged, and YouTube stays unavailable.

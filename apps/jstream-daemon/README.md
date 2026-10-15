@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:32865baf89974a4a", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: new youtube.rs contents bullet; Not here yet now lists YouTube outside Windows (no OS credential store) instead of waiting on with_youtube; rest holds" }
+verified = { hash = "b3:9df3d4c514ab9338", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Jeff: no required OAuth client. YouTube bullet now says the client is optional and user-supplied; still read from --youtube-client or env" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -32,7 +32,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   the tokio runtime,
   prints where it listens, and maps failures to exit codes.
 - **Command line** (`args.rs`): a hand-rolled, pure parser ([Usage](#usage)).
-- **YouTube** (`youtube.rs`): reads the app's Google OAuth client from
+- **YouTube** (`youtube.rs`): reads an optional, user-supplied Google OAuth client from
   `--youtube-client` or the environment, and gives the engine YouTube with it
   ([Design](#design)).
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
@@ -81,7 +81,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:500fa09c986a5eb0", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: --youtube-client row and YouTube (Windows) bullet match args.rs, main.rs and youtube.rs (Google's Desktop app JSON or JSTREAM_YOUTUBE_CLIENT_ID/_SECRET, unavailable without a client or off Windows, bad file or lone secret exit 1 without quoting values); exit 1 row adds the client file" }
+verified = { hash = "b3:6800fd7229d43a34", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Jeff: no required OAuth client. --youtube-client row and help say optional, your own; YouTube bullet says JStream ships none and points to Going live with YouTube Studio's RTMPS URL and key; rest unchanged" }
 -->
 
 ```sh
@@ -100,7 +100,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. On Windows it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
-| `--youtube-client <path>` | Windows: the Google OAuth client for YouTube sign-in, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables. |
+| `--youtube-client <path>` | Windows, optional: your own Google OAuth client for YouTube sign-in, the JSON Google Cloud gives for a "Desktop app" client (see **YouTube** below). Default: the `JSTREAM_YOUTUBE_CLIENT_ID` and `JSTREAM_YOUTUBE_CLIENT_SECRET` environment variables. |
 | `--register-vcam` | Windows: registers the virtual camera for this machine, then exits (see **Virtual camera** below). Takes no other options. |
 | `-V`, `--version` | Prints the daemon and protocol versions. |
 | `-h`, `--help` | Prints the help. |
@@ -142,8 +142,10 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   it stops accepting connections, closes the open ones (their clients see
   `Disconnected`, and event streams end) and exits 0. Without `--collection` the
   engine's state is lost.
-- **YouTube (Windows).** With the app's OAuth client, the `youtube.*` calls work
-  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)): `youtube.sign_in`
+- **YouTube (Windows), optional.** JStream ships no OAuth client and needs none: to
+  stream to YouTube without one, use **Going live** below with YouTube Studio's RTMPS
+  URL and stream key. With an OAuth client you supply yourself, the `youtube.*` calls
+  work too ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)): `youtube.sign_in`
   returns Google's consent URL, and the account's refresh token is kept in Credential
   Manager, so a restart stays signed in. The client is a Google Cloud OAuth client of
   type "Desktop app" with the YouTube Data API v3 enabled. Pass its downloaded JSON
@@ -206,7 +208,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:5484d2ddd924ea82", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 YouTube: new YouTube bullet matches youtube::client/set_up and serve::with_youtube (HttpsTransport, WindowsCredentials, before live; dropped with a warning off Windows; never fails the start); Dependencies add jstream-youtube and serde_json, dev-dep jstream-youtube fake" }
+verified = { hash = "b3:e03533ea4ed82dd1", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Wording-only change in youtube.rs and serve.rs docs (the user's client, none shipped); the YouTube design bullet still matches the code" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

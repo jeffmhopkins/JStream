@@ -1,5 +1,6 @@
-//! YouTube setup: the app's Google OAuth client, read at runtime and never committed
-//! (R-SEC-001), and handing it to the engine with `Engine::with_youtube` (ADR-0041).
+//! YouTube setup: an optional Google OAuth client the user supplies (JStream ships
+//! none), read at runtime and never committed (R-SEC-001), and handing it to the
+//! engine with `Engine::with_youtube` (ADR-0041).
 //!
 //! The client comes from `--youtube-client <file>`, the JSON Google Cloud gives for a
 //! "Desktop app" OAuth client, else from the `JSTREAM_YOUTUBE_CLIENT_ID` and
@@ -25,7 +26,7 @@ pub const CLIENT_ID_ENV: &str = "JSTREAM_YOUTUBE_CLIENT_ID";
 /// The environment variable holding the client's secret, if it has one.
 pub const CLIENT_SECRET_ENV: &str = "JSTREAM_YOUTUBE_CLIENT_SECRET";
 
-/// The app's OAuth client.
+/// The user's OAuth client.
 #[derive(Debug)]
 pub struct Client {
     /// The client ID (`….apps.googleusercontent.com`). Not secret, but never logged.
