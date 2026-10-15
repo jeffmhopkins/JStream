@@ -304,13 +304,13 @@ fn output_call(start: bool) -> Call {
     }
 }
 
-/// The output states among `events`; `stats.tick` is skipped.
+/// The output states among `events`; `stats.tick` and `meters.tick` are skipped.
 fn output_steps(events: Vec<Event>) -> Vec<OutputState> {
     events
         .into_iter()
         .filter_map(|event| match event {
             Event::OutputStateChanged { state, .. } => Some(state),
-            Event::StatsTick { .. } => None,
+            Event::StatsTick { .. } | Event::MetersTick { .. } => None,
             other => panic!("unexpected event {other:?}"),
         })
         .collect()
