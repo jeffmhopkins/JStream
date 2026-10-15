@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:5e59c0b28a67f643", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Stale only via apps/jstream-daemon/README.md's re-stamped verified line (merge of main into #147); no app code changed; table and diagram hold" }
+verified = { hash = "b3:d002ffb73e0e21a0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via apps/jstream-cli (mcp.rs comment, README, tests): jstream-cli is still the remote client with the stdio MCP proxy and doesn't link the engine; table and diagram hold" }
 -->
 
 ```
