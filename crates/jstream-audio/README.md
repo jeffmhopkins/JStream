@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:6075abda3536d3f7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via ARCH#threading's handover paragraph; the built mixer API has no generations or live-value release, so the SeqCst/stopped-marker rule contradicts nothing here" }
+verified = { hash = "b3:9ce7b2752d28e690", by = "agent:claude@session_01MYuHTvXyZdeQGrKJhs9Htz", note = "Re-read Purpose against D3: the 'come later' list no longer claims meters are missing, the API list names the meter module, Errors covers the meter's rate; mixer API, time line and rt tests unchanged" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -195,6 +195,7 @@ non-negative floats.
 <!-- @section
 covers = ["crates/jstream-audio/src/meter/**"]
 depends_on = ["docs/adr/0028-audio-model-v2.md#decision"]
+verified = { hash = "b3:f77ce7451ac1f6e0", by = "agent:claude@session_01MYuHTvXyZdeQGrKJhs9Htz", note = "New section, checked against src/meter/: filter length, cutoff and measured phase agreement, 100 ms steps and windows, gates, 0.02 LU histogram range and size, rate rule, and the tests listed; ADR-0028 decision (4x true peak, momentary/short-term/integrated, allocation-free, reset action) matches" }
 -->
 
 `src/meter/` holds the broadcast meters
