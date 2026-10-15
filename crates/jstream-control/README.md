@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:52a7dd882bd90bd0", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: re-read after a rustdoc link fix in ws_config.rs (WS_PROTOCOL's doc now links WS_TOKEN_PROTOCOL_PREFIX); text unchanged and still matches" }
+verified = { hash = "b3:c6bae3ad1d51b34c", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: re-read after ws_config.rs compiled its browser-only helpers under cfg(any(test, wasm32)) instead of allow(dead_code); text unchanged and still matches" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:41c3616e481114da", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: re-read after a rustdoc link fix in ws_config.rs (WS_PROTOCOL's doc now links WS_TOKEN_PROTOCOL_PREFIX); text unchanged and still matches" }
+verified = { hash = "b3:46f8b2356c78808a", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: re-read after ws_config.rs compiled its browser-only helpers under cfg(any(test, wasm32)) instead of allow(dead_code); text unchanged and still matches" }
 -->
 
 ### The trait

@@ -3,7 +3,6 @@
 //!
 //! Docs: crates/jstream-control/README.md#design, docs/adr/0006-mcp-full-access.md
 
-use crate::WS_PATH;
 use crate::error::ControlError;
 use std::fmt;
 
@@ -62,10 +61,8 @@ pub(crate) fn disconnected(reason: impl Into<String>) -> ControlError {
 
 /// The URL the browser client opens: `url` with the API path when it has none. Only
 /// `ws://` and `wss://` URLs with a host are accepted; the browser checks the rest.
-#[cfg_attr(
-    not(target_arch = "wasm32"),
-    allow(dead_code, reason = "used by the wasm32 client; tested natively")
-)]
+// Only the wasm32 client uses it; native builds compile it for the tests.
+#[cfg(any(test, target_arch = "wasm32"))]
 pub(crate) fn browser_url(url: &str) -> Result<String, ControlError> {
     let invalid = |why: &str| disconnected(format!("invalid engine URL `{url}`: {why}"));
     let (scheme, rest) = url
@@ -85,9 +82,9 @@ pub(crate) fn browser_url(url: &str) -> Result<String, ControlError> {
         return Err(invalid("a WebSocket URL can't have a fragment"));
     }
     let path = match path {
-        "" | "/" => WS_PATH,
+        "" | "/" => crate::WS_PATH,
         path if path.starts_with('?') => {
-            return Ok(format!("{scheme}://{authority}{WS_PATH}{path}"));
+            return Ok(format!("{scheme}://{authority}{}{path}", crate::WS_PATH));
         }
         path => path,
     };
@@ -97,10 +94,8 @@ pub(crate) fn browser_url(url: &str) -> Result<String, ControlError> {
 /// The subprotocol that carries `token`: `jstream.token.<token>`. A subprotocol must be
 /// an HTTP token (RFC 6455 §4.1), so a token with other characters is refused; the
 /// daemon's tokens are lowercase hex.
-#[cfg_attr(
-    not(target_arch = "wasm32"),
-    allow(dead_code, reason = "used by the wasm32 client; tested natively")
-)]
+// Only the wasm32 client uses it; native builds compile it for the tests.
+#[cfg(any(test, target_arch = "wasm32"))]
 pub(crate) fn token_protocol(token: &str) -> Result<String, ControlError> {
     // RFC 7230 `tchar`.
     let tchar = |b: u8| b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b);

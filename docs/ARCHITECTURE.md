@@ -519,7 +519,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:7133d1577d28736e", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: re-read after a rustdoc link fix in ws_config.rs (WS_PROTOCOL's doc now links WS_TOKEN_PROTOCOL_PREFIX); text unchanged and still matches" }
+verified = { hash = "b3:6871c94d12a37bb9", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: re-read after ws_config.rs compiled its browser-only helpers under cfg(any(test, wasm32)) instead of allow(dead_code); text unchanged and still matches" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
