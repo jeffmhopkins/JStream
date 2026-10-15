@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:63e4c97bc4848a48", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "ADR-0051 accepted (Jeff, #367): re-read; links re-pointed from superseded ADR-0041 to ADR-0051, which restates its decision with the API optional; text holds" }
+verified = { hash = "b3:f262c040adb24773", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 N3: re-read; jstream-youtube and jstream-sources manifest summaries now cite ADR-0051, matching their crate-map rows; holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

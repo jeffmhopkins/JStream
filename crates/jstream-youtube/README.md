@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0051-youtube-without-a-required-oauth-client.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:fd30f8d7edbfc26c", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "ADR-0051 accepted (Jeff, #367): re-read; links re-pointed from superseded ADR-0041 to ADR-0051, which restates its decision with the API optional; text holds" }
+verified = { hash = "b3:e65f6e5cd4cd3803", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 N3: re-read; the §4/§5 citations and the not-yet line now say ADR-0041 kept by ADR-0051; holds" }
 -->
 
 Layer-2 client for Google sign-in and the
@@ -47,12 +47,12 @@ Contents:
   `refresh` gets a new access token and reports a rotated refresh token; `revoke` signs
   out. Access tokens record their expiry (timed from when the request was sent) and the
   scopes granted.
-  - **Scopes** (ADR-0041 §4): `Scope::Readonly` (`youtube.readonly`) for listing and
+  - **Scopes** (ADR-0041 §4, kept by ADR-0051): `Scope::Readonly` (`youtube.readonly`) for listing and
     stream health, `Scope::Manage` (`youtube`) for creating, binding and transitioning.
     The Live API reference pages list exactly these: the list methods accept either
     (or `youtube.force-ssl`), the write methods `youtube` or `youtube.force-ssl`. A
     granted `force-ssl` counts as `Manage`. JStream signs in once, asking for
-    `Manage` alone, which the reads accept too (ADR-0041 §4); `Readonly` stays for a
+    `Manage` alone, which the reads accept too (ADR-0041 §4, kept by ADR-0051); `Readonly` stays for a
     grant that holds only it.
   - A refresh refused with `invalid_grant` is `YoutubeError::SignInRequired`.
 - **`LoopbackRedirect`:** the redirect listener, bound to `127.0.0.1` on an OS-chosen
@@ -86,7 +86,7 @@ Contents:
   ([R-TEST-004](../../docs/RULES.md#R-TEST-004)); the HTTPS tests use a TLS server on
   loopback with certificates made at test time.
 - **Errors:** one `thiserror` enum, `YoutubeError`. `is_quota` recognises quota and
-  rate-limit reasons, which the engine surfaces as protocol errors (ADR-0041 §5).
+  rate-limit reasons, which the engine surfaces as protocol errors (ADR-0041 §5, kept by ADR-0051).
 
 **Secrets** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): tokens, codes, the client
 secret and stream keys are held as `Secret`s. The request head that carries the bearer
@@ -100,6 +100,6 @@ column, never quoted. The refresh token is kept in the OS credential store throu
 anywhere itself.
 
 **Not yet:** chat (reading, sending as the channel, the featured message) and audience
-stats from ADR-0041, quota accounting, the protocol commands and MCP tools that expose
+stats from ADR-0041 (kept by ADR-0051), quota accounting, the protocol commands and MCP tools that expose
 all of this, and the engine wiring (including saving the refresh token in the
 `OAuthTokenStore`).

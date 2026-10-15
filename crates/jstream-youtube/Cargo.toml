@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 2
-summary = "OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; ADR-0041). No media code."
+summary = "OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; ADR-0051). No media code."
 unsafe_allowed = false
 
 [lints]
