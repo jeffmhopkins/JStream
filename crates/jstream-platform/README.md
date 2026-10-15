@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:7b9e576558c95478", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = '#142: new Stream keys (keys.rs) bullet: StreamKeyStore, Secret (Secret("***"), not Clone, zeroed on drop, from_utf8), held apart from Backends; Fakes list MemoryKeyStore; still no unsafe (black_box + compiler_fence)' }
+verified = { hash = "b3:f6c8c4929c171800", by = "agent:claude@session_017dgMHhk9KuuwXxpbutfCzi", note = "Merge of main (#142 Stream keys bullet, MemoryKeyStore in Fakes) into C4a: re-read both; main's keys bullet and fake are unchanged; C4a's Video capture devices bullet (VideoDevices, paired audio, VideoDeviceFormat, CaptureEncoding Raw/Yuy2/Mjpeg, CaptureDecoder hook, rejected frames dropped), FakeVideoDevices/FakeCaptureDecoder and the Not yet line (C4b, Backends wiring, MJPEG Codec variant) match video_device.rs and fake.rs" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -51,6 +51,16 @@ Contents:
   thread takes from it without blocking; `None` means "repeat the last frame". Spike S1
   drains Windows.Graphics.Capture's pool to the newest frame the same way.
   `CaptureStats` counts captured and skipped frames.
+- **Video capture devices** (webcams and capture cards,
+  [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)): `VideoDevices`
+  (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
+  endpoint when the backend can pair one), each device's `VideoDeviceFormat`s (size, frame
+  period, `CaptureEncoding`), and opens a device in one format as a `CaptureStream`, the
+  same mailbox as display capture. `CaptureEncoding` is `Raw` (an engine pixel format),
+  `Yuy2` (converted to NV12 by the backend) or `Mjpeg`. MJPEG is a video codec, so it is
+  decoded on the decoder side: opening a compressed format takes a `CaptureDecoder`
+  (`Send`), which the capture thread calls with each `CompressedFrame` before the mailbox;
+  a frame it rejects is dropped and the stream goes on.
 - **Audio:** `AudioIo` (`Send + Sync`) lists devices and opens input (microphone,
   output loopback, process loopback) and output streams. Each stream calls an
   engine-supplied `AudioInputHandler` or `AudioOutputHandler` on the backend's real-time
@@ -92,7 +102,9 @@ Contents:
   only when advanced), `FakeCapture`, `FakeAudioIo`, `FakeCodecs` (correct timing and
   keyframe pattern, a forced keyframe restarting that pattern, placeholder payloads; the decoder returns frames in presentation
   order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
-  (dropping it stops it; a test watches it through a `FakeVcamProbe`), plus
+  (dropping it stops it; a test watches it through a `FakeVcamProbe`),
+  `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
+  MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail) and
   `fake::backends`. The crate's tests drive every trait through trait objects only,
@@ -101,8 +113,9 @@ Contents:
 
 **Not yet:** a platform that delivers or consumes GPU frames (the Windows
 `GpuInterop` opens the device and encode targets; its capture and encoders don't use them
-yet), webcam capture (an MJPEG `Codec` variant and a
-camera `CaptureTarget`), and encoder selection by GPU adapter.
+yet), a platform implementation of `VideoDevices` (Media Foundation's source reader is
+C4b) and its place in `Backends`, an MJPEG `Codec` variant with a `CaptureDecoder` built
+from the platform's decoder, and encoder selection by GPU adapter.
 
 <a id="gpu-frames"></a>
 ## GPU frames
