@@ -40,11 +40,14 @@ pub enum AudioError {
     /// buffers for.
     #[error("the mixer already has the maximum number of buses")]
     TooManyBuses,
-    /// The input's or bus's filter chain already holds as many filters as it reserved.
+    /// The filter chain already holds as many filters as it reserved.
     #[error("the filter chain already has the maximum number of filters")]
     TooManyFilters,
-    /// The input, bus or filter was removed.
-    #[error("the input, bus or filter was removed")]
+    /// The mixer already holds as many output taps as it reserved.
+    #[error("the mixer already has the maximum number of output taps")]
+    TooManyOutputTaps,
+    /// The input, bus, output tap or filter was removed.
+    #[error("the input, bus, output tap or filter was removed")]
     Removed,
     /// Input, bus or filter changes are waiting for the mixer to apply them, and the
     /// queue is full.

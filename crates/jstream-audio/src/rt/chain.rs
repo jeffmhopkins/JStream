@@ -90,6 +90,26 @@ pub(crate) enum KernelKind {
     Delay,
 }
 
+impl FilterSpec {
+    /// This spec with `params` applied: what a filter built from it and then edited
+    /// with `params` holds. Parameters of another kind leave it as it is.
+    pub(crate) fn with(self, params: FilterParams) -> Self {
+        match (self, params) {
+            (Self::Gain { .. }, FilterParams::Gain { gain_db }) => Self::Gain { gain_db },
+            (Self::NoiseGate(_), FilterParams::NoiseGate(p)) => Self::NoiseGate(p),
+            (Self::Compressor(_), FilterParams::Compressor(p)) => Self::Compressor(p),
+            (Self::Limiter { lookahead_ms, .. }, FilterParams::Limiter(params)) => Self::Limiter {
+                lookahead_ms,
+                params,
+            },
+            (Self::Delay { max_ms, .. }, FilterParams::Delay { delay_ms }) => {
+                Self::Delay { max_ms, delay_ms }
+            }
+            (spec, _) => spec,
+        }
+    }
+}
+
 impl FilterParams {
     pub(crate) fn kind(&self) -> KernelKind {
         match self {
@@ -178,10 +198,12 @@ impl Kernel {
 }
 
 /// What the control plane keeps about a filter it sent to the mixer, to check edits
-/// without the kernel itself.
+/// without the kernel itself, and to build another copy of it.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FilterBook {
     pub(crate) id: u64,
+    /// The spec it was built from, with every edit since applied.
+    pub(crate) spec: FilterSpec,
     pub(crate) kind: KernelKind,
     pub(crate) latency: usize,
     /// For a delay, the longest delay it has room for, frames.
@@ -189,9 +211,10 @@ pub(crate) struct FilterBook {
 }
 
 impl FilterBook {
-    pub(crate) fn new(id: u64, kernel: &Kernel) -> Self {
+    pub(crate) fn new(id: u64, spec: FilterSpec, kernel: &Kernel) -> Self {
         Self {
             id,
+            spec,
             kind: kernel.kind(),
             latency: kernel.latency_frames(),
             max_delay_frames: match kernel {
@@ -311,6 +334,15 @@ impl Chain {
         let (_, kernel) = self.filters.remove(index);
         self.latency -= kernel.latency_frames();
         Some(kernel)
+    }
+
+    /// Clears every filter's state and the compensation delay, as if the chain had only
+    /// seen silence. Never allocates.
+    pub(crate) fn reset(&mut self) {
+        for (_, kernel) in &mut self.filters {
+            kernel.filter().reset();
+        }
+        self.comp.reset();
     }
 
     /// Applies `params` to filter `id`, if it is in the chain.

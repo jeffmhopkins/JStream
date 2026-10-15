@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:3c568a44adcff1ac", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (D7b #231) into C9: main only restamped these via ARCH threading's Collector row; Media files and audio bullets unchanged, re-read, holds" }
+verified = { hash = "b3:3c8b346cce6474eb", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (D8, U0-U5, B6-r, #215, #262, #263, #267) into C9: main's text kept beside C9's; text unchanged by main; Media files bullet and FakeMediaDecoders hold; re-read" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -154,7 +154,7 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:8bed5efbaa524f4d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Stale via ARCH crate-map platform row only (MediaDecoders listed); GPU frame design untouched" }
+verified = { hash = "b3:afc3d89a71c019fb", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (D8, U0-U5, B6-r, #215, #262, #263, #267) into C9: main's text kept beside C9's; stale via ARCH crate-map only (U-series rows); GPU frame text untouched, holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

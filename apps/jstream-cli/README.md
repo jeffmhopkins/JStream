@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:889d8fc912b3ef44", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; contents hold with B6-f's commands and scene switch/studio get" }
+verified = { hash = "b3:f2f2278743d2e4c4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed: the item.move cycle golden now expects the mock's cycle path; error format (error: <message> (<code>)) and exit code 17 unchanged" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:a5ec524c34e496eb", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; scene switch and studio get rows hold beside B6-f's set_role/item.move/set_geometry rows" }
+verified = { hash = "b3:d87d877168335337", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: took B6-f's Edits bullet and added scene.create's optional role:group/role:scene; grouping batch now creates the scene as a group" }
 -->
 
 ```sh
@@ -101,7 +101,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 `jstream-cli`.
 
 - **Edits** are written as their protocol command name followed by its arguments, in a
-  fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
+  fixed order (`scene.create <scene-id> <name> [role:scene|role:group]`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
   protocol is supported except settings, encoder profiles and `source.create`'s
   `duplicated_from`. `source.set_settings`,
@@ -116,8 +116,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `canvas.set_size <width> <height>` sets the canvas. Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
-  <index>`: grouping is one batch that creates a scene, makes it a group, places it
-  through a `scene:` source, and moves the items into it. The placement edits'
+  <index>`, and `scene.create` takes an optional trailing `role:group` or `role:scene`:
+  grouping is one batch that creates a scene as a group, places it through a `scene:`
+  source, and moves the items into it. The placement edits'
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
   the item's own scene, which omitting it already means.
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
@@ -234,11 +235,12 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8f6199e548006e27", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; B6-f's placement and ROLE text and B10's studio.changed note both hold" }
+verified = { hash = "b3:fbd4a9d27c04d5d8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only run/tests.rs changed (cycle reason golden names the path); design bullets don't quote engine reasons" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
-  most, a sequence of fixed-arity edits named by their protocol command names, doesn't
+  most, a sequence of fixed-arity edits (only `scene.create` takes one optional trailing
+  `role:`) named by their protocol command names, doesn't
   fit a derive-based parser: with `clap` it would be a trailing list of raw strings
   parsed by hand anyway. A parser crate would add a dependency tree (and a review under
   [R-DEP-004](../../docs/RULES.md#R-DEP-004)) for the few global options and the help

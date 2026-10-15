@@ -72,6 +72,7 @@ fn create(scene: &str) -> Edit {
     Edit::SceneCreate {
         scene_id: SceneId::new(scene),
         name: scene.to_uppercase(),
+        role: None,
     }
 }
 

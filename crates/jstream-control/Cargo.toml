@@ -19,22 +19,48 @@ workspace = true
 # `MockEngine`/`MockControl`: an in-memory implementation for developing and testing
 # clients without the engine. Off by default; clients enable it in dev-dependencies.
 mock = []
-# `WsControl`: the WebSocket client, on native targets for now. Off by default, so the
-# WASM/UI build carries no tokio. Plain `ws://` only: no TLS feature is enabled.
-ws = ["dep:futures-util", "dep:serde_json", "dep:tokio", "dep:tokio-tungstenite"]
+# `WsControl`: the WebSocket client. Off by default. On native targets it runs tokio and
+# tokio-tungstenite (plain `ws://` only: no TLS feature is enabled); on `wasm32` it wraps
+# the browser's `WebSocket` through `web-sys`, so the UI build carries no tokio.
+ws = [
+    "dep:futures-channel",
+    "dep:futures-util",
+    "dep:serde_json",
+    "dep:tokio",
+    "dep:tokio-tungstenite",
+    "dep:wasm-bindgen",
+    "dep:web-sys",
+    "dep:js-sys",
+]
 
 [dependencies]
 futures-core.workspace = true
 jstream-protocol.workspace = true
 thiserror.workspace = true
 
-# The WebSocket client's transport (feature `ws`). Native only: `wasm32` builds never pull
+# The native WebSocket client's transport (feature `ws`): `wasm32` builds never pull
 # tokio, even with the feature on.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 futures-util = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, features = ["macros", "net", "rt", "sync"] }
 tokio-tungstenite = { workspace = true, optional = true }
+
+# The browser WebSocket client's transport (feature `ws` on `wasm32`): the `WebSocket`
+# bindings, and `futures-channel` to complete calls and feed event streams without an
+# executor of its own.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+futures-channel = { workspace = true, optional = true }
+js-sys = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+wasm-bindgen = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true, features = [
+    "BinaryType",
+    "CloseEvent",
+    "Event",
+    "MessageEvent",
+    "WebSocket",
+] }
 
 [dev-dependencies]
 jstream-protocol = { workspace = true, features = ["fixtures"] }

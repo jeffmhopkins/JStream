@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:2dce314b8d7a4e9d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (D7b #231) into C9: main only restamped these via ARCH threading's Collector row; C9's MfMediaDecoders bullet and C5 text unchanged, re-read, holds" }
+verified = { hash = "b3:a3c840a648e9454b", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (D8, U0-U5, B6-r, #215, #262, #263, #267) into C9: main's text kept beside C9's; text unchanged by main; MfMediaDecoders bullet holds; re-read" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

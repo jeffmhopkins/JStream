@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:57e905d648cca2ab", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Round 3 of #245 with main (B6-f #210, B10 #201) merged: B10's Studio bullet and C9's live sources bullet both kept; re-read" }
+verified = { hash = "b3:0a6f557dece7d4b9", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (D8, U0-U5, B6-r, #215, #262, #263, #267) into C9: main's text kept beside C9's; Live sources bullet (videos, show, media backend) kept; re-read" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -158,7 +158,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e62511f8312ef2cf", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Round 3 of #245 with main (B6-f #210, B10 #201) merged: Live sources now says a source's plan count starts at its build (B2), so it restarts the first time a plan reaches it, e.g. after scene.switch (B10's Program scene section kept); re-read against live.rs" }
+verified = { hash = "b3:cec0cfc58517ddf1", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (D8, U0-U5, B6-r, #215, #262, #263, #267) into C9: main's text kept beside C9's; #215's render-snapshot lock wording kept; C9's Live sources paragraph (plan count from build, show, set_media, NoBackend) holds; re-read" }
 -->
 
 ### Engine and sessions
@@ -788,8 +788,9 @@ release it before taking the collection lock. A source must not call back into t
 engine while that mutex is held. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The render snapshot is published under the collection
-lock (which makes the control side its one writer) and loaded by the render and
-snapshot threads with no lock at all. A stream's poll takes only its queue's lock. No lock
+lock (which makes the control side its one writer) and loaded by the render thread
+with no lock at all. `video.snapshot` reads it under the collection lock and the
+snapshot thread only receives it. A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
@@ -917,7 +918,7 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:9cb93b65cd929904", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main (C5 audio sources, B9) into D7b: kept C5's audio-sources sentences and D7b's mixer-collector sentence (rings, removed buses' state, filter chains and filters, per retire.rs); re-read; holds" }
+verified = { hash = "b3:0763b192181eef0d", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main (#231 D7b): #231's mixer-collector sentence kept; nothing here says which threads load the render snapshot, holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

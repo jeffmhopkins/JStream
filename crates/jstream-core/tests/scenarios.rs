@@ -220,6 +220,7 @@ fn overload_drops_and_counts() {
     let applied = block_on(user.call(Call::Batch(Batch::single(Edit::SceneCreate {
         scene_id: SceneId::new("main"),
         name: "Main".into(),
+        role: None,
     }))))
     .expect("batch");
     assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });
@@ -424,6 +425,7 @@ fn rt_panic_is_reported() {
     let applied = block_on(agent.call(Call::Batch(Batch::single(Edit::SceneCreate {
         scene_id: SceneId::new("main"),
         name: "Main".into(),
+        role: None,
     }))))
     .expect("batch");
     assert_eq!(applied.result, CallResult::Batch { rev: Rev(1) });

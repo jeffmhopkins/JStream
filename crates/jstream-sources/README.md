@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:ade4044298b098a5", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Round 3 of #245: media bullet now says every frame must have the first's size (N5), restart on first show (B2), the unknown-length loop seek (N7) and seeks without the lock (B3); re-read against media/player.rs and mod.rs" }
+verified = { hash = "b3:88264b33ac4477f1", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (D8, U0-U5, B6-r, #215, #262, #263, #267) into C9: main's text kept beside C9's; #262's hard-link sentence kept ahead of C9's AssetRoots::open sentences in Assets; media bullet unchanged; re-read" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -168,12 +168,16 @@ is walked from the root and each folder on it is held open without delete sharin
 which stops it being renamed or replaced until the file is open; one that has become a
 link (a symlink, junction or other name-surrogate reparse point) is refused, while a
 OneDrive placeholder or dedup file, also a reparse point, is read. The root folder
-itself is the host's configuration and is trusted. `AssetRoots::open` checks a file the
-same way for a reader that opens it again by path (a platform decoder streaming a large
-file) and returns the open file with its resolved host path. The caller keeps the file
-open until that reader has opened the path: on Windows it is held without delete
-sharing, so it, and the folders above it, can't be renamed or replaced meanwhile. Unix
-has no such hold, so there the path is only checked.
+itself is the host's configuration and is trusted, and so is what is in it: a hard link
+inside the root to a file outside is read, because the link and its target are the same
+file and neither check can tell them apart. Making one needs write access inside the
+root, and refusing every file with more than one link would also refuse deduplicated
+files. `AssetRoots::open` checks a file the same way for a reader that opens it again by
+path (a platform decoder streaming a large file) and returns the open file with its
+resolved host path. The caller keeps the file open until that reader has opened the
+path: on Windows it is held without delete sharing, so it, and the folders above it,
+can't be renamed or replaced meanwhile. Unix has no such hold, so there the path is
+only checked.
 Errors name an asset by the root and path its setting holds, never by the host path
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). A missing or
 undecodable file is an error from `create`, never from the edit that set it.
