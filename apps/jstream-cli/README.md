@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:77315bdcfd4cbb22", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 changed run.rs only to ignore the new key_set and outputs fields; contents list holds" }
+verified = { hash = "b3:1d15bdb918aca891", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b: only the 0.7->0.8 version goldens in run/tests.rs changed; the CLI still lacks the output edits (now including record), output.list and key actions as the Edits bullet says" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -181,7 +181,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:311fbb873847e04e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 run.rs change is two match patterns; parsing, block_on, connector, mock and writer bullets hold" }
+verified = { hash = "b3:37c5c322b5acd057", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b: tests.rs version goldens only; parsing, block_on, connector, mock and writer bullets hold" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

@@ -3,7 +3,7 @@
 use crate::Graph;
 use jstream_protocol::{
     Crop, Edit, EntityKind, ItemId, ItemTransform, OutputId, OutputInfo, OutputKind, ProtocolError,
-    QueryResult, Rev, RtmpTarget, SceneId, SourceId, SourceKind, Vec2,
+    QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SourceId, SourceKind, Vec2,
 };
 use std::collections::BTreeSet;
 
@@ -52,6 +52,25 @@ fn output_create(id: &str, url: &str) -> Edit {
         output_id: OutputId::new(id),
         kind: OutputKind::Rtmp {
             target: target(url),
+        },
+    }
+}
+
+/// An absolute path on this platform: `C:\` on Windows, `/` elsewhere.
+fn abs_path(rest: &str) -> String {
+    if cfg!(windows) {
+        format!("C:\\{}", rest.replace('/', "\\"))
+    } else {
+        format!("/{rest}")
+    }
+}
+
+fn record_create(id: &str, path: &str) -> Edit {
+    Edit::OutputCreate {
+        output_id: OutputId::new(id),
+        kind: OutputKind::Record {
+            path: path.into(),
+            container: RecordContainer::Mp4,
         },
     }
 }
@@ -507,6 +526,65 @@ fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
 }
 
 #[test]
+fn a_recording_output_is_created_and_deleted_with_exact_inverses() {
+    let mut graph = Graph::new();
+    let path = abs_path("Videos/show.mp4");
+    let created = apply_ok(&mut graph, vec![record_create("rec", &path)]);
+    assert_eq!(
+        created.inverse.edits,
+        vec![Edit::OutputDelete {
+            output_id: OutputId::new("rec"),
+        }]
+    );
+    assert_eq!(
+        graph.output_list(),
+        QueryResult::OutputList {
+            rev: Rev(1),
+            outputs: vec![OutputInfo {
+                output_id: OutputId::new("rec"),
+                kind: OutputKind::Record {
+                    path: path.clone(),
+                    container: RecordContainer::Mp4,
+                },
+            }],
+        }
+    );
+    // A recording has no RTMP target to change.
+    let (field, _) = invalid_reason(apply_err(
+        &mut graph,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("rec"),
+            target: target("rtmp://host/live"),
+        }],
+    ));
+    assert_eq!(field, "edits.0.output_id");
+    let deleted = apply_ok(
+        &mut graph,
+        vec![Edit::OutputDelete {
+            output_id: OutputId::new("rec"),
+        }],
+    );
+    assert_eq!(deleted.inverse.edits, vec![record_create("rec", &path)]);
+}
+
+#[test]
+fn recording_paths_are_validated() {
+    let mut graph = Graph::new();
+    for path in [
+        String::new(),
+        "show.mp4".into(),
+        abs_path("Videos/"),
+        abs_path("Videos/.."),
+        abs_path("Videos/show\n.mp4"),
+    ] {
+        let (field, reason) =
+            invalid_reason(apply_err(&mut graph, vec![record_create("rec", &path)]));
+        assert_eq!(field, "edits.0.kind.path", "{path:?}: {reason}");
+    }
+    assert_eq!(graph.state().outputs().len(), 0);
+}
+
+#[test]
 fn output_edits_are_validated() {
     let mut graph = Graph::new();
     apply_ok(&mut graph, vec![output_create("yt", "rtmp://host/live")]);
@@ -773,7 +851,9 @@ mod property {
     //!
     //! A hand-rolled, seeded generator keeps the test deterministic and dependency-free.
 
-    use super::{add, builtin, output_create, scene_create, scene_source, target};
+    use super::{
+        abs_path, add, builtin, output_create, record_create, scene_create, scene_source, target,
+    };
     use crate::Graph;
     use jstream_protocol::{
         Crop, Edit, ItemId, ItemTransform, OutputId, Rev, SceneId, SourceId, Vec2,
@@ -881,7 +961,13 @@ mod property {
             13 => Edit::SourceDelete {
                 source_id: SourceId::new(source(rng)),
             },
-            14 => output_create(&pool(rng, "out"), url(rng)),
+            14 => {
+                if rng.below(4) == 0 {
+                    record_create(&pool(rng, "out"), &abs_path("Videos/show.mp4"))
+                } else {
+                    output_create(&pool(rng, "out"), url(rng))
+                }
+            }
             15 => Edit::OutputSetTarget {
                 output_id: OutputId::new(output(rng)),
                 target: target(url(rng)),

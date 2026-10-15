@@ -12,8 +12,8 @@ use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::lock;
 use crate::outputs::Outputs;
 use crate::runtime::{
-    Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent, Running,
-    launch, parts_from,
+    Destination, Gate, LivePublish, MediaHost, OpenPublish, OutputStats, Pending, PipelineEvent,
+    Running, launch, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
@@ -21,10 +21,11 @@ use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, IdempotencyKey,
-    OutputId, OutputKind, OutputState, ProtocolError, Query, QueryResult, RequestId, Rev,
-    SecretString, SourceId,
+    OutputId, OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer,
+    RequestId, Rev, SecretString, SourceId,
 };
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
@@ -139,7 +140,9 @@ impl Engine {
 
     /// What an output in the collection is and where it sends, or `None` if the
     /// collection has no such output. A host reads its target here when it opens the
-    /// publish target for `output.start`, and its key from the store it injected.
+    /// publish target for `output.start`, and its key from the store it injected. A
+    /// recording output (`OutputKind::Record`) needs no publish target: the engine
+    /// opens its file itself.
     pub fn output_kind(&self, output_id: &OutputId) -> Option<OutputKind> {
         lock(&self.shared.state)
             .graph
@@ -154,7 +157,8 @@ impl Engine {
     ///
     /// A start still needs a publish target ([`with_publish`](Self::with_publish))
     /// or an opener ([`with_publish_opener`](Self::with_publish_opener)). Without
-    /// either it fails with `action_failed` and changes no output state.
+    /// either it fails with `action_failed` and changes no output state. A recording
+    /// output needs neither: its start records to the file the collection names.
     #[must_use]
     pub fn with_backends(mut self, backends: Backends) -> Self {
         let host = self.host();
@@ -175,7 +179,8 @@ impl Engine {
 
     /// Stores how `output.start` opens its publish target when no one-shot target
     /// ([`with_publish`](Self::with_publish)) is waiting: every start calls `open`
-    /// once, after `starting` and outside the engine's locks, so a host that is live
+    /// once, after `starting` and outside the engine's locks (except for a recording
+    /// output, which never calls it), so a host that is live
     /// (with [`connect_rtmp`](crate::connect_rtmp)) connects on each start and can
     /// start again after a stop or a failure. An `open` error fails that start with
     /// `action_failed`. Requires [`with_backends`](Self::with_backends) first;
@@ -533,15 +538,18 @@ impl Engine {
                     reason: "another output is already running".into(),
                 });
             }
-            let publish = match lock(&host.publish).take() {
-                Some(publish) => Target::Ready(publish),
-                None => match lock(&host.open_publish).as_ref() {
-                    Some(open) => Target::Open(Arc::clone(open)),
-                    None => {
-                        return Err(ProtocolError::ActionFailed {
-                            reason: "output.start has no publish target".into(),
-                        });
-                    }
+            let publish = match record_path(&state.graph, &output_id) {
+                Some(path) => Target::Record(path),
+                None => match lock(&host.publish).take() {
+                    Some(publish) => Target::Ready(publish),
+                    None => match lock(&host.open_publish).as_ref() {
+                        Some(open) => Target::Open(Arc::clone(open)),
+                        None => {
+                            return Err(ProtocolError::ActionFailed {
+                                reason: "output.start has no publish target".into(),
+                            });
+                        }
+                    },
                 },
             };
             let parts = {
@@ -584,7 +592,9 @@ impl Engine {
         let (fail_tx, fail_rx) = mpsc::channel();
         let launched = publish
             .open(&output_id)
-            .and_then(|publish| launch(parts, publish, output_id.clone(), generation, fail_tx))
+            .and_then(|destination| {
+                launch(parts, destination, output_id.clone(), generation, fail_tx)
+            })
             .map(|mut running| {
                 running.arm_stats(self);
                 running
@@ -839,11 +849,24 @@ impl Drop for SettleOnDrop<'_> {
     }
 }
 
-/// The publish target a start took: a one-shot one the host set, or the opener it
-/// calls once the locks are released.
+/// Where a recording output in the collection records to, or `None` when the output
+/// is not a recording (or not in the collection).
+fn record_path(graph: &Graph, output_id: &OutputId) -> Option<PathBuf> {
+    match graph.state().output(output_id)?.kind() {
+        OutputKind::Record {
+            path,
+            container: RecordContainer::Mp4,
+        } => Some(PathBuf::from(path)),
+        _ => None,
+    }
+}
+
+/// Where a start sends its output: a one-shot publish target the host set, the opener
+/// it calls once the locks are released, or a recording file.
 enum Target {
     Ready(Box<dyn LivePublish>),
     Open(OpenPublish),
+    Record(PathBuf),
 }
 
 impl Target {
@@ -855,13 +878,15 @@ impl Target {
         }
     }
 
-    /// The target to publish into. Runs the opener, outside the engine's locks.
-    fn open(self, output_id: &OutputId) -> Result<Box<dyn LivePublish>, String> {
+    /// Where to send the output. Runs the opener, outside the engine's locks. A
+    /// recording's file is opened by `launch`, once the frame size is known.
+    fn open(self, output_id: &OutputId) -> Result<Destination, String> {
         match self {
-            Target::Ready(publish) => Ok(publish),
-            Target::Open(open) => {
-                open(output_id).map_err(|err| format!("opening the publish target: {err}"))
-            }
+            Target::Ready(publish) => Ok(Destination::Publish(publish)),
+            Target::Open(open) => open(output_id)
+                .map(Destination::Publish)
+                .map_err(|err| format!("opening the publish target: {err}")),
+            Target::Record(path) => Ok(Destination::Record(path)),
         }
     }
 }

@@ -15,8 +15,9 @@ use std::fmt;
 
 /// What an output is and where it sends. Serialized with an internal `type` tag.
 ///
-/// Only RTMP(S) to a generic URL is configurable so far. Recording, the virtual camera
-/// and the YouTube-bound target of the data model come later as new variants.
+/// RTMP(S) to a generic URL and recording to a file are configurable so far. The
+/// virtual camera and the YouTube-bound target of the data model come later as new
+/// variants.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[non_exhaustive]
@@ -26,6 +27,30 @@ pub enum OutputKind {
         /// The ingest server it publishes to.
         target: RtmpTarget,
     },
+    /// A recording to a file on the engine's machine.
+    Record {
+        /// Where the finished recording goes: an absolute path on the engine's
+        /// machine, ending in a file name. While recording, the file is written as
+        /// `<path>.part` and renamed to `path` when the output stops. A recording never
+        /// overwrites: `output.start` fails with `action_failed` when `path` or its
+        /// `.part` name exists. The engine rejects, with `invalid_argument`, an empty or
+        /// relative path, one with control characters, and one that ends in a
+        /// separator or names no file.
+        path: String,
+        /// The file format.
+        container: RecordContainer,
+    },
+}
+
+/// The file format a recording is written in. Serialized as a snake_case string.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RecordContainer {
+    /// MP4 with H.264 video and AAC audio, written fragmented (a fragment per video
+    /// keyframe, each synced to disk), so a crash loses at most the last fragment and
+    /// the `.part` file it leaves plays up to there.
+    Mp4,
 }
 
 /// Where an RTMP output publishes. Serialized with an internal `type` tag.
@@ -173,7 +198,7 @@ impl<'de> Visitor<'de> for SecretVisitor {
 
 #[cfg(test)]
 mod tests {
-    use super::{OutputKind, RtmpTarget, SecretString};
+    use super::{OutputKind, RecordContainer, RtmpTarget, SecretString};
     use crate::{ClientMessage, ProtocolError};
     use serde_json::json;
 
@@ -191,6 +216,21 @@ mod tests {
                 "target": {"type": "generic", "url": "rtmp://a.rtmp.youtube.com/live2"}
             }))
         );
+    }
+
+    #[test]
+    fn record_wire_form() {
+        let kind = OutputKind::Record {
+            path: "/home/me/Videos/show.mp4".into(),
+            container: RecordContainer::Mp4,
+        };
+        let wire = json!({
+            "type": "record",
+            "path": "/home/me/Videos/show.mp4",
+            "container": "mp4"
+        });
+        assert_eq!(serde_json::to_value(&kind).ok(), Some(wire.clone()));
+        assert_eq!(serde_json::from_value::<OutputKind>(wire).ok(), Some(kind));
     }
 
     #[test]

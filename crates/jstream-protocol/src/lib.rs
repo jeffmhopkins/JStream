@@ -36,7 +36,7 @@ pub use geometry::{
     ProjectedQuad, Size, legacy_quad,
 };
 pub use id::{ClientId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId};
-pub use output::{OutputInfo, OutputKind, RtmpTarget, SecretString};
+pub use output::{OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString};
 pub use query::{ItemInfo, Query, QueryResult, SceneInfo, SceneSummary, SourceInfo};
 pub use schema::json_schema;
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};

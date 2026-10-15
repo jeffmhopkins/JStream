@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:f6c8c4929c171800", by = "agent:claude@session_017dgMHhk9KuuwXxpbutfCzi", note = "Merge of main (#142 Stream keys bullet, MemoryKeyStore in Fakes) into C4a: re-read both; main's keys bullet and fake are unchanged; C4a's Video capture devices bullet (VideoDevices, paired audio, VideoDeviceFormat, CaptureEncoding Raw/Yuy2/Mjpeg, CaptureDecoder hook, rejected frames dropped), FakeVideoDevices/FakeCaptureDecoder and the Not yet line (C4b, Backends wiring, MJPEG Codec variant) match video_device.rs and fake.rs" }
+verified = { hash = "b3:8e0266c5cf87e9fe", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Stale via ARCH#threading (F2b output thread may record): backend traits unchanged" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

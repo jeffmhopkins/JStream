@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:4a0ec5b672b9d8d0", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Commands and Queries list the 0.7 output edits, key actions and output.list; new Outputs (output.rs) bullet; PROTOCOL_VERSION 0.7 with stats.tick as 0.6; checked against command.rs, query.rs, output.rs, version.rs" }
+verified = { hash = "b3:90a725bb5773db0b", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b: Outputs bullet lists record and RecordContainer (mp4); version text says 0.8 for the record kind and 0.7 for output edits; checked against output.rs and version.rs" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -35,8 +35,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `ItemTransform`, `Crop` and `SourceKind`; `Action` (`output.start`, `output.stop`,
   `output.set_key`, `output.clear_key`); `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Outputs** (`output.rs`): `OutputKind` (only `rtmp` so far), `RtmpTarget` (only a
-  generic `url`), `OutputInfo`, and `SecretString`, the write-only stream key, which
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+  (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
@@ -59,8 +59,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
   transform. A negative scale is not refused: `from_legacy` returns the drawn outline
   and flags the reflection, which geometry cannot store. These types are not
-  messages. `PROTOCOL_VERSION` is 0.7 because of the output edits, `output.list`,
-  the key actions and `key_set`; `stats.tick` is the 0.6 addition, `video.snapshot`
+  messages. `PROTOCOL_VERSION` is 0.8 because of the `record` output kind; the output
+  edits, `output.list`, the key actions and `key_set` are the 0.7 additions, `stats.tick`
+  the 0.6 one, `video.snapshot`
   the 0.5 one, and the geometry wire surface ships as a later minor. `ItemTransform`'s schema description names
   `ItemGeometry` as the replacement (`protocol.snap` and the MCP `tools.snap`).
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
@@ -79,7 +80,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:e6e59bc369fcff37", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: handshake example at 0.7; actions include storing a stream key; new outputs paragraph (create/set_target/delete, URL checks from graph target.rs, write-only key, key outlives delete, clear_key on a deleted output); state.get outputs, output.list, key_set with pre-0.7 defaults; geometry paragraph says 0.7" }
+verified = { hash = "b3:cec813226681b83d", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b: handshake example at 0.8; outputs paragraph adds the record kind (absolute path, mp4, .part then rename, never overwrites, set_target refused); geometry paragraph's version line says 0.8" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -99,8 +100,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":7},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":7},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":8},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":8},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -186,7 +187,13 @@ Outputs are collection state too: `output.create` adds one, stopped, with its
 while it runs. A target URL must be an `rtmp://` or `rtmps://` server URL with a host and an
 application name, and is refused if it could carry a credential (`user:password@`, a
 query or a fragment). A key pasted into the path can't be told from a nested
-application name, so it is stored as given. The
+application name, so it is stored as given. A `record` output (0.8) records to a file
+on the engine's machine: `path` must be absolute and end in a file name, and
+`container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
+`action_failed` when `path` or `<path>.part` already exists, so a recording never
+overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
+so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
+record elsewhere. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
@@ -400,8 +407,8 @@ function in this crate so the compositor and the UI share one implementation.
   reflected quad.
 
 These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.7 because the
-outputs are that minor. `stats.tick` remains the 0.6 addition and `video.snapshot` the
+`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.8 because of the
+`record` output kind, and the outputs are the 0.7 minor. `stats.tick` remains the 0.6 addition and `video.snapshot` the
 0.5 one. ADR-0022
 names the geometry additions as 0.4, which already shipped with `events.dropped`;
 the geometry wire surface ships as a later minor, under

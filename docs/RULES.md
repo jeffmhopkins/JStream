@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e33b2a7a9766038f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-RT-001..006 against the handover text: a SeqCst store, load or fence allocates, locks and waits on nothing, so the rules hold unchanged" }
+verified = { hash = "b3:675fe4f3e6c8895e", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Stale via ARCH#threading (F2b): the output thread is not one of the RT rows; recording writes block only it and the encoder queues drop under overload (R-RT-004); rule text holds" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:8afa655b32d5a083", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142 (protocol 0.7): new edits, actions and query plus key_set and outputs fields that parse with serde defaults from older servers are additive, a minor bump; names are noun.verb; no rule text changed" }
+verified = { hash = "b3:d29785c355fd9952", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b adds the record output kind and RecordContainer, an addition: minor bump to 0.8 per R-API-001; no rule text changed" }
 -->
 
 <a id="R-API-001"></a>

@@ -4,7 +4,8 @@
 //! composites one scene and, because the fake GPU interop has no encode target,
 //! reads the frame back and pushes CPU RGBA. The mixer thread polls the engine
 //! clock. Encode threads live inside the encoder sessions. The output thread muxes
-//! FLV and publishes it. None of those threads lock the engine's collection.
+//! FLV and publishes it, or muxes fragmented MP4 and writes it to a recording file
+//! ([`Sink`]). None of those threads lock the engine's collection.
 //!
 //! The render and mixer threads catch a panic at their thread boundary, and every
 //! fatal error on the render, mixer and output threads goes to the same channel, so
@@ -33,9 +34,6 @@ use jstream_media::{
     AudioBuffer, AudioFormat, ChannelLayout, Codec, ColorInfo, ColorRange, ColorSpace, FrameSize,
     MediaTime, PixelFormat, Plane, Rounding, SampleFormat, Timebase, VideoFrame, VideoFrameInfo,
 };
-use jstream_mux::aac::{AOT_AAC_LC, AudioSpecificConfig};
-use jstream_mux::flv::{AudioTrack, FlvConfig, FlvTagger, MetadataStyle, VideoTrack};
-use jstream_mux::h264::AvcDecoderConfig;
 use jstream_platform::{
     AudioEncoderConfig, AudioInputTarget, AudioIo, AudioStream, Backends, Capture, CaptureStream,
     Codecs, HardwarePreference, MediaClock, RateControl, VideoEncoderConfig, VideoSurface,
@@ -49,6 +47,7 @@ use crate::drops::{
 };
 use crate::engine::Engine;
 use crate::lock;
+use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::{LinkState, LivePublish, OpenPublish};
 
 /// Base frame rate of this cut: one frame every 1/30 s.
@@ -101,8 +100,8 @@ pub(crate) fn cpu_draw() -> OpenDraw {
     })
 }
 
-/// A fake Annex-B encoder does not emit SPS/PPS. FLV still needs a decoder
-/// configuration, so the tagger is given the mux crate's baseline sets.
+/// A fake Annex-B encoder does not emit SPS/PPS. FLV and MP4 still need a decoder
+/// configuration, so the muxers are given the mux crate's baseline sets.
 const SPS: [u8; 5] = [0x67, 0x42, 0xC0, 0x1E, 0xDA];
 const PPS: [u8; 4] = [0x68, 0xCE, 0x3C, 0x80];
 
@@ -393,12 +392,13 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
     }
 }
 
-/// Opens the devices and encoders, then the threads. On failure the publish
-/// target is dropped: a one-shot target has to be set again, an opener opens a new
-/// one on the next start.
+/// Opens the devices and encoders, then the destination, then the threads. On failure
+/// the publish target is dropped: a one-shot target has to be set again, an opener
+/// opens a new one on the next start. A recording opened before the failure is
+/// removed, so its `.part` file doesn't block the next start.
 pub(crate) fn launch(
     parts: Parts,
-    publish: Box<dyn LivePublish>,
+    destination: Destination,
     output_id: OutputId,
     generation: u64,
     fail_tx: Sender<PipelineEvent>,
@@ -427,7 +427,9 @@ pub(crate) fn launch(
     // The mixer timestamps its first block `latency` before the clock, so the FLV
     // origin sits that far back. Later blocks and frames stay at or after it.
     let origin = stream_origin(parts.clock.as_ref(), &mixer)?;
-    let tagger = tagger(size, origin)?;
+    // Set once the start has succeeded; until then a recording is provisional.
+    let keep = Arc::new(AtomicBool::new(false));
+    let sink = Sink::open(destination, &stream_info(size, origin), Arc::clone(&keep))?;
     let stop = Arc::new(AtomicBool::new(false));
     let stats = PipelineStats::new();
     let (ready_tx, ready_rx) = mpsc::channel();
@@ -472,8 +474,7 @@ pub(crate) fn launch(
         let stop = Arc::clone(&stop);
         move || {
             output_loop(OutputJob {
-                publish,
-                tagger,
+                sink,
                 video: video_sub,
                 audio: audio_sub,
                 stats,
@@ -513,7 +514,10 @@ pub(crate) fn launch(
         final_tick: None,
     };
     match ready_rx.recv_timeout(parts.open_timeout) {
-        Ok(Ok(())) => Ok(running),
+        Ok(Ok(())) => {
+            keep.store(true, Ordering::Release);
+            Ok(running)
+        }
         Ok(Err(reason)) => {
             drop(running);
             Err(reason)
@@ -658,28 +662,17 @@ fn stream_origin(clock: &dyn MediaClock, mixer: &Mixer) -> Result<MediaTime, Str
         .map_err(|err| format!("stream origin: {err}"))
 }
 
-fn tagger(size: FrameSize, origin: MediaTime) -> Result<FlvTagger, String> {
-    let avc = AvcDecoderConfig::new(vec![SPS.to_vec()], vec![PPS.to_vec()])
-        .map_err(|err| format!("AVC decoder config: {err}"))?;
-    let aac = AudioSpecificConfig::new(AOT_AAC_LC, SAMPLE_RATE, 2)
-        .map_err(|err| format!("AAC config: {err}"))?;
-    let config = FlvConfig {
-        video: Some(VideoTrack {
-            width: size.width(),
-            height: size.height(),
-            frame_rate: Some(f64::from(FRAME_DEN) / f64::from(FRAME_NUM)),
-            bitrate_kbps: Some(VIDEO_KBPS),
-            avc: Some(avc),
-        }),
-        audio: Some(AudioTrack {
-            config: aac,
-            bitrate_kbps: Some(AUDIO_KBPS),
-        }),
-        origin: Some(origin),
-        metadata_style: MetadataStyle::File,
-        encoder: Some("jstream".into()),
-    };
-    FlvTagger::new(config).map_err(|err| format!("FLV tagger: {err}"))
+fn stream_info(size: FrameSize, origin: MediaTime) -> StreamInfo {
+    StreamInfo {
+        size,
+        origin,
+        frame_rate: f64::from(FRAME_DEN) / f64::from(FRAME_NUM),
+        video_kbps: VIDEO_KBPS,
+        audio_kbps: AUDIO_KBPS,
+        sample_rate: SAMPLE_RATE,
+        sps: &SPS,
+        pps: &PPS,
+    }
 }
 
 struct RenderJob {
@@ -1061,8 +1054,7 @@ fn mixer_loop(
 }
 
 struct OutputJob {
-    publish: Box<dyn LivePublish>,
-    tagger: FlvTagger,
+    sink: Sink,
     video: Subscription,
     audio: Subscription,
     stats: Arc<PipelineStats>,
@@ -1072,7 +1064,8 @@ struct OutputJob {
     fail: Sender<PipelineEvent>,
 }
 
-/// Muxes both encoder streams and publishes them. A publish error, or an encoder
+/// Muxes both encoder streams and publishes or records them. A publish or write
+/// error, or an encoder
 /// stream that ends before the pipeline was told to stop (the encoder failed, or its
 /// session closed), is fatal and goes to the failure channel. A lost link is not an
 /// error: the publish target drops and counts tags while it reconnects, and this
@@ -1086,8 +1079,7 @@ struct OutputJob {
 /// is already on its way to `stopped`.
 fn output_loop(job: OutputJob) {
     let OutputJob {
-        mut publish,
-        mut tagger,
+        mut sink,
         video,
         audio,
         stats,
@@ -1096,15 +1088,9 @@ fn output_loop(job: OutputJob) {
         stop,
         fail: fail_tx,
     } = job;
-    let started = match tagger.start() {
-        Ok(tags) => publish_tags(&mut publish, &tags),
-        Err(err) => Err(format!("FLV start: {err}")),
-    };
-    if let Err(err) = started {
+    if let Err(err) = sink.start() {
         report(&fail_tx, err);
-        if let Err(err) = publish.finish() {
-            tracing::error!(error = %err, "publish finish failed");
-        }
+        sink.finish();
         return;
     }
     let mut video_done = false;
@@ -1126,7 +1112,7 @@ fn output_loop(job: OutputJob) {
     while failed.is_none() && (!video_done || !audio_done) {
         if drain.is_none() && stop.load(Ordering::Acquire) {
             let deadline = Instant::now() + STOP_DRAIN;
-            publish.stop_by(deadline);
+            sink.stop_by(deadline);
             drain = Some(deadline);
         }
         if drain.is_some_and(|deadline| Instant::now() >= deadline) {
@@ -1136,7 +1122,7 @@ fn output_loop(job: OutputJob) {
         if !video_done {
             match video.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
-                    if let Err(err) = forward(&mut publish, &mut tagger, &packet, &output_drops) {
+                    if let Err(err) = sink.forward(&packet, &output_drops) {
                         failed = Some(err);
                     }
                 }
@@ -1150,7 +1136,7 @@ fn output_loop(job: OutputJob) {
         if failed.is_none() && !audio_done {
             match audio.recv_timeout(Duration::from_millis(2)) {
                 Ok(Some(packet)) => {
-                    if let Err(err) = forward(&mut publish, &mut tagger, &packet, &output_drops) {
+                    if let Err(err) = sink.forward(&packet, &output_drops) {
                         failed = Some(err);
                     }
                 }
@@ -1164,14 +1150,14 @@ fn output_loop(job: OutputJob) {
         *lock(&stats.video_subscriber) = video.stats();
         *lock(&stats.audio_subscriber) = audio.stats();
         if failed.is_none()
-            && let Err(err) = publish.poll()
+            && let Err(err) = sink.poll()
         {
-            failed = Some(format!("publish poll failed: {err}"));
+            failed = Some(err);
         }
         if failed.is_none() {
-            link = report_link(publish.as_ref(), link, &fail_tx);
+            link = report_link(&sink, link, &fail_tx);
         }
-        link_drops.store(publish.dropped(), Ordering::Relaxed);
+        link_drops.store(sink.dropped(), Ordering::Relaxed);
     }
     if let Some(err) = failed {
         if stop.load(Ordering::Acquire) {
@@ -1189,10 +1175,8 @@ fn output_loop(job: OutputJob) {
             "stop did not drain the output in time; dropped the packets still queued"
         );
     }
-    link_drops.store(publish.dropped(), Ordering::Relaxed);
-    if let Err(err) = publish.finish() {
-        tracing::error!(error = %err, "publish finish failed");
-    }
+    link_drops.store(sink.dropped(), Ordering::Relaxed);
+    sink.finish();
 }
 
 /// Takes and counts the packets queued on `sub` without sending them. Nothing when
@@ -1213,12 +1197,8 @@ fn discard(sub: &Subscription, done: bool) -> u64 {
 /// Tells the watcher when the publish link has changed from `last`, and returns
 /// the link's state now. Giving up (`Failed`) is not reported here: the next send
 /// or poll fails with it, and that error settles the output `failed`.
-fn report_link(
-    publish: &dyn LivePublish,
-    last: LinkState,
-    fail: &Sender<PipelineEvent>,
-) -> LinkState {
-    let now = publish.link_state();
+fn report_link(sink: &Sink, last: LinkState, fail: &Sender<PipelineEvent>) -> LinkState {
+    let now = sink.link_state();
     let event = match (last, now) {
         (LinkState::Active, LinkState::Reconnecting) => PipelineEvent::LinkDown,
         (LinkState::Reconnecting, LinkState::Active) => PipelineEvent::LinkUp,
@@ -1228,36 +1208,6 @@ fn report_link(
     // The receiver is gone once the pipeline is being torn down; nothing to tell.
     let _ = fail.send(event);
     now
-}
-
-/// Muxes one packet and sends its tags. A packet the muxer rejects is dropped. A
-/// destination that stops accepting tags ends the output loop.
-fn forward(
-    publish: &mut Box<dyn LivePublish>,
-    tagger: &mut FlvTagger,
-    packet: &jstream_media::Packet,
-    output_drops: &AtomicU64,
-) -> Result<(), String> {
-    match tagger.push(packet) {
-        Ok(tags) => publish_tags(publish, &tags),
-        Err(err) => {
-            output_drops.fetch_add(1, Ordering::Relaxed);
-            tracing::warn!(error = %err, "dropping a packet the muxer rejected");
-            Ok(())
-        }
-    }
-}
-
-fn publish_tags(
-    publish: &mut Box<dyn LivePublish>,
-    tags: &[jstream_mux::flv::FlvTag],
-) -> Result<(), String> {
-    for tag in tags {
-        publish
-            .send_tag(tag)
-            .map_err(|err| format!("sending an FLV tag: {err}"))?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

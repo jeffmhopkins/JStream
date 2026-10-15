@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:6d1d08042c2dab8a", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Stale via ARCH#data-model (#142 Built so far adds outputs): encode reads no collection outputs; its API and tests list are unchanged" }
+verified = { hash = "b3:05b67d0cb8a6484b", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Stale via ARCH#threading/#data-model (F2b): a recording output subscribes to the sessions like the RTMP one; one-session-per-mix wording and API list hold" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:d852e03c5535905f", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#142 outputs and stream keys) into #133: prose is main's; re-read Engine, Outputs and Tests bullets (key store, output_kind, collection outputs); #133's change is only Running field and OpenedAudio binding order, which no bullet describes" }
+verified = { hash = "b3:e33fae8d3ca12c01", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b: purpose says a recording output needs no publish target; Tests bullet lists the three recording tests in tests.rs cpu_pipeline; checked against engine.rs and runtime/sink.rs" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -27,7 +27,7 @@ host hands them an `InProcessControl` as a `dyn Control`.
 The control plane is the scene graph, the sessions and `video.snapshot`.
 `output.start` runs the media pipeline when the host calls
 `with_backends` and gives it a publish target (`with_publish` or
-`with_publish_opener`). Without backends, an output action stays the placeholder
+`with_publish_opener`); a recording output needs no publish target. Without backends, an output action stays the placeholder
 state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
@@ -71,7 +71,9 @@ state machine. Contents:
   `connect_rtmp` against a slow fake RTMP server on loopback, one that hangs up
   and is reconnected to, and one that stops reading while a stop's deadline runs out,
   a publish opener connecting that fake server on every start (start, media, stop,
-  twice) and one that cannot connect, overload drops from a
+  twice) and one that cannot connect, a recording output writing MP4 to a temp dir
+  (renamed into place on stop, refused when the file exists, no `.part` file left
+  by a failed start), overload drops from a
   fake encoder and the mixer reported in `stats.tick`, render and mixer panics
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
   the hidden `Engine::with_cpu_compositor`), the output edits and the stream-key
@@ -92,7 +94,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:cab2a58451ec8ea0", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#142) into #133: prose is main's; re-read Outputs, Stream keys and Pipeline/stop paragraphs; #133's drop order (InputControls after _streams) touches neither the output collection nor the key store and changes no described state, error or deadline" }
+verified = { hash = "b3:3b021f8e1ca40526", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b: Outputs paragraph says a recording never calls the opener; new Recording paragraph matches runtime/sink.rs (open in launch, provisional .part removed on failed start, keep flag, write errors fatal, muxer rejects counted) and engine.rs record_path; Dependencies name fMP4 and the recorder; one pipeline at a time still holds" }
 -->
 
 ### Engine and sessions
@@ -130,7 +132,8 @@ canvas `FrameSize` and the media clock's time base), `jstream-render` (the snaps
 and the pipeline compositor), `jstream-platform` (backend traits the host injects, and
 the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its drop
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
-`jstream-mux` (FLV), `jstream-outputs` (the reconnecting RTMP publisher), `png`
+`jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
+publisher and the recording file sink), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
@@ -300,7 +303,8 @@ delete a running output (`invalid_argument`), so the batch passes it the running
 A host can also declare an output with `Engine::with_output(id)`, outside the
 collection: it starts `stopped`, has no target and stays known whatever the collection
 holds. A live host reads a collection output's target with `output_kind` when its
-publish opener runs; wiring that into the daemon is not done yet.
+publish opener runs; wiring that into the daemon is not done yet. A recording output
+(`OutputKind::Record`) never calls the opener or takes a one-shot target.
 
 **Stream keys.** `with_key_store` injects the OS credential store
 (`jstream_platform::StreamKeyStore`). `output.set_key` checks that the output is in the
@@ -353,8 +357,25 @@ thread's drain is bounded, see the RTMP paragraph below), then emits
 `stopped`. The start then answers `action_failed` and does not emit `active`. The
 publish target (one-shot or opened) is dropped on that path too.
 
+**Recording.** When the collection's output is a `Record { path, container: mp4 }`,
+the start sends the encoded packets to a file instead of a publish target
+(`runtime/sink.rs`): the output thread muxes fragmented MP4 with
+`jstream-outputs`' `Recorder`, which writes `<path>.part`, syncs each fragment (one
+per keyframe, every two seconds) and renames the file to `path` when the output
+stops. The file is opened in `launch`, after the devices and encoders and before the
+threads, so a path that can't be recorded to (an existing file or `.part`, a missing
+directory) fails the start with `action_failed` and `opening the recording: <reason>`.
+Until the compositor has opened, the recording is provisional: a start that fails
+after opening the file removes the `.part` file, so it doesn't block the next start.
+Once `active`, the `.part` file is kept whatever happens: a write error (a full disk
+among them) settles `failed` and leaves it readable up to its last fragment, and a
+failed rename at stop is logged with the `.part` path. A packet the muxer rejects is
+dropped and counted in `output_packets`. Disk writes run on the output thread and
+may block; the encoder subscriber queues absorb that and drop when full. Only one
+pipeline runs at a time, so recording while streaming waits for shared encoders (F3).
+
 Once the pipeline is `active`, a fatal error on any pipeline thread is sent on a
-channel: a `send_tag` or `poll` failure, an encoder stream that ends before the
+channel: a `send_tag` or `poll` failure, a recording write failure, an encoder stream that ends before the
 pipeline was told to stop (the encoder failed, or its session closed), and the
 render and mixer failures below.
 A watcher the control thread started settles `failed`, emits `output.state_changed`,

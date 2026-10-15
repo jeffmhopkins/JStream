@@ -6,10 +6,10 @@
 //! edit succeeds does the working copy replace the state.
 
 use crate::model::{Graph, Item, Output, Scene, Source, State};
-use crate::target::rtmp_url_problem;
+use crate::target::{record_path_problem, rtmp_url_problem};
 use jstream_protocol::{
-    Batch, Crop, Edit, EntityKind, ItemId, ItemTransform, OutputId, OutputKind, ProtocolError, Rev,
-    RtmpTarget, SceneId, SourceId, SourceKind,
+    Batch, Crop, Edit, EntityKind, ItemId, ItemTransform, OutputId, OutputKind, ProtocolError,
+    RecordContainer, Rev, RtmpTarget, SceneId, SourceId, SourceKind,
 };
 use std::collections::BTreeSet;
 
@@ -403,6 +403,9 @@ fn apply_edit(
             }
             match kind {
                 OutputKind::Rtmp { target } => check_target(target, at, "kind.target")?,
+                OutputKind::Record { path, container } => {
+                    check_record(path, *container, at)?;
+                }
                 _ => return Err(unsupported(at, "kind", "this output kind")),
             }
             state.outputs.insert(
@@ -461,6 +464,18 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
             None => Ok(()),
         },
         _ => Err(unsupported(at, name, "this RTMP target")),
+    }
+}
+
+/// Checks a recording output's path and container.
+fn check_record(path: &str, container: RecordContainer, at: usize) -> Result<(), ProtocolError> {
+    match container {
+        RecordContainer::Mp4 => {}
+        _ => return Err(unsupported(at, "kind.container", "this container")),
+    }
+    match record_path_problem(path) {
+        Some(problem) => Err(invalid(at, "kind.path", problem)),
+        None => Ok(()),
     }
 }
 

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:6472eee194ecc612", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#152 true-peak and loudness meters) into #133: only the verified line conflicted; re-read the section: main's meter API, Errors and 'not yet run by the mixer' wording sit beside #133's add_input keep-alive sentence, and both match handle.rs, mixer.rs and meter/" }
+verified = { hash = "b3:82cc42839d385175", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Stale via ARCH#threading (F2b: output thread may write MP4 to a file): audio threads, rings and mixer unchanged" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -97,7 +97,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:8c88bd69420113d8", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#133 review N1: add_input rustdoc now says to keep the InputControl until the stream is closed and the mixer dropped, else the free moves to an RT thread; doc comment only, no code change; re-read the section and its keep-alive / no-collector wording still matches" }
+verified = { hash = "b3:78ecdf09a3e3d437", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Stale via ARCH#threading (F2b output thread recording): R-RT-001 audio thread rules and ring hand-off unaffected; the disk writes are on the output thread, not an audio thread" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

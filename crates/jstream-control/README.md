@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:8d484cc48e9ec9b1", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: Mock section says every edit but the output ones; output.status key_set always false; the 0.7 output edits, output.list and key actions answer internal and state.get reports no outputs (mock.rs action/edit/query fallthroughs)" }
+verified = { hash = "b3:d0e2632bf866fb29", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Stale via ARCH#protocol (record kind is 0.8): mock still answers internal for every output edit, record included; no text names the protocol minor except the 0.7 output-configuration bullet, which still holds" }
 -->
 
 ### The trait

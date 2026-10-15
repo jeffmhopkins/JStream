@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:9b30c77b25300ba6", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#142: State and new Output model bullets; Outputs bullet for target.rs URL checks, inverses and apply_with_running; Reading lists output.list and Output::to_info; Tests bullet names output URL checks and the running-delete refusal" }
+verified = { hash = "b3:67d8e45509518662", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b: Output bullet names the record kind; Outputs bullet adds record path checks (target.rs record_path_problem, field kind.path) and set_target refusing a recording; checked against apply.rs and target.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -33,7 +33,8 @@ codes, so the engine passes them to clients unchanged.
   never deletes its source.
 - `Scene`: a name and its items in stacking order, bottom first.
 - `Item`: the source it places, a `transform`, a `crop` and `visible`.
-- `Output`: an ID and an `OutputKind` (so far only RTMP to a generic URL). Whether it
+- `Output`: an ID and an `OutputKind` (so far RTMP to a generic URL, or a recording
+  to an MP4 file). Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -60,7 +61,11 @@ goes up by exactly one, and the result carries the **inverse batch**.
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
   name, and one that could carry a credential (`user:password@`, a query or a
-  fragment). `output.delete` is undone by `output.create` with its kind, and
+  fragment). A recording's `path` is rejected (field `kind.path`) when it is empty,
+  over 4096 bytes, has control characters, is not absolute on the engine's machine,
+  or doesn't end in a file name; whether the file can be written is the engine's
+  check at `output.start`. `output.set_target` on a recording fails with
+  `invalid_argument` (it has no RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
   with `invalid_argument`, in edit order.
