@@ -120,6 +120,7 @@ impl Capture for WgcCapture {
     }
 
     fn start(&self, target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        hold_mta_for_the_process()?;
         let mta = MtaUsage::new()?;
         let resolved = resolve(target)?;
         if !GraphicsCaptureSession::IsSupported().os("GraphicsCaptureSession::IsSupported")? {
@@ -133,6 +134,25 @@ impl Capture for WgcCapture {
             mta,
         )?))
     }
+}
+
+/// Keeps the process's multithreaded apartment until the process exits, from the first
+/// capture on.
+///
+/// The `windows` crate caches agile WinRT activation factories (here the capture
+/// session's and frame pool's statics) for the whole process and never releases them.
+/// When the last MTA usage goes, COM uninitialises and may unload the DLLs behind them,
+/// so the next capture called through a dangling factory and crashed with an access
+/// violation (seen on hardware: a second capture in one process). Holding one usage for
+/// the process keeps those factories valid. It is a process-lifetime OS hold, set once
+/// and never changed, not application state (R-RS-008).
+fn hold_mta_for_the_process() -> Result<(), PlatformError> {
+    static HOLD: OnceLock<MtaUsage> = OnceLock::new();
+    if HOLD.get().is_none() {
+        // A thread that loses the race drops its usage at once, which balances it.
+        let _ = HOLD.set(MtaUsage::new()?);
+    }
+    Ok(())
 }
 
 /// What a capture item is created for.
@@ -643,15 +663,19 @@ impl Drop for Mapped<'_> {
 fn on_frame(
     pool: &Direct3D11CaptureFramePool,
     shared: &Shared,
-    converter: &Mutex<Converter>,
+    converter: &Mutex<Option<Converter>>,
 ) -> Result<(), PlatformError> {
     if shared.failure.get().is_some() {
         return Ok(());
     }
-    let mut conv = converter.lock().map_err(|_| PlatformError::InvalidState {
+    let mut guard = converter.lock().map_err(|_| PlatformError::InvalidState {
         what: "WGC capture",
         state: "the frame handler panicked",
     })?;
+    // `None` once the stream has dropped: an event already on its way does nothing.
+    let Some(conv) = guard.as_mut() else {
+        return Ok(());
+    };
     // An event can find the pool empty (an earlier event took its frame): not an error.
     let Ok(frame) = pool.TryGetNextFrame() else {
         return Ok(());
@@ -696,6 +720,9 @@ struct WgcStream {
     item: GraphicsCaptureItem,
     frame_token: Option<i64>,
     closed_token: Option<i64>,
+    /// The frame handler's state, shared with the handler, which WinRT may release
+    /// later, on a thread of its own. Emptied when the stream drops.
+    converter: Arc<Mutex<Option<Converter>>>,
     /// Declared last: the apartment outlives the WinRT objects above.
     _mta: MtaUsage,
 }
@@ -738,11 +765,11 @@ impl WgcStream {
             captured: AtomicU64::new(0),
             skipped: AtomicU64::new(0),
         });
-        let converter = Mutex::new(Converter {
+        let converter = Arc::new(Mutex::new(Some(Converter {
             device,
             pool_size: size,
             path,
-        });
+        })));
         // From here on, dropping the stream unregisters and closes everything.
         let mut stream = Self {
             shared: Arc::clone(&shared),
@@ -751,6 +778,7 @@ impl WgcStream {
             item,
             frame_token: None,
             closed_token: None,
+            converter: Arc::clone(&converter),
             _mta: mta,
         };
         let on_shared = Arc::clone(&shared);
@@ -825,8 +853,7 @@ impl CaptureStream for WgcStream {
 
 impl Drop for WgcStream {
     fn drop(&mut self) {
-        // Errors at teardown change nothing. A handler already running finishes on its
-        // own thread; it holds its own references to what it uses.
+        // Errors at teardown change nothing.
         if let Some(t) = self.frame_token.take() {
             let _ = self.pool.RemoveFrameArrived(t);
         }
@@ -835,6 +862,17 @@ impl Drop for WgcStream {
         }
         let _ = self.session.Close();
         let _ = self.pool.Close();
+        // Release the handler's D3D11, WinRT and GPU objects here, on this thread, while
+        // the apartment is still held, rather than whenever WinRT releases the handler.
+        // Waits for a handler that is running to finish its frame. A panicked handler
+        // poisoned the lock; its state is released all the same.
+        let converter = match self.converter.lock() {
+            Ok(mut guard) => guard.take(),
+            Err(poisoned) => poisoned.into_inner().take(),
+        };
+        drop(converter);
+        // A frame no one took holds a slot's texture and the GPU context's device.
+        drop(self.shared.mailbox.take());
     }
 }
 
@@ -931,6 +969,26 @@ mod device_tests {
     use super::WgcCapture;
     use crate::{QpcClock, WindowsGpu};
 
+    /// `pts` is on the clock's time line: within the last second, and at most 100 ms
+    /// ahead of `now`. `SystemRelativeTime` can be ahead of the clock: on a 29 Hz display
+    /// the GPU path, which delivers a frame within milliseconds, saw frames stamped about
+    /// 15 ms after `now`, less than one refresh, so the time is the composition's target
+    /// rather than when the frame was ready.
+    fn assert_recent(
+        pts: jstream_platform::media::MediaTime,
+        now: jstream_platform::media::MediaTime,
+    ) {
+        let (pts, now) = (pts.ticks(), now.ticks());
+        assert!(
+            pts <= now + 1_000_000,
+            "pts {pts} more than 100 ms after now {now}"
+        );
+        assert!(
+            now - pts < 10_000_000,
+            "pts {pts} more than a second before now {now}"
+        );
+    }
+
     /// The whole start path for the race in `tests`: the real `CreateForWindow` on a
     /// destroyed window gives `NotFound`.
     #[test]
@@ -1001,16 +1059,7 @@ mod device_tests {
             }
             // pts is on the clock's time line: in the last second, and not in the future.
             assert_eq!(info.pts.timebase(), clock.timebase());
-            assert!(
-                info.pts.ticks() <= now.ticks(),
-                "{:?} after {now:?}",
-                info.pts
-            );
-            assert!(
-                now.ticks() - info.pts.ticks() < 10_000_000,
-                "{:?} vs {now:?}",
-                info.pts
-            );
+            assert_recent(info.pts, now);
             pts.push(info.pts.ticks());
         }
         // A display delivers a first frame even if nothing changes on it.
@@ -1026,6 +1075,30 @@ mod device_tests {
             capture.start(&missing).err(),
             Some(PlatformError::NotFound { .. })
         ));
+    }
+
+    /// A second capture in one process, after the first has been dropped with
+    /// everything it held (R-TEST-001). Before the process kept its apartment, the second
+    /// start called a cached WinRT factory whose DLL COM had unloaded, and crashed. Run it
+    /// on its own to exercise that: other tests in the process may already have started
+    /// a capture.
+    #[test]
+    #[ignore = "needs a display and Windows.Graphics.Capture"]
+    fn captures_again_after_a_capture_is_dropped() {
+        for round in 0..3 {
+            let capture = WgcCapture::new();
+            let mut stream = capture.start(&primary(&capture).target).expect("start");
+            let start = Instant::now();
+            while stream.latest().expect("latest").is_none() {
+                assert!(
+                    start.elapsed() < Duration::from_secs(2),
+                    "round {round}: no frame"
+                );
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            drop(stream);
+            drop(capture);
+        }
     }
 
     /// The primary display's capture target.
@@ -1144,16 +1217,7 @@ mod device_tests {
                 assert_eq!(size, info.size);
             }
             assert_eq!(info.pts.timebase(), clock.timebase());
-            assert!(
-                info.pts.ticks() <= now.ticks(),
-                "{:?} after {now:?}",
-                info.pts
-            );
-            assert!(
-                now.ticks() - info.pts.ticks() < 10_000_000,
-                "{:?} vs {now:?}",
-                info.pts
-            );
+            assert_recent(info.pts, now);
             assert!(
                 last_pts.is_none_or(|p| p < info.pts.ticks()),
                 "pts increase"

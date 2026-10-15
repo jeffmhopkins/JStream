@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:34658075d3c0001e", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into E3a: section text is E3a's (main changed only the verified line, via D1's ARCH#threading/crate-map edits, which don't concern this crate); re-read WgcCapture on_gpu, WindowsGpu fence values, Not yet, Tests against capture/ring.rs, gpu/capture.rs, wgc.rs, and the edited platform README purpose" }
+verified = { hash = "b3:45ce41ac5a653580", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3a hardware fixes: re-read WgcCapture Times (pts may be up to 100 ms ahead, as seen on Jeff's 29 Hz display), Threads (process-lifetime MTA hold for windows-rs's cached factories), new Teardown bullet (handler state released on drop) and Tests (three captures in one process) against wgc.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -99,8 +99,10 @@ The code is ported from spikes S1 to S3. This first cut has:
     the capture thread, and the mailbox boxes every frame it is given.
   - **Times:** `pts` is the frame's `SystemRelativeTime`, which WGC reports as QPC in
     100 ns units. That is `QpcClock`'s time line and unit, so it is used as is. The
-    capture test checks that every `pts` is at most a second before `QpcClock::now`, and
-    not after it.
+    capture tests check that every `pts` is at most a second before `QpcClock::now` and
+    at most 100 ms after it. It can be ahead: on a 29 Hz display the GPU path, which
+    delivers a frame within milliseconds, saw frames stamped about 15 ms after `now`, so
+    the time is the composition's target rather than when the frame was ready.
   - **Settings:** the yellow capture border is turned off and the cursor is captured,
     best effort: builds without these settings keep their defaults.
   - **End of a capture:** when the window closes or the display goes away, `latest`
@@ -109,7 +111,14 @@ The code is ported from spikes S1 to S3. This first cut has:
     ([R-UNSAFE-005](../../docs/RULES.md#R-UNSAFE-005)); the enumeration callbacks catch
     panics too.
   - **Threads:** each capture keeps the process MTA alive (`CoIncrementMTAUsage`), so it
-    can be started, read and dropped from threads that never initialised COM.
+    can be started, read and dropped from threads that never initialised COM. From the
+    first capture on, one more usage is held until the process exits: the `windows`
+    crate caches agile WinRT activation factories for the process, and once the last
+    usage went, COM could unload the DLLs behind them, so a later capture crashed.
+  - **Teardown:** dropping a stream unregisters its handlers, closes the session and
+    pool, and then releases the handler's devices, textures and ring on the dropping
+    thread, waiting for a handler that is mid-frame. A frame left in the mailbox is
+    released too.
   - **Start:** a target that goes between the lookup and the start of the capture is
     `NotFound` (except a reused window handle), as for a target that was never there.
   - **GPU path** (`on_gpu`, for a context `WindowsGpu` opened; another backend's is
@@ -258,8 +267,8 @@ audio devices, no Media Foundation, no GPU and no display
 ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The GPU test renders into an encode
 target, stages it and checks that the shared fence passes the staged value. The capture
 tests list the displays, capture the primary display for a second, checking the
-frames' format and `pts`, and start a capture of a destroyed window, which must be
-`NotFound`. The GPU capture tests read back twenty staged frames (each opaque, so a
+frames' format and `pts`, start a capture of a destroyed window, which must be
+`NotFound`, and capture three times in a row in one process. The GPU capture tests read back twenty staged frames (each opaque, so a
 read before the copy finished would show), refuse another device's queue, outlive the
 context, and hold every frame until the ring drops new ones, then release them. They
 need screen activity, so move the mouse while they run. Run them on a Windows machine with a microphone, speakers, a
