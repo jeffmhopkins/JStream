@@ -20,7 +20,8 @@ use std::sync::Arc;
 ///
 /// A failure to connect is returned before anything is written to `output`, so it exits
 /// with the CLI's usual code (2 usage, 3 disconnected). The server sends `hello` itself,
-/// before the first tool call that needs the engine, with the MCP client's name. Once
+/// at `initialize`, with the MCP client's name, so an idle agent keeps its session past
+/// `jstream-server`'s handshake timeout. Once
 /// serving, a lost engine connection does not stop the proxy: `jstream-mcp` answers each
 /// tool call that needs the engine with its `disconnected` tool error, and the proxy
 /// keeps serving until `input` ends, then returns `Ok`. Only failing to read `input`

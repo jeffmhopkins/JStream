@@ -181,6 +181,8 @@ fn rpc_error(reply: &Value) -> (i64, String) {
 fn handshake_list_and_call_round_trip() {
     let f = fixture();
     assert_eq!(f.legacy(1, "ping", json!({})), json!({}));
+    // Nothing is sent to the engine before the client introduces itself.
+    assert!(f.hello_names().is_empty());
     let init = f.initialize();
     assert_eq!(init["protocolVersion"], "2025-11-25");
     assert_eq!(init["capabilities"], json!({"tools": {}}));
@@ -193,8 +195,9 @@ fn handshake_list_and_call_round_trip() {
     let initialized = json!({"jsonrpc": "2.0", "method": "notifications/initialized"});
     assert_eq!(f.send(&initialized), None);
     assert_eq!(f.legacy(1, "ping", json!({})), json!({}));
-    // `hello` waits for the first call that needs the engine.
-    assert!(f.hello_names().is_empty());
+    // `initialize` opened the engine session, under the MCP client's name, so a server
+    // that times out a silent connection doesn't close it while the agent is idle.
+    assert_eq!(f.hello_names(), ["agent-x"]);
 
     let list = f.legacy(2, "tools/list", json!({}));
     let names: Vec<&str> = list["tools"]
@@ -275,7 +278,7 @@ fn handshake_list_and_call_round_trip() {
         json!({"op": {"type": "output.start", "output_id": "out_rec"}}),
     );
     assert_eq!(ok(&started)["result"], json!({"kind": "action"}));
-    // One session, opened once, under the MCP client's name.
+    // One session, opened once (at `initialize`), under the MCP client's name.
     assert_eq!(f.hello_names(), ["agent-x"]);
 }
 
@@ -301,6 +304,8 @@ fn handshake_negotiates_a_served_revision() {
 fn stateless_requests_round_trip() {
     let f = fixture();
     let discovered = f.modern("server/discover", json!({}));
+    // `server/discover` opened the engine session, as `initialize` does.
+    assert_eq!(f.hello_names(), ["modern-agent"]);
     let result = &discovered["result"];
     assert_eq!(result["resultType"], "complete");
     assert_eq!(
@@ -438,8 +443,9 @@ fn bad_arguments_are_malformed_tool_errors() {
     // Arguments are optional in `CallToolRequest`; `scene` needs `op`.
     let reply = f.legacy(3, "tools/call", json!({"name": "scene"}));
     assert_eq!(tool_error(&reply)["code"], "malformed");
-    // Nothing reached the engine.
-    assert!(f.hello_names().is_empty());
+    // Nothing reached the engine but `initialize`'s `hello`.
+    assert_eq!(f.hello_names(), ["agent-x"]);
+    assert_eq!(f.engine.rev().0, 0);
 }
 
 #[test]
@@ -522,6 +528,35 @@ fn a_session_that_cannot_reopen_says_the_call_was_not_sent() {
     assert_eq!(f.engine.rev().0, 0);
 }
 
+/// `hello` is sent when the client introduces itself. If it fails there, `initialize`
+/// still succeeds and the next call that needs the engine tries again; a stateless client
+/// that skips `server/discover` gets its `hello` before its first engine call.
+#[test]
+fn the_session_opens_at_initialize_or_else_before_the_first_call() {
+    let f = fixture();
+    f.control.closed.store(true, Ordering::Relaxed);
+    let init = f.initialize();
+    assert_eq!(init["protocolVersion"], "2025-11-25");
+    assert_eq!(f.hello_names(), ["agent-x"]);
+    let error = tool_error(&f.call_tool("scene", json!({"op": {"type": "scene.list"}}))).clone();
+    assert_eq!(error["code"], "disconnected");
+    assert!(
+        error["message"]
+            .as_str()
+            .is_some_and(|m| m.contains("not sent")),
+        "{error}"
+    );
+    assert_eq!(f.hello_names(), ["agent-x", "agent-x"]);
+
+    let f = fixture();
+    let called = f.modern(
+        "tools/call",
+        json!({"name": "scene", "arguments": {"op": {"type": "scene.list"}}}),
+    );
+    ok(&called["result"]);
+    assert_eq!(f.hello_names(), ["modern-agent"]);
+}
+
 /// Reads the `events` tool after `after`; returns its structured result.
 fn read_events(f: &Fixture, after: Option<u64>) -> Value {
     let arguments = after.map_or_else(|| json!({}), |after| json!({ "after": after }));
@@ -532,7 +567,7 @@ fn read_events(f: &Fixture, after: Option<u64>) -> Value {
 fn events_report_every_change_with_a_cursor() {
     let f = fixture();
     f.initialize();
-    // The first read opens the session, so there is nothing before it.
+    // `initialize` opened the session, and nothing has happened since.
     let first = read_events(&f, None);
     assert_eq!(
         first,
@@ -692,7 +727,8 @@ fn describe_api_returns_the_protocol_schema() {
     f.initialize();
     let result = f.call_tool("describe_api", json!({}));
     assert_eq!(ok(&result), &json_schema());
-    assert!(f.hello_names().is_empty());
+    // Only `initialize`'s `hello`: describing the API sends nothing.
+    assert_eq!(f.hello_names(), ["agent-x"]);
 }
 
 #[test]

@@ -60,9 +60,13 @@ enum Era {
 ///
 /// It owns one [`Control`] session: every tool call acts as that session's client, so
 /// its edits form one undo history and carry one name in the audit log (ADR-0013). The
-/// session's `hello` is sent lazily, before the first tool call that needs the engine,
-/// with the MCP client's name. Just before that first `hello`, the server subscribes to
-/// the session's events and buffers them for the `events` tool.
+/// session's `hello` is sent as soon as the MCP client introduces itself, with its name:
+/// at `initialize` (handshake-based revisions) or at `server/discover` (2026-07-28). So a
+/// server that times out a silent connection (`jstream-server`'s handshake timeout)
+/// doesn't close the session while the agent is still idle. If that `hello` fails, or the
+/// client skipped both, it is sent before the next tool call that needs the engine. Just
+/// before the first `hello`, the server subscribes to the session's events and buffers
+/// them for the `events` tool.
 ///
 /// [`handle`](Server::handle) answers one message. It needs no particular executor: the
 /// future only awaits the [`Control`] futures. [`serve_stdio`](crate::serve_stdio) runs it
@@ -126,7 +130,12 @@ impl Server {
 
     async fn request(&self, method: &str, params: &Map<String, Value>) -> Result<Value, RpcError> {
         if method == "initialize" {
-            return self.initialize(params);
+            let result = self.initialize(params)?;
+            let client_name = lock(&self.legacy)
+                .as_ref()
+                .and_then(|s| s.client_name.clone());
+            self.open_early(client_name).await;
+            return Ok(result);
         }
         let meta = params.get(META).and_then(Value::as_object);
         let era = match meta.and_then(|m| m.get(META_PROTOCOL_VERSION)) {
@@ -166,7 +175,10 @@ impl Server {
                     .and_then(Value::as_str)
                     .map(str::to_owned);
                 let mut result = match method {
-                    "server/discover" => self.discover(),
+                    "server/discover" => {
+                        self.open_early(client_name).await;
+                        self.discover()
+                    }
                     "tools/list" => self.list(params)?,
                     "tools/call" => self.call(params, client_name).await?,
                     _ => return Err(method_not_found(method)),
@@ -388,6 +400,19 @@ impl Server {
                 }
                 .into(),
             ),
+        }
+    }
+
+    /// Opens the engine session when the MCP client introduces itself (`initialize`,
+    /// `server/discover`). A failure doesn't fail the request: the next tool call that
+    /// needs the engine tries again and reports it.
+    async fn open_early(&self, client_name: Option<String>) {
+        let client_name = client_name.unwrap_or_else(|| DEFAULT_CLIENT_NAME.to_owned());
+        if let Err(error) = self.open(client_name).await {
+            tracing::warn!(
+                error = %error,
+                "could not open the engine session; the next tool call tries again"
+            );
         }
     }
 
