@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:bab3a709a6be2e47", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: hosts table gains jstream-browser-helper as a non-host subprocess exe; diagram unchanged" }
+verified = { hash = "b3:96a546c194a0c7c6", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: desktop host row says its cef feature (off by default) opens browser pages in CEF; diagram unchanged" }
 -->
 
 ```
@@ -54,7 +54,7 @@ verified = { hash = "b3:bab3a709a6be2e47", by = "agent:claude@session_01E4Mb9bbG
 
 | Host (`apps/`) | What it is |
 |---|---|
-| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
+| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until CEF's sandbox and file limits land, opens browser sources' pages in CEF. |
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-browser-helper` | Not a host: CEF's subprocess exe for browser sources, which hosts that turn on browser sources ship next to their own exe ([ADR-0046](adr/0046-browser-crate-and-helper.md), [its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
@@ -117,7 +117,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:33bc1c3b4c13439f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 after merging main: main's plugin-proto row plus this PR's jstream-browser row, platform-windows row without CEF and the helper in the apps row; lint-deps passes" }
+verified = { hash = "b3:0f13b572119dc9b3", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: apps row says jstream-desktop also links sources, and jstream-browser with cef; layers hold (lint-deps)" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -157,7 +157,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, CEF's subprocess exe ([ADR-0046](adr/0046-browser-crate-and-helper.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, CEF's subprocess exe ([ADR-0046](adr/0046-browser-crate-and-helper.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -788,14 +788,14 @@ the output gets a black frame. None of this is built yet.
 ## Browser source
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:373cc6c6528e4876", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: intro now says built in jstream-browser, not yet in a host or the program mix; S4 choices and results untouched" }
+verified = { hash = "b3:230a4eecaba61445", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: intro says the desktop app wires it in behind cef, daemon and program mix don't yet; S4 text untouched" }
 -->
 
 A browser source is a CEF off-screen browser
 ([ADR-0021](adr/0021-browser-source.md)), built in `jstream-browser`
 ([ADR-0046](adr/0046-browser-crate-and-helper.md),
-[its README](../crates/jstream-browser/README.md)) but not yet wired into a host or the
-program mix. Each `OnAcceleratedPaint`
+[its README](../crates/jstream-browser/README.md)). The desktop app wires it in behind
+its off-by-default `cef` feature; the daemon and the program mix don't use it yet. Each `OnAcceleratedPaint`
 hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
 and no fence. CEF takes the texture back into its pool when the callback returns. So the
 callback opens the handle on the wgpu D3D12 device, imports it through hal as in the GPU

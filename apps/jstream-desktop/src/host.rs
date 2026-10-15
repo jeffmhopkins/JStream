@@ -126,21 +126,39 @@ fn new_token() -> anyhow::Result<String> {
 /// time), saved on every change, with `audit` recording every batch and action.
 ///
 /// On Windows it is live, as the daemon's is: the OS backends, stream keys in
-/// Credential Manager, and RTMP(S) publishing on `output.start`. Elsewhere there are
-/// no backends yet.
+/// Credential Manager, and RTMP(S) publishing on `output.start`. With the `cef` feature
+/// it also opens browser sources' pages, keeping CEF's cache and log under `data`
+/// ([`browser::backend`](crate::browser)). Elsewhere there are no backends yet.
 ///
 /// # Errors
 /// When the collection file can't be read, loaded or created, and on Windows when a
 /// backend can't be created (the QPC clock).
-pub fn engine(collection: &Path, audit: Arc<dyn AuditSink>) -> anyhow::Result<Arc<Engine>> {
+pub fn engine(
+    collection: &Path,
+    data: &Path,
+    audit: Arc<dyn AuditSink>,
+) -> anyhow::Result<Arc<Engine>> {
     let engine = Engine::new()
         .with_audit(audit)
         .with_collection_file(collection)
         .context("could not open the collection")?;
     #[cfg(windows)]
-    let engine = live(engine, windows_backends()?);
+    let engine = {
+        let backends = windows_backends()?;
+        #[cfg(feature = "cef")]
+        let browser = crate::browser::backend(data, Arc::clone(&backends.clock));
+        #[cfg(not(feature = "cef"))]
+        let browser = {
+            let _ = data;
+            None
+        };
+        live(engine, backends, browser)
+    };
     #[cfg(not(windows))]
-    let engine = Arc::new(engine);
+    let engine = {
+        let _ = data;
+        Arc::new(engine)
+    };
     Ok(engine)
 }
 
@@ -161,20 +179,27 @@ fn windows_backends() -> anyhow::Result<Backends> {
     })
 }
 
-/// Makes `engine` live on `backends`, with keys in Credential Manager and a publish
-/// opener that connects RTMP(S). The opener holds the engine weakly, so the engine
-/// still drops when the server lets go of it. The same wiring as the daemon's
-/// `serve::live` (apps/jstream-daemon/src/serve.rs), whose tests cover the opener.
+/// Makes `engine` live on `backends`, with keys in Credential Manager, a publish
+/// opener that connects RTMP(S) and, when there is one, `browser` for browser sources.
+/// The opener holds the engine weakly, so the engine still drops when the server lets
+/// go of it. The same wiring as the daemon's `serve::live`
+/// (apps/jstream-daemon/src/serve.rs), whose tests cover the opener.
 #[cfg(windows)]
-fn live(engine: Engine, backends: Backends) -> Arc<Engine> {
+fn live(
+    engine: Engine,
+    backends: Backends,
+    browser: Option<Arc<dyn jstream_sources::BrowserBackend>>,
+) -> Arc<Engine> {
     let keys: Arc<dyn StreamKeyStore> = Arc::new(jstream_platform_windows::WindowsCredentials);
     let handle = Arc::new(OnceLock::new());
-    let engine = Arc::new(
-        engine
-            .with_key_store(Arc::clone(&keys))
-            .with_backends(backends)
-            .with_publish_opener(opener(Arc::clone(&handle), keys)),
-    );
+    let engine = engine
+        .with_key_store(Arc::clone(&keys))
+        .with_backends(backends)
+        .with_publish_opener(opener(Arc::clone(&handle), keys));
+    let engine = Arc::new(match browser {
+        Some(browser) => engine.with_browser(browser),
+        None => engine,
+    });
     // The cell is new, so this is its only value.
     let _ = handle.set(Arc::downgrade(&engine));
     engine
@@ -247,8 +272,12 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_file(&collection);
-        let engine = engine(&collection, Arc::new(AuditMemory::new()))
-            .unwrap_or_else(|e| panic!("an engine: {e:#}"));
+        let engine = engine(
+            &collection,
+            &std::env::temp_dir(),
+            Arc::new(AuditMemory::new()),
+        )
+        .unwrap_or_else(|e| panic!("an engine: {e:#}"));
         let host = Host::start(engine, "http://jstream.localhost")
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert!(
@@ -319,8 +348,12 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_file(&collection);
-        let engine = engine(&collection, Arc::new(AuditMemory::new()))
-            .unwrap_or_else(|e| panic!("an engine: {e:#}"));
+        let engine = engine(
+            &collection,
+            &std::env::temp_dir(),
+            Arc::new(AuditMemory::new()),
+        )
+        .unwrap_or_else(|e| panic!("an engine: {e:#}"));
         let host = Host::start(engine, ORIGIN).unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(upgrade_status(&host, ORIGIN), "HTTP/1.1 101");
         assert_eq!(upgrade_status(&host, "http://evil.example"), "HTTP/1.1 403");

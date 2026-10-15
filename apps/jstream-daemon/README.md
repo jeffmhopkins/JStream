@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:ba52f5f3dcaeb8c8", by = "agent:claude@session_01PZRAdnkMzURQaUtof2W6W2", note = "Round 1 B1: Tests bullet now says WS sets the key and starts the stream, MCP starts the recording (matches e2e.rs); rest of Purpose re-read, holds" }
+verified = { hash = "b3:210cd34e21030821", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4 on #283 merged with main: stale via crate-map apps row (desktop links browser) and main's stamp; daemon creates no browser backend and its text names none; holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1e583a28e2b0b269", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main into #253: stale via jstream-server#design, whose only change is that the subprotocol names come from jstream-control; daemon design names no subprotocol, holds" }
+verified = { hash = "b3:4e9b44d90b19e7ad", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4 on #283 merged with main: stale via core design (with_browser) and main's stamp; daemon design names neither browser nor with_browser; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

@@ -137,7 +137,7 @@ and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:9910a5baf660ca61", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 after merging main: stale via crate-map only; render still can't use unsafe, design holds" }
+verified = { hash = "b3:07c464e5516ece65", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: stale via crate-map only; the desktop opens its browser device through GpuInterop::open_device as this section describes; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:dee8be93f154a517", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 doc fix: crate docs no longer intra-link CefBackend (cfg'd out of rustdoc); README text unaffected" }
+verified = { hash = "b3:06a431ab39e6dbc8", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: stale via ARCH browser-source and crate-map edits only; the seam text (with_browser, use_device) holds" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
@@ -88,7 +88,7 @@ to, and the shutdown time. It runs on Windows with the `cef` feature only.
 ## Open items
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md"]
-verified = { hash = "b3:fe59fe3a187983b6", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: open items match what the CEF backend leaves out (no_sandbox, no file request handler, no host wiring, no render import, no visibility hook)" }
+verified = { hash = "b3:425ea3d66bd09b80", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: Hosts bullet now says the desktop app creates a backend with its cef feature on a device it opens; daemon still doesn't; other items unchanged" }
 -->
 
 What ADR-0021 asks for that this crate doesn't do yet. The first three block any host
@@ -102,8 +102,9 @@ from turning on the `cef` feature.
   to their folder.
 - **Packaging and updates.** The CEF runtime isn't in the portable zip yet, with its
   licence notices, and nothing checks the pinned CEF against CEF stable.
-- **Hosts.** The daemon and desktop app don't create a backend or call
-  `Engine::with_browser`, and nothing hands the backend the engine's device.
+- **Hosts.** The daemon doesn't create a backend yet. The desktop app does, with its
+  `cef` feature, on a device of the media adapter it opens, not the engine's own,
+  which the engine doesn't hand out yet.
 - **Compositing.** The program mix doesn't draw a page's `GpuFrame` yet; a `browser`
   source draws a transparent frame of its size until the render import of GPU frames
   lands.

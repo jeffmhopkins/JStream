@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:d40cf29820e1fc9f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via ARCH crate-map apps row (adds jstream-browser-helper); the desktop app creates no browser backend yet, text holds" }
+verified = { hash = "b3:1b18413b70c1f1e2", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: Contents gains browser.rs (Windows + cef only); not-yet list says browser sources are off in a default build; checked against lib.rs and browser.rs" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -34,6 +34,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token.
+- **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
+  backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard and
   shutdown.
 - **Data folder and log file** (`data.rs`, `logs.rs`).
@@ -44,14 +46,14 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
 virtual camera's registration mode (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, crash
-reports, MCP and the token for outside clients, and the release build of the portable
-folder.
+reports, MCP and the token for outside clients, the release build of the portable
+folder, and browser sources in a default build (the `cef` feature is off).
 
 <a id="usage"></a>
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:1806a584c2b4f0f0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
+verified = { hash = "b3:a616400bf75a10cd", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: browser sources need --features cef, the helper and runtime beside jstream.exe; cache <data>/cef and logs/cef.log match browser.rs; off by default per Cargo.toml" }
 -->
 
 On Windows, with the UI built first:
@@ -70,6 +72,13 @@ Closing the window stops the engine.
 | Option | Meaning |
 |---|---|
 | `--ui-dir <folder>` | The UI bundle (`trunk build`'s `dist`). Default: the `ui` folder beside the exe. |
+
+**Browser sources** need the `cef` feature (`cargo run -p jstream-desktop --features
+cef`), whose build downloads and builds CEF, and `jstream-browser-helper.exe` and the CEF
+runtime beside `jstream.exe`. It is off by default until CEF's sandbox and file-access
+limits land ([the browser crate's open items](../../crates/jstream-browser/README.md#open-items)).
+Without it, a `browser` source draws nothing. CEF's cache is the data folder's `cef`
+folder, and its log `logs\cef.log`.
 
 - **Data folder.** `%APPDATA%\JStream`, the daemon's too. When a file named `portable`
   sits beside the exe, a `data` folder beside the exe instead, so the app can run from
@@ -92,7 +101,7 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:f6d32a6fab0050f4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 now excepts GET /pair on a TLS listener and allows a device-token cookie; desktop serves loopback without TLS, pairs nothing and uses its in-memory token, so nothing here changes; holds" }
+verified = { hash = "b3:65ee8c04f8a14f61", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "C8b4: new browser bullet matches host.rs (backend after with_backends, on backends.clock) and browser.rs (WindowsGpu::open_device, failures logged, CEF starts on first page)" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
@@ -135,5 +144,12 @@ verified = { hash = "b3:f6d32a6fab0050f4", by = "agent:claude@session_01WbL3WRbc
   Windows where that holds. `tauri.conf.json` names the app and its icon; the bundler
   is off (the portable folder is ADR-0020's), and so are Tauri's CSP injection and
   global API. `tauri-build` writes ACL schemas to `gen/`, which is not committed.
+- **Browser sources, behind a feature.** With `cef`, the engine gets a CEF backend
+  (`jstream-browser`) on the backends' media clock, so pages' audio is stamped on the
+  clock the mixer runs on. Its pages paint onto a device of the media adapter the app
+  opens for them (`WindowsGpu::open_device`), since the engine doesn't hand out its own
+  device yet. The backend is added after the OS backends, so sources open on the media
+  clock. CEF starts on the first page, so a missing helper or runtime fails that source,
+  not the app; with no device, pages play audio but show no frames.
 - **Logs and the token.** The token reaches only the bootstrap script. It is never
   logged, written to disk, or put in a URL (R-SEC-001).
