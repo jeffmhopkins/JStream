@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:985a6a5f73426958", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: Preview bullet for preview/ (subscribe, H.264 on software jstream-encode or own JPEG, jstream-preview thread); tests list names src/tests/preview.rs's six cases" }
+verified = { hash = "b3:3a75e323ed3b2ea2", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "#186 after merging main: main's text; re-checked its render-snapshot mentions (program mix drawn from it, PNG on the snapshot thread) make no lock-free claim for the snapshot thread, holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -68,6 +68,9 @@ state machine. Contents:
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
   compositor.
+- **Studio** (`studio.rs`): which scene is on program, runtime state under the
+  collection lock that `scene.switch` sets and `studio.get` reads
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
   mix as small pictures sent to the session that asked as binary frames
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
@@ -146,8 +149,10 @@ state machine. Contents:
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
   outputs, refused files left
   as they were, a failed save that the next change recovers, and concurrent sessions
-  leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
-  dev-dependency) driving the engine in-process.
+  leaving the latest collection and no temporary file), `scene.switch` and the program
+  scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
+  that follows program, and an MCP agent (`jstream-mcp`, a dev-dependency) driving the
+  engine in-process.
 
 Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
 the platform's Windows devices. See
@@ -162,7 +167,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:af81a67c3e006401", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: new Preview streams subsection matches preview/mod.rs (8-frame queue, 4 streams, codec picked at subscribe, hub thread own compositor, pacing, 2 s keyframe, software H.264 VBR, JPEG fallback, 30 draw errors, gate); Locking gains the preview thread's and session's locks, matching engine.rs preview_action and run()" }
+verified = { hash = "b3:5f83b0d81693f253", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 merge of main: stale via protocol design's number sentence only; engine text unaffected" }
 -->
 
 ### Engine and sessions
@@ -256,8 +261,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   (`not_found` for an unknown one) and fills `key_set` from the key store after the
   collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
-- **Actions**: `output.start` and `output.stop` (see *Outputs* below), and
-  `output.set_key` and `output.clear_key` (see *Stream keys* below).
+- **Actions**: `output.start` and `output.stop` (see *Outputs* below),
+  `output.set_key` and `output.clear_key` (see *Stream keys* below), and
+  `scene.switch` (see *Program scene* below).
+- **`studio.get`** reads the program scene under the collection lock.
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -315,14 +322,31 @@ collection lock:
 - **Not steps:** actions (outputs, stream keys), queries and history calls. Live
   values are not built.
 
+### Program scene
+
+The program scene is runtime state in `studio.rs`, under the collection lock beside the
+outputs' state, not in the graph
+([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)). `scene.switch`
+sets it (`not_found` for a scene the collection doesn't have) and emits
+`studio.changed`, with no `rev` change; a switch to the scene already on program emits
+nothing. After every applied batch, undo and redo the engine reconciles it: the collection's first
+scene goes on program when it is created, a deleted program scene gives way to the
+first scene left (or none), and a reorder never moves it. A scene's `role` changes none
+of this: a group is a scene here, and can go on program. A batch, undo or redo that moves
+program emits `studio.changed` right after its `state.changed`, naming the same request. The
+mock applies the same rules, and the differential script holds the two to each other.
+Program is not saved in the collection file, so an engine that loads one (a restart) starts
+with its first scene on program. The program mix, on the render thread and in
+`video.snapshot`, draws the program scene, and a switch re-plans it, so the next frame
+shows the new scene: a cut. Only a cut exists; transitions and the preview scene come
+later.
+
 ### Snapshots
 
 `video.snapshot` returns the program mix as a PNG
-([jstream-protocol › Design](../jstream-protocol/README.md#design)). Until studio
-state exists, that scene is the first one in display order. `Program` will follow
-`program_scene` once studio mode is built
-([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)); that state is M2
-([ROADMAP › M2](../../ROADMAP.md#m2)). An empty collection is an opaque black canvas.
+([jstream-protocol › Design](../jstream-protocol/README.md#design)): the program
+scene, read under the collection lock when the shot is copied, so a snapshot after a
+`scene.switch` shows the new scene. An empty collection is an opaque black canvas.
 
 The canvas is the collection's (`State::canvas`, default 1920×1080, changed by
 `canvas.set_size`), copied into the shot with the items, so every scene of a snapshot,
@@ -352,8 +376,9 @@ draws nothing.
 
 **The render snapshot.** `snapshot::plan` copies the program scene, the scenes it
 reaches, the frames they place and the passes that draw them (`schedule`, made once
-here) into an immutable `Shot`. The engine re-plans after every applied batch, undo
-and redo, every `set_source_frame`, a collection file's load, a live source's build
+here) into an immutable `Shot`. The program scene is the one `scene.switch` put on
+program (*Program scene*). The engine re-plans after every applied batch, undo
+and redo, a `scene.switch` that moves program, every `set_source_frame`, a collection file's load, a live source's build
 and a live source's next frame (see *Live sources*), under the collection lock, and
 `RenderHub::publish` stores
 it through `arc-swap` as the next render generation only when it draws something new
@@ -799,8 +824,9 @@ thread, which takes no engine lock; the preview thread takes its own state lock,
 the collection lock alone and only to load the render snapshot and `rev`, never while
 drawing or encoding. A session's preview streams and binary channel are leaf locks; the queue to it is taken only after the
 collection lock is released. The render snapshot is published under the collection
-lock (which makes the control side its one writer) and loaded by the render and
-snapshot threads with no lock at all. A stream's poll takes only its queue's lock. No lock
+lock (which makes the control side its one writer) and loaded by the render thread
+with no lock at all. `video.snapshot` reads it under the collection lock and the
+snapshot thread only receives it. A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
@@ -841,7 +867,7 @@ Every agent action goes to the audit log
 the time, `client_id`, the client's name from its latest `hello` (`client_name`, cut
 to 128 bytes; `client_id`s restart at `client_1` with the engine, so the name is what
 says which agent acted across restarts), the session's `request_id`, the call (`batch`,
-`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id`, the `rev` before and
+`history.undo`, `history.redo` or the action's name), a batch's edits by name in order, an action's `output_id` or `scene_id` (`scene.switch`), the `rev` before and
 after, the result (`ok` or the error code), and `replayed` for a batch, undo or redo whose
 idempotency key had already been applied. It holds no argument of any call: no names,
 settings, URLs or keys, so `output.set_key` records only that action on that output
@@ -895,7 +921,7 @@ temporary `.<name>.<pid>.tmp` beside the file, flushed to disk, renamed over it,
 Unix the directory flushed too; on Unix it is mode `0600`. A failed save is logged at
 `error` with the path and `rev`, removes the temporary file, and leaves the call's
 result as it is: the change stays applied and the next change saves again. Undo
-history and idempotency keys are not saved.
+history, idempotency keys and the program scene are not saved (see *Program scene*).
 
 `jstream-daemon`'s `--collection` option turns this on
 ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
@@ -928,7 +954,7 @@ history and idempotency keys are not saved.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:e60e01872963b2f8", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 preview: stale through ARCH#threading's new Preview row only; the output pipeline runtime is unchanged and the preview hub is not part of the program stage; holds" }
+verified = { hash = "b3:037387eaec0b2653", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): stale via ARCH#threading only; text is main's; re-checked it names neither the render-snapshot loader nor CLAP hosts, the two paragraphs that changed; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -973,7 +999,8 @@ or mixer panic) is a channel message to a watcher the control thread started; th
 watcher emits `failed` and stops the pipeline. A program-stage failure reaches every
 running output. Frame hand-off is the encoder session queues. The audio and outputs
 snapshots and a GPU encode target are still rows of the ARCH thread table, not this
-cut. The mixer also has its own collector, which frees only input rings and their
-counters. The program stage's `jstream-audio-sources` thread opens and closes the audio
-sources' inputs as the collection changes (see *Audio sources* in Design); it takes
-no engine lock and is joined, and every input closed, after the mixer thread stops.
+cut. The mixer also has its own collector, which frees input rings and their counters,
+removed buses' state, and removed filter chains and filters. The program stage's
+`jstream-audio-sources` thread opens and closes the audio sources' inputs as the
+collection changes (see *Audio sources* in Design); it takes no engine lock and is
+joined, and every input closed, after the mixer thread stops.

@@ -249,6 +249,7 @@ fn create_scene(id: &str) -> Call {
     Call::Batch(Batch::single(Edit::SceneCreate {
         scene_id: SceneId::new(id),
         name: id.to_uppercase(),
+        role: None,
     }))
 }
 
@@ -380,6 +381,15 @@ fn a_batch_a_query_and_events_round_trip() {
             cause: None,
         })
     );
+    // The first scene went on program, by the same request.
+    assert_eq!(
+        next_event(&harness, &mut events),
+        Some(Event::StudioChanged {
+            program_scene: Some(SceneId::new("main")),
+            client_id: client_id.clone(),
+            request_id: Some(RequestId::new("req_1")),
+        })
+    );
 
     let query = Call::Query {
         query: Query::SceneList,
@@ -440,7 +450,9 @@ fn concurrent_calls_each_get_their_own_answer_and_event() {
     }
     by_request.sort();
     let mut seen = Vec::new();
-    for _ in names {
+    // One `state.changed` per batch, and one `studio.changed` for the first scene.
+    let mut program_changes = 0;
+    for _ in 0..=names.len() {
         match next_event(&harness, &mut events) {
             Some(Event::StateChanged {
                 rev,
@@ -451,9 +463,11 @@ fn concurrent_calls_each_get_their_own_answer_and_event() {
                 assert_eq!(from, client_id);
                 seen.push((id, rev));
             }
+            Some(Event::StudioChanged { .. }) => program_changes += 1,
             other => panic!("unexpected event {other:?}"),
         }
     }
+    assert_eq!(program_changes, 1);
     seen.sort();
     assert_eq!(seen, by_request);
 }
@@ -539,8 +553,8 @@ fn malformed_messages_get_malformed_errors() {
         }
         other => panic!("unexpected reply {other:?}"),
     }
-    // The wire form from the protocol README: the response and the event carry the
-    // client's own request ID.
+    // The wire form from the protocol README: the response and the events carry the
+    // client's own request ID, `studio.changed` (the first scene went on program) too.
     let hello = r#"{"type":"hello","protocol":{"major":0,"minor":5},"client_name":"raw"}"#;
     assert!(matches!(
         exchange(&harness, &mut socket, hello),
@@ -548,29 +562,36 @@ fn malformed_messages_get_malformed_errors() {
     ));
     let request = r#"{"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":0}}"#;
     let first = exchange(&harness, &mut socket, request);
-    let second = harness.run(async {
-        loop {
-            match socket.next().await {
-                Some(Ok(Message::Text(text))) => {
-                    match serde_json::from_str::<ServerMessage>(text.as_str()) {
-                        Ok(message) => return message,
-                        Err(error) => panic!("unreadable: {error}"),
+    let mut messages = vec![first];
+    for _ in 0..2 {
+        messages.push(harness.run(async {
+            loop {
+                match socket.next().await {
+                    Some(Ok(Message::Text(text))) => {
+                        match serde_json::from_str::<ServerMessage>(text.as_str()) {
+                            Ok(message) => return message,
+                            Err(error) => panic!("unreadable: {error}"),
+                        }
                     }
+                    Some(Ok(_)) => continue,
+                    other => panic!("no further message: {other:?}"),
                 }
-                Some(Ok(_)) => continue,
-                other => panic!("no second message: {other:?}"),
             }
-        }
-    });
+        }));
+    }
     let mut ids = Vec::new();
-    for message in [first, second] {
+    for message in messages {
         match message {
             ServerMessage::Response(response) => ids.push(("response", response.id)),
             ServerMessage::Event(event) => match event.event {
                 Event::StateChanged {
                     request_id: Some(id),
                     ..
-                } => ids.push(("event", id)),
+                } => ids.push(("state.changed", id)),
+                Event::StudioChanged {
+                    request_id: Some(id),
+                    ..
+                } => ids.push(("studio.changed", id)),
                 other => panic!("unexpected event {other:?}"),
             },
             other => panic!("unexpected message {other:?}"),
@@ -580,8 +601,9 @@ fn malformed_messages_get_malformed_errors() {
     assert_eq!(
         ids,
         [
-            ("event", RequestId::new("r1")),
-            ("response", RequestId::new("r1"))
+            ("response", RequestId::new("r1")),
+            ("state.changed", RequestId::new("r1")),
+            ("studio.changed", RequestId::new("r1"))
         ]
     );
 }
@@ -592,6 +614,8 @@ fn a_server_shutdown_disconnects_calls_and_ends_events() {
     let (control, _) = harness.session();
     let mut events = control.events();
     ok(harness.run(control.call(create_scene("main"))));
+    // `state.changed`, then `studio.changed` for the first scene.
+    assert!(next_event(&harness, &mut events).is_some());
     assert!(next_event(&harness, &mut events).is_some());
     harness.shut_down();
     assert_eq!(next_event(&harness, &mut events), None, "the stream ends");
@@ -766,6 +790,10 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
         next_event(&harness, &mut events),
         Some(Event::StateChanged { rev: Rev(1), .. })
     ));
+    assert!(matches!(
+        next_event(&harness, &mut events),
+        Some(Event::StudioChanged { .. })
+    ));
     // Time for the slow connection to drain the engine's queue into its outbox, which is
     // what overflows; reading too early would only make the drop smaller, never hide it
     // from the count below.
@@ -775,7 +803,8 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
     let (delivered, dropped, notices) = harness.run(async {
         let (mut delivered, mut dropped, mut notices) = (0u64, 0u64, 0u64);
         let mut last: Option<usize> = None;
-        while delivered + dropped < SENT as u64 + 1 {
+        // The numbered events, then the batch's `state.changed` and `studio.changed`.
+        while delivered + dropped < SENT as u64 + 2 {
             let text = match slow.next().await {
                 Some(Ok(Message::Text(text))) => text,
                 Some(Ok(_)) => continue,
@@ -802,6 +831,7 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
                         assert_eq!(rev, Rev(1));
                         delivered += 1;
                     }
+                    Event::StudioChanged { .. } => delivered += 1,
                     other => panic!("unexpected event {other:?}"),
                 },
                 other => panic!("unexpected message {other:?}"),
@@ -811,7 +841,7 @@ fn a_client_that_stops_reading_gets_events_dropped_and_slows_no_one() {
     });
     assert!(dropped > 0, "the slow client's outbox never overflowed");
     assert!(notices >= 1);
-    assert_eq!(delivered + dropped, SENT as u64 + 1);
+    assert_eq!(delivered + dropped, SENT as u64 + 2);
 
     // Once it reads again, the slow client is served like any other.
     let query =
@@ -1096,8 +1126,19 @@ async fn http_on(
     headers: &[(&str, &str)],
     body: &str,
 ) -> HttpReply {
+    http_to(stream, method, crate::MCP_PATH, headers, body).await
+}
+
+/// [`http_on`] for any path. A `HEAD` answer's `Content-Length` announces no body.
+async fn http_to(
+    stream: &mut tokio::net::TcpStream,
+    method: &str,
+    path: &str,
+    headers: &[(&str, &str)],
+    body: &str,
+) -> HttpReply {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let mut request = format!("{method} {} HTTP/1.1\r\n", crate::MCP_PATH);
+    let mut request = format!("{method} {path} HTTP/1.1\r\n");
     for (name, value) in headers {
         request.push_str(&format!("{name}: {value}\r\n"));
     }
@@ -1122,6 +1163,7 @@ async fn http_on(
                 .lines()
                 .find_map(|line| line.strip_prefix("content-length:"))
                 .and_then(|value| value.trim().parse::<usize>().ok())
+                .filter(|_| method != "HEAD")
                 .unwrap_or(0);
             break (end + 4, length);
         }
@@ -1666,5 +1708,311 @@ fn preview_frames_go_out_as_binary_messages() {
     match reply {
         ServerMessage::Error(error) => assert_eq!(error.error.error.code(), "malformed"),
         other => panic!("unexpected reply {other:?}"),
+    }
+}
+
+/// A UI bundle in a fresh temporary directory, removed on drop, beside a `secret` file
+/// outside it that no request may reach.
+struct Bundle {
+    base: std::path::PathBuf,
+}
+
+impl Bundle {
+    fn new(name: &str) -> Bundle {
+        let base =
+            std::env::temp_dir().join(format!("jstream-server-ui-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        let files: [(&str, &[u8]); 4] = [
+            (
+                "dist/index.html",
+                b"<script nonce=\"{{__TRUNK NONCE__}}\" type=\"module\">init()</script>",
+            ),
+            ("dist/app_bg.wasm", b"\0asm\x01\0\0\0"),
+            ("dist/assets/style.css", b"body {}"),
+            ("secret", b"not for the browser"),
+        ];
+        for (path, contents) in files {
+            let path = base.join(path);
+            if let Some(parent) = path.parent()
+                && let Err(error) = std::fs::create_dir_all(parent)
+            {
+                panic!("create {}: {error}", parent.display());
+            }
+            if let Err(error) = std::fs::write(&path, contents) {
+                panic!("write {}: {error}", path.display());
+            }
+        }
+        #[cfg(unix)]
+        if let Err(error) =
+            std::os::unix::fs::symlink(base.join("secret"), base.join("dist/link.txt"))
+        {
+            panic!("symlink: {error}");
+        }
+        Bundle { base }
+    }
+
+    fn dist(&self) -> std::path::PathBuf {
+        self.base.join("dist")
+    }
+}
+
+impl Drop for Bundle {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.base);
+    }
+}
+
+impl Harness {
+    /// Sends `method path` on a new connection, with `headers` (`Host` is added unless
+    /// given).
+    fn request(&self, method: &str, path: &str, headers: &[(&str, &str)]) -> HttpReply {
+        let addr = self.authority.clone();
+        let mut all: Vec<(&str, &str)> = Vec::new();
+        if !headers.iter().any(|(n, _)| n.eq_ignore_ascii_case("host")) {
+            all.push(("Host", &addr));
+        }
+        all.extend_from_slice(headers);
+        self.run(async {
+            let mut stream = match tokio::net::TcpStream::connect(&addr).await {
+                Ok(stream) => stream,
+                Err(error) => panic!("connect: {error}"),
+            };
+            http_to(&mut stream, method, path, &all, "").await
+        })
+    }
+}
+
+/// `Basic` credentials whose password is the test token, as a browser sends them.
+fn basic() -> String {
+    // base64("jstream:test-token-0123")
+    "Basic anN0cmVhbTp0ZXN0LXRva2VuLTAxMjM=".to_owned()
+}
+
+#[test]
+fn the_ui_is_off_by_default() {
+    let harness = start(&MockEngine::new());
+    let bearer = format!("Bearer {TOKEN}");
+    let reply = harness.request("GET", "/", &[("Authorization", &bearer)]);
+    assert_eq!(reply.status, 404);
+}
+
+#[test]
+fn the_ui_needs_the_token_and_challenges_a_browser() {
+    let bundle = Bundle::new("token");
+    let dist = bundle.dist();
+    let harness = start_with(&MockEngine::new(), |config| config.ui_dir = Some(dist));
+    for authorization in [
+        None,
+        Some("Bearer wrong"),
+        Some("Basic anN0cmVhbTp3cm9uZw=="),
+    ] {
+        let mut headers = Vec::new();
+        if let Some(value) = authorization {
+            headers.push(("Authorization", value));
+        }
+        let reply = harness.request("GET", "/", &headers);
+        assert_eq!(reply.status, 401, "{authorization:?}");
+        assert_eq!(
+            reply.header("www-authenticate"),
+            Some("Basic realm=\"JStream\", charset=\"UTF-8\"")
+        );
+        assert!(!reply.body.contains("init()"), "{}", reply.body);
+    }
+    // A foreign Origin or Host is refused even with the token.
+    let basic = basic();
+    let foreign = harness.request(
+        "GET",
+        "/",
+        &[("Authorization", &basic), ("Origin", "http://evil.example")],
+    );
+    assert_eq!(foreign.status, 403);
+    let rebound = harness.request(
+        "GET",
+        "/",
+        &[("Authorization", &basic), ("Host", "evil.example:80")],
+    );
+    assert_eq!(rebound.status, 403);
+    assert_eq!(harness.sessions.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn the_ui_serves_its_files_with_types_a_nonce_and_a_policy() {
+    let bundle = Bundle::new("files");
+    let dist = bundle.dist();
+    let harness = start_with(&MockEngine::new(), |config| config.ui_dir = Some(dist));
+    let basic = basic();
+    let auth = [("Authorization", basic.as_str())];
+
+    let index = harness.request("GET", "/", &auth);
+    assert_eq!(index.status, 200, "{}", index.body);
+    assert_eq!(
+        index.header("content-type"),
+        Some("text/html; charset=utf-8")
+    );
+    assert_eq!(index.header("x-content-type-options"), Some("nosniff"));
+    assert_eq!(index.header("cache-control"), Some("no-cache"));
+    let Some(policy) = index.header("content-security-policy") else {
+        panic!("no CSP");
+    };
+    let Some(nonce) = policy
+        .split("'nonce-")
+        .nth(1)
+        .and_then(|rest| rest.split('\'').next())
+    else {
+        panic!("no nonce in {policy}");
+    };
+    assert_eq!(nonce.len(), 32, "{nonce}");
+    assert_eq!(
+        index.body,
+        format!("<script nonce=\"{nonce}\" type=\"module\">init()</script>")
+    );
+    assert!(
+        policy.contains(&format!("connect-src 'self' ws://{};", harness.authority)),
+        "{policy}"
+    );
+    // A fresh nonce on every response.
+    let again = harness.request("GET", "/index.html", &auth);
+    assert_eq!(again.status, 200);
+    assert!(!again.body.contains(nonce), "{}", again.body);
+
+    let wasm = harness.request("GET", "/app_bg.wasm", &auth);
+    assert_eq!(wasm.status, 200);
+    assert_eq!(wasm.header("content-type"), Some("application/wasm"));
+    assert_eq!(wasm.body.as_bytes(), b"\0asm\x01\0\0\0");
+    assert!(
+        wasm.header("content-security-policy")
+            .is_some_and(|p| !p.contains("nonce")),
+        "no nonce outside HTML"
+    );
+
+    let css = harness.request("GET", "/assets/style.css", &auth);
+    assert_eq!(
+        (css.status, css.header("content-type")),
+        (200, Some("text/css; charset=utf-8"))
+    );
+    let head = harness.request("HEAD", "/assets/style.css", &auth);
+    assert_eq!((head.status, head.body.as_str()), (200, ""));
+
+    // The UI's own routes serve the index; a missing file is 404.
+    let route = harness.request("GET", "/scenes/main", &auth);
+    assert_eq!(route.status, 200);
+    assert!(route.body.contains("init()"));
+    assert_eq!(harness.request("GET", "/missing.js", &auth).status, 404);
+    // The API's paths are never the UI's: `/mcp` with MCP off, or anything under `/api/`.
+    for path in ["/mcp", "/api/v2/ws", "/api"] {
+        assert_eq!(harness.request("GET", path, &auth).status, 404, "{path}");
+    }
+    // Only GET and HEAD.
+    let post = harness.request("POST", "/", &auth);
+    assert_eq!(
+        (post.status, post.header("allow")),
+        (405, Some("GET, HEAD"))
+    );
+    // The bearer token works too, for native clients.
+    let bearer = format!("Bearer {TOKEN}");
+    assert_eq!(
+        harness
+            .request("GET", "/", &[("Authorization", &bearer)])
+            .status,
+        200
+    );
+}
+
+#[test]
+fn the_ui_never_serves_a_file_outside_its_directory() {
+    let bundle = Bundle::new("escape");
+    let dist = bundle.dist();
+    let harness = start_with(&MockEngine::new(), |config| config.ui_dir = Some(dist));
+    let basic = basic();
+    let auth = [("Authorization", basic.as_str())];
+    for path in [
+        "/../secret",
+        "/%2e%2e/secret",
+        "/assets/..%2f..%2fsecret",
+        "/..%5csecret",
+        "//secret",
+        "/link.txt",
+    ] {
+        let reply = harness.request("GET", path, &auth);
+        assert!(
+            !reply.body.contains("not for the browser"),
+            "{path}: {}",
+            reply.body
+        );
+        assert_ne!(reply.status, 200, "{path}");
+    }
+}
+
+#[test]
+fn binding_refuses_a_ui_dir_that_is_not_a_directory() {
+    let harness = start(&MockEngine::new());
+    let engine = MockEngine::new();
+    let connector: Connector = Arc::new(move || Box::new(engine.connect()));
+    let mut config = match Token::new(TOKEN) {
+        Ok(token) => ServerConfig::new(token),
+        Err(error) => panic!("token: {error}"),
+    };
+    config.ui_dir = Some(std::env::temp_dir().join("jstream-server-ui-no-such-dir"));
+    match harness.run(Server::bind(config, connector)) {
+        Err(crate::ServerError::UiDir { .. }) => {}
+        Err(other) => panic!("expected UiDir, got {other}"),
+        Ok(server) => panic!("bound on {} without a UI dir", server.local_addr()),
+    }
+}
+
+/// The browser's cached `Basic` credentials ride on the UI's WebSocket upgrade too, so
+/// the page never handles the token.
+#[test]
+fn a_websocket_upgrade_accepts_basic_credentials() {
+    let harness = start(&MockEngine::new());
+    let origin = harness.own_origin();
+    let host = harness.authority.clone();
+    assert!(
+        harness
+            .raw(Some(&origin), Some(&host), Some(&basic()))
+            .is_ok()
+    );
+}
+
+/// `jstream-control`'s browser client offers `jstream` and `jstream.token.<token>`
+/// without `Authorization`: the server admits it and selects `jstream`, never echoing
+/// the token's subprotocol.
+#[test]
+fn a_websocket_upgrade_accepts_the_token_as_a_subprotocol() {
+    let harness = start(&MockEngine::new());
+    let origin = harness.own_origin();
+    let offer = |token: &str| {
+        let mut request = match harness.url.as_str().into_client_request() {
+            Ok(request) => request,
+            Err(error) => panic!("request: {error}"),
+        };
+        let headers = request.headers_mut();
+        let protocols = format!("jstream, jstream.token.{token}");
+        for (name, value) in [
+            (header::ORIGIN, origin.as_str()),
+            (header::SEC_WEBSOCKET_PROTOCOL, protocols.as_str()),
+        ] {
+            match HeaderValue::from_str(value) {
+                Ok(value) => headers.insert(name, value),
+                Err(error) => panic!("header: {error}"),
+            };
+        }
+        harness.run(tokio_tungstenite::connect_async(request))
+    };
+    match offer(TOKEN) {
+        Ok((_, response)) => assert_eq!(
+            response
+                .headers()
+                .get(header::SEC_WEBSOCKET_PROTOCOL)
+                .and_then(|v| v.to_str().ok()),
+            Some("jstream")
+        ),
+        Err(error) => panic!("refused: {error}"),
+    }
+    match offer("wrong-token") {
+        Err(tungstenite::Error::Http(response)) => {
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED)
+        }
+        other => panic!("expected 401, got {:?}", other.map(|(_, r)| r.status())),
     }
 }

@@ -20,6 +20,7 @@
 use crate::WS_PATH;
 use crate::control::{BinaryStream, BoxFuture, Control, EventStream};
 use crate::error::ControlError;
+use crate::ws_config::{WsConfig, disconnected};
 use futures_core::Stream;
 use futures_util::{SinkExt, StreamExt};
 use jstream_protocol::{
@@ -38,41 +39,6 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode, Uri, header};
 use tokio_tungstenite::tungstenite::{self, Message};
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
-
-/// Where and how to connect.
-#[derive(Clone)]
-pub struct WsConfig {
-    /// The engine's WebSocket URL, `ws://<host>:<port>[/path]`. Without a path (or with
-    /// `/`) the API path `/api/v1/ws` is used.
-    pub url: String,
-    /// The control token, sent as `Authorization: Bearer <token>`.
-    pub token: String,
-    /// The `Origin` to send. `None` sends the engine's own origin (`http://<host>:<port>`
-    /// of the URL), which the server always accepts.
-    pub origin: Option<String>,
-}
-
-impl WsConfig {
-    /// A configuration for `url` with `token` and the default `Origin`.
-    pub fn new(url: impl Into<String>, token: impl Into<String>) -> Self {
-        WsConfig {
-            url: url.into(),
-            token: token.into(),
-            origin: None,
-        }
-    }
-}
-
-impl fmt::Debug for WsConfig {
-    /// Never prints the token.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("WsConfig")
-            .field("url", &self.url)
-            .field("token", &"***")
-            .field("origin", &self.origin)
-            .finish()
-    }
-}
 
 /// One client session with an engine over its WebSocket API.
 ///
@@ -123,12 +89,6 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 enum Command {
     Hello(Hello, oneshot::Sender<Result<Welcome, ControlError>>),
     Call(Request, oneshot::Sender<Result<Response, ControlError>>),
-}
-
-fn disconnected(reason: impl Into<String>) -> ControlError {
-    ControlError::Disconnected {
-        reason: reason.into(),
-    }
 }
 
 impl WsControl {

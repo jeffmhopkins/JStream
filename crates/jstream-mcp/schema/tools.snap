@@ -83,6 +83,17 @@ source: crates/jstream-mcp/src/tests.rs
                     "description": "Display name.",
                     "type": "string"
                   },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneRole"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "What the scene is for (ADR-0024 §1). Omitted means `scene`."
+                  },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
                     "description": "The new scene's ID, chosen by the client. Rejected if it exists."
@@ -146,7 +157,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create` with its role (omitted for `scene`), then\n`scene.reorder` to its old display position (unless it was last), then each\ndeleted item's `item.remove` inverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -1104,7 +1115,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "scene",
-                "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+                "description": "A scene of its own, listed in the scene list. Scenes are created with this role\nunless `scene.create` names another.",
                 "type": "string"
               },
               {
@@ -1759,7 +1770,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "encoder"
     },
     {
-      "description": "Returns the engine's events after the cursor `after`, oldest first, without waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` say whose batch did it) and `output.state_changed`, from every client, yours included, and `events.dropped` (the server dropped `count` events because this session fell behind; re-read the state). The once-a-second `stats.tick` is not in `events`: each read returns the newest one as `stats` (running drop totals). Each comes with a `seq`, a sequence number of this MCP server, starting at 1 when your first call opened the session. Pass the returned `next` as `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At most 100 events come back at once; `more` says others are waiting. The server keeps the last 1000: `dropped` counts events after your cursor that were discarded before you read them, so re-read the state if it is not 0. `ended` means the session is gone and no more events will come.",
+      "description": "Returns the engine's events after the cursor `after`, oldest first, without waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` say whose batch did it), `studio.changed` (another scene went on program) and `output.state_changed`, from every client, yours included, and `events.dropped` (the server dropped `count` events because this session fell behind; re-read the state). The once-a-second `stats.tick` is not in `events`: each read returns the newest one as `stats` (running drop totals). Each comes with a `seq`, a sequence number of this MCP server, starting at 1 when your first call opened the session. Pass the returned `next` as `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At most 100 events come back at once; `more` says others are waiting. The server keeps the last 1000: `dropped` counts events after your cursor that were discarded before you read them, so re-read the state if it is not 0. `ended` means the session is gone and no more events will come.",
       "inputSchema": {
         "additionalProperties": false,
         "properties": {
@@ -2893,7 +2904,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "preview"
     },
     {
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.switch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "IdempotencyKey": {
@@ -2915,7 +2926,7 @@ source: crates/jstream-mcp/src/tests.rs
             "oneOf": [
               {
                 "const": "scene",
-                "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+                "description": "A scene of its own, listed in the scene list. Scenes are created with this role\nunless `scene.create` names another.",
                 "type": "string"
               },
               {
@@ -2959,6 +2970,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "name": {
                     "description": "Display name.",
                     "type": "string"
+                  },
+                  "role": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneRole"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "What the scene is for (ADR-0024 §1). Omitted means `scene`."
                   },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -3023,7 +3045,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create` with its role (omitted for `scene`), then\n`scene.reorder` to its old display position (unless it was last), then each\ndeleted item's `item.remove` inverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -3062,6 +3084,24 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "scene_id",
                   "index"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every\noutput that shows program) shows it from the next frame. The program scene is\nruntime state, not collection state (ADR-0030): the switch changes no `rev`, is\nnever undone, and emits `studio.changed`, which `studio.get` reads back. Switching\nto the scene already on program succeeds and emits nothing. Fails with\n`not_found` for a scene not in the collection.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to put on program."
+                  },
+                  "type": {
+                    "const": "scene.switch",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
                 ],
                 "type": "object"
               },
@@ -3372,6 +3412,37 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "state"
+    },
+    {
+      "description": "Runs one `studio` operation: set `op.type` to one of `studio.get` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `studio` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Reads the studio state: which scene is on program. It is runtime state, not\ncollection state (ADR-0030), so the result carries no `rev`.",
+                "properties": {
+                  "type": {
+                    "const": "studio.get",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "studio"
     },
     {
       "description": "Runs one `video` operation: set `op.type` to one of `video.snapshot` (query). A query only reads. A `video.snapshot` result leads with the PNG as an image content block; its JSON `png` field only names that block. Failures come back as a tool error whose `error.code` is stable.",

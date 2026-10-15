@@ -73,6 +73,7 @@ fn create(scene: &str) -> Edit {
     Edit::SceneCreate {
         scene_id: SceneId::new(scene),
         name: scene.to_uppercase(),
+        role: None,
     }
 }
 
@@ -123,6 +124,14 @@ fn output_call(output: &str, start: bool) -> Call {
     }
 }
 
+fn switch_call(scene: &str) -> Call {
+    Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new(scene),
+        },
+    }
+}
+
 fn code(error: &ControlError) -> Option<&'static str> {
     error.protocol().map(ProtocolError::code)
 }
@@ -143,7 +152,8 @@ pub(crate) fn check_stale_expected_rev_is_rejected() {
     let user = connected(&engine);
     let mut events = agent.events();
     assert_eq!(batch(&user, Batch::single(create("a"))), Ok(Rev(1)));
-    assert_eq!(drain(&mut events).len(), 1);
+    // `state.changed`, and `studio.changed` for the first scene going on program.
+    assert_eq!(drain(&mut events).len(), 2);
 
     let stale = Batch::single(create("b")).expecting(Rev(0));
     let error = batch(&agent, stale).expect_err("conflict");
@@ -282,7 +292,10 @@ fn a_batch_applies_atomically_and_bumps_rev_by_one() {
     };
     assert_eq!(batch(&control, edits), Ok(Rev(1)));
     assert_eq!(engine.rev(), Rev(1));
-    assert_eq!(drain(&mut events).len(), 1, "one event per batch");
+    // One `state.changed` per batch; this one also put the first scene on program.
+    let first = drain(&mut events);
+    assert_eq!(first.len(), 2, "one event per batch, then studio.changed");
+    assert!(matches!(first[1], Event::StudioChanged { .. }));
 
     // The last edit fails, so none of them applies.
     let failing = Batch {
@@ -459,7 +472,8 @@ fn an_idempotent_retry_gets_the_original_result() {
         block_on(control.call(Call::Batch(keyed.clone().expecting(Rev(0))))).expect("retry");
     assert_eq!(retry.result, first.result);
     assert_eq!(engine.rev(), Rev(2));
-    assert_eq!(drain(&mut events).len(), 2, "a retry emits nothing");
+    // Two `state.changed`, and `studio.changed` for the first scene.
+    assert_eq!(drain(&mut events).len(), 3, "a retry emits nothing");
 
     // Keys are per client: another client's identical key is a new batch.
     let other = connected(&engine);
@@ -501,8 +515,13 @@ fn events_reach_every_subscriber_in_order() {
         Event::StateChanged {
             rev: Rev(1),
             client_id: agent.client_id().expect("agent"),
-            request_id: Some(by_agent.id),
+            request_id: Some(by_agent.id.clone()),
             cause: None,
+        },
+        Event::StudioChanged {
+            program_scene: Some(SceneId::new("a")),
+            client_id: agent.client_id().expect("agent"),
+            request_id: Some(by_agent.id),
         },
         Event::StateChanged {
             rev: Rev(2),
@@ -523,6 +542,114 @@ fn events_reach_every_subscriber_in_order() {
     // Queries emit nothing.
     query(&user, Query::StateGet).expect("state.get");
     assert_eq!(drain(&mut user_events), vec![]);
+}
+
+/// `scene.switch` puts a scene on program without an edit: no `rev`, `studio.changed`
+/// to every client, `studio.get` reads it back. The first scene goes on program by
+/// itself, a deleted program scene gives way to the first one left, and reordering
+/// scenes doesn't move it (ADR-0030).
+#[test]
+fn scene_switch_changes_program_without_an_edit() {
+    let engine = Engine::new();
+    let user = connected(&engine);
+    let agent = connected(&engine);
+    let mut events = user.events();
+    let program = |control: &dyn Control| match query(control, Query::StudioGet) {
+        Ok(QueryResult::StudioGet { program_scene }) => program_scene,
+        other => panic!("not a studio result: {other:?}"),
+    };
+    let switched =
+        |scene: &str, client: &InProcessControl, request: RequestId| Event::StudioChanged {
+            program_scene: Some(SceneId::new(scene)),
+            client_id: client.client_id().expect("connected"),
+            request_id: Some(request),
+        };
+    assert_eq!(program(&user), None);
+    assert_eq!(
+        code(&block_on(agent.call(switch_call("a"))).expect_err("no scene yet")),
+        Some("not_found")
+    );
+
+    let built = block_on(user.call(Call::Batch(Batch {
+        edits: vec![create("a"), create("b")],
+        expected_rev: None,
+        idempotency_key: None,
+    })))
+    .expect("scenes");
+    assert_eq!(
+        drain(&mut events),
+        vec![
+            Event::StateChanged {
+                rev: Rev(1),
+                client_id: user.client_id().expect("connected"),
+                request_id: Some(built.id.clone()),
+                cause: None,
+            },
+            switched("a", &user, built.id),
+        ]
+    );
+    assert_eq!(program(&agent), Some(SceneId::new("a")));
+
+    let switch = block_on(agent.call(switch_call("b"))).expect("switch");
+    assert_eq!(switch.result, CallResult::Action {});
+    assert_eq!(engine.rev(), Rev(1), "a switch is not an edit");
+    assert_eq!(drain(&mut events), vec![switched("b", &agent, switch.id)]);
+    assert_eq!(program(&user), Some(SceneId::new("b")));
+    // Switching to what is already on program succeeds and says nothing.
+    block_on(user.call(switch_call("b"))).expect("same scene");
+    assert_eq!(drain(&mut events), vec![]);
+    let error = block_on(user.call(switch_call("ghost"))).expect_err("unknown scene");
+    assert_eq!(
+        error.protocol(),
+        Some(&ProtocolError::NotFound {
+            entity: EntityKind::Scene,
+            id: "ghost".into(),
+        })
+    );
+    assert_eq!(drain(&mut events), vec![]);
+
+    // Reordering scenes leaves program where it is.
+    batch(
+        &user,
+        Batch::single(Edit::SceneReorder {
+            scene_id: SceneId::new("a"),
+            index: 1,
+        }),
+    )
+    .expect("reorder");
+    assert!(matches!(
+        drain(&mut events).as_slice(),
+        [Event::StateChanged { rev: Rev(2), .. }]
+    ));
+    assert_eq!(program(&user), Some(SceneId::new("b")));
+
+    // Deleting the program scene puts the first scene left on program, after the
+    // batch's own `state.changed`; deleting the last one leaves none.
+    let deleted = block_on(agent.call(Call::Batch(Batch::single(Edit::SceneDelete {
+        scene_id: SceneId::new("b"),
+    }))))
+    .expect("delete");
+    let seen = drain(&mut events);
+    assert!(matches!(seen[0], Event::StateChanged { rev: Rev(3), .. }));
+    assert_eq!(seen[1..], [switched("a", &agent, deleted.id)]);
+    batch(
+        &agent,
+        Batch::single(Edit::SceneDelete {
+            scene_id: SceneId::new("a"),
+        }),
+    )
+    .expect("delete the last");
+    assert!(matches!(
+        drain(&mut events).as_slice(),
+        [
+            Event::StateChanged { rev: Rev(4), .. },
+            Event::StudioChanged {
+                program_scene: None,
+                ..
+            }
+        ]
+    ));
+    assert_eq!(program(&user), None);
 }
 
 #[test]
@@ -620,6 +747,10 @@ fn streams_end_with_their_session_or_the_engine() {
         poll_event(&mut leaving_events, Waker::noop()),
         Poll::Ready(Some(Event::StateChanged { rev: Rev(1), .. }))
     ));
+    assert!(matches!(
+        poll_event(&mut leaving_events, Waker::noop()),
+        Poll::Ready(Some(Event::StudioChanged { .. }))
+    ));
     assert_eq!(
         poll_event(&mut leaving_events, Waker::noop()),
         Poll::Ready(None)
@@ -629,7 +760,8 @@ fn streams_end_with_their_session_or_the_engine() {
         poll_event(&mut leaving_events, Waker::noop()),
         Poll::Ready(None)
     );
-    assert_eq!(drain(&mut staying_events).len(), 2);
+    // Two `state.changed`, and `studio.changed` for the first scene.
+    assert_eq!(drain(&mut staying_events).len(), 3);
 
     // Subscriptions opened later see only later events.
     let mut late = staying.events();
@@ -691,13 +823,20 @@ fn concurrent_sessions_see_every_event_in_rev_order() {
 
     let total = u64::try_from(THREADS * BATCHES).expect("small");
     assert_eq!(engine.rev(), Rev(total));
+    // The first batch also puts its scene on program; no later one moves it.
+    let mut program_changes = 0;
     let revs: Vec<u64> = drain(&mut events)
         .into_iter()
-        .map(|event| match event {
-            Event::StateChanged { rev, .. } => rev.0,
+        .filter_map(|event| match event {
+            Event::StateChanged { rev, .. } => Some(rev.0),
+            Event::StudioChanged { .. } => {
+                program_changes += 1;
+                None
+            }
             other => panic!("unexpected event {other:?}"),
         })
         .collect();
+    assert_eq!(program_changes, 1);
     assert_eq!(revs, (1..=total).collect::<Vec<_>>());
 }
 
@@ -715,6 +854,15 @@ fn the_engine_answers_like_the_mock() {
                 client_id: ClientId::new("client"),
                 request_id,
                 cause: None,
+            },
+            Event::StudioChanged {
+                program_scene,
+                request_id,
+                ..
+            } => Event::StudioChanged {
+                program_scene,
+                client_id: ClientId::new("client"),
+                request_id,
             },
             other => other,
         }
@@ -739,6 +887,15 @@ fn the_engine_answers_like_the_mock() {
         Call::Batch(Batch::single(webcam())),
         Call::Batch(Batch::single(create("a")).expecting(Rev(1))),
         Call::Batch(Batch::single(add("a", "i9", "webcam")).expecting(Rev(2))),
+        // The parity collection reorders `b` first, so `b` goes on program: switching to
+        // `a` moves it, a second switch is a no-op, and deleting `a` below (`b` can't go
+        // while `a` nests it) moves it back to `b`.
+        switch_call("a"),
+        switch_call("a"),
+        switch_call("ghost"),
+        Call::Query {
+            query: Query::StudioGet,
+        },
         Call::Batch(Batch::single(Edit::SourceDelete {
             source_id: SourceId::new("webcam"),
         })),
@@ -755,6 +912,16 @@ fn the_engine_answers_like_the_mock() {
         Call::Batch(Batch::single(Edit::SceneDelete {
             scene_id: SceneId::new("a"),
         })),
+        Call::Query {
+            query: Query::StudioGet,
+        },
+        // Undoing the delete brings `a` back, and program stays on `b`.
+        Call::History(jstream_protocol::HistoryCall::new(
+            jstream_protocol::HistoryOp::Undo,
+        )),
+        Call::Query {
+            query: Query::StudioGet,
+        },
         output_call("yt", true),
         output_call("yt", true),
         output_call("yt", false),
@@ -793,6 +960,16 @@ fn the_engine_answers_like_the_mock() {
     let mock_events: Vec<Event> = drain(&mut mock_events).into_iter().map(normalize).collect();
     assert_eq!(real_events, mock_events);
     assert!(real_events.len() >= 5);
+    let programs: Vec<_> = real_events
+        .iter()
+        .filter_map(|event| match event {
+            Event::StudioChanged { program_scene, .. } => {
+                Some(program_scene.as_ref().map(SceneId::as_str))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(programs, [Some("b"), Some("a"), Some("b")]);
 }
 
 /// Backends without a publish target do not start a pipeline and leave the output
@@ -1468,6 +1645,39 @@ fn the_render_snapshot_follows_the_program_mix() {
     assert_eq!(generation(), 4, "a new frame is a new version");
 }
 
+/// The render thread's program mix follows program: a switch republishes it with the
+/// new scene, a switch to the scene already on program publishes nothing, and deleting
+/// the program scene moves the mix to the first scene left (ADR-0030).
+#[test]
+fn the_render_snapshot_follows_scene_switch() {
+    let engine = Engine::new();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let program = || hub.load().shot().program().map(|id| id.as_str().to_owned());
+    batch(&control, edits(vec![create("a"), create("b")])).expect("scenes");
+    assert_eq!(program().as_deref(), Some("a"));
+    let generation = hub.load().generation();
+
+    block_on(control.call(switch_call("b"))).expect("switch");
+    assert_eq!(program().as_deref(), Some("b"));
+    assert_eq!(hub.load().generation(), generation + 1);
+    block_on(control.call(switch_call("b"))).expect("same scene");
+    assert_eq!(
+        hub.load().generation(),
+        generation + 1,
+        "nothing new to draw"
+    );
+
+    batch(
+        &control,
+        Batch::single(Edit::SceneDelete {
+            scene_id: SceneId::new("b"),
+        }),
+    )
+    .expect("delete the program scene");
+    assert_eq!(program().as_deref(), Some("a"));
+}
+
 /// How long a GPU test's `output.start` waits for lavapipe or WARP to open. The
 /// engine's 10 s default only guards against a stuck adapter; on a loaded CI runner a
 /// software adapter can take longer, and that is not what these tests check. A real
@@ -1580,7 +1790,10 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
     assert_eq!(built, Rev(1));
     assert!(matches!(
         drain(&mut events).as_slice(),
-        [Event::StateChanged { rev: Rev(1), .. }]
+        [
+            Event::StateChanged { rev: Rev(1), .. },
+            Event::StudioChanged { .. }
+        ]
     ));
     engine
         .set_source_frame(
@@ -1616,6 +1829,50 @@ fn video_snapshot_reads_the_program_mix_back_as_png() {
     let (rev, width, rgba) = image(&hidden);
     assert_eq!(rev, Rev(2));
     assert_eq!(at(&rgba, width, 640, 360), [0, 0, 0, 255]);
+
+    // The snapshot follows program: a second scene shows only once it is switched to.
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                create("other"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("green"),
+                    name: "Green".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "webcam".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                add("other", "fill", "green"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        },
+    )
+    .expect("second scene");
+    engine
+        .set_source_frame(
+            &SourceId::new("green"),
+            1920,
+            1080,
+            &solid(1920, 1080, [0, 255, 0, 255]),
+        )
+        .expect("frame");
+    let before = skip(query(&control, Query::VideoSnapshot)).expect("adapter already opened");
+    let (_, width, rgba) = image(&before);
+    assert_eq!(
+        at(&rgba, width, 640, 360),
+        [0, 0, 0, 255],
+        "main is still on"
+    );
+    block_on(control.call(switch_call("other"))).expect("switch");
+    let after = skip(query(&control, Query::VideoSnapshot)).expect("adapter already opened");
+    let (rev, width, rgba) = image(&after);
+    assert_eq!(rev, Rev(3), "a switch is not an edit");
+    assert_eq!(at(&rgba, width, 640, 360), [0, 255, 0, 255]);
+    drain(&mut events);
 
     // A scene source is the inner scene's composite, placed in the program scene.
     let nested = Engine::new();
@@ -3968,6 +4225,44 @@ pub(crate) fn check_secrets_are_redacted() {
     }
     let stored = store.get("out_yt").expect("get").expect("stored");
     assert_eq!(stored.expose(), KEY, "the key reached the store");
+}
+
+/// `scene.switch` is audited like every action, naming its scene, and a switch to an
+/// unknown scene with its error code (ADR-0030).
+#[test]
+fn scene_switch_is_audited() {
+    let audit = Arc::new(crate::AuditMemory::new());
+    let engine = Engine::new().with_audit(audit.clone());
+    let control = connected(&engine);
+    batch(&control, edits(vec![create("a"), create("b")])).expect("scenes");
+    block_on(control.call(switch_call("b"))).expect("switch");
+    block_on(control.call(switch_call("ghost"))).expect_err("unknown scene");
+
+    let entries = audit.entries();
+    let switches: Vec<_> = entries
+        .iter()
+        .skip(1)
+        .map(|e| {
+            (
+                e.call,
+                e.scene_id.as_ref().map(SceneId::as_str),
+                (e.rev_before.0, e.rev_after.0),
+                e.error,
+            )
+        })
+        .collect();
+    assert_eq!(
+        switches,
+        [
+            ("scene.switch", Some("b"), (1, 1), None),
+            ("scene.switch", Some("ghost"), (1, 1), Some("not_found")),
+        ]
+    );
+    assert!(
+        entries[1].to_json_line().contains(",\"scene_id\":\"b\","),
+        "{:?}",
+        entries[1].to_json_line()
+    );
 }
 
 /// The audit log gets one entry per batch and action, with the client and its latest
