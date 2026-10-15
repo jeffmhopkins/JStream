@@ -275,6 +275,8 @@ depends_on = ["docs/adr/0008-windows-support-policy.md"]
   the item status the [Progress](#progress) table is generated from
 - [docs/runbooks/go-live.md](docs/runbooks/go-live.md): taking the daemon live on Windows,
   and the smoke script that checks it
+- [docs/runbooks/waves.md](docs/runbooks/waves.md): which wave branch a PR targets, and
+  how a wave lands in `main`
 - [CLAUDE.md](CLAUDE.md): the entry point for builder agents
 - [REVIEW.md](REVIEW.md): the reviewer agent's instructions; its verdict gates merges
 - [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) and

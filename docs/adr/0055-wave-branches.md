@@ -35,7 +35,8 @@ Work can land in batches through **wave branches** named `wave/<name>`:
 - The wave's owner keeps it merged with `main`, fixes failures the full run finds, and
   opens the PR into `main` when the wave is ready.
 
-PRs straight into `main` keep working exactly as before, so waves are opt-in per change.
+PRs straight into `main` keep working exactly as before. Which branch each PR targets, who
+owns a wave and how it lands are in the [waves runbook](../runbooks/waves.md).
 
 <a id="consequences"></a>
 ## Consequences
