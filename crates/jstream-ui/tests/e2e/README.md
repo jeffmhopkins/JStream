@@ -19,7 +19,6 @@ input on the canvas.
 ## Harness
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests/e2e/*.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:68eb227f8f16d35b", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "U3a: fixtures.js gains inspectorPage (opens an inspector tab), now described; harness otherwise unchanged; all 18 tests pass locally in Chromium" }
 -->
 
 - **The mock daemon** (`mock-daemon/`, the test-only crate `jstream-ui-e2e`) puts
@@ -50,7 +49,6 @@ verified = { hash = "b3:68eb227f8f16d35b", by = "agent:claude@session_01FnBvDaHW
 ## What the tests cover
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/specs/**"]
-verified = { hash = "b3:a801b88194e9982d", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "U3a: new scenes.spec.js (5 tests) described, outputs spec opens the Outputs tab; 18 pass locally (one test.fail for #305 as expected)" }
 -->
 
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
@@ -79,7 +77,6 @@ verified = { hash = "b3:a801b88194e9982d", by = "agent:claude@session_01FnBvDaHW
 ## Running them
 <!-- @section
 covers = ["crates/jstream-ui/tests/e2e/playwright.config.js", "crates/jstream-ui/tests/e2e/package.json"]
-verified = { hash = "b3:dbac1e8d9fa742df", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 -->
 
 ```sh

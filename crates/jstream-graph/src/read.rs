@@ -1,15 +1,15 @@
 //! Reading the graph as protocol query results: what an engine answers to the queries
 //! that read collection state (`scene.list`, `source.list`, `item.list`, `output.list`,
-//! `encoder.list`, `state.get`), to the kind queries (`kind.list`, `kind.describe`), and
-//! to `delete.plan` (`plan.rs`).
+//! `encoder.list`, `bus.list`, `state.get`), to the kind queries (`kind.list`,
+//! `kind.describe`), and to `delete.plan` (`plan.rs`).
 //!
 //! Reads never change the graph. Each collection result carries the revision it was
 //! read at; kinds are not collection state, so their results carry none.
 
-use crate::model::{Encoder, Graph, Item, Output, Placement, Scene, Source, State};
+use crate::model::{Bus, Encoder, Graph, Item, Output, Placement, Scene, Source, State};
 use jstream_protocol::{
-    EncoderProfileInfo, EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query,
-    QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
+    BusInfo, EncoderProfileInfo, EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError,
+    Query, QueryResult, SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo,
 };
 
 impl Graph {
@@ -30,6 +30,7 @@ impl Graph {
             Query::KindDescribe { kind_id } => self.kind_describe(kind_id),
             Query::OutputList => Ok(self.output_list()),
             Query::EncoderList => Ok(self.encoder_list()),
+            Query::BusList => Ok(self.bus_list()),
             Query::DeletePlan { target } => self.delete_plan(target),
             _ => return None,
         })
@@ -120,8 +121,29 @@ impl Graph {
         }
     }
 
+    /// The `bus.list` result: every bus, ordered by ID, and every send, ordered by bus,
+    /// then by source.
+    pub fn bus_list(&self) -> QueryResult {
+        QueryResult::BusList {
+            rev: self.rev,
+            buses: self.state.buses().map(Bus::to_info).collect(),
+            sends: self.send_infos(),
+        }
+    }
+
+    fn send_infos(&self) -> Vec<SendInfo> {
+        self.state
+            .sends()
+            .map(|(source, bus, gain_db)| SendInfo {
+                source_id: source.clone(),
+                bus_id: bus.clone(),
+                gain_db,
+            })
+            .collect()
+    }
+
     /// The `state.get` result: the canvas, every source by ID, every scene with its items
-    /// in display order, and every output and encoder profile by ID.
+    /// in display order, every output, encoder profile and bus by ID, and every send.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
@@ -134,6 +156,8 @@ impl Graph {
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
             encoders: self.state.encoders().map(Encoder::to_info).collect(),
+            buses: self.state.buses().map(Bus::to_info).collect(),
+            sends: self.send_infos(),
         }
     }
 }
@@ -151,6 +175,7 @@ impl Source {
                 .duplicated_from
                 .clone()
                 .filter(|original| state.source(original).is_some()),
+            audio: self.audio,
         }
     }
 }
@@ -173,6 +198,18 @@ impl Encoder {
             profile_id: self.id.clone(),
             name: self.name.clone(),
             profile: self.profile,
+        }
+    }
+}
+
+impl Bus {
+    /// This bus as `bus.list` and `state.get` report it.
+    pub fn to_info(&self) -> BusInfo {
+        BusInfo {
+            bus_id: self.id.clone(),
+            name: self.name.clone(),
+            gain_db: self.gain_db,
+            muted: self.muted,
         }
     }
 }
@@ -279,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_graph_reads_empty() {
+    fn an_empty_graph_reads_empty_but_for_the_master_bus() {
         let graph = Graph::new();
         assert_eq!(
             graph.state_get(),
@@ -290,6 +327,13 @@ mod tests {
                 scenes: vec![],
                 outputs: vec![],
                 encoders: vec![],
+                buses: vec![jstream_protocol::BusInfo {
+                    bus_id: jstream_protocol::BusId::master(),
+                    name: "Master".into(),
+                    gain_db: jstream_protocol::Finite32::ZERO,
+                    muted: false,
+                }],
+                sends: vec![],
             }
         );
         assert_eq!(
@@ -314,7 +358,8 @@ mod tests {
         let Some(Ok(QueryResult::KindList { kinds })) = graph.query(&Query::KindList) else {
             panic!("kind.list");
         };
-        assert_eq!(kinds, vec![parity::kinds()[0].summary()]);
+        let expected: Vec<_> = parity::kinds().iter().map(|k| k.summary()).collect();
+        assert_eq!(kinds, expected);
         let describe = |id: &str| graph.query(&Query::KindDescribe { kind_id: id.into() });
         let Some(Ok(QueryResult::KindDescribe {
             kind,
@@ -324,7 +369,7 @@ mod tests {
             panic!("kind.describe");
         };
         assert_eq!(settings_schema, kind.settings_schema());
-        assert_eq!(kind, parity::kinds()[0]);
+        assert_eq!(kind, parity::kinds()[1]);
         assert!(matches!(
             describe("ghost"),
             Some(Err(ProtocolError::InvalidArgument { field, .. })) if field == "kind_id"

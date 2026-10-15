@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:a75cb5fedfdc794c", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Review N4: properties.rs only (asset root follows a stored reference only); contents list unaffected; holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -58,7 +57,6 @@ Contents ([Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:dfc132b23d4d9009", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Review N4: the asset field keeps the user's root pick while no file is stored and follows a stored reference's root; the form bullet's claims still hold" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -166,7 +164,6 @@ verified = { hash = "b3:dfc132b23d4d9009", by = "agent:claude@session_01FnBvDaHW
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:8120b6e7a0057203", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: Styles bullet now says the test refuses any style attribute, static or set at run time (style=move, attr:style), outside test modules; matches sets_style_attribute in lib.rs" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
@@ -216,7 +213,6 @@ scene and sends the edits. These three are pure and tested natively against
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:f9f43351b35ddde2", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Merge of main into U3a: main's ui-e2e pointer kept; Cargo.toml keeps serde_json; trunk build --locked --offline succeeds; holds" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
