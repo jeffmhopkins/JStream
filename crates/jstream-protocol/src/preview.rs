@@ -1,5 +1,5 @@
 //! Preview streams: the program mix as low-resolution video, sent to one session as
-//! WebSocket binary frames (ADR-0002, ARCH › Control protocol).
+//! WebSocket binary frames (ADR-0045, ARCH › Control protocol).
 //!
 //! A client opens a stream with the `preview.subscribe` action, naming a `channel` of
 //! its own choosing, and closes it with `preview.unsubscribe`. Both are JSON calls; the

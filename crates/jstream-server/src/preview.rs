@@ -1,5 +1,5 @@
 //! Preview frames on a connection: the session's binary channel (`Control::binary`)
-//! on one side, WebSocket binary messages on the other (ADR-0002).
+//! on one side, WebSocket binary messages on the other (ADR-0045).
 //!
 //! The connection opens the session's binary channel once the handshake succeeds, and
 //! queues each frame it yields in [`Frames`] until the writer sends it. The queue holds

@@ -454,7 +454,7 @@ pub enum Action {
         output_id: OutputId,
     },
     /// Opens a preview stream of the program mix for this session: low-resolution
-    /// pictures sent as binary frames on `channel`, only to this session (ADR-0002).
+    /// pictures sent as binary frames on `channel`, only to this session (ADR-0045).
     /// The picture is the canvas scaled down to fit `max_width` × `max_height`, with
     /// even sides; it follows the canvas when that changes. A picture is sent when what
     /// the program mix draws changes, at most `fps` times a second, and at least once

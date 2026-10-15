@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-server/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-server"]
-verified = { hash = "b3:a1f50d3313163f2b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
+verified = { hash = "b3:84dc636237d44dda", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: preview cites ADR-0045 (its own small H.264 encoder session, binary frames, WebCodecs) instead of superseded ADR-0002; only the citation changed; re-read, holds" }
 -->
 
 The server: it puts the control API on an authenticated localhost WebSocket, so remote
@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:635af45d76ee0965", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#263, #272) into #264: main changed only mock.rs's cycle-reason text and stamps here; this PR's constant move kept; re-read, section describes neither cycle-reason wording nor anything the merge changed; holds" }
+verified = { hash = "b3:84b7f6881f8ba11b", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: preview cites ADR-0045 (its own small H.264 encoder session, binary frames, WebCodecs) instead of superseded ADR-0002; only the citation changed; re-read, holds" }
 -->
 
 ### Listening and admission

@@ -1,4 +1,4 @@
-//! A baseline JPEG encoder for the preview stream's fallback codec (ADR-0002): JFIF,
+//! A baseline JPEG encoder for the preview stream's fallback codec (ADR-0045): JFIF,
 //! YCbCr 4:2:0, the example quantization and Huffman tables of ITU-T T.81 Annex K,
 //! scaled for a quality. Small pictures only (a preview is at most 1920 × 1080), so it
 //! favours being short and obviously right over speed: a plain separable DCT, no SIMD.

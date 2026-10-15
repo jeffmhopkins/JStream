@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:d4503391660c5cb0", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: only lib.rs's test module and style.css's header comment changed; no design bullet describes either; holds" }
+verified = { hash = "b3:f2ffa0341cd7ace6", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): stale via control and protocol design cascades; UI still says the preview stream is not hooked up, which holds (U0's lane)" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

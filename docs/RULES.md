@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e23ff09bf4f04289", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
+verified = { hash = "b3:d5ec8381ad25d139", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): stale only via ARCH#threading (main's text plus the Preview thread row, which is not real-time); this section's text is main's and consistent; holds" }
 -->
 
 <a id="R-RT-001"></a>
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:d576006e7238ccc1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: stale through cascade; R-API-001 untouched, subprotocol is transport only; holds" }
+verified = { hash = "b3:04bbe21a9555cf16", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): R-API-001 unchanged; preview is the 0.18 minor addition" }
 -->
 
 <a id="R-API-001"></a>

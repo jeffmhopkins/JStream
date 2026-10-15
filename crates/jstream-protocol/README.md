@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b4650be831c06275", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: src change is one envelope test; contents list and layer description unchanged" }
+verified = { hash = "b3:4a0cef6b58a3b6ca", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: preview cites ADR-0045 (its own small H.264 encoder session, binary frames, WebCodecs) instead of superseded ADR-0002; only the citation changed; re-read, holds" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -70,7 +70,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   shares them. No kind is defined here.
 - **Events** (`event.rs`): `state.changed`, `output.state_changed`, `studio.changed`,
   `events.dropped` and `stats.tick`.
-- **Preview streams** (`preview.rs`, [ADR-0002](../../docs/adr/0002-web-ui-everywhere.md)):
+- **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, shared by every implementation), and the binary
   frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
@@ -128,7 +128,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:7aa5f3f591196354", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 (N2): sentence now says non-integer numbers are f64; rest is main's text" }
+verified = { hash = "b3:68a496a47ee98d78", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: preview cites ADR-0045 (its own small H.264 encoder session, binary frames, WebCodecs) instead of superseded ADR-0002; only the citation changed; re-read, holds" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -702,7 +702,7 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
 Preview video travels as WebSocket binary messages, one `BinaryFrame` each, alongside
 the JSON text messages of the same connection (0.18,
 [ARCH › Control protocol](../../docs/ARCHITECTURE.md#protocol),
-[ADR-0002](../../docs/adr/0002-web-ui-everywhere.md)). Audio meters will use the same
+[ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). Audio meters will use the same
 frame with another kind; their fields are not designed yet beyond ADR-0028's list.
 
 - **Opening and closing.** `preview.subscribe {channel, max_width?, max_height?, fps?,

@@ -1,4 +1,4 @@
-//! Preview streams (U1, ADR-0002): `preview.subscribe` sends the program mix to the
+//! Preview streams (U1, ADR-0045): `preview.subscribe` sends the program mix to the
 //! session that asked, as binary frames on its channel, in H.264 when the platform has
 //! an encoder and JPEG otherwise; a reader that falls behind loses frames up to a
 //! keyframe, and the streams end with `preview.unsubscribe` or the session.

@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:4e5c9b92b95bb380", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: stale through server design, where only a citation was added; steps unchanged; holds" }
+verified = { hash = "b3:e7d68ebd00477ef9", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): stale via server design; go-live steps use no preview; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI

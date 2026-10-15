@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:c6c1eabed7dffa25", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#263, #272) into #264: main changed only mock.rs's cycle-reason text and stamps here; this PR's constant move kept; re-read, section describes neither cycle-reason wording nor anything the merge changed; holds" }
+verified = { hash = "b3:72750cc7858d2b9c", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): main's text with binary()/BinaryStream in the trait bullet; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -47,7 +47,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:4a39e8aa83c89ef1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#263, #272) into #264: main changed only mock.rs's cycle-reason text and stamps here; this PR's constant move kept; re-read, section describes neither cycle-reason wording nor anything the merge changed; holds" }
+verified = { hash = "b3:c940af39b74255c9", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 merge of main (protocol 0.17, scene.switch/studio, browser WsControl, U2-U5): binary() bullet at 0.18; WebSocket client binary sentence now covers the browser (array buffers) too, matching ws_web.rs's BinaryQueue/deliver; main's Failures and Connection text kept" }
 -->
 
 ### The trait

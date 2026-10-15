@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:66c255ea11558ac5", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 merge of main: text is main's (Q1 tests paragraph); stale via protocol design's number sentence only" }
+verified = { hash = "b3:47e3f44804d302de", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1: preview cites ADR-0045 (its own small H.264 encoder session, binary frames, WebCodecs) instead of superseded ADR-0002; only the citation changed; re-read, holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

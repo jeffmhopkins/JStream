@@ -1,4 +1,4 @@
-//! Preview streams (ADR-0002): the program mix as low-resolution pictures, sent to the
+//! Preview streams (ADR-0045): the program mix as low-resolution pictures, sent to the
 //! session that subscribed as binary frames ([`jstream_protocol::BinaryFrame`]).
 //!
 //! **Sessions.** Each [`InProcessControl`](crate::InProcessControl) holds a
