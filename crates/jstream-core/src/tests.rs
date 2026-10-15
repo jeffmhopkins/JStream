@@ -4161,6 +4161,37 @@ mod cpu_pipeline {
         assert_eq!(output_state(&control, "cam"), OutputState::Stopped);
     }
 
+    /// The engine has one camera: a second virtual-camera output can't start while the
+    /// first runs, and says why.
+    #[test]
+    fn a_second_virtual_camera_output_is_refused_while_one_runs() {
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog::default()));
+        let (_engine, control, mut events) =
+            vcam_engine(&fakes, cpu_draw(), scripted(&log), (64, 36), None);
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("cam2"),
+                kind: OutputKind::VirtualCam,
+            }]),
+        )
+        .expect("output.create");
+        drain(&mut events);
+        start_output(&control, &mut events, "cam");
+        let err = block_on(control.call(output_call("cam2", true))).expect_err("refused");
+        assert_eq!(code(&err), Some("action_failed"));
+        assert!(
+            err.to_string().contains("in use by another output"),
+            "{err}"
+        );
+        block_on(control.call(output_call("cam", false))).expect("output.stop");
+        drain(&mut events);
+        start_output(&control, &mut events, "cam2");
+        block_on(control.call(output_call("cam2", false))).expect("output.stop");
+        assert_eq!(log.lock().expect("vcam log").stops, 2);
+    }
+
     /// A camera that refuses to start fails `output.start` with its reason, and the
     /// engine keeps the sink: once the camera accepts, the next start runs.
     #[test]

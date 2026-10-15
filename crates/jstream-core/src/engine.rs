@@ -283,7 +283,9 @@ impl Engine {
             .live
             .set_clock(Arc::clone(&backends.clock));
         let host = self.host();
-        *lock(&host.vcam) = backends.vcam.take();
+        let vcam = backends.vcam.take();
+        host.has_vcam.store(vcam.is_some(), Ordering::Release);
+        *lock(&host.vcam) = vcam;
         *lock(&host.backends) = Some(backends);
         self
     }
@@ -781,8 +783,13 @@ impl Engine {
                 Some(OwnTarget::Vcam(canvas)) => {
                     let sink = lock(&host.vcam).take();
                     let Some(sink) = sink else {
+                        let reason = if host.has_vcam.load(Ordering::Acquire) {
+                            "the virtual camera is in use by another output"
+                        } else {
+                            "this engine has no virtual camera"
+                        };
                         return Err(ProtocolError::ActionFailed {
-                            reason: "this engine has no virtual camera".into(),
+                            reason: reason.into(),
                         });
                     };
                     Target::Vcam(VcamOut::new(sink, Arc::clone(&host.vcam)), canvas)

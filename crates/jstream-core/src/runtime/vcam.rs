@@ -1,16 +1,22 @@
 //! The virtual camera's end of the pipeline: a running output whose frames go from the
-//! program stage's render thread to the platform's [`VcamSink`], with no encoder session
-//! and no output thread.
+//! program stage's render thread to the platform's [`VcamSink`], with no encoder
+//! session.
 //!
 //! The engine owns one sink for its whole life ([`VcamSlot`]). A start takes it out of
-//! the slot ([`VcamOut`]) and starts the camera, then hands the render thread a
-//! [`VcamTap`] that publishes every program frame to it. The tap and the output share
-//! the sink ([`VcamShared`]): a stop takes it out on the control thread, which stops the
-//! camera and returns the sink to the slot, so the next start finds it, and the tap
-//! leaves on its next tick. Whatever drops the sink instead (a start that fails) does
-//! the same.
+//! the slot ([`VcamOut`]) and starts the camera, then starts the output's camera thread
+//! ([`run_camera`]) and hands the render thread a [`VcamTap`]. The two share nothing but
+//! a stop flag and two bounded channels (R-RT-003): each tick the tap copies the program
+//! frame into a buffer the camera thread handed back and sends it, dropping and counting
+//! the frame when the camera thread is behind. The camera thread converts it to BGRA at
+//! the canvas size and publishes it. A stop sets the flag; the camera thread then stops
+//! the camera and returns the sink to the slot, so the next start finds it, and the tap
+//! leaves on its next tick and goes to the collector. Whatever drops the sink instead (a
+//! start that fails) does the same.
 
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use jstream_media::{
     ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Plane, VideoFrame,
@@ -67,50 +73,127 @@ impl Drop for VcamOut {
     }
 }
 
-/// The sink while its output runs, shared by the render thread's tap and the output's
-/// control side. The stop takes it out, on the control thread, so stopping needs no
-/// tick from the render thread and never stops the camera there.
-pub(crate) type VcamShared = Arc<Mutex<Option<VcamOut>>>;
+/// Frames in flight from the render thread to the camera thread. One being published and
+/// one waiting: a camera thread further behind than that drops frames rather than
+/// adding latency.
+const CAMERA_QUEUE: usize = 1;
+/// Buffers the camera thread hands back for the render thread to fill: the queued frame,
+/// the one being published and one to spare.
+const SPARE_BUFFERS: usize = 3;
+/// How often a camera thread with no frame coming checks whether its output stopped.
+const STOP_POLL: Duration = Duration::from_millis(20);
 
-/// A virtual-camera output as the render thread holds it.
+/// One program frame on its way to the camera: RGBA8 at `size`.
+pub(crate) struct CameraFrame {
+    size: FrameSize,
+    pts: MediaTime,
+    rgba: Vec<u8>,
+}
+
+/// The ends of a virtual-camera output's channels. `tap` goes to the render thread and
+/// the rest to [`run_camera`].
+pub(crate) fn camera_channels(
+    stop: Arc<AtomicBool>,
+    drops: Arc<AtomicU64>,
+) -> (VcamTap, Receiver<CameraFrame>, SyncSender<Vec<u8>>) {
+    let (frames_tx, frames_rx) = std::sync::mpsc::sync_channel(CAMERA_QUEUE);
+    let (spare_tx, spare_rx) = std::sync::mpsc::sync_channel(SPARE_BUFFERS);
+    let tap = VcamTap {
+        frames: frames_tx,
+        spare: spare_rx,
+        held: None,
+        stop,
+        drops,
+    };
+    (tap, frames_rx, spare_tx)
+}
+
+/// A virtual-camera output as the render thread holds it. It never locks, blocks or
+/// frees: a leaving tap goes to the collector.
 pub(crate) struct VcamTap {
-    out: VcamShared,
-    /// The size the camera was started at: the canvas.
-    canvas: FrameSize,
-    /// The output's failure channel: a publish error fails this output alone.
-    fail: FailLine,
+    frames: SyncSender<CameraFrame>,
+    /// Buffers the camera thread has published and handed back.
+    spare: Receiver<Vec<u8>>,
+    /// A buffer whose frame was dropped, kept for the next tick.
+    held: Option<Vec<u8>>,
+    /// The output's stop flag.
+    stop: Arc<AtomicBool>,
+    /// The output's drop count: frames the camera thread was too far behind to take.
+    drops: Arc<AtomicU64>,
 }
 
 impl VcamTap {
-    pub(crate) fn new(out: VcamShared, canvas: FrameSize, fail: FailLine) -> Self {
-        Self { out, canvas, fail }
-    }
-
-    /// Publishes one program frame, RGBA8 at `size`, as BGRA8 at the canvas size: fitted
-    /// inside it and centred, by nearest neighbour, when the sizes differ. `false` once
-    /// the tap is done: its output has stopped (the sink has been taken back) or the
-    /// camera refused the frame (the output is told it failed, and its stop takes the
-    /// sink back).
+    /// Sends one program frame, RGBA8 at `size`, to the camera thread. It reuses a
+    /// buffer the camera thread handed back, so it allocates only until buffers
+    /// circulate. `false` once the tap is done: its output is stopping, or the camera
+    /// thread has ended (a stop, or a failed publish it reported).
     pub(crate) fn push(&mut self, size: FrameSize, pts: MediaTime, rgba: &[u8]) -> bool {
-        let mut out = lock(&self.out);
-        let Some(out) = out.as_mut() else {
+        if self.stop.load(Ordering::Acquire) {
             return false;
+        }
+        let mut buffer = self
+            .held
+            .take()
+            .or_else(|| self.spare.try_recv().ok())
+            .unwrap_or_default();
+        buffer.clear();
+        buffer.extend_from_slice(rgba);
+        let frame = CameraFrame {
+            size,
+            pts,
+            rgba: buffer,
         };
-        let published =
-            bgra_frame(size, self.canvas, pts, rgba).and_then(|frame| out.publish(frame));
-        match published {
+        match self.frames.try_send(frame) {
             Ok(()) => true,
-            Err(err) => {
-                self.fail.report(err);
+            Err(TrySendError::Full(frame)) => {
+                self.drops.fetch_add(1, Ordering::Relaxed);
+                self.held = Some(frame.rgba);
+                true
+            }
+            Err(TrySendError::Disconnected(frame)) => {
+                self.held = Some(frame.rgba);
                 false
             }
         }
     }
 
-    /// `false` once the output has stopped; for a tick with no frame to publish yet.
+    /// `false` once the output is stopping; for a tick with no frame to send yet.
     pub(crate) fn stay(&self) -> bool {
-        lock(&self.out).is_some()
+        !self.stop.load(Ordering::Acquire)
     }
+}
+
+/// The body of a virtual-camera output's thread, `jstream-vcam`: converts each frame the
+/// tap sends to BGRA8 at `canvas` and publishes it, and hands the buffer back. It ends
+/// when `stop` is set, when the tap has gone, or when the camera refuses a frame, which
+/// it reports on `fail`; then `out` drops here, which stops the camera and returns the
+/// sink to the engine, and `done` drops after it.
+pub(crate) fn run_camera(
+    mut out: VcamOut,
+    canvas: FrameSize,
+    frames: Receiver<CameraFrame>,
+    spare: SyncSender<Vec<u8>>,
+    stop: Arc<AtomicBool>,
+    fail: FailLine,
+    done: Sender<()>,
+) {
+    while !stop.load(Ordering::Acquire) {
+        let frame = match frames.recv_timeout(STOP_POLL) {
+            Ok(frame) => frame,
+            Err(RecvTimeoutError::Timeout) => continue,
+            Err(RecvTimeoutError::Disconnected) => break,
+        };
+        let published = bgra_frame(frame.size, canvas, frame.pts, &frame.rgba)
+            .and_then(|bgra| out.publish(bgra));
+        if let Err(err) = published {
+            fail.report(err);
+            break;
+        }
+        // Full only if the tap allocated more than were handed back; this one drops.
+        let _ = spare.try_send(frame.rgba);
+    }
+    drop(out);
+    drop(done);
 }
 
 /// One BGRA8 frame at `canvas` from an RGBA8 frame at `size`. The frame owns its
