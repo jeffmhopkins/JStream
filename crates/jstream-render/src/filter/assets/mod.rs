@@ -2,7 +2,7 @@
 //! and scene mask.
 //!
 //! Each reads one external image through [`Pass::set_reference`]: a LUT table made by
-//! [`lut_image`], a decoded mask image, or the referenced scene's composited layer. Render
+//! `lut::lut_image`, a decoded mask image, or the referenced scene's composited layer. Render
 //! does no file or network I/O (R-RT-002), so these passes never open files: the chain
 //! runtime (V0) resolves the asset or scene reference in the settings and hands over the
 //! image. Until both a reference setting and an image are present, a kind passes its
@@ -20,17 +20,6 @@ use serde_json::Value;
 use crate::error::RenderError;
 use crate::filter::{Ctx, Pass};
 use crate::image::Image;
-
-#[allow(
-    unused_imports,
-    reason = "Lane V: the chain runtime (V0) is the first caller outside this group"
-)]
-pub(crate) use cube::{Lut, LutError};
-#[allow(
-    unused_imports,
-    reason = "Lane V: the chain runtime (V0) is the first caller outside this group"
-)]
-pub(crate) use lut::lut_image;
 
 /// This group's kinds.
 pub(crate) fn descriptors() -> Vec<KindDescriptor> {

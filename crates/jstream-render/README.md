@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:4994a365cc91ec8c", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V3: re-read Purpose; the merge moves FrameSync staging and narrows the filter/ allow (assets re-exports now carry their own unused_imports allow); Purpose still points filters at #filters and the chain runtime at V0; holds" }
+verified = { hash = "b3:8a43331530451d18", by = "agent:claude", note = "re-read after dropping the unused LUT re-exports from filter/assets (callers use the full paths until V0 wires them); text unchanged and still holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:8fe01982a8ea71ee", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V3: re-read Design against compositor.rs apply_filter (staging now after encode) and the asset kinds; no new thread, I/O or steady-path allocation; holds" }
+verified = { hash = "b3:61231dce588f0a18", by = "agent:claude", note = "re-read after dropping the unused LUT re-exports from filter/assets (callers use the full paths until V0 wires them); text unchanged and still holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -280,7 +280,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:1bb0ee8683d601a2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V3: harness bullets now say FrameSync staged after recording and frame.time wraps daily, matching compositor.rs and prelude.wgsl; V3 paragraph (apply_lut, image_mask, scene_mask, set_reference on VideoFilter and Pass, LUT layout) unchanged and matches filter/assets, mod.rs and pass.rs; holds" }
+verified = { hash = "b3:e10cbd9b0282d5e0", by = "agent:claude", note = "re-read after dropping the unused LUT re-exports from filter/assets (callers use the full paths until V0 wires them); text unchanged and still holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)

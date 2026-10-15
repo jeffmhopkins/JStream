@@ -717,7 +717,7 @@ verified = { hash = "b3:d7965698ca1720f8", by = "agent:claude@session_01BL6HM3DJ
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:f5e1689b93b9e3de", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V3: re-read; the merge changes no text here, filters still draw one premultiplied image into one of the filter's output_size, chain runtime unbuilt; holds" }
+verified = { hash = "b3:fc0f94c334bfce19", by = "agent:claude", note = "re-read after dropping the unused LUT re-exports from filter/assets (callers use the full paths until V0 wires them); text unchanged and still holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
