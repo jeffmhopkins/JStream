@@ -57,7 +57,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:13b1d3a4c833218e", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 6bb4332 (#215 render-snapshot doc, #267 UI secret fields/go-live, ADR-0044 pairing); re-read main's text beside this PR's virtual-camera text; no code conflict, protocol stays 0.18; holds" }
+verified = { hash = "b3:81b5fa2b0e767808", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 amended for /pair and the cookie, neither built yet; the gate described here is the current code and remains true until the implementation PR, which will update it; holds" }
 -->
 
 ### Listening and admission
