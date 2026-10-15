@@ -249,7 +249,6 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:e23ff09bf4f04289", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; rule text unchanged; neither ARCH#threading change (render snapshot loader, CLAP hosts status) affects R-RT-001..006; the CLAP filter adds no syscall, lock or allocation (tests/no_alloc.rs)" }
 -->
 
 <a id="R-RT-001"></a>
@@ -320,7 +319,6 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:d555bf7414bec253", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -471,7 +469,6 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2348bc7076ff2d66", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): R-API-003 holds: schema stays 1 and a pre-D5 v1 file now loads with its audio sources' master sends, as it did on main" }
 -->
 
 <a id="R-API-001"></a>
@@ -646,7 +643,6 @@ dependency or performance claim (`.github/pull_request_template.md`).
 ## Documentation
 <!-- @section
 depends_on = ["docs/DOCS.md#gate"]
-verified = { hash = "b3:fdb0c87dff90c573", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-DOC-001..012 against DOCS#gate after the rebase: R-DOC-009 names the adr-status exception citing ADR-0038 (renumbered from 0036); R-DOC-006 already covers generated blocks; DOCS#gate's ADR-0039 row-key wording leaves R-DOC-012 as is" }
 -->
 
 <a id="R-DOC-001"></a>
@@ -676,8 +672,8 @@ status = "active"
 enforced_by = ["ci:docs"]
 applies_to = ["**"]
 -->
-A section's stored `verified.hash` must match the computed hash
-([DOCS › Hash-bound verification](DOCS.md#verification)).
+A section's stamp in `docs/verified.toml` must match the computed hash of each of its
+inputs ([DOCS › Hash-bound verification](DOCS.md#verification)).
 
 <a id="R-DOC-004"></a>
 ### R-DOC-004: Fix docs in the same PR; verify only what you re-read
@@ -787,7 +783,6 @@ rules.
 ## Governance
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:689f8a82ade70b26", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read R-GOV-001..005: R-GOV-005 now follows ADR-0043's narrowed maintainer tier; labels, overrides, gate and proxy decisions unchanged" }
 -->
 
 <a id="R-GOV-001"></a>
