@@ -413,7 +413,8 @@ fn queries_match_the_parity_fixture() {
         ),
         Ok(QueryResult::OutputStatus {
             output_id: OutputId::new("rec"),
-            state: OutputState::Stopped
+            state: OutputState::Stopped,
+            key_set: false,
         })
     );
     let missing = query(
@@ -2877,4 +2878,327 @@ mod cpu_pipeline {
         );
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
     }
+}
+
+fn rtmp_output(url: &str) -> jstream_protocol::OutputKind {
+    jstream_protocol::OutputKind::Rtmp {
+        target: jstream_protocol::RtmpTarget::Generic { url: url.into() },
+    }
+}
+
+fn edits(edits: Vec<Edit>) -> Batch {
+    Batch {
+        edits,
+        expected_rev: None,
+        idempotency_key: None,
+    }
+}
+
+fn set_key(output: &str, key: &str) -> Call {
+    Call::Action {
+        action: Action::OutputSetKey {
+            output_id: OutputId::new(output),
+            key: jstream_protocol::SecretString::new(key),
+        },
+    }
+}
+
+fn clear_key(output: &str) -> Call {
+    Call::Action {
+        action: Action::OutputClearKey {
+            output_id: OutputId::new(output),
+        },
+    }
+}
+
+fn key_set(control: &dyn Control, output: &str) -> Result<bool, ControlError> {
+    match query(
+        control,
+        Query::OutputStatus {
+            output_id: OutputId::new(output),
+        },
+    )? {
+        QueryResult::OutputStatus { key_set, .. } => Ok(key_set),
+        other => panic!("not an output status: {other:?}"),
+    }
+}
+
+/// `output.create`, `output.set_target` and `output.delete` change the collection like
+/// any edit (rev, events, `output.list`, `state.get`), the new output can be started,
+/// and a running output can't be deleted.
+#[test]
+fn output_edits_configure_the_collection() {
+    use jstream_protocol::{OutputInfo, RtmpTarget};
+
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let mut events = control.events();
+    let rev = batch(
+        &control,
+        edits(vec![Edit::OutputCreate {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+        }]),
+    )
+    .expect("output.create");
+    assert_eq!(rev, Rev(1));
+    assert!(
+        drain(&mut events)
+            .iter()
+            .any(|e| matches!(e, Event::StateChanged { rev: Rev(1), .. })),
+        "an output edit is a state change"
+    );
+    let listed = |control: &dyn Control| match query(control, Query::OutputList) {
+        Ok(QueryResult::OutputList { outputs, .. }) => outputs,
+        other => panic!("not an output list: {other:?}"),
+    };
+    assert_eq!(
+        listed(&control),
+        vec![OutputInfo {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+        }]
+    );
+    assert_eq!(
+        engine.output_kind(&OutputId::new("out_yt")),
+        Some(rtmp_output("rtmp://a.rtmp.youtube.com/live2"))
+    );
+
+    batch(
+        &control,
+        edits(vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("out_yt"),
+            target: RtmpTarget::Generic {
+                url: "rtmps://a.rtmps.youtube.com:443/live2".into(),
+            },
+        }]),
+    )
+    .expect("output.set_target");
+    match query(&control, Query::StateGet).expect("state.get") {
+        QueryResult::StateGet { outputs, .. } => assert_eq!(
+            outputs,
+            vec![OutputInfo {
+                output_id: OutputId::new("out_yt"),
+                kind: rtmp_output("rtmps://a.rtmps.youtube.com:443/live2"),
+            }]
+        ),
+        other => panic!("not a state: {other:?}"),
+    }
+
+    // The new output is one the placeholder state machine runs.
+    block_on(control.call(output_call("out_yt", true))).expect("start");
+    let refused = batch(
+        &control,
+        edits(vec![Edit::OutputDelete {
+            output_id: OutputId::new("out_yt"),
+        }]),
+    )
+    .expect_err("delete while running");
+    assert_eq!(code(&refused), Some("invalid_argument"));
+    block_on(control.call(output_call("out_yt", false))).expect("stop");
+    batch(
+        &control,
+        edits(vec![Edit::OutputDelete {
+            output_id: OutputId::new("out_yt"),
+        }]),
+    )
+    .expect("output.delete");
+    assert_eq!(listed(&control), vec![]);
+    assert_eq!(engine.output_kind(&OutputId::new("out_yt")), None);
+    let gone = block_on(control.call(output_call("out_yt", true))).expect_err("deleted");
+    assert_eq!(code(&gone), Some("not_found"));
+}
+
+/// `output.set_key` stores the key and `output.status` reports `key_set`; every error
+/// path answers with a fixed reason that never contains the key.
+#[test]
+fn stream_key_actions_report_without_naming_the_key() {
+    use jstream_platform::fake::MemoryKeyStore;
+
+    const KEY: &str = "live_SECRET-5f2a";
+    let store = MemoryKeyStore::new();
+    let engine = Engine::new().with_key_store(Arc::new(store.clone()));
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![Edit::OutputCreate {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+        }]),
+    )
+    .expect("output.create");
+    let leaks = |error: &ControlError| format!("{error:?} {error}").contains("SECRET");
+
+    assert_eq!(key_set(&control, "out_yt").ok(), Some(false));
+    block_on(control.call(set_key("out_yt", KEY))).expect("set_key");
+    assert_eq!(key_set(&control, "out_yt").ok(), Some(true));
+    assert_eq!(store.len(), 1);
+
+    // Unknown output, and keys of the wrong shape.
+    let missing = block_on(control.call(set_key("nope", KEY))).expect_err("unknown output");
+    assert_eq!(code(&missing), Some("not_found"));
+    for (key, reason) in [
+        ("", "must not be empty"),
+        (
+            "live SECRET",
+            "must not contain whitespace or control characters",
+        ),
+        (
+            "live\nSECRET",
+            "must not contain whitespace or control characters",
+        ),
+    ] {
+        let error = block_on(control.call(set_key("out_yt", key))).expect_err("bad key");
+        assert_eq!(
+            error.protocol(),
+            Some(&ProtocolError::InvalidArgument {
+                field: "key".into(),
+                reason: reason.into()
+            })
+        );
+        assert!(!leaks(&error), "{error:?}");
+    }
+    let long = format!("SECRET{}", "k".repeat(1024));
+    let error = block_on(control.call(set_key("out_yt", &long))).expect_err("too long");
+    assert_eq!(code(&error), Some("invalid_argument"));
+    assert!(!leaks(&error), "{error:?}");
+
+    // A failing store: set, clear and status all fail without naming the key.
+    store.set_failing(true);
+    let error = block_on(control.call(set_key("out_yt", KEY))).expect_err("store fails");
+    assert_eq!(code(&error), Some("action_failed"));
+    assert!(!leaks(&error), "{error:?}");
+    let error = block_on(control.call(clear_key("out_yt"))).expect_err("store fails");
+    assert_eq!(code(&error), Some("action_failed"));
+    assert!(!leaks(&error), "{error:?}");
+    let error = key_set(&control, "out_yt").expect_err("store fails");
+    assert_eq!(code(&error), Some("internal"));
+    assert!(!leaks(&error), "{error:?}");
+    store.set_failing(false);
+
+    block_on(control.call(clear_key("out_yt"))).expect("clear_key");
+    assert_eq!(key_set(&control, "out_yt").ok(), Some(false));
+    block_on(control.call(clear_key("out_yt"))).expect("clearing nothing succeeds");
+
+    // Without a store, the key actions fail and `key_set` is false.
+    let bare = Engine::new();
+    let control = connected(&bare);
+    batch(
+        &control,
+        edits(vec![Edit::OutputCreate {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+        }]),
+    )
+    .expect("output.create");
+    let error = block_on(control.call(set_key("out_yt", KEY))).expect_err("no store");
+    assert_eq!(code(&error), Some("action_failed"));
+    assert!(!leaks(&error), "{error:?}");
+    assert_eq!(key_set(&control, "out_yt").ok(), Some(false));
+}
+
+/// R-SEC-001: a stream key set through the protocol reaches the credential store and
+/// nothing else: not the reply, an event, `state.get`, `output.list`, `output.status`
+/// or the engine's log lines.
+pub(crate) fn check_secrets_are_redacted() {
+    use jstream_platform::StreamKeyStore;
+    use jstream_platform::fake::MemoryKeyStore;
+    use std::fmt;
+    use tracing::field::{Field, Visit};
+    use tracing::span::{Attributes, Id, Record};
+    use tracing::{Metadata, Subscriber};
+
+    /// Every span and event the engine emits, with its fields, as text.
+    #[derive(Clone, Default)]
+    struct Logs(Arc<Mutex<Vec<String>>>);
+
+    impl Logs {
+        fn push(&self, text: String) {
+            self.0
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .push(text);
+        }
+    }
+
+    #[derive(Default)]
+    struct Fields(String);
+
+    impl Visit for Fields {
+        fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+            self.0.push_str(&format!("{}={value:?} ", field.name()));
+        }
+    }
+
+    impl Subscriber for Logs {
+        fn enabled(&self, _: &Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, span: &Attributes<'_>) -> Id {
+            let mut fields = Fields::default();
+            span.record(&mut fields);
+            self.push(format!("span {} {}", span.metadata().name(), fields.0));
+            Id::from_u64(1)
+        }
+        fn record(&self, _: &Id, values: &Record<'_>) {
+            let mut fields = Fields::default();
+            values.record(&mut fields);
+            self.push(format!("record {}", fields.0));
+        }
+        fn record_follows_from(&self, _: &Id, _: &Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            let mut fields = Fields::default();
+            event.record(&mut fields);
+            self.push(format!("event {} {}", event.metadata().level(), fields.0));
+        }
+        fn enter(&self, _: &Id) {}
+        fn exit(&self, _: &Id) {}
+    }
+
+    const KEY: &str = "live_REDACT-ME-9c41";
+    let logs = Logs::default();
+    let store = MemoryKeyStore::new();
+    let engine = Engine::new().with_key_store(Arc::new(store.clone()));
+    let control = connected(&engine);
+    let mut events = control.events();
+
+    let mut seen = Vec::new();
+    tracing::subscriber::with_default(logs.clone(), || {
+        batch(
+            &control,
+            edits(vec![Edit::OutputCreate {
+                output_id: OutputId::new("out_yt"),
+                kind: rtmp_output("rtmp://a.rtmp.youtube.com/live2"),
+            }]),
+        )
+        .expect("output.create");
+        let reply = block_on(control.call(set_key("out_yt", KEY))).expect("set_key");
+        seen.push(format!("{reply:?}"));
+        seen.push(serde_json::to_string(&reply.result).expect("serializes"));
+        for query_ in [
+            Query::StateGet,
+            Query::OutputList,
+            Query::OutputStatus {
+                output_id: OutputId::new("out_yt"),
+            },
+        ] {
+            let result = query(&control, query_).expect("query");
+            seen.push(serde_json::to_string(&result).expect("serializes"));
+        }
+        for event in drain(&mut events) {
+            seen.push(serde_json::to_string(&event).expect("serializes"));
+        }
+    });
+    let logged = logs
+        .0
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .join("\n");
+    assert!(!logged.is_empty(), "the engine logged the calls");
+    seen.push(logged);
+    for text in &seen {
+        assert!(!text.contains("REDACT-ME"), "the key leaked: {text}");
+    }
+    let stored = store.get("out_yt").expect("get").expect("stored");
+    assert_eq!(stored.expose(), KEY, "the key reached the store");
 }

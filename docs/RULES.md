@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:aa106e6dcf60b6be", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: kind.list, kind.describe, source.rename, source.set_settings, the optional settings field on source.create and SourceInfo are additive: a minor bump to 0.7, named noun.verb; expected_rev unchanged; no collection file exists yet so no migration. No rule text changed" }
+verified = { hash = "b3:b7eb001719f9e4f4", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): both minors are additive (0.7 outputs, 0.8 kind queries, settings and two edits, optional settings fields); no rule text changed" }
 -->
 
 <a id="R-API-001"></a>

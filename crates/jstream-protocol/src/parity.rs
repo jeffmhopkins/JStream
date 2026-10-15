@@ -173,6 +173,9 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         items: items_of_a(),
                     },
                 ],
+                // The parity collection configures no output: the mock does not
+                // implement the output edits.
+                outputs: vec![],
             }),
         ),
     ]

@@ -8,10 +8,10 @@
 use crate::{
     Action, Batch, Call, CallResult, ClientId, ClientMessage, Command, CommandClass, Crop,
     DropCounts, Edit, EntityKind, ErrorResponse, Event, EventMessage, Finite32, Hello,
-    IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputState, PROTOCOL_VERSION,
-    ProtocolError, Query, QueryResult, Request, RequestId, Response, Rev, SceneId, SceneInfo,
-    SceneSummary, ServerMessage, Settings, SourceId, SourceInfo, SourceKind, Vec2, Welcome,
-    json_schema,
+    IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
+    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, Request, RequestId, Response, Rev,
+    RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, ServerMessage, Settings, SourceId,
+    SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
@@ -126,7 +126,34 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::SourceDelete {
             source_id: SourceId::new("src_cam_2"),
         },
+        Edit::OutputCreate {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+        },
+        Edit::OutputSetTarget {
+            output_id: OutputId::new("out_yt"),
+            target: RtmpTarget::Generic {
+                url: "rtmps://a.rtmps.youtube.com:443/live2".into(),
+            },
+        },
+        Edit::OutputDelete {
+            output_id: OutputId::new("out_yt"),
+        },
     ]
+}
+
+/// An RTMP output kind publishing to `url`.
+fn rtmp(url: &str) -> OutputKind {
+    OutputKind::Rtmp {
+        target: RtmpTarget::Generic { url: url.into() },
+    }
+}
+
+fn output_infos() -> Vec<OutputInfo> {
+    vec![OutputInfo {
+        output_id: OutputId::new("out_yt"),
+        kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+    }]
 }
 
 pub(crate) fn actions() -> Vec<Action> {
@@ -135,6 +162,13 @@ pub(crate) fn actions() -> Vec<Action> {
             output_id: OutputId::new("out_yt"),
         },
         Action::OutputStop {
+            output_id: OutputId::new("out_yt"),
+        },
+        Action::OutputSetKey {
+            output_id: OutputId::new("out_yt"),
+            key: SecretString::new("fixture-key-0000"),
+        },
+        Action::OutputClearKey {
             output_id: OutputId::new("out_yt"),
         },
     ]
@@ -156,6 +190,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::KindDescribe {
             kind_id: "color".into(),
         },
+        Query::OutputList,
     ]
 }
 
@@ -349,6 +384,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::OutputStatus {
             output_id: OutputId::new("out_yt"),
             state: OutputState::Active,
+            key_set: true,
         },
         QueryResult::SourceList {
             rev: Rev(12),
@@ -374,6 +410,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     items: vec![],
                 },
             ],
+            outputs: output_infos(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -403,6 +440,10 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::KindDescribe {
             settings_schema: color_kind().settings_schema(),
             kind: color_kind(),
+        },
+        QueryResult::OutputList {
+            rev: Rev(12),
+            outputs: output_infos(),
         },
     ]
 }

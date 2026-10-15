@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:cde61ca2b7bc9985", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: no mcp source change beyond tests.rs (the new kind tool in the expected list and count); contents list unchanged" }
+verified = { hash = "b3:056772acb84961af", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; server, tools, events, jsonrpc, stdio and error bullets unaffected" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -45,7 +45,7 @@ not built yet ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:3e026157e969093d", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: the tool table row now lists the generated kind tool; generation from the schema means kind.list/kind.describe and source.rename/source.set_settings became ops with no code change, as the section says; tools.snap regenerated" }
+verified = { hash = "b3:7ca271a9d8764fb2", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): tool table lists item, kind, output, scene, source, state, video, matching the regenerated tools.snap; revisions, results and logging unchanged" }
 -->
 
 ### Tools

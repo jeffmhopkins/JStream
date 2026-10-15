@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:4062f94e26392cc2", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: re-read after spelling out the media in the source-reference rejection (video/audio) and its test; the Settings bullet's media sentence still holds" }
+verified = { hash = "b3:767f24f532d7cc15", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Model lists kinds, settings and outputs; Settings, references, Outputs (target.rs, apply_with_running) and deps.rs cycle bullets checked against apply.rs/deps.rs/read.rs; property test now generates rename, set_settings and output edits (below(20))" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -26,7 +26,8 @@ codes, so the engine passes them to clients unchanged.
 - `Graph`: the `State` plus its `rev`, and the kind descriptors it validates `builtin`
   sources against. The engine supplies them (`Graph::with_kinds`); they are not
   collection state, and `Graph::new()` describes none.
-- `State`: the `sources`, keyed by ID, and the `scenes` in display order.
+- `State`: the `sources`, keyed by ID, the `scenes` in display order, and the
+  `outputs`, keyed by ID.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -35,6 +36,9 @@ codes, so the engine passes them to clients unchanged.
   never deletes its source.
 - `Scene`: a name and its items in stacking order, bottom first.
 - `Item`: the source it places, a `transform`, a `crop` and `visible`.
+- `Output`: an ID and an `OutputKind` (so far only RTMP to a generic URL). Whether it
+  runs is the engine's runtime state, and its stream key is in the OS credential store,
+  never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
 **Applying edits** (`apply.rs`): `Graph::apply(edits, expected_rev)` (or `apply_batch`)
 checks `expected_rev` (`rev_conflict`) and rejects an empty batch (`empty_batch`). Then it
@@ -63,6 +67,14 @@ goes up by exactly one, and the result carries the **inverse batch**.
   setting as `<source>.settings.<param>`), and the client removes them first, in the
   same batch if it likes. Rejecting rather than cascading keeps each edit's effect, and
   its inverse, limited to the object it names.
+- **Outputs** (`target.rs` checks the URL): `output.create` and `output.set_target`
+  reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
+  that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
+  name, and one that could carry a credential (`user:password@`, a query or a
+  fragment). `output.delete` is undone by `output.create` with its kind, and
+  `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
+  for an engine whose outputs in the given set are running: deleting one of them fails
+  with `invalid_argument`, in edit order.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
   scenes and sources its settings refer to. Asset references are not edges. Every edit
@@ -72,18 +84,19 @@ goes up by exactly one, and the result carries the **inverse batch**.
   (for example scene `a` -> source `sa` -> scene `a`).
 
 **Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
-collection (`state.get`, `scene.list`, `source.list` and `item.list`) with the
-protocol's result shapes, at the current `rev`, and the kind queries (`kind.list`,
-`kind.describe`, which fails with `invalid_argument` on `kind_id` for an unknown
-kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
+collection (`state.get`, `scene.list`, `source.list`, `item.list` and `output.list`)
+with the protocol's result shapes, at the current `rev`, and the kind queries
+(`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
+unknown kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
 `not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
-display order, items bottom first; `Source::to_info`, `Scene::to_info` and
-`Item::to_info` convert single objects. Reads change nothing.
+display order, items bottom first, outputs ordered by ID; `Source::to_info`,
+`Scene::to_info`, `Item::to_info` and `Output::to_info` convert single objects. Reads change nothing.
 
 **Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
 edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds, and through
 settings references, one case per edge-adding edit), settings checks and defaults,
-delete rejection by references, exact inverses,
+delete rejection by references, output URL checks and the refused delete of a running
+output, exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a

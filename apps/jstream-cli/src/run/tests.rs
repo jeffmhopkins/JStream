@@ -333,7 +333,7 @@ fn state_get_golden() {
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
-            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}]}}}"#,
+            r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[]}}}"#,
         ))
     );
     assert_eq!(
@@ -476,7 +476,7 @@ fn outputs_golden() {
         run_on(&engine, &["--json", "--mock", "output", "status", "out_1"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":"#,
-            r#"{"type":"output.status","output_id":"out_1","state":"active"}}}"#,
+            r#"{"type":"output.status","output_id":"out_1","state":"active","key_set":false}}}"#,
             "\n"
         ))
     );

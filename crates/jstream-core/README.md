@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:c27c2ac1685b8f21", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#136 bounded stop, #141, #146) into B4: took main's text and verified line; re-read with B4's Kinds bullet and 'real source kinds' in Not here yet; #136's Tests and Drop counts bullets and B4's additions are independent and both match the code" }
+verified = { hash = "b3:7f298db656dba720", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; Engine bullet (#142 key store) and Kinds bullet (B4 kinds.rs stubs) both match engine.rs and kinds.rs" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -30,10 +30,12 @@ The control plane is the scene graph, the sessions and `video.snapshot`.
 `with_publish_opener`). Without backends, an output action stays the placeholder
 state machine. Contents:
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
-  `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish` and
-  `with_publish_opener`;
+  `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
+  `with_publish_opener` and `with_key_store`;
   `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
-  frame of a source; `output_stats` reads the running pipeline. It holds the
+  frame of a source; `output_stats` reads the running pipeline; `output_kind` reads a
+  collection output's target. `output.set_key` and `output.clear_key` go to the
+  injected `StreamKeyStore`, never under the collection lock. It holds the
   `jstream-graph` `Graph`, the outputs, those frames, the idempotency keys and the
   subscribers behind one lock, and the drop ledger behind another, and executes
   batches, actions and queries. The pipeline threads do not take the collection lock.
@@ -51,7 +53,8 @@ state machine. Contents:
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
 - **Session** (`session.rs`): `InProcessControl`, one client session.
 - **Events** (`events.rs`): the per-subscription queues behind `Control::events`.
-- **Outputs** (`outputs.rs`): the outputs' runtime state. The placeholder path steps
+- **Outputs** (`outputs.rs`): the outputs' runtime state, following the collection's
+  outputs after each batch and keeping the ones the host declared. The placeholder path steps
   `starting` to `active` at once. The pipeline path emits `starting`, then `active`
   or `failed`. Stop emits `stopping` then `stopped`. A stop during `starting` cancels
   that start and settles `stopped` only after its threads are gone. A lost RTMP
@@ -76,8 +79,10 @@ state machine. Contents:
   twice) and one that cannot connect, overload drops from a
   fake encoder and the mixer reported in `stats.tick`, render and mixer panics
   reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
-  the hidden `Engine::with_cpu_compositor`), and an MCP agent
-  (`jstream-mcp`, a dev-dependency) driving the engine in-process.
+  the hidden `Engine::with_cpu_compositor`), the output edits and the stream-key
+  actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
+  which captures the engine's traces), and an MCP agent (`jstream-mcp`, a
+  dev-dependency) driving the engine in-process.
 
 Not here yet: per-client undo, the audit log, persistence, real source kinds, arc-swap
 snapshots, a GPU encode target, and the platform's Windows devices. See
@@ -92,7 +97,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8c56f6d2e436f59e", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main into B4: main's Pipeline/stop-drain paragraphs kept as they are; B4's Queries bullet (kind queries via Graph::query with built-in kinds), serde_json as a normal dependency, and Not yet (real source kinds) re-read beside them; no contradiction" }
+verified = { hash = "b3:707208991ad6199d", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Queries bullet merged: Graph::query answers collection reads incl. output.list and the kind queries from kinds.rs; output.status key_set path from #142; Outputs, Stream keys and Dependencies (serde_json) checked" }
 -->
 
 ### Engine and sessions
@@ -174,10 +179,13 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   are remembered, so a retry of a failed batch is applied. Keys are kept for the
   engine's lifetime ([protocol open question 6](../jstream-protocol/README.md#open-questions)).
 - **Queries** that read the collection, and the kind queries, go to `Graph::query`,
-  which holds the built-in kinds the engine gave it (`kinds.rs`); `output.status` reads
-  the outputs (`not_found` for an unknown one). `video.snapshot` is answered here, not by
+  `output.list` and the `outputs` of `state.get` included; the graph holds the built-in
+  kinds the engine gave it (`kinds.rs`). `output.status` reads the outputs' runtime state
+  (`not_found` for an unknown one) and fills `key_set` from the key store after the
+  collection lock is released (`internal` if the store fails). `video.snapshot` is answered here, not by
   the graph.
-- **Actions**: `output.start` and `output.stop` (see *Outputs* below).
+- **Actions**: `output.start` and `output.stop` (see *Outputs* below), and
+  `output.set_key` and `output.clear_key` (see *Stream keys* below).
 - A call, query or action this engine does not implement answers `internal`, as the
   mock does.
 
@@ -291,9 +299,27 @@ it is read, so it does not simulate mailbox skips.
 
 ### Outputs
 
-Outputs are runtime state, not collection state: they never change `rev`. Until the
-protocol has edits that configure outputs, the host declares them with
-`Engine::with_output(id)`; each starts `stopped`.
+An output's configuration is collection state (`output.create`, `output.set_target`,
+`output.delete`, kept by `jstream-graph`); whether it runs is runtime state, which never
+changes `rev`. After each applied batch the runtime states follow the collection: a
+created output starts `stopped`, and a deleted one is forgotten. The graph refuses to
+delete a running output (`invalid_argument`), so the batch passes it the running set.
+A host can also declare an output with `Engine::with_output(id)`, outside the
+collection: it starts `stopped`, has no target and stays known whatever the collection
+holds. A live host reads a collection output's target with `output_kind` when its
+publish opener runs; wiring that into the daemon is not done yet.
+
+**Stream keys.** `with_key_store` injects the OS credential store
+(`jstream_platform::StreamKeyStore`). `output.set_key` checks that the output is in the
+collection (`not_found`), then the key's shape (`invalid_argument`, field `key`: empty,
+over 1024 bytes, or with whitespace or control characters), then stores it under the
+output ID with no engine lock held. `output.clear_key` removes it and succeeds when
+there is none, even for an output no longer in the collection. With no store, or when
+the store refuses, both fail with `action_failed`. The key is write-only
+([R-SEC-001](../../docs/RULES.md#R-SEC-001)): every reason is fixed text, nothing logs
+the call's arguments, and no response, event or query carries it. The crate-root test
+`secrets_are_redacted` sets a key and checks the reply, `state.get`, `output.list`,
+`output.status`, the events and every span and event the engine traces.
 
 **Placeholder.** With no backends, the actions only move a state machine, as
 `jstream-control`'s mock does. The protocol defines an action's response as "accepted"
@@ -475,4 +501,3 @@ revisions and error codes are logged, never a call's arguments
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): one scene, a CPU readback
   into the encoder, and the platform fakes in the test. `video.snapshot` still
   composites from frames the host injects with `set_source_frame`.
-- `R-SEC-001`'s `secrets_are_redacted` test: the engine holds no secret yet.

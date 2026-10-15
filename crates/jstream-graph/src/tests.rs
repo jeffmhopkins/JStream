@@ -2,10 +2,12 @@
 
 use crate::Graph;
 use jstream_protocol::{
-    Crop, Edit, EntityKind, ItemId, ItemTransform, KindCategory, KindDescriptor, Media,
-    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, Settings, SourceId, SourceKind, Vec2,
+    Crop, Edit, EntityKind, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId,
+    OutputInfo, OutputKind, ParamDescriptor, ParamType, ProtocolError, QueryResult, Rev,
+    RtmpTarget, SceneId, Settings, SourceId, SourceKind, Vec2,
 };
 use serde_json::{Value, json};
+use std::collections::BTreeSet;
 
 fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
     ParamDescriptor {
@@ -130,6 +132,28 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
         item_id: ItemId::new(item),
         source_id: SourceId::new(source),
         transform: None,
+    }
+}
+
+fn target(url: &str) -> RtmpTarget {
+    RtmpTarget::Generic { url: url.into() }
+}
+
+fn output_create(id: &str, url: &str) -> Edit {
+    Edit::OutputCreate {
+        output_id: OutputId::new(id),
+        kind: OutputKind::Rtmp {
+            target: target(url),
+        },
+    }
+}
+
+fn output_url(graph: &Graph, id: &str) -> Option<String> {
+    match graph.state().output(&OutputId::new(id))?.kind() {
+        OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url },
+        } => Some(url.clone()),
+        _ => None,
     }
 }
 
@@ -508,6 +532,206 @@ fn ids(graph: &Graph, scene: &str) -> Vec<String> {
 }
 
 #[test]
+fn outputs_are_created_retargeted_and_deleted_with_exact_inverses() {
+    let mut graph = Graph::new();
+    let created = apply_ok(
+        &mut graph,
+        vec![output_create("yt", "rtmp://a.rtmp.youtube.com/live2")],
+    );
+    assert_eq!(
+        created.inverse.edits,
+        vec![Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        }]
+    );
+    assert_eq!(
+        output_url(&graph, "yt").as_deref(),
+        Some("rtmp://a.rtmp.youtube.com/live2")
+    );
+
+    let retarget = apply_ok(
+        &mut graph,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("yt"),
+            target: target("rtmps://a.rtmps.youtube.com:443/live2"),
+        }],
+    );
+    assert_eq!(
+        retarget.inverse.edits,
+        vec![Edit::OutputSetTarget {
+            output_id: OutputId::new("yt"),
+            target: target("rtmp://a.rtmp.youtube.com/live2"),
+        }]
+    );
+    assert_eq!(
+        output_url(&graph, "yt").as_deref(),
+        Some("rtmps://a.rtmps.youtube.com:443/live2")
+    );
+    assert_eq!(
+        graph.output_list(),
+        QueryResult::OutputList {
+            rev: Rev(2),
+            outputs: vec![OutputInfo {
+                output_id: OutputId::new("yt"),
+                kind: OutputKind::Rtmp {
+                    target: target("rtmps://a.rtmps.youtube.com:443/live2"),
+                },
+            }],
+        }
+    );
+
+    // Undo the retarget, then redo it: the inverse's inverse is the edit again.
+    let undo = graph.apply_batch(&retarget.inverse).expect("undo applies");
+    assert_eq!(
+        output_url(&graph, "yt").as_deref(),
+        Some("rtmp://a.rtmp.youtube.com/live2")
+    );
+    graph.apply_batch(&undo.inverse).expect("redo applies");
+    assert_eq!(
+        output_url(&graph, "yt").as_deref(),
+        Some("rtmps://a.rtmps.youtube.com:443/live2")
+    );
+
+    let deleted = apply_ok(
+        &mut graph,
+        vec![Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        }],
+    );
+    assert_eq!(
+        deleted.inverse.edits,
+        vec![output_create("yt", "rtmps://a.rtmps.youtube.com:443/live2")]
+    );
+    assert_eq!(graph.state().outputs().len(), 0);
+    match graph.state_get() {
+        QueryResult::StateGet { outputs, .. } => assert!(outputs.is_empty()),
+        other => panic!("not state.get: {other:?}"),
+    }
+}
+
+#[test]
+fn output_edits_are_validated() {
+    let mut graph = Graph::new();
+    apply_ok(&mut graph, vec![output_create("yt", "rtmp://host/live")]);
+
+    let cases = [
+        (output_create("", "rtmp://host/live"), "edits.0.output_id"),
+        (
+            output_create("o2", "rtmp://alice:key@host/live"),
+            "edits.0.kind.target.url",
+        ),
+        (
+            output_create("o2", "rtmp://host/live?key=abc"),
+            "edits.0.kind.target.url",
+        ),
+        (
+            output_create("o2", "http://host/live"),
+            "edits.0.kind.target.url",
+        ),
+        (
+            output_create("o2", "rtmp://host"),
+            "edits.0.kind.target.url",
+        ),
+        (
+            Edit::OutputSetTarget {
+                output_id: OutputId::new("yt"),
+                target: target("rtmp://host/live#key"),
+            },
+            "edits.0.target.url",
+        ),
+    ];
+    for (edit, field) in cases {
+        let (got, reason) = invalid_reason(apply_err(&mut graph, vec![edit.clone()]));
+        assert_eq!(got, field, "{edit:?}: {reason}");
+        assert!(
+            !reason.contains("key=abc") && !reason.contains("alice"),
+            "{reason}"
+        );
+    }
+
+    assert_eq!(
+        apply_err(&mut graph, vec![output_create("yt", "rtmp://other/live")]),
+        ProtocolError::AlreadyExists {
+            entity: EntityKind::Output,
+            id: "yt".into(),
+        }
+    );
+    for edit in [
+        Edit::OutputSetTarget {
+            output_id: OutputId::new("nope"),
+            target: target("rtmp://host/live"),
+        },
+        Edit::OutputDelete {
+            output_id: OutputId::new("nope"),
+        },
+    ] {
+        assert_eq!(
+            apply_err(&mut graph, vec![edit]),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "nope".into(),
+            }
+        );
+    }
+    // A bad target is rejected even when the output is missing too: not_found first.
+    assert!(matches!(
+        apply_err(
+            &mut graph,
+            vec![Edit::OutputSetTarget {
+                output_id: OutputId::new("nope"),
+                target: target("bad"),
+            }]
+        ),
+        ProtocolError::NotFound { .. }
+    ));
+}
+
+#[test]
+fn a_running_output_cannot_be_deleted() {
+    let mut graph = Graph::new();
+    apply_ok(
+        &mut graph,
+        vec![
+            output_create("yt", "rtmp://host/live"),
+            output_create("rec", "rtmp://host/rec"),
+        ],
+    );
+    let running = BTreeSet::from([OutputId::new("yt")]);
+    let before = graph.clone();
+    let delete = |id: &str| Edit::OutputDelete {
+        output_id: OutputId::new(id),
+    };
+    let error = graph
+        .apply_with_running(&[delete("rec"), delete("yt")], None, &running)
+        .expect_err("rejected");
+    let (field, reason) = invalid_reason(error);
+    assert_eq!(field, "edits.1.output_id");
+    assert!(reason.contains("running"), "{reason}");
+    assert_eq!(graph, before, "nothing applied");
+
+    // An earlier failing edit is still reported first.
+    let error = graph
+        .apply_with_running(&[delete("nope"), delete("yt")], None, &running)
+        .expect_err("rejected");
+    assert!(matches!(error, ProtocolError::NotFound { .. }), "{error:?}");
+
+    // Retargeting a running output is allowed; deleting a stopped one too.
+    graph
+        .apply_with_running(
+            &[
+                Edit::OutputSetTarget {
+                    output_id: OutputId::new("yt"),
+                    target: target("rtmp://backup/live"),
+                },
+                delete("rec"),
+            ],
+            None,
+            &running,
+        )
+        .expect("applies");
+}
+
+#[test]
 fn reorder_moves_one_and_keeps_the_rest_in_order() {
     let mut graph = fixture();
     apply_ok(
@@ -653,10 +877,13 @@ mod property {
     //! A hand-rolled, seeded generator keeps the test deterministic and dependency-free.
 
     use super::{
-        add, builtin, graph, scene_create, scene_ref, scene_source, set_settings, source_ref,
+        add, builtin, graph, output_create, scene_create, scene_ref, scene_source, set_settings,
+        source_ref, target,
     };
     use crate::Graph;
-    use jstream_protocol::{Crop, Edit, ItemId, ItemTransform, Rev, SceneId, SourceId, Vec2};
+    use jstream_protocol::{
+        Crop, Edit, ItemId, ItemTransform, OutputId, Rev, SceneId, SourceId, Vec2,
+    };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
 
@@ -691,13 +918,22 @@ mod property {
             .flat_map(|s| s.items().iter().map(|i| i.id().to_string()))
             .collect();
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
+        let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
+        let urls = [
+            "rtmp://a.example/live",
+            "rtmps://b.example:443/live",
+            "rtmp://c.example/app/instance",
+            "rtmp://bad.example/live?key=1",
+        ];
         let pool = |rng: &mut Rng, prefix: &str| format!("{prefix}{}", rng.below(8));
         let scene = |rng: &mut Rng| rng.pick(&scenes).unwrap_or_else(|| pool(rng, "s"));
         let item = |rng: &mut Rng| rng.pick(&items).unwrap_or_else(|| pool(rng, "i"));
         let source = |rng: &mut Rng| rng.pick(&sources).unwrap_or_else(|| pool(rng, "src"));
+        let output = |rng: &mut Rng| rng.pick(&outputs).unwrap_or_else(|| pool(rng, "out"));
+        let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let index = |rng: &mut Rng| u32::try_from(rng.below(6)).expect("fits");
         let f = |rng: &mut Rng| f32::from(u16::try_from(rng.below(2000)).expect("fits")) - 1000.0;
-        match rng.below(17) {
+        match rng.below(20) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -768,8 +1004,16 @@ mod property {
                 };
                 set_settings(&source(rng), &patch)
             }
-            _ => Edit::SourceDelete {
+            16 => Edit::SourceDelete {
                 source_id: SourceId::new(source(rng)),
+            },
+            17 => output_create(&pool(rng, "out"), url(rng)),
+            18 => Edit::OutputSetTarget {
+                output_id: OutputId::new(output(rng)),
+                target: target(url(rng)),
+            },
+            _ => Edit::OutputDelete {
+                output_id: OutputId::new(output(rng)),
             },
         }
     }
@@ -842,6 +1086,9 @@ mod property {
             "source.delete",
             "source.rename",
             "source.set_settings",
+            "output.create",
+            "output.set_target",
+            "output.delete",
         ]
         .into();
         assert_eq!(applied_names, all);

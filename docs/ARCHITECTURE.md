@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:f7847f7cdd8db9a1", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: apps/jstream-cli gained source.rename parsing and version-agnostic tests; it is still the remote client with the stdio MCP proxy and links no engine, so the diagram and table hold" }
+verified = { hash = "b3:546b8a0e7430e457", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; apps changes are test goldens only (CLI reads PROTOCOL_VERSION); diagram and host table hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:44a4b8f3c2449b6c", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#141 platform-windows description) into B4: rows unchanged; B4 adds only serde_json (external) to jstream-graph and jstream-core, no new jstream crate edge" }
+verified = { hash = "b3:138aa6f252837bf1", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read the whole map with #144's vcam-proto row; B4 changes no manifest's layer or dependencies beyond serde_json in graph and core, which the rows don't list" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -132,7 +132,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-types` | IDs, math (Vec/Mat/Transform3D), color, rational time, units | no |
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
 | 0 | `jstream-plugin-proto` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): the versioned `repr(C)` shared-memory contract (audio rings, parameter-event ring, status block) between the mixer and the CLAP plugin host | no |
-| 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL (`repr(C)` types and constants only) | no |
+| 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `AudioIo`, `VideoEncoder`, `AudioEncoder`, `VideoDecoder`, `VcamSink`, `MediaClock`, `GpuInterop` (uses `wgpu` types). The **single owner** of the encoder and decoder traits. | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
@@ -165,7 +165,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:8161dd00b53a1c91", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: edited Built so far: sources carry settings checked against the kind descriptor and stored complete; settings references are dependency edges in the one cycle check; delete is rejected while a setting refers to the target; stub kinds live in jstream-core until jstream-sources; Not yet adds kind versions on stored settings. The target model above already had settings and is unchanged" }
+verified = { hash = "b3:469cd47b05c605ba", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Built so far merged: settings checked and stored complete, settings-reference edges and delete rejection (B4), and outputs with Rtmp Generic url (#142); Not yet drops settings and keeps kind versions; checked against graph model/mod.rs" }
 -->
 
 ```
@@ -345,12 +345,16 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
   built-in kinds are stubs in `jstream-core` until `jstream-sources` exists.
+  Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
+  the URL checked to carry no credential. A stream key is never collection state: it
+  lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
   `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
   variants and overrides, folders, labels, favourites and other organisation metadata,
-  `background`, hotkeys, and everything outside `sources` and `scenes`. Nothing is
-  persisted yet.
+  `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
+  `YouTube`, `Record` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
+  and `outputs`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
@@ -491,7 +495,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:3613679e50569fcf", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Re-read after merging main (#137, #145, #151, #152): queries bullet carries B4's kind.list/kind.describe and the envelope, transport and events bullets still match; #137 was test-only for the server" }
+verified = { hash = "b3:1a7f8a46e389a409", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): output edits and stream-key bullets (#142) and kind queries marked protocol 0.8 (B4); queries bullet lists output.list and kind.list/describe; transport bullets unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -506,6 +510,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   batch increments `rev` by one. `item.move` moves an item between scenes keeping its
   id, and placement edits take an optional `scene_id` so they can write a keyframe
   scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
+  `output.create`, `output.set_target` and `output.delete` configure the collection's
+  outputs (protocol 0.7).
+- **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
+  A key is not collection state: it goes to the OS credential store and is write-only,
+  never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
+  `output.status` reports only `key_set`.
 - **Actions** (`output.start`, `studio.transition`, `youtube.go_live`, …): side effects,
   never undoable or batchable. A *script* runs actions in sequence and returns a result
   for each step.
@@ -537,10 +547,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   naming the outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
-  `output.status`, `video.snapshot` → the program mix as a PNG in the JSON result,
-  longest side at most 1280, with the layout `rev`; `kind.list` and `kind.describe` →
-  the kinds the engine describes, each with a generated settings schema
-  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); later `audio.levels`).
+  `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the
+  JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
+  `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
+  schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); later `audio.levels`).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops}`, …).
   `stats.tick` (protocol 0.6) carries the pipeline's running drop totals
   ([R-RT-004](RULES.md#R-RT-004)); the fields are in
@@ -585,7 +595,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:5b2688aa6447f6d0", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: tool list adds the generated kind tool; tools/list size updated to about 60 KB (tools.snap grew from ~56 KB to ~64 KB with the settings and descriptor schemas); events, access and snapshot bullets unaffected" }
+verified = { hash = "b3:cc2b2df213a2b7f3", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): grouped tools list includes kind and output; tools.snap is about 79 KB, so the size line says about 80 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
@@ -599,8 +609,8 @@ verified = { hash = "b3:5b2688aa6447f6d0", by = "agent:claude@session_011XVJmf1Y
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 60 KB
-  of `tools/list` today), and `describe_api` returns the whole protocol schema. Shrinking
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 80 KB
+  of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in

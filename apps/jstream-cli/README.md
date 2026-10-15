@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:3455cf7d6e06899b", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: args.rs gained source.rename and run/tests.rs reads PROTOCOL_VERSION instead of a literal 0.6; the contents list (commands, running, exit codes, blocking, MCP proxy) still holds" }
+verified = { hash = "b3:15e8ec2e9262bce9", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; contents list holds for both (run.rs ignores key_set/outputs and settings alike)" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:cfb85de61190fb1f", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: edited the Edits bullet: every protocol edit except settings (source.set_settings, source.create with settings) is supported, since those need a JSON argument form; source.rename added to the usage text in args.rs. Output and reads bullets unchanged (source tables still print kind only)" }
+verified = { hash = "b3:46f8a234ede5d0ab", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Edits bullet merged to say settings and outputs are both unsupported (args.rs has source.rename, no settings or output edits); Reads bullet keeps #142's outputs/key_set note; version line reads PROTOCOL_VERSION" }
 -->
 
 ```sh
@@ -94,9 +94,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings: `source.set_settings`, and `source.create`
-  with settings, need a JSON argument form the CLI doesn't have yet, so a source it
-  creates gets its kind's defaults. Several edits on one line go as **one atomic batch**: one new
+  protocol is supported except settings and outputs. `source.set_settings`, and
+  `source.create` with settings, need a JSON argument form the CLI doesn't have yet, so
+  a source it creates gets its kind's defaults. Protocol 0.7's output edits
+  (`output.create`, `output.set_target`, `output.delete`), `output.list` and the
+  stream-key actions are not in the CLI yet. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
@@ -109,7 +111,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `scene:main`); items bottom first, with `VISIBLE`, `POSITION` (`x,y`), `SCALE`,
   `ROTATION` and `CROP` (`left,top,right,bottom`) in the argument order of the edits
   that set them. `state get` prints the sources, then each scene in display order with
-  its items. An empty list prints `no scenes`, `no sources` or `no items`.
+  its items; it doesn't print the outputs, and `output status` prints the state but
+  not `key_set`, so read those with `--json`. An empty list prints `no scenes`,
+  `no sources` or `no items`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
 - **Errors** go to stderr. For people: `error: <message>`, with ` (<code>)` appended
@@ -179,7 +183,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:7bf0b5046e143aa1", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "B4: parsing is still fixed-arity edits (source.rename is one more of arity 2); connector, mock, writers, MCP proxy and errors bullets unaffected; tests bullet unchanged (the version tests now format PROTOCOL_VERSION)" }
+verified = { hash = "b3:1c04bb14bd2bf578", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; parsing, block_on, connector, mock, writers and MCP proxy bullets unaffected by either change" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
