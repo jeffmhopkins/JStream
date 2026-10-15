@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:593b1be72fd3cc3a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324 merge of main at 94fb25d: contents list names ws_config.rs's URL, token and end-reason helpers, matching the code; holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -47,7 +46,6 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:86628910723a80bc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324 merge of main at 94fb25d: failures bullet matches ws_web.rs (session ends on error or close, first reason kept) and the testing paragraph matches the e2e spec and ws_config tests; holds" }
 -->
 
 ### The trait
