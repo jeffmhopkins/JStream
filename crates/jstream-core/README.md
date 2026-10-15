@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:7ca6eb06157259c7", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6: Snapshot bullet still holds (snapshot.rs owns video.snapshot on its thread); added the nested-scene scheduling and pixel tests to the Tests bullet; Runtime bullet unchanged (one scene)" }
+verified = { hash = "b3:ed5727edbec65d21", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main into #147: took main's Tests bullet (stalled-stop, stop-deadline, panic-reporting tests) plus C6's nested-scene scheduling and pixel tests; Snapshot and Runtime bullets match the code" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -55,7 +55,8 @@ state machine. Contents:
   reconnecting, settles `failed`.
 - **Drop counts** (`drops.rs`): the sources a `stats.tick` sums. `output.start`
   registers the capture cell, both encode sessions, both mixer inputs, the mix
-  bus, and the muxer's and the publish link's packet drops, and a sampler thread
+  bus, and the packets the output thread drops (muxer rejects and what a stop's
+  drain abandons) and the publish link's, and a sampler thread
   emits a tick about once a second until the pipeline stops.
 - **Tests** (`tests.rs`, `tests/mcp.rs`, `tests/scenarios.rs`): the protocol rules through
   `InProcessControl`, the shared parity fixture, a differential run against
@@ -63,11 +64,15 @@ state machine. Contents:
   `video.snapshot` on the software adapter, nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
-  stage-failure, late-tick, teardown, final-tick and link-loss tests run without one),
-  `connect_rtmp` against a slow fake RTMP server on loopback and one that hangs up
-  and is reconnected to, a publish opener connecting that fake server on every start
-  (start, media, stop, twice) and one that cannot connect, overload drops from a
-  fake encoder and the mixer reported in `stats.tick`, and an MCP agent
+  stage-failure, late-tick, teardown, final-tick, link-loss and stalled-stop tests run
+  without one),
+  `connect_rtmp` against a slow fake RTMP server on loopback, one that hangs up
+  and is reconnected to, and one that stops reading while a stop's deadline runs out,
+  a publish opener connecting that fake server on every start (start, media, stop,
+  twice) and one that cannot connect, overload drops from a
+  fake encoder and the mixer reported in `stats.tick`, render and mixer panics
+  reported as `failed` on the CPU stand-in (`tests/scenarios.rs` reaches it through
+  the hidden `Engine::with_cpu_compositor`), and an MCP agent
   (`jstream-mcp`, a dev-dependency) driving the engine in-process.
 
 Not here yet: per-client undo, the audit log, persistence, settings, arc-swap
@@ -83,7 +88,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:909f23fed68bea92", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6: rewrote the nested-scene paragraph in Snapshots against snapshot.rs (schedule/visit/last_uses/render): inside-out render_image passes, transparent nested background, once per (scene, depth), MAX_NESTING 8, cycle source draws nothing, runtime render thread still one scene" }
+verified = { hash = "b3:b92427d93a62e786", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main into #147 plus review N2/N3: main's runtime stop-drain and opener text and C6's Snapshots nested-scene paragraph coexist; added the debug log at the depth bound and that width is not bounded (k distinct nested sources hold k textures)" }
 -->
 
 ### Engine and sessions
@@ -200,8 +205,9 @@ that places it. A nested scene has no background yet, so it is transparent where
 draws nothing and the scene under it shows through; the program scene is drawn over
 opaque black. A scene placed more than once at the same depth is composited once.
 Depth is bounded: the program scene is depth 0, and a scene source more than 8
-levels below it draws nothing, so one snapshot holds at most that many nested
-canvas-sized textures on one branch. The graph already rejects cycles at every
+levels below it draws nothing (logged at `debug`). Width is not bounded: an image
+stays alive until the last pass that places it, so a scene with *k* distinct nested
+scene sources holds *k* canvas-sized FP16 textures at once. The graph already rejects cycles at every
 edit that adds nesting; if a copied shot had one, the scene source that closes it
 draws nothing. The live pipeline's render thread (`runtime/`) still composites one
 scene and does not draw nested scenes yet.
@@ -273,6 +279,7 @@ What each stage contributes:
 | Audio encode session | the same input drops | `encode_blocks` |
 | Encode subscriber queue | `subscriber_drops` | `output_packets` |
 | Muxer | a packet the FLV tagger rejects | `output_packets` |
+| Stop drain | packets still queued when a stop's drain deadline passes, or when a send fails while stopping, dropped by the output thread | `output_packets` |
 | Publish link | tags the publish target dropped while its link was down (`LivePublish::dropped`; for RTMP, `ReconnectStats::dropped`), published by the output thread | `output_packets` |
 
 A render tick that falls a whole period or more behind the clock is not drawn late:
@@ -327,7 +334,8 @@ Failure emits `failed` and `action_failed`, and drops a one-shot publish target 
 the host sets another before retrying (an opener is kept). A second start while one pipeline is up, or
 while a start is still in flight, fails with `action_failed` and leaves that
 pipeline alone. `output.stop` on an `active` pipeline emits `stopping`, drops it
-outside the lock (its drop sets the stop flag and joins the threads), then emits
+outside the lock (its drop sets the stop flag and joins the threads; the output
+thread's drain is bounded, see the RTMP paragraph below), then emits
 `stopped`. `output.stop` during the in-flight start cancels that generation, emits
 `stopping`, waits until the start has dropped whatever it opened, then emits
 `stopped`. The start then answers `action_failed` and does not emit `active`. The
@@ -350,8 +358,8 @@ pipeline has joined. A stop's join also holds off a start of another output. The
 wait also ends if that teardown panics, so a later start is not left waiting on a
 join that already unwound. If the teardown panics during `output.stop`, the output
 settles `failed` instead of staying `stopping`, and the panic reaches the caller. A
-`finish` error, or an encoder stream ending, while a stop is tearing the session
-down is not a second failure.
+`finish` or send error, or an encoder stream ending, while a stop is tearing the
+session down is not a second failure.
 
 A lost connection is not fatal. After each pass the output thread reads the publish
 target's `LivePublish::link_state` (`Active` unless the target can lose its link,
@@ -399,11 +407,22 @@ the first and each reconnect attempt (built with
 `rtmp_connector` on the same URL and key), reads with a 10 s timeout through the
 handshake and the publish exchange (the publisher retries only interrupted reads, so
 a shorter timeout fails on a slow server), then drops the read timeout to 1 ms so
-`poll` does not block the output thread. Writes keep a 10 s timeout: a stop drains
-the queued packets before `finish`, so a peer that has stopped reading can hold
-`output.stop` for up to 10 s per blocked write, and a stalled write takes that long
-to count as a lost link. There is no shorter drain bound on stop yet. Its unit tests
-drive fake servers on loopback, one of which hangs up mid-stream.
+`poll` does not block the output thread. Writes keep a 10 s timeout while the output
+runs, so a stalled write takes that long to count as a lost link.
+
+A stop bounds its drain. When the output thread sees the stop flag it gives itself
+2 s (`STOP_DRAIN`) to send what the encoders queued and tells the target that
+deadline (`LivePublish::stop_by`; the default does nothing). Once it passes, or a send
+fails while stopping, the thread drops the packets still queued, counts them in
+`output_packets`, and calls `finish`. A failure while stopping is logged, not
+reported: the output is already on its way to `stopped`. `RtmpPublish` honors the
+deadline: each write's timeout is cut to the time left, a lost link is not
+reconnected, and past the deadline sends fail and `finish` drops the connection
+without the `FCUnpublish` … `deleteStream` goodbye. So a peer that has stopped
+reading holds `output.stop` for about 2 s, not 10 s per blocked write; a target that
+ignores `stop_by` can still add one blocked send. `connect_rtmp`'s unit tests drive
+fake servers on loopback: a slow one, one that hangs up mid-stream, and one that
+stops reading while the deadline runs out.
 
 ### Locking
 

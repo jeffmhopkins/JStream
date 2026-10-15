@@ -145,8 +145,8 @@ impl Compositor {
             .targets
             .as_ref()
             .expect("invariant: ensure_targets just set them");
-        self.composite(&mut encoder, &targets.working_view, scene);
-        self.resolve(&mut encoder, targets);
+        self.record_composite(&mut encoder, &targets.working_view, scene);
+        self.record_resolve(&mut encoder, targets);
         if let Some(buffer) = &readback_buffer {
             encoder.copy_texture_to_buffer(
                 wgpu::TexelCopyTextureInfo {
@@ -212,7 +212,7 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-layer"),
             });
-        self.composite(&mut encoder, &view, scene);
+        self.record_composite(&mut encoder, &view, scene);
         self.gpu.queue.submit([encoder.finish()]);
         Ok(image::layer(&self.maker(), target, width, height))
     }
@@ -473,7 +473,7 @@ impl Compositor {
 
     /// The composite pass: clear `target` (`Rgba16Float`) to the background and draw
     /// the items, premultiplied linear.
-    fn composite(
+    fn record_composite(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
@@ -510,7 +510,7 @@ impl Compositor {
     }
 
     /// The resolve pass: the FP16 working target to the straight sRGB output.
-    fn resolve(&self, encoder: &mut wgpu::CommandEncoder, targets: &Targets) {
+    fn record_resolve(&self, encoder: &mut wgpu::CommandEncoder, targets: &Targets) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("jstream-render-resolve"),
             color_attachments: &[Some(color_attachment(

@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:72f498b7c586028c", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6: nested-scene bullet now names render_image returning an Image the caller places, depth and cycles in jstream-core; other bullets unchanged by the load/composite/resolve split" }
+verified = { hash = "b3:10dfd4b0711bd43d", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Review N5 rename only (record_composite/record_resolve); purpose bullets unchanged and still hold" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -97,7 +97,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:eff0201b3ba96cd3", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6: added render_image after pass 2 (new Rgba16Float RENDER_ATTACHMENT|TEXTURE_BINDING texture per call, Alpha::Premultiplied, one submit ordered before the outer one) and its resources row; render's passes, staging and readback unchanged by the load/composite/resolve refactor" }
+verified = { hash = "b3:f5d2dd7954337afa", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Review N5: renamed the pass helpers to record_composite/record_resolve; passes, render_image and resources text unchanged and still match" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -227,7 +227,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:31552a4789b4335b", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6: added the five render_image pixel tests to What is checked; still no golden PNGs (no xtask golden), tolerance pixel checks on lavapipe and WARP, device lock and skip rules unchanged" }
+verified = { hash = "b3:2c900748814f915f", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Review N5: the render_image tests are three pixel tests plus an ownership check (four tests), now stated so; rest unchanged" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -253,10 +253,10 @@ stacking); crop; integer scale; 90° rotation about the top-left; opacity over a
 opaque background (the linear blend, then the sRGB encode); a fully cropped item and
 a hidden item draw nothing; readback size and row packing; a `FrameSync` hold is
 staged once per submit and not staged when the item is hidden. Nested scenes
-(`render_image`): an image placed in another scene lands where its scene put the
-item and is transparent elsewhere, survives a later `render`, keeps a half-opaque
-item exact in linear light, nests twice with scaling at each level, and is refused
-by another compositor. Alpha edges: a 2x1
+(`render_image`), three pixel tests and an ownership check: an image placed in
+another scene lands where its scene put the item and is transparent elsewhere, and
+survives a later `render`; a half-opaque item stays exact in linear light; images
+nest twice with scaling at each level; another compositor refuses the image. Alpha edges: a 2x1
 opaque-red-then-transparent upload drawn half a pixel off and at scale 2 keeps red
 at 255 where it is partly covered (straight filtering gave 187 on lavapipe); an
 imported sRGB texture is read as straight alpha. An image from another compositor on

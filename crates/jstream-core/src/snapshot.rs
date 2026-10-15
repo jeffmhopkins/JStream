@@ -250,7 +250,15 @@ fn visit(
         let image = match &placed.source {
             SourceRef::Frame(source) => Source::Frame(source.clone()),
             SourceRef::Scene(inner) => {
-                if depth >= MAX_NESTING || path.contains(inner) {
+                if depth >= MAX_NESTING {
+                    tracing::debug!(
+                        scene = %inner,
+                        max = MAX_NESTING,
+                        "nested scene is past the snapshot's depth bound; not drawn"
+                    );
+                    continue;
+                }
+                if path.contains(inner) {
                     continue;
                 }
                 Source::Pass(visit(shot, inner, depth + 1, path, done, passes))

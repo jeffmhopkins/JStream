@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:d002ffb73e0e21a0", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via apps/jstream-cli (mcp.rs comment, README, tests): jstream-cli is still the remote client with the stdio MCP proxy and doesn't link the engine; table and diagram hold" }
+verified = { hash = "b3:5e59c0b28a67f643", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Stale only via apps/jstream-daemon/README.md's re-stamped verified line (merge of main into #147); no app code changed; table and diagram hold" }
 -->
 
 ```
@@ -83,7 +83,7 @@ verified = { hash = "b3:405cffd61ea37377", by = "agent:claude@session_01QBbMRwRu
 ## Repository layout
 <!-- @section
 covers = ["xtask/src/main.rs"]
-verified = { hash = "b3:0e48ba2d422db8da", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "main.rs gained the 'docs generate' usage entry (xtask/ line still lists docs); the docs/adr/ line now mentions the generated README.md index next to TEMPLATE.md; rest of the tree unchanged" }
+verified = { hash = "b3:02586af269c6ad78", by = "agent:claude@session_01G2n9TnrH9za1trRoJWCsmB", note = "main.rs gained the docs review and docs log usage entries only; the xtask/ line (docs, lint-deps, governance, ...) and the rest of the tree still hold" }
 -->
 
 ```
@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ffeb76b8de905c81", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the apps/* row against apps/jstream-daemon/Cargo.toml: still layer 6 with unsafe_allowed false; the new direct deps tracing and blake3 are external crates (no new jstream crate edge), so the row text holds" }
+verified = { hash = "b3:1866d0ba10ec12ca", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "#141 review N1: platform-windows package description now names the Credential Manager store; re-read the crate map: the row (layer 2, unsafe yes, Credential Manager store listed) still matches the manifest summary, no dependency edge changed" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -141,7 +141,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-audio` | Real-time mixer: adaptive resampling, send matrix, buses, filters, metering | no |
 | 2 | `jstream-mux` | Pure-Rust muxers: FLV (with enhanced RTMP), MP4/fMP4 | no |
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0034](adr/0034-youtube-interaction-scope-v2.md)). No media code. | no |
-| 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
+| 2 | `jstream-platform-windows` | WGC capture, WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CEF browser backend (ADR-0021) | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, CoreAudio, VideoToolbox/AudioToolbox, IOSurface↔Metal (M3) | **yes** |
 | 2 | `jstream-platform-linux` | PipeWire, VAAPI, dmabuf↔Vulkan (M3; codec policy per future ADR) | **yes** |
 | 2 | `jstream-plugin-clap` | Planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): safe wrapper over the CLAP plugin ABI. Only `jstream-plugin-host` links it. | **yes** |
@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:2a23f997fce1180e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main into #135: re-read the section; the #132/#139 handover text is main's and unchanged, and #135's runtime change (OpenPublish opener held in MediaHost, called on the control thread that runs output.start, outside the engine locks) fits 'once the host has injected platform backends and a publish target'; no thread, RT or failure-path change" }
+verified = { hash = "b3:c155fb3f4532ab9e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#135) into #136: prose is main's; re-read the section: the output-pipeline paragraph's 'publish target' covers #135's opener, it claims nothing about stop duration so #136's 2 s drain bound fits, the panic-boundary and watcher text matches rt_panic_is_reported, and the SeqCst handover paragraph is untouched" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -487,7 +487,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:730d037d3a32ecb6", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via the jstream-server README (open question 8): Transport bullet still holds; the handshake timeout is server-local, envelope unchanged" }
+verified = { hash = "b3:5386153a7678a890", by = "agent:claude@session_01Gkayyrtq9Ahc5U37dAfdoB", note = "Re-read for #137: test-only change (shutdown tests wait on counted conditions instead of fixed sleeps; CLOSE_TIMEOUT made pub(crate) for the test). No behaviour change; the section still matches; envelope and transport bullets unaffected" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -622,7 +622,7 @@ verified = { hash = "b3:86ae7c32cfa70b9a", by = "agent:claude@session_01QBbMRwRu
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:6c19c11ac041d355", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6: one-scene compositor paragraph now says nested scenes go through render_image as an on-GPU Rgba16Float image with the caller bounding depth; steps 1-6, S1 table and output path unchanged" }
+verified = { hash = "b3:d9ef248382cce5c7", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Review N5 rename of the render pass helpers only; the one-scene compositor paragraph's render_image sentence and steps 1-6 still hold" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
