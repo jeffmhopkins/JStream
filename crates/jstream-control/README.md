@@ -309,8 +309,9 @@ the reason a session ended with, which it shares, are unit-tested natively
    `jstream-server` works around it by mapping session IDs back to wire IDs
    ([jstream-server › Design](../jstream-server/README.md#design)).
 3. **Browser client.** Settled and built: `web-sys`'s `WebSocket` on `wasm32`, with the
-   token in a subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). A
-   browser test (wasm-bindgen-test against a server) is still open.
+   token in a subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). It is
+   tested end to end through the web UI (above); a test of the client on its own
+   (wasm-bindgen-test against a server) is still open.
 4. **TLS.** `wss://` needs a TLS feature of `tokio-tungstenite` (rustls with ring) and
    its wiring. `ring` is already on the lint-deps native-code allowlist, for
    `jstream-outputs`' RTMPS, so that part needs no further governance change.
