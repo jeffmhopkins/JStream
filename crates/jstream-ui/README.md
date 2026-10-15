@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:2d2d0b01d21536dc", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7 merge-only round (main e1e2a94: #295, #309): re-read; text is main's; B7's UI change is test-only; holds" }
+verified = { hash = "b3:cd7a4c1c7812c8d0", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "B7×D5 merge (main 94fb25d, D5 #240) on B7 eed5622, resolved from the D8 thread; text identical to main's (diffed); stale only because covered code took B7's changes, none of which this section describes; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
