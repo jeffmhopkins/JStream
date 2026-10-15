@@ -103,7 +103,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:446d4f4724a1a923", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "B8: new Audit log subsection checked against audit.rs and the one hook in Engine::execute (batches and actions only, recorded after the lock, no arguments, rev before/after and replay rule, bounded channel 1024, 8 MiB rotation to audit.1.jsonl, 0600); Locking names the sink's own mutex; secrets_are_redacted now covers audit entries; Not yet drops the audit log" }
+verified = { hash = "b3:51d9680182d5eec7", by = "agent:claude@session_01J56U6c8eEhJRPwsd3efsiC", note = "Merge of main (#153 MCP over HTTP, #134, #163) into B8 #171: main changed only the verified line here; re-read the B8 Audit log and Locking text, still matching audit.rs and the Engine::execute hook; the MCP-session sentence from #153 holds (each /mcp session calls Engine::connect, so its calls are audited like any session's)" }
 -->
 
 ### Engine and sessions
