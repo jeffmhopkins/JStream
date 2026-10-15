@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:0531ff3a61f59917", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = '''Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; Settings bullets are B4's; F2b record path checks now platform-independent (/, \, C:\ or C:/; no .. segment), matching target.rs record_path_problem''' }
+verified = { hash = "b3:a13adcb9b67fc192", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b round 2: Unknown output kind, RTMP target and container are refused with invalid_argument (apply.rs); record path rule and reason text match target.rs (review N1); Outputs bullet holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

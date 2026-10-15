@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:8167f40872f54836", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; the record kind is an addition, a minor bump to 0.9 past B4's 0.8 per R-API-001; no rule text changed" }
+verified = { hash = "b3:3419f508dc0e9c6a", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b round 2: rule text unchanged; R-API-001 says additions are minor, and the record kind's break of 0.7/0.8 output reads is now stated in protocol README#design and left to the maintainer as open question 8" }
 -->
 
 <a id="R-API-001"></a>

@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:1b5a38fd6be1a352", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; mock still answers internal for every output edit (record included) and describes no kinds; nothing names the protocol minor except the 0.7 output-configuration bullet, which holds" }
+verified = { hash = "b3:cfbf93f05e56caff", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#169 Y2, #153 I1) into F2b round 2: took main's verified line and re-read; mock still answers internal for output edits and parses OutputKind through the protocol type, so it gains Unknown parsing; mock bullets hold" }
 -->
 
 ### The trait

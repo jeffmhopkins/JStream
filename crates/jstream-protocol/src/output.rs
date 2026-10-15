@@ -42,6 +42,13 @@ pub enum OutputKind {
         /// The file format.
         container: RecordContainer,
     },
+    /// A kind this version of the protocol doesn't know. Never sent; produced only when
+    /// parsing a kind from a newer server, so a client from 0.9 on can still read
+    /// `output.list` and `state.get` when a later kind is configured. The engine
+    /// refuses it in an edit with `invalid_argument`.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 /// The file format a recording is written in. Serialized as a snake_case string.
@@ -53,6 +60,11 @@ pub enum RecordContainer {
     /// keyframe, each synced to disk), so a crash loses at most the last fragment and
     /// the `.part` file it leaves plays up to there.
     Mp4,
+    /// A container this version of the protocol doesn't know, from a newer server.
+    /// The engine refuses it in an edit with `invalid_argument`.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 /// Where an RTMP output publishes. Serialized with an internal `type` tag.
@@ -70,6 +82,11 @@ pub enum RtmpTarget {
         /// credential: `user:password@`, a `?query` or a `#fragment`.
         url: String,
     },
+    /// A target this version of the protocol doesn't know, from a newer server. Never
+    /// sent; the engine refuses it in an edit with `invalid_argument`.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 /// One output, as `output.list` and `state.get` report it: its collection state.
@@ -233,6 +250,30 @@ mod tests {
         });
         assert_eq!(serde_json::to_value(&kind).ok(), Some(wire.clone()));
         assert_eq!(serde_json::from_value::<OutputKind>(wire).ok(), Some(kind));
+    }
+
+    /// A kind, target or container from a newer server parses as `Unknown`, so an
+    /// older client can still read the message that carries it.
+    #[test]
+    fn later_kinds_parse_as_unknown() {
+        let parse = |value| serde_json::from_value::<OutputKind>(value).ok();
+        assert_eq!(
+            parse(json!({"type": "virtual_cam", "device": "x"})),
+            Some(OutputKind::Unknown)
+        );
+        assert_eq!(
+            parse(json!({"type": "rtmp", "target": {"type": "you_tube", "binding": "b"}})),
+            Some(OutputKind::Rtmp {
+                target: RtmpTarget::Unknown
+            })
+        );
+        assert_eq!(
+            parse(json!({"type": "record", "path": "/a.mkv", "container": "mkv"})),
+            Some(OutputKind::Record {
+                path: "/a.mkv".into(),
+                container: RecordContainer::Unknown,
+            })
+        );
     }
 
     #[test]

@@ -19,7 +19,7 @@ use jstream_mux::aac::{AOT_AAC_LC, AudioSpecificConfig};
 use jstream_mux::flv::{self, FlvConfig, FlvTag, FlvTagger, MetadataStyle};
 use jstream_mux::fmp4::{self, Fmp4Config};
 use jstream_mux::h264::AvcDecoderConfig;
-use jstream_outputs::record::{RecordError, Recorder};
+use jstream_outputs::record::{RecordError, Recorder, temp_path_for};
 
 use crate::runtime::{LinkState, LivePublish};
 
@@ -123,8 +123,17 @@ impl Sink {
                     }),
                     origin: Some(info.origin),
                 };
-                let recorder = Recorder::create(&path, config)
-                    .map_err(|err| format!("opening the recording: {err}"))?;
+                let recorder = Recorder::create(&path, config).map_err(|err| {
+                    // A failed init-segment write leaves the `.part` file behind, which
+                    // would block the next start; it holds nothing worth keeping.
+                    if matches!(err, RecordError::DiskFull { .. } | RecordError::Write { .. })
+                        && let Some(temp) = temp_path_for(&path)
+                        && let Err(remove) = fs::remove_file(&temp)
+                    {
+                        tracing::warn!(error = %remove, part = %temp.display(), "removing a failed start's recording");
+                    }
+                    format!("opening the recording: {err}")
+                })?;
                 tracing::info!(path = %recorder.temp_path().display(), "recording");
                 Ok(Self::Record(RecordSink {
                     recorder: Some(recorder),

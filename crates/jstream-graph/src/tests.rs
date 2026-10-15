@@ -675,6 +675,31 @@ fn recording_paths_are_validated() {
             invalid_reason(apply_err(&mut graph, vec![record_create("rec", &path)]));
         assert_eq!(field, "edits.0.kind.path", "{path:?}: {reason}");
     }
+    // A kind, target or container from a newer client parses as `Unknown` and is
+    // refused as an invalid argument, not stored.
+    for (kind, field) in [
+        (OutputKind::Unknown, "edits.0.kind.type"),
+        (
+            OutputKind::Rtmp {
+                target: RtmpTarget::Unknown,
+            },
+            "edits.0.kind.target.type",
+        ),
+        (
+            OutputKind::Record {
+                path: "/Videos/show.mkv".into(),
+                container: RecordContainer::Unknown,
+            },
+            "edits.0.kind.container",
+        ),
+    ] {
+        let edit = Edit::OutputCreate {
+            output_id: OutputId::new("rec"),
+            kind,
+        };
+        let (got, reason) = invalid_reason(apply_err(&mut graph, vec![edit]));
+        assert_eq!(got, field, "{reason}");
+    }
     assert_eq!(graph.state().outputs().len(), 0);
 }
 

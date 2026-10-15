@@ -39,7 +39,7 @@ pub use codec::{
 pub use error::PlatformError;
 pub use gpu::{AdapterId, FrameSync, GpuContext, GpuFrame, GpuInterop};
 pub use id::DeviceId;
-pub use keys::{Secret, StreamKeyStore};
+pub use keys::{OAuthTokenStore, Secret, StreamKeyStore};
 pub use surface::VideoSurface;
 pub use vcam::{VcamFormat, VcamSink};
 pub use video_device::{

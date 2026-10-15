@@ -11,9 +11,11 @@
 //! The rejection reasons are fixed text. They never repeat the URL, which might hold a
 //! key.
 //!
-//! A recording path is checked for its shape only: absolute on the engine's machine and
-//! ending in a file name. Whether its directory exists, and whether a file is already
-//! there, is checked by `output.start`, when the recording is opened.
+//! A recording path is checked for its shape only, the same on every platform:
+//! absolute in either Unix or Windows form, with no `..` segment, and ending in a file
+//! name. Whether it is absolute on the engine's own machine, whether its directory
+//! exists, and whether a file is already there, is checked by `output.start`, when the
+//! recording is opened.
 
 /// The longest URL accepted, in bytes.
 pub(crate) const MAX_URL_LEN: usize = 2048;
@@ -42,7 +44,7 @@ pub(crate) fn record_path_problem(path: &str) -> Option<&'static str> {
         && bytes[1] == b':'
         && matches!(bytes[2], b'/' | b'\\');
     if !(path.starts_with(['/', '\\']) || drive) {
-        return Some("must be absolute (`/…`, or `C:\\…` on Windows)");
+        return Some("must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`");
     }
     let mut segments = path.split(['/', '\\']);
     if segments.clone().any(|segment| segment == "..") {

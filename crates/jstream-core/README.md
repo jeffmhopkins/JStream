@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:628aa2d498e73df6", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; B4's Kinds bullets hold; F2b: a recording output needs no publish target, Tests bullet lists the four recording tests (including the not-absolute-here start)" }
+verified = { hash = "b3:9f67ce97b35cbbfc", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#169 Y2, #153 I1) into F2b round 2: took main's verified line and re-read; F2b round 2: Tests bullet and recording text unchanged; sink.rs now also removes .part on an init-segment write failure (described in Design)" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -99,7 +99,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1db64dd781170c0d", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; B4's kind-query and settings text holds; F2b Recording paragraph matches runtime/sink.rs (absolute-here check, open in launch, provisional .part, keep flag, write errors fatal)" }
+verified = { hash = "b3:6f9fd09a21fc37a1", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b round 2 (review N2): Recording paragraph adds that an init-segment write failure (DiskFull/Write from Recorder::create) removes the .part, matching sink.rs Sink::open; rest re-read" }
 -->
 
 ### Engine and sessions
@@ -373,7 +373,9 @@ stops. The file is opened in `launch`, after the devices and encoders and before
 threads, so a path that can't be recorded to (one not absolute on this machine, an existing
 file or `.part`, a missing directory) fails the start with `action_failed` and `opening the recording: <reason>`.
 Until the compositor has opened, the recording is provisional: a start that fails
-after opening the file removes the `.part` file, so it doesn't block the next start.
+after opening the file removes the `.part` file, so it doesn't block the next start,
+and so does one whose init segment can't be written (`DiskFull` or `Write` from
+`Recorder::create`).
 Once `active`, the `.part` file is kept whatever happens: a write error (a full disk
 among them) settles `failed` and leaves it readable up to its last fragment, and a
 failed rename at stop is logged with the `.part` path. A packet the muxer rejects is

@@ -466,6 +466,13 @@ fn apply_edit(
                 OutputKind::Record { path, container } => {
                     check_record(path, *container, at)?;
                 }
+                OutputKind::Unknown => {
+                    return Err(invalid(
+                        at,
+                        "kind.type",
+                        "is not an output kind this engine knows",
+                    ));
+                }
                 _ => return Err(unsupported(at, "kind", "this output kind")),
             }
             state.outputs.insert(
@@ -523,6 +530,11 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
             Some(problem) => Err(invalid(at, &format!("{name}.url"), problem)),
             None => Ok(()),
         },
+        RtmpTarget::Unknown => Err(invalid(
+            at,
+            &format!("{name}.type"),
+            "is not an RTMP target this engine knows",
+        )),
         _ => Err(unsupported(at, name, "this RTMP target")),
     }
 }
@@ -531,6 +543,13 @@ fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), Protoc
 fn check_record(path: &str, container: RecordContainer, at: usize) -> Result<(), ProtocolError> {
     match container {
         RecordContainer::Mp4 => {}
+        RecordContainer::Unknown => {
+            return Err(invalid(
+                at,
+                "kind.container",
+                "is not a container this engine knows",
+            ));
+        }
         _ => return Err(unsupported(at, "kind.container", "this container")),
     }
     match record_path_problem(path) {

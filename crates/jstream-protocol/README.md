@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:ab6e2eb2f2bd0d8f", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; version text: 0.9 for the record kind, 0.8 kind queries and settings, 0.7 outputs; checked against version.rs" }
+verified = { hash = "b3:6b9cedafd3354839", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b round 2: output.rs gains Unknown on OutputKind, RtmpTarget and RecordContainer (schemars-skipped, schema unchanged); Outputs bullet and version text hold" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -91,7 +91,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:d7c613f098e95491", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#155 B4, protocol 0.8) into F2b: took main's verified line and re-read the section; handshake example at 0.9; record paragraph (0.9) lists the absolute forms and the .. rule as output.rs documents; geometry paragraph version line says 0.9" }
+verified = { hash = "b3:0156f643d61c54e5", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "F2b round 2 (review B2): Compatibility bullet says OutputKind/RtmpTarget/RecordContainer parse unknown values as Unknown from 0.9 and that 0.7/0.8 clients can't parse output.list or state.get once a record output exists; open question 8 names it and leaves the minor-bump call to the maintainer" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -430,9 +430,15 @@ after 1.0:
   optional field. Old clients keep working, and a newer server still serves them
   (`can_serve`), because unknown fields are ignored (no type denies them), and because
   unknown server messages, events and error codes parse as an `Unknown` variant that
-  clients skip. An unknown error code still has its `message`. Not yet covered: a new
+  clients skip. An unknown error code still has its `message`. From 0.9, an output's
+  `OutputKind`, `RtmpTarget` and `RecordContainer` parse an unknown `type` or value as
+  `Unknown` too, so later output kinds won't break a 0.9 client. Not yet covered: a new
   value of a string enum (`OutputState`, `EntityKind`) inside a known message breaks an
-  older client's parse, so adding one needs open question 8 settled first.
+  older client's parse, so adding one needs open question 8 settled first. The same
+  break happened once, in 0.9 itself: `OutputKind` had no fallback in 0.7 and 0.8, so a
+  0.7 or 0.8 client can't parse `output.list` or `state.get` once a `record` output
+  exists (the whole response fails, and `WsControl` ends the session). Whether that
+  counts as a minor bump is part of open question 8.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
@@ -533,7 +539,9 @@ described above.
    the pipeline runs.
 8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
    fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
-   a new value as a major change?
+   a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
+   fallbacks from 0.9, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
+   outputs (see Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an
