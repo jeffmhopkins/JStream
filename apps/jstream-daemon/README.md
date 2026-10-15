@@ -191,7 +191,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1d8ea2b531b3c4e4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#307 merge of main (#237, #309, #295, #331): took main's stamp; re-read whole section; this PR's delay-load bullet (link-arg-bins reaches the unit-test harness, LNK4199 not fatal via linker_messages, what tests/delay_load.rs checks and misses) kept and matches build.rs's DLL list; main's clock-swap sentence in core#design fits QpcClock via with_backends; holds" }
+verified = { hash = "b3:d211a9a80f1dab95", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#307 merge of main (#240 D5 audio): took main's stamp; re-read whole section; #240 changed no daemon text or code and the daemon names no audio routing; this PR's delay-load bullet still matches build.rs's DLL list and tests/delay_load.rs; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
