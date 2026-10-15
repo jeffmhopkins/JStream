@@ -2410,10 +2410,10 @@ mod tests {
         let error = undo(&*control).expect_err("running");
         assert_eq!(
             error.protocol(),
-            Some(&ProtocolError::InvalidArgument {
-                field: "edits.0.output_id".into(),
-                reason: "output `yt` is running; stop it first".into(),
-            })
+            Some(&ProtocolError::invalid_argument(
+                "edits.0.output_id",
+                "output `yt` is running; stop it first",
+            ))
         );
         action(&*control, Action::OutputStop { output_id: yt }).expect("stop");
         assert_eq!(undo(&*control), Ok((Rev(2), Rev(1), 0, 1)));
