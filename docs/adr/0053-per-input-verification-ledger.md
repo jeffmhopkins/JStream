@@ -62,16 +62,20 @@ does.
    An inline `verified` line fails `docs check`. No section can cover the ledger.
 3. **`docs verify` writes only what changed.** Entries whose input still has the recorded
    hash keep their `by` and `note`; changed and new inputs get this verification's; removed
-   inputs are dropped. With nothing changed, the `body` entry takes the new `by` and `note`,
-   so the re-read is still recorded.
+   inputs are dropped. No other line is rewritten, so a verify that only drops entries, or
+   finds nothing changed, can't conflict with a parallel change to another entry (which
+   would then resolve to fresh, item 4); with nothing changed it writes nothing.
 4. **Two PRs conflict on an input both changed.** Then neither re-read the combination,
    and its `stamp` line conflicts, as the whole stamp did before. Adding or removing
    entries at the same spot on both sides can conflict too: both adding inputs between
    the same two neighbours (two PRs adding modules to one crate often do), one adding an
    input next to one the other removes, or both removing neighbouring inputs. A change on
    one side next to an add or remove on the other merges. `docs merge-main` takes main's
-   side of any ledger conflict and reports the section stale, as it did for inline stamps;
-   a branch entry lost that way only ever makes a section stale, never falsely fresh.
+   side of any ledger conflict and reports the section stale, as it did for inline stamps.
+   Every line a verify rewrites is for an input it saw change, so a conflicting line taken
+   from main no longer matches the merged input and the section is stale. The exception is
+   both PRs making the same change to an input, where main's entry already verified that
+   exact content. The fixture test checks each case on stamps `restamp` wrote.
 5. **One-time migration.** `cargo xtask docs migrate` moves each inline stamp whose hash
    still matches into the ledger, with its `by` and `note` on `body`, and drops one that no
    longer matches, so that section is stale until someone re-reads it. It replaces

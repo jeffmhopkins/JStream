@@ -168,8 +168,9 @@ pub(crate) fn diff(stamp: Option<&Stamp>, inputs: &BTreeMap<String, String>) -> 
 
 /// The stamp `docs verify` writes: entries whose hash still matches keep their `by` and
 /// `note`; changed and new inputs get this verification's; removed inputs are dropped.
-/// When no entry changed or was added, the `body` entry takes this verification, so the
-/// re-read is still recorded.
+/// Nothing else is rewritten: a verify that only drops removed inputs, or finds every
+/// input unchanged, leaves the other entries' lines as they were, so it can't conflict
+/// with a parallel change to them that `docs merge-main` would then resolve to fresh.
 pub(crate) fn restamp(
     old: Option<&Stamp>,
     inputs: &BTreeMap<String, String>,
@@ -181,24 +182,16 @@ pub(crate) fn restamp(
         by: Some(by.to_owned()),
         note: Some(note.to_owned()),
     };
-    let mut changed = false;
-    let mut out: Stamp = inputs
+    inputs
         .iter()
         .map(|(k, h)| {
             let e = match old.and_then(|o| o.get(k)) {
                 Some(e) if &e.hash == h => e.clone(),
-                _ => {
-                    changed = true;
-                    fresh(h)
-                }
+                _ => fresh(h),
             };
             (k.clone(), e)
         })
-        .collect();
-    if !changed && let Some(e) = out.get_mut(super::hash::BODY) {
-        *e = fresh(&e.hash);
-    }
-    out
+        .collect()
 }
 
 #[cfg(test)]
@@ -303,7 +296,7 @@ mod tests {
     }
 
     /// Only changed inputs take the new verification, so parallel PRs that change
-    /// different inputs write different lines; a re-read with no change restamps `body`.
+    /// different inputs write different lines; a re-read with no change rewrites nothing.
     #[test]
     fn restamp_rewrites_only_changed_entries() {
         let old = restamp(
@@ -327,51 +320,59 @@ mod tests {
             "agent:third",
             "third",
         );
-        assert_eq!(again["body"].by.as_deref(), Some("agent:third"));
-        assert_eq!(again["file:a"], new["file:a"]);
+        assert_eq!(
+            again, new,
+            "a re-read with nothing changed rewrites nothing"
+        );
     }
 
-    /// The layout's promise, checked with git itself: on one section, two branches that
-    /// change different inputs, or add or remove one next to an input the other changes,
-    /// merge cleanly. Two that change the same input conflict, and so can two that add or
-    /// remove inputs at the same spot (ADR-0053 item 4).
+    /// The layout's promise, checked with git itself on ledgers that `restamp` wrote from
+    /// a shared base, as `docs verify` does on two branches. Two branches that change
+    /// different inputs, or add or remove one next to an input the other changes, merge
+    /// cleanly and the section is fresh. Two that change the same input conflict, and so
+    /// can two that add or remove inputs at the same spot (ADR-0053 item 4); taking main's
+    /// side of the conflict, as `docs merge-main` does, leaves the section stale unless
+    /// both made the same change.
     #[test]
-    fn parallel_changes_to_different_inputs_merge_cleanly_in_git() {
-        type Entries = Vec<(&'static str, &'static str)>;
-        let ledger = |entries: &[(&str, &str)]| {
-            let mut l = Ledger::default();
-            l.sections.insert(
-                "S#s".into(),
-                restamp(
-                    None,
-                    &inputs(entries),
-                    "agent:x",
-                    "same note on every entry",
-                ),
-            );
-            l.render()
-        };
-        let base = [
+    fn parallel_verifies_merge_cleanly_or_resolve_to_stale_in_git() {
+        #[derive(Clone, Copy)]
+        enum Op {
+            Change(&'static str),
+            Add(&'static str),
+            Remove(&'static str),
+        }
+        use Op::{Add, Change, Remove};
+        let base = inputs(&[
             ("body", "b3:0"),
             ("file:a", "b3:1"),
             ("file:b", "b3:2"),
             ("file:c", "b3:3"),
-        ];
-        let with = |edit: &dyn Fn(&mut Entries)| {
-            let mut e = base.to_vec();
-            edit(&mut e);
-            e.sort_unstable();
-            ledger(&e)
+            ("file:d", "b3:4"),
+        ]);
+        let apply = |to: &mut BTreeMap<String, String>, op: Op, hash: &str| match op {
+            Change(k) | Add(k) => {
+                to.insert(k.to_owned(), hash.to_owned());
+            }
+            Remove(k) => {
+                to.remove(k);
+            }
         };
-        let change = |k: &'static str| {
-            with(&move |e: &mut Entries| {
-                for x in e.iter_mut().filter(|x| x.0 == k) {
-                    x.1 = "b3:9";
-                }
-            })
+        let base_stamp = restamp(None, &base, "agent:base", "base");
+        let render = |stamp: Stamp| {
+            let mut l = Ledger::default();
+            l.sections.insert("S#s".into(), stamp);
+            l.render()
         };
-        let add = |k: &'static str| with(&move |e: &mut Entries| e.push((k, "b3:8")));
-        let remove = |k: &'static str| with(&move |e: &mut Entries| e.retain(|x| x.0 != k));
+        let side = |op: Op, who: &str| {
+            let mut now = base.clone();
+            apply(&mut now, op, &format!("b3:{who}"));
+            render(restamp(
+                Some(&base_stamp),
+                &now,
+                &format!("agent:{who}"),
+                who,
+            ))
+        };
         let dir = std::env::temp_dir().join(format!("xtask-ledger-git-{}", std::process::id()));
         let git = |args: &[&str]| {
             std::process::Command::new("git")
@@ -381,52 +382,95 @@ mod tests {
                 .output()
                 .expect("invariant: git runs")
         };
-        let merges = |a: &str, b: &str| -> bool {
+        // Merges main into the branch and returns whether it was clean, and the ledger
+        // after taking main's side of any conflict.
+        let merge = |branch: &str, main: &str| -> (bool, Ledger) {
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(&dir).expect("invariant: temp dir is writable");
-            let commit = |text: &str, branch: &str| {
+            let commit = |text: &str, name: &str| {
                 std::fs::write(dir.join("v.toml"), text).expect("invariant: writable");
-                git(&["checkout", "-q", "-B", branch]);
+                git(&["checkout", "-q", "-B", name]);
                 git(&["add", "v.toml"]);
-                git(&["commit", "-q", "-m", branch]);
+                git(&["commit", "-q", "-m", name]);
             };
             git(&["init", "-q"]);
-            commit(&ledger(&base), "base");
-            commit(a, "one");
+            commit(&render(base_stamp.clone()), "base");
+            commit(main, "main");
             git(&["checkout", "-q", "base"]);
-            commit(b, "two");
-            git(&["merge-tree", "--write-tree", "one", "two"])
-                .status
-                .success()
+            commit(branch, "branch");
+            let clean = git(&["merge", "-q", "main"]).status.success();
+            let text = std::fs::read_to_string(dir.join("v.toml")).expect("invariant: written");
+            let text = if clean {
+                text
+            } else {
+                super::super::merge::resolve_ledger(&text)
+                    .expect("invariant: a ledger conflict resolves")
+                    .0
+            };
+            (
+                clean,
+                Ledger::parse(&text).expect("invariant: the merge parses"),
+            )
         };
-        for (what, a, b) in [
-            ("change a, change b", change("file:a"), change("file:b")),
-            ("change body, change a", change("body"), change("file:a")),
-            ("add aa, change b", add("file:aa"), change("file:b")),
-            ("add aa, change a", add("file:aa"), change("file:a")),
-            ("remove b, change c", remove("file:b"), change("file:c")),
-            ("remove b, change a", remove("file:b"), change("file:a")),
-            ("add aa, add bb", add("file:aa"), add("file:bb")),
-            ("add aa, remove c", add("file:aa"), remove("file:c")),
-            (
-                "add zz after the last entry, change c",
-                add("file:zz"),
-                change("file:c"),
-            ),
-            ("remove c, change b", remove("file:c"), change("file:b")),
-        ] {
-            assert!(merges(&a, &b), "{what} must merge cleanly");
+        let pairs = [
+            (Change("file:a"), Change("file:b"), true),
+            (Change("body"), Change("file:a"), true),
+            (Add("file:aa"), Change("file:b"), true),
+            (Add("file:aa"), Change("file:a"), true),
+            (Remove("file:b"), Change("file:c"), true),
+            (Remove("file:b"), Change("file:a"), true),
+            (Remove("file:b"), Change("body"), true),
+            (Remove("file:b"), Remove("file:d"), true),
+            (Add("file:aa"), Add("file:bb"), true),
+            (Add("file:aa"), Remove("file:c"), true),
+            (Add("file:zz"), Change("file:d"), true),
+            (Remove("file:d"), Change("file:c"), true),
+            (Change("file:a"), Change("file:a"), false),
+            (Add("file:ba"), Add("file:bb"), false),
+            (Remove("file:d"), Add("file:e"), false),
+            (Remove("file:b"), Remove("file:c"), false),
+        ];
+        for (one, two, clean) in pairs {
+            for (branch, main) in [(one, two), (two, one)] {
+                let (merged_clean, merged) = merge(&side(branch, "one"), &side(main, "two"));
+                let what = format!("{:?} into {:?}", ops(main), ops(branch));
+                assert_eq!(merged_clean, clean, "{what}: clean merge expected: {clean}");
+                // The tree after the merge: both edits, and a third version of an input
+                // both changed.
+                let mut tree = base.clone();
+                apply(&mut tree, branch, "b3:one");
+                apply(&mut tree, main, "b3:two");
+                if let (Change(x), Change(y)) = (branch, main)
+                    && x == y
+                {
+                    tree.insert(x.to_owned(), "b3:both".to_owned());
+                }
+                let stale = !diff(merged.sections.get("S#s"), &tree).is_empty();
+                assert_eq!(stale, !clean, "{what}: stale after the merge: {stale}");
+            }
         }
-        for (what, a, b) in [
-            (
-                "change a twice",
-                change("file:a"),
-                with(&|e: &mut Entries| e[1].1 = "b3:7"),
-            ),
-            ("add ba, add bb", add("file:ba"), add("file:bb")),
-            ("remove c, add d", remove("file:c"), add("file:d")),
-        ] {
-            assert!(!merges(&a, &b), "{what} is expected to conflict");
+        // The one conflict that resolves fresh: both made the same change to an input, so
+        // main's entry already verified exactly the merged content.
+        let same = |who: &str| {
+            let mut now = base.clone();
+            now.insert("file:a".into(), "b3:same".into());
+            render(restamp(
+                Some(&base_stamp),
+                &now,
+                &format!("agent:{who}"),
+                who,
+            ))
+        };
+        let (clean, merged) = merge(&same("one"), &same("two"));
+        let mut tree = base.clone();
+        tree.insert("file:a".into(), "b3:same".into());
+        assert!(!clean && diff(merged.sections.get("S#s"), &tree).is_empty());
+        fn ops(op: Op) -> String {
+            match op {
+                Change(k) => format!("change {k}"),
+                Add(k) => format!("add {k}"),
+                Remove(k) => format!("remove {k}"),
+            }
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

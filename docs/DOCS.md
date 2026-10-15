@@ -294,8 +294,11 @@ That means:
     or both removing neighbouring inputs. Two PRs adding modules to one crate often do.
 
   Any ledger conflict is resolved the same way (`docs merge-main` below): the section is
-  left stale, to be re-read after merging `main`, and never falsely fresh. A re-read with
-  no input changed records its `by` and `note` on the `body` entry.
+  left stale, to be re-read after merging `main`. The one exception is two PRs making the
+  same change to an input: main's entry then already verified exactly that content. A
+  verify writes only entries whose input changed or is new, and drops removed ones, so it
+  never rewrites a line for an input it didn't see change; a verify with no input changed
+  writes nothing.
 - **The ledger is generated.** Only `docs verify` (and `docs migrate`) writes it, in
   sorted, canonical form; `docs check` fails on any other form, and on an inline
   `verified` key in an `@section` block. A stamp for a section that no longer needs one
@@ -412,8 +415,7 @@ holds**. The note says what was checked and why it still holds, e.g.:
   A stock-phrase list alone is too easy to game.
 - A false verification is a bug, and gets fixed and noted like one.
 - A later `docs verify` of the same section in the same PR replaces the `by` and `note`
-  of every entry whose input changed since the previous verify (only `body`'s when none
-  did). An earlier note on such an entry survives only in git history (`docs log`), so the
+  of every entry whose input changed since the previous verify. An earlier note on such an entry survives only in git history (`docs log`), so the
   last note on each entry must cover the PR's whole change to that input: it is the one
   the reviewer reads.
 - The sweep is to report each section's verify-to-edit ratio from git (not built yet,

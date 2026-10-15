@@ -297,7 +297,7 @@ fn verify(root: &Path, target: &str, by: &str, note: &str) -> Result<()> {
             .with_context(|| format!("writing {}", doc.path))?;
     }
     if changed.is_empty() {
-        eprintln!("verified {key}: re-read recorded on its `body` entry");
+        eprintln!("verified {key}: already fresh, nothing to record");
     } else {
         eprintln!("verified {key}: {}", changed.join(", "));
     }

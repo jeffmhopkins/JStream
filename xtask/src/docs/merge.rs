@@ -230,7 +230,7 @@ fn sides(text: &str) -> Result<(String, String, Vec<Hunk>), String> {
 /// branch changed that input, so it is reported for a re-read. The result must parse; it is
 /// rewritten canonically. Returns it and the sections whose stamp differs from the
 /// branch's.
-fn resolve_ledger(text: &str) -> Result<(String, Vec<String>), String> {
+pub(super) fn resolve_ledger(text: &str) -> Result<(String, Vec<String>), String> {
     let (ours, theirs, _) = sides(text)?;
     let parse = |t: &str, side: &str| {
         ledger::Ledger::parse(t).map_err(|e| format!("{side} doesn't parse: {e}"))
