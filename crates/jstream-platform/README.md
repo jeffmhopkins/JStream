@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:0ea935c5788237e5", by = "agent:claude@session_01Q6eRwxiAzJidNbXNzEDHVJ", note = "F4: Codecs bullet now names VideoEncoder::request_keyframe and its refusing default; FakeCodecs restarts its keyframe pattern at a forced keyframe; on-demand keyframes dropped from Not yet" }
+verified = { hash = "b3:5ff352eca8a3f534", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (F4 request_keyframe) into H1: re-read both; the Codecs bullet's request_keyframe text is main's, and the IDs and errors bullet names PlatformError::MissingComponent; neither change touches the other" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:33239f38707d87fd", by = "agent:claude@session_01Q6eRwxiAzJidNbXNzEDHVJ", note = "Merge of main (#141 WindowsCredentials) into #146 (F4): re-read both; the Credential Manager bullet and unsafe/RAII wording are main's, unchanged, and the H.264 Keyframe on demand bullet (CODECAPI_AVEncVideoForceKeyFrame, Unsupported when refused) is unaffected by them" }
+verified = { hash = "b3:b378f301b6e1e375", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (#141 WindowsCredentials, #146 F4 keyframes) into H1: re-read both; main's Credential Manager and keyframe text unchanged; the check_media_foundation bullet sits after it, now says nothing calls it yet (review N1); the Tests paragraph lists the credential tests and the MF decision, probe and edition-read tests together" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
