@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-effects/src/**", "crates/jstream-effects/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-effects", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0035-clap-plugins-out-of-process.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:4a4831bf1a7be60a", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "Round 1 (B1, N1-N3): re-read; hot reload now stamps the manifest plus named shaders and retries duplicate-refused folders when an ID is freed; contract adds overrides; prelude validated alone" }
 -->
 
 Layer-3 loader for third-party **WGSL effect packs**, the data-only extension point of
