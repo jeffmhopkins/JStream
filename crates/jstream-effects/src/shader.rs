@@ -7,7 +7,7 @@
 //! field per parameter, in declaration order) bound at group [`PARAMS_GROUP`], binding
 //! [`PARAMS_BINDING`] as `p`, then the effect's own file. That file defines
 //! `@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>` and nothing the host has to
-//! bind: no bindings, no immediates, no other entry points.
+//! bind: no bindings, no immediates, no overrides, no other entry points.
 
 use std::collections::BTreeSet;
 use std::error::Error as _;
@@ -205,6 +205,10 @@ fn linear_rgba(text: &str) -> Option<[f32; 4]> {
 pub(crate) fn validate(prelude: &str, header: &str, source: &str) -> Result<(), String> {
     let host = naga::front::wgsl::parse_str(prelude)
         .map_err(|e| format!("the host prelude does not parse: {}", e.message()))?;
+    // A host mistake is named as one, not blamed on the generated `Params`.
+    Validator::new(ValidationFlags::all(), Capabilities::empty())
+        .validate(&host)
+        .map_err(|e| format!("the host prelude does not validate: {}", e.as_inner()))?;
     let head = format!("{prelude}\n{header}\n");
     // The effect's first line is the one after the head's last newline.
     let head_lines = head.matches('\n').count();
@@ -269,6 +273,12 @@ fn check_contract(host: &Module, module: &Module, has_params: bool) -> Result<()
     if !found {
         return Err(format!(
             "defines no `@fragment fn {ENTRY_POINT}(in: VsOut) -> @location(0) vec4<f32>`"
+        ));
+    }
+    if let Some((_, o)) = module.overrides.iter().next() {
+        return Err(format!(
+            "declares the override `{}`; an effect takes its values only from parameters",
+            o.name.as_deref().unwrap_or("?")
         ));
     }
     let host_globals: BTreeSet<Option<&str>> = host

@@ -188,6 +188,13 @@ impl Effect {
     }
 }
 
+/// The shader paths, relative to the pack folder, that the manifest at `path` names.
+pub(crate) fn shader_files(path: &Path) -> Result<Vec<String>, PackError> {
+    let text = read(path, MAX_MANIFEST_BYTES)?;
+    let manifest = manifest::parse(path, &text)?;
+    Ok(manifest.effects.into_iter().map(|e| e.shader).collect())
+}
+
 /// Reads a whole file of at most `limit` bytes as UTF-8.
 fn read(path: &Path, limit: u64) -> Result<String, PackError> {
     let io = |source| PackError::Io {

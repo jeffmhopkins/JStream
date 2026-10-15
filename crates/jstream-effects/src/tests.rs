@@ -411,6 +411,11 @@ fn shaders_are_checked_against_the_contract() {
             "must return `@location(0) vec4<f32>`",
         ),
         (
+            "override",
+            "override k: f32;\n@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> { return src(in.uv) * k; }\n",
+            "declares the override `k`",
+        ),
+        (
             "undefined",
             "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> { return p.missing; }\n",
             "line 2:",
@@ -482,12 +487,25 @@ fn the_watcher_hot_reloads_packs() {
     assert!(watcher.effect("retro/scanlines").is_some());
     assert!(watcher.poll().errors.is_empty());
 
-    // Fixing it reloads it, and a file the manifest didn't name yet is seen too.
+    // Fixing it reloads it.
     write(&dir.join("scanlines.wgsl"), SCANLINES);
     assert_eq!(
         watcher.poll().kinds,
         [KindChange::Changed("retro/scanlines".into())]
     );
+
+    // A shader the manifest names before it exists is watched, and loads once written.
+    std::fs::remove_file(dir.join("scanlines.wgsl")).expect("remove shader");
+    assert_eq!(watcher.poll().errors.len(), 1);
+    assert!(watcher.poll().errors.is_empty());
+    write(&dir.join("scanlines.wgsl"), SCANLINES);
+    let changes = watcher.poll();
+    assert!(changes.errors.is_empty() && changes.kinds.is_empty());
+
+    // Files the manifest doesn't name are not watched.
+    write(&dir.join("notes.txt"), "draft");
+    let changes = watcher.poll();
+    assert!(changes.errors.is_empty() && changes.kinds.is_empty());
 
     // An effect dropped from the manifest is removed.
     let without_plain = &MANIFEST[..MANIFEST.find("[[effect]]\nid = \"plain\"").expect("plain")];
@@ -498,7 +516,8 @@ fn the_watcher_hot_reloads_packs() {
     );
 
     // A second folder with the same pack ID is refused.
-    retro(&temp.0.join("retro-copy"), MANIFEST, SCANLINES);
+    let copy = temp.0.join("retro-copy");
+    retro(&copy, MANIFEST, SCANLINES);
     let changes = watcher.poll();
     assert!(changes.kinds.is_empty());
     assert!(
@@ -506,14 +525,49 @@ fn the_watcher_hot_reloads_packs() {
         "{:?}",
         changes.errors
     );
-    std::fs::remove_dir_all(temp.0.join("retro-copy")).expect("remove copy");
-    assert!(watcher.poll().kinds.is_empty());
+    assert!(watcher.poll().errors.is_empty());
 
-    // Removing the folder removes its kinds.
+    // Removing the first folder frees the ID, and the copy loads in the same poll.
     std::fs::remove_dir_all(&dir).expect("remove pack");
+    let changes = watcher.poll();
+    assert!(changes.errors.is_empty(), "{:?}", changes.errors);
     assert_eq!(
-        watcher.poll().kinds,
-        [KindChange::Removed("retro/scanlines".into())]
+        changes.kinds,
+        [
+            KindChange::Removed("retro/scanlines".into()),
+            KindChange::Added("retro/plain".into()),
+            KindChange::Added("retro/scanlines".into()),
+        ]
     );
+    assert!(watcher.packs().all(|p| p.dir() == copy));
+
+    // A pack that changes its ID frees the old one too.
+    let third = temp.0.join("retro-third");
+    retro(&third, MANIFEST, SCANLINES);
+    assert_eq!(watcher.poll().errors.len(), 1);
+    write(
+        &copy.join("effect.toml"),
+        &MANIFEST.replacen(r#"id = "retro""#, r#"id = "neo""#, 1),
+    );
+    let changes = watcher.poll();
+    assert!(changes.errors.is_empty(), "{:?}", changes.errors);
+    // neo/* added; retro/* removed from the copy, then added from the third folder.
+    assert_eq!(changes.kinds.len(), 6, "{:?}", changes.kinds);
+    assert!(
+        changes
+            .kinds
+            .contains(&KindChange::Added("neo/plain".into()))
+    );
+    assert!(
+        changes
+            .kinds
+            .contains(&KindChange::Added("retro/plain".into()))
+    );
+    assert_eq!(watcher.packs().count(), 2);
+
+    // Removing the folders removes their kinds.
+    std::fs::remove_dir_all(&copy).expect("remove copy");
+    std::fs::remove_dir_all(&third).expect("remove third");
+    assert_eq!(watcher.poll().kinds.len(), 4);
     assert_eq!(watcher.packs().count(), 0);
 }
