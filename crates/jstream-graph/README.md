@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:c82b796ce9dd438a", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2: re-read; Applying edits says Applied carries the touched set; new Touched sets bullet matches touched.rs (objects incl. encoders, props incl. role/source/encoder choice/encoding, scene order, canvas size, unknown; conflicts_with); Tests names touched.rs; model and encoder prose unaffected" }
+verified = { hash = "b3:1e1724a0e147d258", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review round 2, merge of main (#239 B2-f2 touched sets in graph): main's Touched sets bullet plus C5's data-model cascade (audio-only kinds recorded as mixer inputs; graph stores them like any built-in kind); holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

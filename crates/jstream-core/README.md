@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:07769a38a8b6a334", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2 and #212: re-read; History bullet (log of what each change touched) and Tests list hold; the Touched unit tests moved to jstream-graph" }
+verified = { hash = "b3:f5704400b6add912", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review round 2, merge of main (#239 B2-f2 touched sets in graph): main's Touched-from-graph history text and C5's Audio sources bullet/tests both kept; rewrapped the Tests bullet's 'stream-key actions' line (N5); holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -127,8 +127,7 @@ state machine. Contents:
   deleted while an output runs, an unavailable device or application that leaves the
   output running, a failed stream reopened, an application found again under a new
   process ID, and a settings change reopening its input), the output edits and the
-  stream-key
-  actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
+  stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
   rotation (`audit.rs`), and of undo and redo (`undo_and_redo_are_audited`), the
@@ -152,7 +151,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c7f7481cca172259", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f2 merge of main (#232 A6, #234 A4): re-read; A6's audit sink wording from main kept; Conflicts (graph's Touched set, encoder objects/props) and #212's collection-file wording hold" }
+verified = { hash = "b3:9a62a5e94c3b3671", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review round 2, merge of main (#239 B2-f2 touched sets in graph): main's undo touched-set and collection-file wording changes don't overlap C5's Audio sources/Locking/Not yet text; engine.rs keeps audio.sync beside both live.sync calls (load and changed); holds" }
 -->
 
 ### Engine and sessions
