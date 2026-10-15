@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:9bd72724f2b33c38", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b hardware follow-up: added the Threads line (each call and the capture thread join the MTA with Com::init, as WasapiAudio does; MF objects released before MFShutdown), matching mod.rs and stream.rs; rest of the bullet and the Tests paragraph unchanged" }
+verified = { hash = "b3:28e810d5206cde44", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Re-read after the stream.rs SAFETY comment edit: the Threads line (capture thread joins the MTA) now matches the comment; nothing else changed" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
