@@ -870,7 +870,7 @@ stamp = { hash = "b3:d7db1d06b04d10fc" }
 stamp = { hash = "b3:edefe86e076ea4e3" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:c677afbf20d70a8f", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity gain text kept; C9's Live sources text (plans, show, media backends) unchanged and matches live.rs; re-read, holds" }
+stamp = { hash = "b3:6b3823368b150ab6", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: added that a media input also gets D6's activity gain (when_shown, agreeing with the feeder's audible-while-shown); Audio sources and Live sources text otherwise holds against audio_sources.rs, live.rs, activity.rs; re-read" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:4b7f99a329a36029" }
@@ -897,7 +897,7 @@ stamp = { hash = "b3:5e06b48ac662790f" }
 stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:c6131e778a1cca80" }
+stamp = { hash = "b3:82865b433d5487da", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: added that a media input also gets D6's activity gain (when_shown, agreeing with the feeder's audible-while-shown); Audio sources and Live sources text otherwise holds against audio_sources.rs, live.rs, activity.rs; re-read" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -909,7 +909,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:c746508afb7ea2df", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity gain text kept; C9's Live sources text (plans, show, media backends) unchanged and matches live.rs; re-read, holds" }
+stamp = { hash = "b3:a5c416b475b2efcc", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: added that a media input also gets D6's activity gain (when_shown, agreeing with the feeder's audible-while-shown); Audio sources and Live sources text otherwise holds against audio_sources.rs, live.rs, activity.rs; re-read" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -924,7 +924,7 @@ stamp = { hash = "b3:29301fe6ecd05436" }
 stamp = { hash = "b3:06fe384b67b62cfe" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/live.rs"]
-stamp = { hash = "b3:44603c89d5d38bf0", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity gain text kept; C9's Live sources text (plans, show, media backends) unchanged and matches live.rs; re-read, holds" }
+stamp = { hash = "b3:6f6e5c31ec269940", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: added that a media input also gets D6's activity gain (when_shown, agreeing with the feeder's audible-while-shown); Audio sources and Live sources text otherwise holds against audio_sources.rs, live.rs, activity.rs; re-read" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
@@ -933,7 +933,7 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:976b8a234d4f9a45" }
+stamp = { hash = "b3:3d9c1b6465bf3344", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: added that a media input also gets D6's activity gain (when_shown, agreeing with the feeder's audible-while-shown); Audio sources and Live sources text otherwise holds against audio_sources.rs, live.rs, activity.rs; re-read" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -960,7 +960,7 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:211e61b83bc93adc", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity gain text kept; C9's Live sources text (plans, show, media backends) unchanged and matches live.rs; re-read, holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:bbb4201c3ae8d968", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity gain text kept; C9's Live sources text (plans, show, media backends) unchanged and matches live.rs; re-read, holds" }
+stamp = { hash = "b3:37b1ac10731b2675", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: added that a media input also gets D6's activity gain (when_shown, agreeing with the feeder's audible-while-shown); Audio sources and Live sources text otherwise holds against audio_sources.rs, live.rs, activity.rs; re-read" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:732249ad50d11c2c" }
@@ -972,10 +972,10 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:cff417eb46781fe2", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity gain text kept; C9's Live sources text (plans, show, media backends) unchanged and matches live.rs; re-read, holds" }
+stamp = { hash = "b3:1f16e7c29b94cb9b", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: added that a media input also gets D6's activity gain (when_shown, agreeing with the feeder's audible-while-shown); Audio sources and Live sources text otherwise holds against audio_sources.rs, live.rs, activity.rs; re-read" }
 
 ["CRATE-jstream-core#purpose"."body"]
-stamp = { hash = "b3:31b4b99af5ea879c", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity-gain text from main kept beside C9's media sources text; re-read, holds" }
+stamp = { hash = "b3:96a96f90904787c8", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's live-source sound bullet beside D6's activity gain text; re-read against audio_sources.rs, holds" }
 
 ["CRATE-jstream-core#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-core"]
 stamp = { hash = "b3:d63649ff29b26532" }
@@ -987,7 +987,7 @@ stamp = { hash = "b3:5e06b48ac662790f" }
 stamp = { hash = "b3:9ae9770430e0f01d" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audio_sources.rs"]
-stamp = { hash = "b3:c6131e778a1cca80" }
+stamp = { hash = "b3:82865b433d5487da", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's live-source sound bullet beside D6's activity gain text; re-read against audio_sources.rs, holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/audit.rs"]
 stamp = { hash = "b3:63e27b443cbc6f6d" }
@@ -999,7 +999,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:c746508afb7ea2df", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity-gain text from main kept beside C9's media sources text; re-read, holds" }
+stamp = { hash = "b3:a5c416b475b2efcc", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's live-source sound bullet beside D6's activity gain text; re-read against audio_sources.rs, holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1014,7 +1014,7 @@ stamp = { hash = "b3:29301fe6ecd05436" }
 stamp = { hash = "b3:06fe384b67b62cfe" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/live.rs"]
-stamp = { hash = "b3:44603c89d5d38bf0", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity-gain text from main kept beside C9's media sources text; re-read, holds" }
+stamp = { hash = "b3:6f6e5c31ec269940", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's live-source sound bullet beside D6's activity gain text; re-read against audio_sources.rs, holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/outputs.rs"]
 stamp = { hash = "b3:b7dbe1b3935b3df8" }
@@ -1023,7 +1023,7 @@ stamp = { hash = "b3:b7dbe1b3935b3df8" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:976b8a234d4f9a45" }
+stamp = { hash = "b3:3d9c1b6465bf3344", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's live-source sound bullet beside D6's activity gain text; re-read against audio_sources.rs, holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1050,7 +1050,7 @@ stamp = { hash = "b3:7388509dff80cbe4" }
 stamp = { hash = "b3:211e61b83bc93adc", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity-gain text from main kept beside C9's media sources text; re-read, holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
-stamp = { hash = "b3:bbb4201c3ae8d968", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity-gain text from main kept beside C9's media sources text; re-read, holds" }
+stamp = { hash = "b3:37b1ac10731b2675", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's live-source sound bullet beside D6's activity gain text; re-read against audio_sources.rs, holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio_routing.rs"]
 stamp = { hash = "b3:732249ad50d11c2c" }
@@ -1062,7 +1062,7 @@ stamp = { hash = "b3:31eb7a26da4bb8c3" }
 stamp = { hash = "b3:c9688aabcb558c82" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/sources.rs"]
-stamp = { hash = "b3:cff417eb46781fe2", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity-gain text from main kept beside C9's media sources text; re-read, holds" }
+stamp = { hash = "b3:1f16e7c29b94cb9b", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's live-source sound bullet beside D6's activity gain text; re-read against audio_sources.rs, holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/tests/mcp.rs"]
 stamp = { hash = "b3:678b488c706f11fa" }
@@ -1071,7 +1071,7 @@ stamp = { hash = "b3:678b488c706f11fa" }
 stamp = { hash = "b3:abbe7b25a9e379ed", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: D6 activity-gain text from main kept beside C9's media sources text; re-read, holds" }
 
 ["CRATE-jstream-core#runtime"."body"]
-stamp = { hash = "b3:50a6bc0982573317", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; vcam tap text is main's; mixer thread metering and routing attach unchanged; holds" }
+stamp = { hash = "b3:46820a15fbd21028", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: mixer line with media sound, metering and routing attach unchanged; jstream-media-audio text holds against runtime/pipeline.rs; re-read" }
 
 ["CRATE-jstream-core#runtime"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:27f72f3f6ef95752" }
@@ -1083,7 +1083,7 @@ stamp = { hash = "b3:f2c3ac9292e67cf2" }
 stamp = { hash = "b3:b5aa5ea1644b6fdd" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:976b8a234d4f9a45" }
+stamp = { hash = "b3:3d9c1b6465bf3344", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: mixer line with media sound, metering and routing attach unchanged; jstream-media-audio text holds against runtime/pipeline.rs; re-read" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:cd76a871c2ae751d" }
@@ -1101,7 +1101,7 @@ stamp = { hash = "b3:20b9282859764b8b" }
 stamp = { hash = "b3:1cfcb78c8b9d5f89", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: delay-load sentence merges #328's unit-test-harness wording with C9's MfMediaDecoders DLLs (mfplat, mfreadwrite); re-read, holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:c677afbf20d70a8f", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: delay-load sentence merges #328's unit-test-harness wording with C9's MfMediaDecoders DLLs (mfplat, mfreadwrite); re-read, holds" }
+stamp = { hash = "b3:6b3823368b150ab6", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: stale only through core#design; daemon text unchanged by C9b; re-read, holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:2c41053918072ae6" }
@@ -1653,7 +1653,7 @@ stamp = { hash = "b3:9074e32b08b81d5b" }
 stamp = { hash = "b3:4dd2ed0785be217e" }
 
 ["CRATE-jstream-platform#purpose"."body"]
-stamp = { hash = "b3:0aaa0cd81d7282bc", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's MediaDecoders and fake text unchanged; re-read, holds" }
+stamp = { hash = "b3:82f71e7f11386403", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's MediaAudioInfo, next_audio, seek both streams and FakeAudio text hold; re-read" }
 
 ["CRATE-jstream-platform#purpose"."dep:crates/jstream-media/README.md#purpose"]
 stamp = { hash = "b3:e204cadb57ccceae" }
@@ -1698,7 +1698,7 @@ stamp = { hash = "b3:f7ce23061cfbb76d" }
 stamp = { hash = "b3:7d8f9a5250232107" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/fake.rs"]
-stamp = { hash = "b3:a683ec2608f8ee7a", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's MediaDecoders and fake text unchanged; re-read, holds" }
+stamp = { hash = "b3:aa0c198b798fe734", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's MediaAudioInfo, next_audio, seek both streams and FakeAudio text hold; re-read" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/gpu.rs"]
 stamp = { hash = "b3:7711b9f3083b64e2" }
@@ -1710,16 +1710,16 @@ stamp = { hash = "b3:8019c83df5cad30a" }
 stamp = { hash = "b3:5e9dc58061f8fffa" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/lib.rs"]
-stamp = { hash = "b3:3a2a8613a280d748", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's MediaDecoders and fake text unchanged; re-read, holds" }
+stamp = { hash = "b3:4d46690187fbaff4", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's MediaAudioInfo, next_audio, seek both streams and FakeAudio text hold; re-read" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/media_file.rs"]
-stamp = { hash = "b3:cf6973108804b3f4", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's MediaDecoders and fake text unchanged; re-read, holds" }
+stamp = { hash = "b3:3963aad5d32d4220", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's MediaAudioInfo, next_audio, seek both streams and FakeAudio text hold; re-read" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/surface.rs"]
 stamp = { hash = "b3:acaa4ad70c04147a" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/tests.rs"]
-stamp = { hash = "b3:4cb4b298e082fb51", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's MediaDecoders and fake text unchanged; re-read, holds" }
+stamp = { hash = "b3:744085bdb3e7b372", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's MediaAudioInfo, next_audio, seek both streams and FakeAudio text hold; re-read" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/vcam.rs"]
 stamp = { hash = "b3:29fcc9029fafe17d" }
@@ -1728,10 +1728,10 @@ stamp = { hash = "b3:29fcc9029fafe17d" }
 stamp = { hash = "b3:191ac01e6ea05888" }
 
 ["CRATE-jstream-platform-windows#purpose"."body"]
-stamp = { hash = "b3:23dcf3180228d09d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's decode bullets unchanged; re-read against decode/*.rs, holds" }
+stamp = { hash = "b3:40b68dca5720d63e", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's Audio bullet (select or decode, else unselected) holds against decode/reader.rs; re-read" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:0aaa0cd81d7282bc", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's decode bullets unchanged; re-read against decode/*.rs, holds" }
+stamp = { hash = "b3:82f71e7f11386403", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's Audio bullet (select or decode, else unselected) holds against decode/reader.rs; re-read" }
 
 ["CRATE-jstream-platform-windows#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-platform-windows"]
 stamp = { hash = "b3:dfa8602587609b6c" }
@@ -1815,10 +1815,10 @@ stamp = { hash = "b3:74c65b07fb166fc0" }
 stamp = { hash = "b3:8330b0ef94f35307", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's decode bullets unchanged; re-read against decode/*.rs, holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/decode/mod.rs"]
-stamp = { hash = "b3:a03785817b4324c7", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's decode bullets unchanged; re-read against decode/*.rs, holds" }
+stamp = { hash = "b3:b873edd144dfa0f5", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's Audio bullet (select or decode, else unselected) holds against decode/reader.rs; re-read" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/decode/reader.rs"]
-stamp = { hash = "b3:023a4f1440971def", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's decode bullets unchanged; re-read against decode/*.rs, holds" }
+stamp = { hash = "b3:346f233886f55751", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: C9b's Audio bullet (select or decode, else unselected) holds against decode/reader.rs; re-read" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/gpu/capture.rs"]
 stamp = { hash = "b3:e413bab2e84c75e1" }
@@ -2235,7 +2235,7 @@ stamp = { hash = "b3:933d0c4ef1b02ecc" }
 stamp = { hash = "b3:4a9ea9ae5014f95c" }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:191d1744a59b7182", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's media kind text unchanged; re-read against media/*.rs, holds" }
+stamp = { hash = "b3:2f94c16c49ca9e76", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: MediaAudio and audio paragraph (video_over tail, 10 ms packets, 100 ms lead) hold against media/*.rs and tests/media.rs; re-read" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:dfba6103702005f0" }
@@ -2265,19 +2265,22 @@ stamp = { hash = "b3:6ae3f673fe0d6d0b" }
 stamp = { hash = "b3:c4299f8d4d3cdecb" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/lib.rs"]
-stamp = { hash = "b3:09bdba3da7e95cfe", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's media kind text unchanged; re-read against media/*.rs, holds" }
+stamp = { hash = "b3:42bd2fff7f76a0a9", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: MediaAudio and audio paragraph (video_over tail, 10 ms packets, 100 ms lead) hold against media/*.rs and tests/media.rs; re-read" }
+
+["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/media/audio.rs"]
+stamp = { hash = "b3:4dddceeda1a3f24a", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: MediaAudio and audio paragraph (video_over tail, 10 ms packets, 100 ms lead) hold against media/*.rs and tests/media.rs; re-read" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/media/mod.rs"]
-stamp = { hash = "b3:58615404b31f65dd", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's media kind text unchanged; re-read against media/*.rs, holds" }
+stamp = { hash = "b3:3536a16a1c2c4f8e", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: MediaAudio and audio paragraph (video_over tail, 10 ms packets, 100 ms lead) hold against media/*.rs and tests/media.rs; re-read" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/media/player.rs"]
-stamp = { hash = "b3:d94951a1f941cd3d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's media kind text unchanged; re-read against media/*.rs, holds" }
+stamp = { hash = "b3:e384af6f41f27720", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: MediaAudio and audio paragraph (video_over tail, 10 ms packets, 100 ms lead) hold against media/*.rs and tests/media.rs; re-read" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/registry.rs"]
 stamp = { hash = "b3:ce3b85e252781f45", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's media kind text unchanged; re-read against media/*.rs, holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/source.rs"]
-stamp = { hash = "b3:2fc3696549781eac", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's media kind text unchanged; re-read against media/*.rs, holds" }
+stamp = { hash = "b3:070277b307d5cd18", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: MediaAudio and audio paragraph (video_over tail, 10 ms packets, 100 ms lead) hold against media/*.rs and tests/media.rs; re-read" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/text/mod.rs"]
 stamp = { hash = "b3:34314ba6e93e9e21" }
@@ -2301,7 +2304,7 @@ stamp = { hash = "b3:dbb67160c5d2f421" }
 stamp = { hash = "b3:fc3b1214b3ce4e96" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/media.rs"]
-stamp = { hash = "b3:e0d5f54a96965408", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's media kind text unchanged; re-read against media/*.rs, holds" }
+stamp = { hash = "b3:b8ac7dec8999e505", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: MediaAudio and audio paragraph (video_over tail, 10 ms packets, 100 ms lead) hold against media/*.rs and tests/media.rs; re-read" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/tests/sources.rs"]
 stamp = { hash = "b3:c7c03d5f739566b4", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: C9's media kind text unchanged; re-read against media/*.rs, holds" }
@@ -2592,7 +2595,7 @@ stamp = { hash = "b3:8c355a30a5fdf52f" }
 stamp = { hash = "b3:d4525f7b6a698676", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: stale only via platform#purpose (Audio and FakeAudioIo lines); Secret and OAuthTokenStore text unchanged; holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:crates/jstream-platform/README.md#purpose"]
-stamp = { hash = "b3:0aaa0cd81d7282bc", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (41cfb15: #376 stamp ledger, D6 activity gain, K2 #350, #328) into C9; stamps moved to docs/verified.toml: stale only through platform#purpose; youtube text unaffected; re-read, holds" }
+stamp = { hash = "b3:82f71e7f11386403", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of #245's branch (main at 41cfb15: #376 ledger, D6 activity gain) into C9b; stamps now in docs/verified.toml: stale only through platform#purpose; youtube text unaffected; re-read, holds" }
 
 ["CRATE-jstream-youtube#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-youtube"]
 stamp = { hash = "b3:e3b27ea549009815" }

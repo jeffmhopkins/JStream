@@ -489,7 +489,9 @@ clients yet: that needs a protocol field (D5's lane).
 A live source's sound is one more input of the same set, keyed by its source ID and,
 like an audio source's, opened muted and listed in `Routed`, so the routing gives it
 its fader and sends (a `media` source gets its master send at creation, as every
-source with a channel does). It isn't opened while the source's audio is off (`sync`
+source with a channel does) and its activity gain: a `media` source follows
+`when_shown`, so the gain agrees with the feeder, which hands sound on only while
+the program shows the source (an `always` one is still fed only then). It isn't opened while the source's audio is off (`sync`
 also notes which sources' audio is off). The thread opens it by adding a mixer input
 in the sound's format and opening the source's own stream on its producer
 (`MediaAudio::open`, stamped on the program stage's media clock from the source's
