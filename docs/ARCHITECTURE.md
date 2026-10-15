@@ -368,7 +368,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:7f250ee0d850763a", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (D1 mixer collector, F2b recording sink, B2, B8) into E1: combined the output paragraph (program mix plus 'a recording output needs none'), the Collector row now names both the per-output render collector and the mixer's own, and the not-this-cut sentence keeps D1's mixer-collector note; matches pipeline.rs and audio retire.rs" }
+verified = { hash = "b3:93e9be3cc81f6b6f", by = "agent:claude", note = "#189: test-only change to the RTMP reconnect test and its send_until helper in runtime/publish.rs; re-read, no prose describes that test or its budget; still holds" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
