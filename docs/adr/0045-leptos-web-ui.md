@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0044"
+id = "ADR-0045"
 title = "One web UI on Leptos, confirmed for M2"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0044: One web UI on Leptos, confirmed for M2
+# ADR-0045: One web UI on Leptos, confirmed for M2
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

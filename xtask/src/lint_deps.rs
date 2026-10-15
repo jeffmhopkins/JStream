@@ -57,7 +57,7 @@ const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
         None,
         "`links = \"prettyplease03\"` only enforces one version per graph; its build script prints \
          cfg declarations and checks that key, and compiles nothing. Reached through leptos_macro \
-         (jstream-ui, ADR-0044)",
+         (jstream-ui, ADR-0045)",
     ),
     (
         "wasm-bindgen-shared",

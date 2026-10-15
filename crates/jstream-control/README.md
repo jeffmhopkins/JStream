@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:46f8b2356c78808a", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: re-read after ws_config.rs compiled its browser-only helpers under cfg(any(test, wasm32)) instead of allow(dead_code); text unchanged and still matches" }
+verified = { hash = "b3:e16cc07af9e570cf", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 ### The trait
@@ -214,7 +214,7 @@ pulls `web-sys`.
   `ws://` only for now, so no `rustls` or `ring` is in the tree. TLS (rustls with the
   ring provider, [R-DEP-006](../../docs/RULES.md#R-DEP-006)) is an open question below.
   On `wasm32` it is the browser's `WebSocket` through `web-sys`
-  ([ADR-0044](../../docs/adr/0044-leptos-web-ui.md)), which takes `ws://` and `wss://`
+  ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)), which takes `ws://` and `wss://`
   (the browser does TLS).
 - **No runtime required of the caller.** Natively, `WsControl::connect` starts one
   thread per connection running a single-threaded tokio runtime. Every future and
@@ -229,7 +229,7 @@ pulls `web-sys`.
   rather than the URL, so it stays out of logs: an `Authorization: Bearer` header from
   native clients, and from browsers, which can't set that header, two subprotocols in
   `Sec-WebSocket-Protocol`: `jstream` and `jstream.token.<token>`
-  ([ADR-0044](../../docs/adr/0044-leptos-web-ui.md)). The server selects `jstream`; the
+  ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). The server selects `jstream`; the
   browser client fails the connection if it selects anything else. A token that isn't an
   HTTP token (RFC 7230 `tchar`s) can't be a subprotocol and fails `connect`; the
   daemon's tokens are hex. `jstream-server` doesn't accept the subprotocol yet, so a
@@ -275,7 +275,7 @@ and the URL and token handling it shares are unit-tested natively (`ws_config.rs
    `jstream-server` works around it by mapping session IDs back to wire IDs
    ([jstream-server › Design](../jstream-server/README.md#design)).
 3. **Browser client.** Settled and built: `web-sys`'s `WebSocket` on `wasm32`, with the
-   token in a subprotocol ([ADR-0044](../../docs/adr/0044-leptos-web-ui.md)). A
+   token in a subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). A
    browser test (wasm-bindgen-test against a server) is still open.
 4. **TLS.** `wss://` needs a TLS feature of `tokio-tungstenite` (rustls with ring) and
    its wiring. `ring` is already on the lint-deps native-code allowlist, for

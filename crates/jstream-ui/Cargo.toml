@@ -18,7 +18,7 @@ workspace = true
 [dependencies]
 # Reading the engine's event stream.
 futures-util.workspace = true
-# The WebSocket client: the browser's `WebSocket` on wasm32 (ADR-0044).
+# The WebSocket client: the browser's `WebSocket` on wasm32 (ADR-0045).
 jstream-control = { workspace = true, features = ["ws"] }
 jstream-protocol.workspace = true
 leptos.workspace = true

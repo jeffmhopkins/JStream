@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c2c953c7e753de42", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: open question 2 now names ADR-0044's subprotocols and says the server still accepts only Authorization; server code unchanged" }
+verified = { hash = "b3:247012964eb6fd10", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 ### Listening and admission
@@ -267,7 +267,7 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    design sends the token in `Sec-WebSocket-Protocol` instead
    ([jstream-control › Design](../jstream-control/README.md#design)): the subprotocols
    `jstream` and `jstream.token.<token>`, of which the server selects `jstream`
-   ([ADR-0044](../../docs/adr/0044-leptos-web-ui.md)). The browser client sends them;
+   ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). The browser client sends them;
    the server accepts only `Authorization` until it implements that.
 3. **UI assets.** Serving the web UI is deferred. MCP over streamable HTTP is settled
    and built (see *MCP over streamable HTTP*); whether it should also offer SSE, once

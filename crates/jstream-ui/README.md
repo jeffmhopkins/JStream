@@ -13,11 +13,11 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:2dad2667df39b1fd", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: new crate; contents match app.rs, session.rs, panels, canvas, main.rs; layer 3 matches crate map row" }
+verified = { hash = "b3:27fa543724274877", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
-([ADR-0044](../../docs/adr/0044-leptos-web-ui.md)). It is built with Leptos and rendered
+([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). It is built with Leptos and rendered
 client-side. The daemon serves it over HTTP and the desktop app loads it in a Tauri
 webview. It is a client like the CLI and the MCP server: it holds a `dyn Control` from
 `jstream-control` and never links the engine
@@ -42,8 +42,8 @@ Contents (the skeleton; [Design](#design) explains the choices):
 ## Design
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
-depends_on = ["docs/adr/0044-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9a386f8f1802f4c7", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: new crate; connect form, session context, event task, grid shell and native tests match app.rs, session.rs and style.css" }
+depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
+verified = { hash = "b3:632a58846c0871ed", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -76,8 +76,8 @@ verified = { hash = "b3:9a386f8f1802f4c7", by = "agent:claude@session_01SHnfsdCu
 ## Build
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
-depends_on = ["docs/adr/0044-leptos-web-ui.md"]
-verified = { hash = "b3:41a25e12c11b1591", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: trunk commands built dist/ locally (trunk 0.21.14, wasm-bindgen 0.2.129 on PATH); CI wasm job described as added in ci.yml" }
+depends_on = ["docs/adr/0045-leptos-web-ui.md"]
+verified = { hash = "b3:1f08fe1163f5d35d", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
@@ -101,5 +101,5 @@ clippy for `wasm32` over `jstream-control` (with `ws`) and `jstream-ui`.
 
 A page served by trunk is on a different port from the engine, so the engine refuses
 its `Origin` unless it is configured as an extra origin; and until `jstream-server`
-accepts the token subprotocol ([ADR-0044](../../docs/adr/0044-leptos-web-ui.md)), the
+accepts the token subprotocol ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)), the
 UI connects only to an engine that does.

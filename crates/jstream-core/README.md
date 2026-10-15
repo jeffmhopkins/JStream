@@ -151,7 +151,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:493a0d89f06121c9", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: stale via ARCH#protocol and control#design (browser client, token subprotocol); InProcessControl and engine design untouched" }
+verified = { hash = "b3:396d9cc2725931ae", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 ### Engine and sessions

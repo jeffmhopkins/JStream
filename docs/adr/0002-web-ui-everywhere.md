@@ -3,13 +3,13 @@ id = "ADR-0002"
 title = "One web UI for desktop and browser"
 kind = "adr"
 status = "superseded"
-superseded_by = "docs/adr/0044-leptos-web-ui.md"
+superseded_by = "docs/adr/0045-leptos-web-ui.md"
 -->
 
 # ADR-0002: One web UI for desktop and browser
 
 <!-- @generated begin adr-status -->
-> **Superseded** by [ADR-0044: One web UI on Leptos, confirmed for M2](0044-leptos-web-ui.md). This decision no longer applies.
+> **Superseded** by [ADR-0045: One web UI on Leptos, confirmed for M2](0045-leptos-web-ui.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

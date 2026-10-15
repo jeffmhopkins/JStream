@@ -64,7 +64,7 @@ jstream-youtube = { path = "crates/jstream-youtube" }
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.
 png = { version = "0.18", default-features = false }
-# The web UI framework (ADR-0044): client-side rendering only, no server functions or
+# The web UI framework (ADR-0045): client-side rendering only, no server functions or
 # hydration. Its `csr` feature also turns on `getrandom`'s browser backend.
 leptos = { version = "0.8", default-features = false, features = ["csr"] }
 pulldown-cmark = { version = "0.13", default-features = false }

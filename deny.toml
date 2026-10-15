@@ -8,7 +8,7 @@ yanked = "deny"
 ignore = [
     # `paste` is archived; Leptos 0.8 reaches it through `either_of` and `tachys`, at build
     # time only (a proc-macro). Expires at the M2 exit: by then Leptos has dropped it, or
-    # jstream-ui moves to a Leptos release that has (ADR-0044).
+    # jstream-ui moves to a Leptos release that has (ADR-0045).
     { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; a build-time proc-macro under Leptos 0.8 (jstream-ui). Expires: M2 exit" },
 ]
 
@@ -33,7 +33,7 @@ allow = [
 # this entry as not encountered; it records the decision for when that changes.
 # BSL-1.0 (Boost) is permissive in the same way as MIT (R-DEP-001): keep the notice in
 # source distributions, nothing for binaries. Allowed for this one crate, a hash that
-# Leptos's `server_fn` always depends on (ADR-0044).
+# Leptos's `server_fn` always depends on (ADR-0045).
 exceptions = [
     { crate = "assert_no_alloc", allow = ["BSD-1-Clause"] },
     { crate = "xxhash-rust", allow = ["BSL-1.0"] },
@@ -54,7 +54,7 @@ skip = [
     { crate = "hashbrown@0.16.1", reason = "gpu-allocator 0.28 under wgpu-hal, which is pinned exactly (ADR-0004)" },
     { crate = "syn@2.0.119", reason = "windows-implement/windows-interface (windows-core 0.62, pinned exactly) and zerocopy-derive still use syn 2" },
     { crate = "windows-sys@0.52.0", reason = "ring 0.17 (rustls provider, R-DEP-006) uses windows-sys 0.52" },
-    # Leptos 0.8 (jstream-ui, ADR-0044).
+    # Leptos 0.8 (jstream-ui, ADR-0045).
     { crate = "convert_case@0.6.0", reason = "config 0.15 (leptos_config) uses 0.6; leptos_macro uses 0.11" },
     { crate = "r-efi@5.3.0", reason = "getrandom 0.3 uses r-efi 5; getrandom 0.4 (uuid under leptos_macro) uses 6" },
     { crate = "rustc-hash@1.1.0", reason = "naga 30 (wgpu, pinned exactly by ADR-0004) uses 1; Leptos uses 2" },
@@ -81,7 +81,7 @@ deny = [
     # R-DEP-006: rustls with the ring provider.
     { crate = "aws-lc-sys", reason = "R-DEP-006" },
     # R-RS-003: anyhow only in apps and xtask. `leptos_hot_reload` is a dependency of Leptos
-    # (jstream-ui, ADR-0044) that uses it internally; no JStream error type is an anyhow one.
+    # (jstream-ui, ADR-0045) that uses it internally; no JStream error type is an anyhow one.
     { crate = "anyhow", wrappers = ["jstream-desktop", "jstream-daemon", "jstream-cli", "xtask", "leptos_hot_reload"], reason = "R-RS-003" },
 ]
 

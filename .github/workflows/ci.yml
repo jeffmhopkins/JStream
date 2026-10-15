@@ -94,7 +94,7 @@ jobs:
           command: check
           arguments: --all-features
 
-  # The web UI for wasm32 (ADR-0044): clippy over the browser WebSocket client and the UI,
+  # The web UI for wasm32 (ADR-0045): clippy over the browser WebSocket client and the UI,
   # then a trunk build. trunk and the wasm-bindgen CLI are downloaded at pinned versions
   # and checked against pinned SHA-256 sums; the wasm-bindgen CLI must match Cargo.lock.
   wasm:

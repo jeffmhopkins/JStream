@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:51a6ede83f41e90b", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: stale via server#design (browser token subprotocol note); go-live steps use the CLI and are unchanged" }
+verified = { hash = "b3:d41b9d6c2a28ab99", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI

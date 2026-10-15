@@ -184,7 +184,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:c6713338da64f731", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: stale via server#design (open question 2 now names ADR-0044's token subprotocols); daemon design untouched" }
+verified = { hash = "b3:66baa8b95133c362", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

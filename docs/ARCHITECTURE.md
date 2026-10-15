@@ -19,8 +19,8 @@ provisional, and globs that match nothing are only warnings.
 ## Shape of the system
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
-depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0044-leptos-web-ui.md"]
-verified = { hash = "b3:ee1cd21fe48cbf0a", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: depends on ADR-0044 instead of superseded ADR-0002; diagram's jstream-ui (Leptos to WASM) client still holds" }
+depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
+verified = { hash = "b3:dffea86bfec8a1f6", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 ```
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:7f854240bd6b219b", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: jstream-ui row is layer 3 with ADR-0044, matching its Cargo.toml metadata; lint-deps passes" }
+verified = { hash = "b3:1b409ee708c3c06c", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -154,7 +154,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
-| 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0044](adr/0044-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
+| 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
@@ -519,7 +519,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:6871c94d12a37bb9", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: re-read after ws_config.rs compiled its browser-only helpers under cfg(any(test, wasm32)) instead of allow(dead_code); text unchanged and still matches" }
+verified = { hash = "b3:b67d81ee720da2f6", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -614,7 +614,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   (`InProcessControl`, [jstream-core › Design](../crates/jstream-core/README.md#design))
   and over WebSocket by `jstream-control` (`WsControl`, feature `ws`), natively and in
   the browser, where the token travels as a subprotocol because a page can't set
-  `Authorization` ([ADR-0044](adr/0044-leptos-web-ui.md)); `jstream-server` doesn't accept
+  `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)); `jstream-server` doesn't accept
   that yet. `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
   default, with the token required and `Origin`/`Host` validated
