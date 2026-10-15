@@ -3,8 +3,9 @@
 //! driven the way A4's smoke script (`scripts/smoke.ps1`) drives the live daemon. MCP
 //! over streamable HTTP builds a scene with a display source and creates two outputs,
 //! an RTMP stream to a local sink and a recording; the WebSocket client sets the stream
-//! key, starts both, watches `stats.tick` and the state events, and stops them. The
-//! test then checks what the sink received, the recorded MP4, and the audit log.
+//! key and starts the stream, MCP starts the recording, the WebSocket client watches
+//! `stats.tick` and the state events, and each interface stops the output it started.
+//! The test then checks what the sink received, the recorded MP4, and the audit log.
 //!
 //! The built binary has no backends off Windows, so this runs the same pieces in
 //! process instead (`tests/daemon.rs` covers the binary itself). The fake clock is
@@ -185,8 +186,14 @@ impl Mcp {
         body
     }
 
-    /// POSTs one JSON-RPC request and returns the body of a 200 answer.
+    /// POSTs one JSON-RPC request and returns the body of a 200 answer. The I/O blocks,
+    /// so it runs in `block_in_place`: the server under test shares this runtime, and
+    /// its tasks move off this worker meanwhile.
     fn request(&mut self, method: &str, params: &str) -> String {
+        tokio::task::block_in_place(|| self.request_blocking(method, params))
+    }
+
+    fn request_blocking(&mut self, method: &str, params: &str) -> String {
         self.next_id += 1;
         let body = format!(
             r#"{{"jsonrpc":"2.0","id":{},"method":"{method}","params":{params}}}"#,

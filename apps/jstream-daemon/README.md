@@ -56,9 +56,10 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   SIGINT; `tests/e2e.rs`, the headless end to end on every OS: the engine as the
   daemon makes it live, on the platform fakes with the CPU compositor, behind the
   server with MCP on, where MCP builds a scene and creates an RTMP output to a local
-  loopback sink and a recording, the WebSocket client sets the key and starts both,
-  and the test checks `stats.tick`, what the sink received and the recorded MP4. The
-  binary has no backends off Windows, so it runs in process; `tests/delay_load.rs`,
+  loopback sink and a recording, the WebSocket client sets the key and starts the
+  stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
+  received and the recorded MP4. The binary has no backends off Windows, so it runs
+  in process; `tests/delay_load.rs`,
   Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import).
 
