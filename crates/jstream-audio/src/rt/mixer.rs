@@ -29,6 +29,7 @@ use jstream_media::{MediaTime, Rounding, Timebase};
 
 use super::cmd::{self, Command, ControlPlane};
 use super::input::InputShared;
+use super::retire::Retirer;
 use super::ring::FrameRing;
 use super::shared::{Counter, GainParam, Meter, levels};
 use crate::error::AudioError;
@@ -148,17 +149,20 @@ impl Mixer {
     /// A mixer with no inputs.
     ///
     /// # Errors
-    /// [`AudioError::InvalidConfig`] when `config` doesn't [validate](MixerConfig::validate).
+    /// [`AudioError::InvalidConfig`] when `config` doesn't [validate](MixerConfig::validate),
+    /// and [`AudioError::CollectorUnavailable`] when the thread that frees removed
+    /// inputs' rings cannot be started.
     pub fn new(config: MixerConfig) -> Result<Self, AudioError> {
         config.validate()?;
         let timebase =
             Timebase::per_second(config.sample_rate).map_err(|_| AudioError::InvalidConfig {
                 what: "sample_rate must be non-zero",
             })?;
-        super::retire::start();
+        let retirer = Retirer::spawn()?;
         let (tx, commands) = crossbeam_channel::bounded(cmd::COMMAND_CAP);
         let plane = Arc::new(ControlPlane::new(
             tx,
+            retirer,
             config.sample_rate,
             config.ring_frames,
         ));
@@ -324,8 +328,8 @@ impl Mixer {
             match command {
                 Command::Add { id, ring, shared } => {
                     if self.inputs.len() >= cmd::MAX_INPUTS {
-                        super::retire::ring(ring);
-                        super::retire::shared(shared);
+                        self.plane.retirer().ring(ring);
+                        self.plane.retirer().shared(shared);
                         continue;
                     }
                     if let Some(pos) = self.position {
@@ -349,8 +353,8 @@ impl Mixer {
             return;
         };
         let slot = self.inputs.swap_remove(index);
-        super::retire::ring(slot.ring);
-        super::retire::shared(slot.shared);
+        self.plane.retirer().ring(slot.ring);
+        self.plane.retirer().shared(slot.shared);
     }
 
     fn check_out(&self, out: &[f32]) -> Result<(), AudioError> {
@@ -373,16 +377,16 @@ impl Drop for Mixer {
         loop {
             match self.commands.try_recv() {
                 Ok(Command::Add { ring, shared, .. }) => {
-                    super::retire::ring(ring);
-                    super::retire::shared(shared);
+                    self.plane.retirer().ring(ring);
+                    self.plane.retirer().shared(shared);
                 }
                 Ok(Command::Remove(id)) => self.retire_id(id),
                 Err(_) => break,
             }
         }
         for slot in self.inputs.drain(..) {
-            super::retire::ring(slot.ring);
-            super::retire::shared(slot.shared);
+            self.plane.retirer().ring(slot.ring);
+            self.plane.retirer().shared(slot.shared);
         }
     }
 }
@@ -716,6 +720,7 @@ mod tests {
     #[test]
     fn a_removed_ring_is_freed_on_the_collector_thread() {
         let mut mixer = Mixer::new(config(480)).unwrap();
+        let collector = mixer.plane.retirer().thread();
         let (producer, control) = mixer.add_input(stereo48()).unwrap();
         let (hook_tx, hook_rx) = std::sync::mpsc::channel();
         producer.ring().on_drop(hook_tx);
@@ -735,7 +740,7 @@ mod tests {
         let freed_on = hook_rx
             .recv_timeout(std::time::Duration::from_secs(2))
             .unwrap();
-        assert_eq!(freed_on, super::super::retire::collector_thread());
+        assert_eq!(freed_on, collector);
         assert_ne!(freed_on, audio_id);
         assert_ne!(freed_on, std::thread::current().id());
     }
@@ -745,6 +750,7 @@ mod tests {
     #[test]
     fn dropping_the_mixer_first_still_frees_the_ring_on_the_collector() {
         let mut mixer = Mixer::new(config(480)).unwrap();
+        let collector = mixer.plane.retirer().thread();
         let (producer, _control) = mixer.add_input(stereo48()).unwrap();
         let (hook_tx, hook_rx) = std::sync::mpsc::channel();
         producer.ring().on_drop(hook_tx);
@@ -764,7 +770,7 @@ mod tests {
         let freed_on = hook_rx
             .recv_timeout(std::time::Duration::from_secs(2))
             .unwrap();
-        assert_eq!(freed_on, super::super::retire::collector_thread());
+        assert_eq!(freed_on, collector);
         assert_ne!(freed_on, audio_id);
         assert_ne!(freed_on, mixer_id);
     }

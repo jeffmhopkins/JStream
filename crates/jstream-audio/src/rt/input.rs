@@ -45,6 +45,7 @@ use super::continuity::{Continuity, PositionTracker};
 use super::control::{Ema, Pi};
 use super::downmix::Downmix;
 use super::drift::DriftFit;
+use super::retire::Retirer;
 use super::ring::{FrameRing, RingWriter, WriteReport};
 use super::shared::{AtomicF64, Counter, GainParam, Meter};
 use super::sinc::{Output, Resampler};
@@ -216,6 +217,8 @@ pub struct InputProducer {
     pi: Pi,
     smooth: Ema,
     shared: Option<Arc<InputShared>>,
+    /// Where `drop` hands the ring and the counters, so the audio thread frees neither.
+    retirer: Retirer,
 }
 
 impl InputProducer {
@@ -225,6 +228,7 @@ impl InputProducer {
         engine_rate: u32,
         ring: Arc<FrameRing>,
         shared: Arc<InputShared>,
+        retirer: Retirer,
     ) -> Self {
         let rate = format.sample_rate();
         Self {
@@ -251,6 +255,7 @@ impl InputProducer {
             pi: Pi::new(LOOP_BANDWIDTH_HZ, LOOP_DAMPING, MAX_CORRECTION),
             smooth: Ema::new(ERROR_SMOOTHING_S),
             shared: Some(shared),
+            retirer,
         }
     }
 
@@ -446,10 +451,10 @@ impl Drop for InputProducer {
     /// the ring, including when it holds the last one (the mixer was already dropped).
     fn drop(&mut self) {
         if let Some(writer) = self.sink.writer.take() {
-            super::retire::ring(writer.into_ring());
+            self.retirer.ring(writer.into_ring());
         }
         if let Some(shared) = self.shared.take() {
-            super::retire::shared(shared);
+            self.retirer.shared(shared);
         }
     }
 }
@@ -479,7 +484,13 @@ mod tests {
             AudioFormat::new(RATE, ChannelLayout::Stereo, SampleFormat::F32Interleaved).unwrap();
         let ring = Arc::new(FrameRing::new(1 << 16));
         let shared = Arc::new(InputShared::new());
-        let p = InputProducer::new(format, RATE, Arc::clone(&ring), Arc::clone(&shared));
+        let p = InputProducer::new(
+            format,
+            RATE,
+            Arc::clone(&ring),
+            Arc::clone(&shared),
+            Retirer::spawn().unwrap(),
+        );
         (p, ring, shared)
     }
 

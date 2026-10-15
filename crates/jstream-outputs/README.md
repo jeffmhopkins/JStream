@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:ae584ed009d49f3a", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via ARCH#threading's handover paragraph; the RTMP client reads no snapshots or live values, so the stopped-marker and fence rule doesn't apply" }
+verified = { hash = "b3:66153a3019fd04b6", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Stale only via ARCH#threading, whose change is about the audio mixer's collector for input rings. Re-read this section's threading references (its own threads and RT rules); none mentions the collector, so it holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

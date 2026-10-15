@@ -5,94 +5,141 @@
 //! allocation: it hands the `Arc` to this thread, and the free happens here, including
 //! when that reference was the last one.
 //!
-//! The queue is bounded and lock-free, so the hand-off does not allocate, lock or
-//! block. The collector is started from [`Mixer::new`](crate::Mixer::new), on the
-//! thread that builds the mixer, and then lives for the process.
+//! Each [`Mixer`](crate::Mixer) starts its own collector and passes a [`Retirer`] to
+//! everything that hands objects to it: the mixer, its control plane and each input's
+//! producer (R-RS-008: no global). The collector ends once every `Retirer` is gone and
+//! it has freed what they sent, so a producer dropped after its mixer still has one.
+//!
+//! The queue is bounded and lock-free, so a hand-off does not allocate. The collector
+//! polls the queue instead of blocking on it: a receiver blocked in `recv` would make
+//! each `try_send` lock the channel's waker and wake it with a syscall, on the
+//! real-time thread. With nothing waiting, `try_send` is a few atomics.
 
 use std::sync::Arc;
-use std::sync::OnceLock;
+use std::thread::JoinHandle;
 #[cfg(test)]
 use std::thread::ThreadId;
+use std::time::Duration;
 
-use crossbeam_channel::{Sender, TrySendError, bounded};
+use crossbeam_channel::{Receiver, Sender, TryRecvError, TrySendError, bounded};
 
+use super::cmd::{COMMAND_CAP, MAX_INPUTS};
 use super::input::InputShared;
 use super::ring::FrameRing;
+use crate::error::AudioError;
+
+/// Objects that can wait to be freed. Every input sends at most two of each kind (one
+/// from the mixer, one from the producer), and the mixer applies at most a command
+/// queue's worth of changes per block, so a few blocks' worth fits with room to spare.
+const QUEUE_CAP: usize = 4 * MAX_INPUTS + 4 * COMMAND_CAP;
+
+/// How long the collector sleeps between drains. Freeing late costs only memory.
+const POLL: Duration = Duration::from_millis(10);
 
 enum Retired {
     Ring(Arc<FrameRing>),
     Shared(Arc<InputShared>),
 }
 
-struct Collector {
+/// Hands shared objects to one mixer's collector thread. Cloned into each holder.
+#[derive(Clone, Debug)]
+pub(crate) struct Retirer {
     tx: Sender<Retired>,
     #[cfg(test)]
     thread: ThreadId,
 }
 
-fn collector() -> &'static Collector {
-    static COLLECTOR: OnceLock<Collector> = OnceLock::new();
-    COLLECTOR.get_or_init(|| {
-        let (tx, rx) = bounded(1024);
-        let (id_tx, id_rx) = std::sync::mpsc::channel();
-        let spawned = std::thread::Builder::new()
+impl Retirer {
+    /// Starts a collector thread. Called on the thread that builds the mixer.
+    ///
+    /// # Errors
+    /// [`AudioError::CollectorUnavailable`] when the thread cannot be spawned.
+    pub(crate) fn spawn() -> Result<Self, AudioError> {
+        // Detached: the thread ends by itself once every `Retirer` is gone.
+        Self::start().map(|(retirer, _thread)| retirer)
+    }
+
+    fn start() -> Result<(Self, JoinHandle<()>), AudioError> {
+        let (tx, rx) = bounded(QUEUE_CAP);
+        let handle = std::thread::Builder::new()
             .name("jstream-audio-collector".to_owned())
-            .spawn(move || {
-                let _ = id_tx.send(std::thread::current().id());
-                while let Ok(item) = rx.recv() {
-                    match item {
-                        Retired::Ring(ring) => drop(ring),
-                        Retired::Shared(shared) => drop(shared),
-                    }
-                }
-            });
-        // A collector that failed to start leaves the `Arc`s to be freed by whoever
-        // still holds them. Mixer construction is the caller, not a real-time thread.
-        let thread = if spawned.is_ok() {
-            id_rx.recv().unwrap_or_else(|_| std::thread::current().id())
-        } else {
-            std::thread::current().id()
-        };
-        #[cfg(not(test))]
-        let _started = thread;
-        Collector {
+            .spawn(move || collect(&rx))
+            .map_err(|_| AudioError::CollectorUnavailable)?;
+        let retirer = Self {
             tx,
             #[cfg(test)]
-            thread,
+            thread: handle.thread().id(),
+        };
+        Ok((retirer, handle))
+    }
+
+    /// The thread that frees this mixer's retired objects. Tests use it to tell that
+    /// free apart from the audio thread and the mixer thread.
+    #[cfg(test)]
+    pub(crate) fn thread(&self) -> ThreadId {
+        self.thread
+    }
+
+    pub(crate) fn ring(&self, ring: Arc<FrameRing>) {
+        self.hand_off(Retired::Ring(ring));
+    }
+
+    pub(crate) fn shared(&self, shared: Arc<InputShared>) {
+        self.hand_off(Retired::Shared(shared));
+    }
+
+    fn hand_off(&self, item: Retired) {
+        match self.tx.try_send(item) {
+            Ok(()) => {}
+            // The queue is sized above what a mixer can retire between drains, and the
+            // collector only stops once every `Retirer` is gone. If it is full anyway, a
+            // detached thread frees the object so this real-time thread does not.
+            // Spawning allocates: this is the overflow path, never the steady state.
+            Err(TrySendError::Full(item) | TrySendError::Disconnected(item)) => {
+                let _ = std::thread::Builder::new()
+                    .name("jstream-audio-collector-overflow".to_owned())
+                    .spawn(move || drop(item));
+            }
         }
-    })
+    }
 }
 
-/// Starts the collector if it is not already running. Called while the mixer is built.
-pub(crate) fn start() {
-    let _ = collector();
+/// The collector's loop: free whatever arrived, sleep, and stop once every sender is
+/// gone and the queue is empty.
+fn collect(rx: &Receiver<Retired>) {
+    loop {
+        loop {
+            match rx.try_recv() {
+                Ok(Retired::Ring(ring)) => drop(ring),
+                Ok(Retired::Shared(shared)) => drop(shared),
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => return,
+            }
+        }
+        std::thread::sleep(POLL);
+    }
 }
 
-/// The thread that frees retired rings. Tests use it to tell that free apart from the
-/// audio thread and the mixer thread.
 #[cfg(test)]
-pub(crate) fn collector_thread() -> ThreadId {
-    collector().thread
-}
+mod tests {
+    use super::*;
 
-pub(crate) fn ring(ring: Arc<FrameRing>) {
-    hand_off(Retired::Ring(ring));
-}
-
-pub(crate) fn shared(shared: Arc<InputShared>) {
-    hand_off(Retired::Shared(shared));
-}
-
-fn hand_off(item: Retired) {
-    match collector().tx.try_send(item) {
-        Ok(()) => {}
-        // The bounded queue is full, or the collector never started. A detached
-        // thread frees the object so this real-time thread does not. Spawning
-        // allocates, which is the overflow path, not the steady state.
-        Err(TrySendError::Full(item) | TrySendError::Disconnected(item)) => {
-            let _ = std::thread::Builder::new()
-                .name("jstream-audio-collector-overflow".to_owned())
-                .spawn(move || drop(item));
-        }
+    /// A retired ring is freed on the collector, and the collector ends once the last
+    /// `Retirer` is gone, so each mixer's collector goes away with it.
+    #[test]
+    fn the_collector_frees_on_its_thread_and_ends_with_its_last_retirer() {
+        let (retirer, handle) = Retirer::start().unwrap();
+        let other = retirer.clone();
+        let ring = Arc::new(FrameRing::new(1024));
+        let (tx, rx) = std::sync::mpsc::channel();
+        ring.on_drop(tx);
+        retirer.ring(ring);
+        let freed_on = rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert_eq!(freed_on, retirer.thread());
+        drop(retirer);
+        assert!(!handle.is_finished(), "a clone still holds the collector");
+        other.shared(Arc::new(InputShared::new()));
+        drop(other);
+        handle.join().unwrap();
     }
 }

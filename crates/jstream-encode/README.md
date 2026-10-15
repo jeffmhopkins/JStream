@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:94ef2aea8ba1da43", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via ARCH#threading's handover paragraph; encode threads read no snapshots or parameter channels, so the stopped-marker and fence rule doesn't apply" }
+verified = { hash = "b3:7ffb236eed55eca7", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Stale only via ARCH#threading, whose change is about the audio mixer's collector for input rings. Re-read this section's threading references (its own threads and RT rules); none mentions the collector, so it holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

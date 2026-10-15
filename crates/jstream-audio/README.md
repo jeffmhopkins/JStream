@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:6075abda3536d3f7", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Stale via ARCH#threading's handover paragraph; the built mixer API has no generations or live-value release, so the SeqCst/stopped-marker rule contradicts nothing here" }
+verified = { hash = "b3:dc91e88efca3294e", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Re-read against D1: API names Mixer::add_input and MixerControl::add_input, InputControl::remove, 64 inputs; Errors gains TooManyInputs, CommandQueueFull, CollectorUnavailable; Tests list gains the live add/remove and collector tests" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -61,7 +61,8 @@ stamped on the clock, and no device is the master.
   whether the stream failed.
 
 **Errors** (`AudioError`): an invalid configuration, an unsupported input rate or
-sample layout, or a wrong output length. No variant allocates.
+sample layout, a wrong output length, more than 64 inputs, a full input command
+queue, or a collector thread that could not start. No variant allocates.
 
 **Tests.** The unit tests in each `src/rt/` module cover:
 - ring: underrun, drop-oldest overrun, late frames, forward jumps, and a two-thread test
@@ -71,7 +72,10 @@ sample layout, or a wrong output length. No variant allocates.
 - the controller, drift fit, continuity and downmix coefficients, ported from S3 with
   S3's tests;
 - the input's anchoring, outlier runs, discontinuities and silent packets;
-- the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling.
+- the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
+- inputs added from another thread while the mixer runs, then removed, the 64-input
+  limit, and the ring freed on the collector thread whichever of the mixer and the
+  producer lets go last, and the collector ending with its last handle.
 
 `tests/sim.rs` runs simulated devices through the public API on a simulated 100 ns
 clock, with no real devices or threads ([R-TEST-004](../../docs/RULES.md#R-TEST-004)).
@@ -96,7 +100,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:afa31a9a7d486795", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read Realtime against the ARCH#threading handover text (stopped marker, SeqCst fence): this section claims only rings and atomics for the mixer's shared state (R-RT-003) and no generation counter or marker, which stay unbuilt; it holds" }
+verified = { hash = "b3:ae9308712501d220", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Re-read the command-queue paragraph against cmd.rs, mixer.rs and retire.rs: bounded crossbeam queue applied between blocks into a list reserved for 64; mixer and producer hand their Arcs to a per-mixer collector (no global, R-RS-008) that polls so try_send never wakes a thread; R-RT-001/R-RT-003 hold" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -188,9 +192,12 @@ allocate, and removing one unlinks it. The mixer and the producer each hold an `
 of the ring. Releasing either reference hands that `Arc` to the collector thread,
 which is where the ring is freed
 ([R-RT-003](../../docs/RULES.md#R-RT-003)), including when the producer is dropped on
-the audio thread after the mixer is already gone. The collector is started when the
-mixer is built and then lives for the process. A full command queue refuses the add
-or the removal rather than blocking the mixer.
+the audio thread after the mixer is already gone. Each mixer starts its own collector
+in `Mixer::new` and hands it to its control plane and producers, so nothing is global
+([R-RS-008](../../docs/RULES.md#R-RS-008)). It ends once the mixer, every producer and
+its control handles are gone. It polls its queue every 10 ms rather than blocking on it, so a hand-off is
+a `try_send` that never wakes a thread or takes the channel's lock. A full command
+queue refuses the add or the removal rather than blocking the mixer.
 
 **Not yet enforced or measured:**
 - No test proves the absence of allocation. R-RT-001 names

@@ -38,4 +38,7 @@ pub enum AudioError {
     /// Input changes are waiting for the mixer to apply them, and the queue is full.
     #[error("the mixer input command queue is full")]
     CommandQueueFull,
+    /// The thread that frees the mixer's retired rings could not be started.
+    #[error("the mixer's collector thread could not be started")]
+    CollectorUnavailable,
 }

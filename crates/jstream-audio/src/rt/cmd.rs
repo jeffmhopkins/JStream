@@ -13,6 +13,7 @@ use crossbeam_channel::Sender;
 use jstream_media::{AudioFormat, SampleFormat};
 
 use super::input::{InputProducer, InputShared};
+use super::retire::Retirer;
 use super::ring::FrameRing;
 use super::sinc::{MAX_DOWN_RATIO, MAX_UP_RATIO};
 use crate::error::AudioError;
@@ -40,6 +41,7 @@ pub(crate) struct ControlPlane {
     /// Ids accepted and not yet removed. Touched only from the control plane, never
     /// from the mixer thread.
     admitted: Mutex<BTreeSet<u64>>,
+    retirer: Retirer,
     sample_rate: u32,
     ring_frames: usize,
 }
@@ -49,11 +51,17 @@ fn lock(mutex: &Mutex<BTreeSet<u64>>) -> std::sync::MutexGuard<'_, BTreeSet<u64>
 }
 
 impl ControlPlane {
-    pub(crate) fn new(tx: Sender<Command>, sample_rate: u32, ring_frames: usize) -> Self {
+    pub(crate) fn new(
+        tx: Sender<Command>,
+        retirer: Retirer,
+        sample_rate: u32,
+        ring_frames: usize,
+    ) -> Self {
         Self {
             tx,
             next_id: AtomicU64::new(1),
             admitted: Mutex::new(BTreeSet::new()),
+            retirer,
             sample_rate,
             ring_frames,
         }
@@ -92,8 +100,19 @@ impl ControlPlane {
         }
         admitted.insert(id);
         drop(admitted);
-        let producer = InputProducer::new(format, engine, ring, Arc::clone(&shared));
+        let producer = InputProducer::new(
+            format,
+            engine,
+            ring,
+            Arc::clone(&shared),
+            self.retirer.clone(),
+        );
         Ok((producer, id, shared))
+    }
+
+    /// The collector this mixer's objects are retired to.
+    pub(crate) fn retirer(&self) -> &Retirer {
+        &self.retirer
     }
 
     /// Queues removal of `id`. False when `id` is unknown or already removed, or when

@@ -115,7 +115,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ffeb76b8de905c81", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the apps/* row against apps/jstream-daemon/Cargo.toml: still layer 6 with unsafe_allowed false; the new direct deps tracing and blake3 are external crates (no new jstream crate edge), so the row text holds" }
+verified = { hash = "b3:4917a95a616248b0", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Re-read the jstream-audio row against its Cargo.toml: layer 2, unsafe_allowed false; the new dependency crossbeam-channel is external, so no new JStream crate edge and the row holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:2a23f997fce1180e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main into #135: re-read the section; the #132/#139 handover text is main's and unchanged, and #135's runtime change (OpenPublish opener held in MediaHost, called on the control thread that runs output.start, outside the engine locks) fits 'once the host has injected platform backends and a publish target'; no thread, RT or failure-path change" }
+verified = { hash = "b3:a8775cf3e702e94b", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Re-read with D1: the In-the-engine paragraph says inputs are added and removed on a lock-free queue and released rings go to the collector; the output-pipeline sentence now says the only collector so far is the mixer's own for input rings. Thread table, clock, handover text unchanged" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -395,8 +395,9 @@ one, and a render panic repeats the last frame until teardown. A fatal error on 
 render, mixer or output thread (a publish failure, an encoder stream that ends
 before stop, a render or mixer panic) is a channel message to a watcher the control
 thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
-encoder session queues. Arc-swap snapshots, the collector thread and a GPU encode
-target are still the rows above, not this cut.
+encoder session queues. Arc-swap snapshots and a GPU encode target are still the
+rows above, not this cut. The collector so far is the mixer's own, and frees only
+input rings and their counters.
 
 **CLAP plugin hosts** ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), planned for M3 and not built: each CLAP filter
 instance runs in its own `jstream-plugin-host` process, on a real-time thread registered
