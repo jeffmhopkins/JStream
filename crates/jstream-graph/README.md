@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:4352b2d343ce4ac4", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; ADR-0040 text from main; F2b record path checks and Unknown refusals still match target.rs and apply.rs" }
+verified = { hash = "b3:abb0c0aa113418de", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: model lists encoders and output encoder profile, Encoder and State::encoding_of; encoder.rs edit rules and inverses; encoder.list read; tests include encoder edits and the property test now generates them" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -26,8 +26,8 @@ codes, so the engine passes them to clients unchanged.
 - `Graph`: the `State` plus its `rev`, and the kind descriptors it validates `builtin`
   sources against. The engine supplies them (`Graph::with_kinds`); they are not
   collection state, and `Graph::new()` describes none.
-- `State`: the `sources`, keyed by ID, the `scenes` in display order, and the
-  `outputs`, keyed by ID.
+- `State`: the `sources`, keyed by ID, the `scenes` in display order, the
+  `outputs`, keyed by ID, and the `encoders` (encoder profiles), keyed by ID.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
@@ -36,8 +36,10 @@ codes, so the engine passes them to clients unchanged.
   never deletes its source.
 - `Scene`: a name and its items in stacking order, bottom first.
 - `Item`: the source it places, a `transform`, a `crop` and `visible`.
-- `Output`: an ID and an `OutputKind` (so far RTMP to a generic URL, or a recording
-  to an MP4 file). Whether it
+- `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, or a recording
+  to an MP4 file) and the encoder profile it uses, if not the default.
+- `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
+  `State::encoding_of` gives the encoding an output starts with. Whether it
   runs is the engine's runtime state, and its stream key is in the OS credential store,
   never here ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
@@ -80,7 +82,15 @@ goes up by exactly one, and the result carries the **inverse batch**.
   `invalid_argument` (it has no RTMP target). `output.delete` is undone by `output.create` with its kind, and
   `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them fails
-  with `invalid_argument`, in edit order.
+  with `invalid_argument`, in edit order. The `OutputDelete` inverse also restores the
+  output's encoder profile.
+- **Encoder profiles** (`encoder.rs`): `encoder.create` and `encoder.update` check the
+  profile with the protocol's `EncoderProfile::problem` (`invalid_argument`, field
+  `profile.<field>`) and the name; `encoder.delete` is refused with `invalid_argument`
+  while an output uses the profile, naming it. `output.set_encoder` checks the output,
+  then the profile (`not_found`), and needs no running check: it applies from the
+  output's next start. Each is undone by its opposite (`encoder.delete` by
+  `encoder.create`, `encoder.update` and `output.set_encoder` by the previous value).
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
   scenes and sources its settings refer to. Asset references are not edges. Every edit
@@ -90,19 +100,21 @@ goes up by exactly one, and the result carries the **inverse batch**.
   (for example scene `a` -> source `sa` -> scene `a`).
 
 **Reading** (`read.rs`): `Graph::query` answers the protocol queries that read the
-collection (`state.get`, `scene.list`, `source.list`, `item.list` and `output.list`)
+collection (`state.get`, `scene.list`, `source.list`, `item.list`, `output.list` and
+`encoder.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
 unknown kind). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
 `not_found` for an `item.list` of a missing scene. Sources come ordered by ID, scenes in
-display order, items bottom first, outputs ordered by ID; `Source::to_info`,
+display order, items bottom first, outputs and encoder profiles ordered by ID; `Source::to_info`,
 `Scene::to_info`, `Item::to_info` and `Output::to_info` convert single objects. Reads change nothing.
 
 **Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
 edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds, and through
 settings references, one case per edge-adding edit), settings checks and defaults,
 delete rejection by references, output URL checks and the refused delete of a running
-output, exact inverses,
+output, encoder edits and their inverses (a profile freed and deleted in one batch),
+exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a

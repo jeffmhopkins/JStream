@@ -979,7 +979,8 @@ mod property {
     };
     use crate::Graph;
     use jstream_protocol::{
-        Crop, Edit, ItemId, ItemTransform, OutputId, Rev, SceneId, SourceId, Vec2,
+        Crop, Edit, EncoderProfile, EncoderProfileId, ItemId, ItemTransform, OutputId, RateControl,
+        Rev, SceneId, SourceId, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1016,6 +1017,7 @@ mod property {
             .collect();
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
+        let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
         let urls = [
             "rtmp://a.example/live",
             "rtmps://b.example:443/live",
@@ -1028,9 +1030,18 @@ mod property {
         let source = |rng: &mut Rng| rng.pick(&sources).unwrap_or_else(|| pool(rng, "src"));
         let output = |rng: &mut Rng| rng.pick(&outputs).unwrap_or_else(|| pool(rng, "out"));
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
+        let encoder = |rng: &mut Rng| rng.pick(&encoders).unwrap_or_else(|| pool(rng, "enc"));
+        // Out of range one time in eight.
+        let profile = |rng: &mut Rng| {
+            let mut profile = EncoderProfile::DEFAULT;
+            profile.video.rate_control = RateControl::Cbr {
+                kbps: [50, 2500, 6000, 9000, 12_000, 20_000, 40_000, 80_000][rng.below(8)],
+            };
+            profile
+        };
         let index = |rng: &mut Rng| u32::try_from(rng.below(6)).expect("fits");
         let f = |rng: &mut Rng| f32::from(u16::try_from(rng.below(2000)).expect("fits")) - 1000.0;
-        match rng.below(20) {
+        match rng.below(23) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1115,6 +1126,31 @@ mod property {
                 output_id: OutputId::new(output(rng)),
                 target: target(url(rng)),
             },
+            19 => {
+                let profile_id = EncoderProfileId::new(pool(rng, "enc"));
+                let name = pool(rng, "name ");
+                let profile = profile(rng);
+                if rng.below(2) == 0 {
+                    Edit::EncoderCreate {
+                        profile_id,
+                        name,
+                        profile,
+                    }
+                } else {
+                    Edit::EncoderUpdate {
+                        profile_id: EncoderProfileId::new(encoder(rng)),
+                        name,
+                        profile,
+                    }
+                }
+            }
+            20 => Edit::OutputSetEncoder {
+                output_id: OutputId::new(output(rng)),
+                profile_id: (rng.below(3) != 0).then(|| EncoderProfileId::new(encoder(rng))),
+            },
+            21 => Edit::EncoderDelete {
+                profile_id: EncoderProfileId::new(encoder(rng)),
+            },
             _ => Edit::OutputDelete {
                 output_id: OutputId::new(output(rng)),
             },
@@ -1191,7 +1227,11 @@ mod property {
             "source.set_settings",
             "output.create",
             "output.set_target",
+            "output.set_encoder",
             "output.delete",
+            "encoder.create",
+            "encoder.update",
+            "encoder.delete",
         ]
         .into();
         assert_eq!(applied_names, all);

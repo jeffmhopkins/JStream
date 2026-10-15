@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:244d70caa87b2ce8", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: prose unchanged; ARCH#threading change (recording sink) doesn't touch platform traits" }
+verified = { hash = "b3:45feba942c843356", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: re-read against ARCH#threading change; traits unchanged, the core maps profiles onto VideoEncoderConfig rate control and hardware" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates

@@ -21,9 +21,8 @@ use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
-    EncoderSessionInfo, EntityKind, Event, IdempotencyKey,
-    OutputId, OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer,
-    RequestId, Rev, SecretString, SourceId,
+    EncoderSessionInfo, EntityKind, Event, IdempotencyKey, OutputId, OutputKind, OutputState,
+    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, SecretString, SourceId,
 };
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -528,8 +527,7 @@ impl Engine {
                     .running
                     .iter()
                     .filter(|(id, running)| {
-                        *id != output_id
-                            && running.encoders().is_some_and(|e| Arc::ptr_eq(e, own))
+                        *id != output_id && running.encoders().is_some_and(|e| Arc::ptr_eq(e, own))
                     })
                     .map(|(id, _)| id.clone())
                     .collect(),
@@ -598,9 +596,6 @@ impl Engine {
                     reason: "another output is starting".into(),
                 });
             }
-            // A running program stage is shared; holding it here keeps it running
-            // until this start has its own hold, or gives up.
-            let program = gate.program.upgrade();
             let key = encode_key(&state.graph, &output_id);
             let publish = match record_path(&state.graph, &output_id) {
                 Some(path) => Target::Record(path),
@@ -643,6 +638,10 @@ impl Engine {
                     return Err(err);
                 }
             }
+            // A running program stage is shared; holding it here keeps it running
+            // until this start has its own hold, or gives up. Taken last, so no early
+            // return drops it under the locks.
+            let program = gate.program();
             break (parts, publish, generation, program, key);
         };
         wake_all(std::mem::take(&mut wake));
@@ -659,7 +658,7 @@ impl Engine {
                 Some(program) => program,
                 None => {
                     let program = launch_program(self, parts)?;
-                    lock(&host.gate).program = Arc::downgrade(&program);
+                    lock(&host.gate).set_program(&program);
                     program
                 }
             };

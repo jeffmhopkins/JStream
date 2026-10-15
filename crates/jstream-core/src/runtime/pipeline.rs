@@ -18,9 +18,9 @@
 //! the publish target, so a peer that has stopped reading cannot hold `output.stop`.
 
 use std::any::Any;
+use std::collections::BTreeMap;
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::collections::BTreeMap;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Condvar, Mutex, PoisonError, Weak};
 use std::thread::{self, JoinHandle};
@@ -164,7 +164,9 @@ pub(crate) struct MediaHost {
 /// its pipeline's failures and settles `failed`.
 pub(crate) struct Gate {
     /// The program stage, while some running output holds it.
-    pub(crate) program: Weak<Program>,
+    program: Weak<Program>,
+    /// Its failure fan-out, which says whether it has failed without keeping it alive.
+    failures: Weak<Failures>,
     pub(crate) running: BTreeMap<OutputId, Running>,
     pub(crate) pending: Option<Pending>,
     pub(crate) watchers: BTreeMap<OutputId, JoinHandle<()>>,
@@ -176,8 +178,25 @@ pub(crate) struct Gate {
 
 impl Gate {
     /// Whether a start has to wait for a teardown before it opens the devices.
+    /// A program stage that has failed is on its way down: its outputs settle
+    /// `failed` and drop it, and the start waits for that rather than joining it.
     pub(crate) fn must_wait(&self) -> bool {
-        self.draining > 0 && self.program.strong_count() == 0
+        (self.draining > 0 && self.program.strong_count() == 0)
+            || self
+                .failures
+                .upgrade()
+                .is_some_and(|failures| failures.failed())
+    }
+
+    /// The running program stage, to share.
+    pub(crate) fn program(&self) -> Option<Arc<Program>> {
+        self.program.upgrade()
+    }
+
+    /// Records the program stage a start launched.
+    pub(crate) fn set_program(&mut self, program: &Arc<Program>) {
+        self.program = Arc::downgrade(program);
+        self.failures = Arc::downgrade(&program.failures);
     }
 }
 
@@ -200,6 +219,7 @@ impl MediaHost {
             starts: Mutex::new(()),
             gate: Mutex::new(Gate {
                 program: Weak::new(),
+                failures: Weak::new(),
                 running: BTreeMap::new(),
                 pending: None,
                 watchers: BTreeMap::new(),
@@ -369,24 +389,59 @@ struct Failures {
 #[derive(Default)]
 struct FailState {
     reason: Option<String>,
-    outputs: Vec<Sender<PipelineEvent>>,
+    /// Each running output's failure channel, by output and start generation.
+    outputs: Vec<(OutputId, u64, Sender<PipelineEvent>)>,
 }
 
 impl Failures {
-    fn add(&self, output: Sender<PipelineEvent>) {
+    /// Sends the program's failures to this output until the returned registration
+    /// drops. Its watcher waits for every sender to go, so an output leaving a program
+    /// others still use has to take its sender with it.
+    fn add(
+        self: &Arc<Self>,
+        output_id: OutputId,
+        generation: u64,
+        output: Sender<PipelineEvent>,
+    ) -> Registration {
         let mut state = lock(&self.inner);
         if let Some(reason) = &state.reason {
             let _ = output.send(PipelineEvent::Failed(reason.clone()));
         }
-        state.outputs.push(output);
+        state.outputs.push((output_id.clone(), generation, output));
+        Registration {
+            failures: Arc::clone(self),
+            output_id,
+            generation,
+        }
+    }
+
+    fn failed(&self) -> bool {
+        lock(&self.inner).reason.is_some()
     }
 
     fn fail(&self, reason: String) {
         let mut state = lock(&self.inner);
         state
             .outputs
-            .retain(|output| output.send(PipelineEvent::Failed(reason.clone())).is_ok());
+            .retain(|(_, _, output)| output.send(PipelineEvent::Failed(reason.clone())).is_ok());
         state.reason.get_or_insert(reason);
+    }
+}
+
+/// An output's place in [`Failures`], given up on drop.
+struct Registration {
+    failures: Arc<Failures>,
+    output_id: OutputId,
+    generation: u64,
+}
+
+impl Drop for Registration {
+    fn drop(&mut self) {
+        lock(&self.failures.inner)
+            .outputs
+            .retain(|(output_id, generation, _)| {
+                (output_id, *generation) != (&self.output_id, self.generation)
+            });
     }
 }
 
@@ -458,6 +513,8 @@ pub(crate) struct Running {
     /// Tags the publish target dropped while its link was down, as it last reported.
     link_drops: Arc<AtomicU64>,
     drop_guard: Option<DropGuard>,
+    /// Its failure channel's place in the program, given up once its thread is gone.
+    registration: Option<Registration>,
     /// Dropped last: when this was the program's last output, that stops the render
     /// and mixer threads.
     program: Option<Arc<Program>>,
@@ -527,6 +584,7 @@ impl Drop for Running {
         join("output", self.output.take());
         // After the thread stops, so the latch sees its final counters.
         self.drop_guard.take();
+        self.registration.take();
         self.program.take();
     }
 }
@@ -744,7 +802,9 @@ pub(crate) fn launch(
     generation: u64,
     fail_tx: Sender<PipelineEvent>,
 ) -> Result<Running, String> {
-    program.failures.add(fail_tx.clone());
+    let registration = program
+        .failures
+        .add(output_id.clone(), generation, fail_tx.clone());
     let encoders = program.encoders(engine, key)?;
     let origin = program.origin()?;
     // Set once the start has succeeded; until then a recording is provisional.
@@ -799,6 +859,7 @@ pub(crate) fn launch(
         output_drops,
         link_drops,
         drop_guard: None,
+        registration: Some(registration),
         program: Some(program),
     };
     running.arm_stats(engine);
@@ -924,8 +985,12 @@ fn open_video(
     size: FrameSize,
     profile: &EncoderProfile,
 ) -> Result<VideoSession, String> {
-    VideoSession::open(codecs, video_config(size, profile)?, SessionOptions::default())
-        .map_err(|err| format!("opening the video encoder: {err}"))
+    VideoSession::open(
+        codecs,
+        video_config(size, profile)?,
+        SessionOptions::default(),
+    )
+    .map_err(|err| format!("opening the video encoder: {err}"))
 }
 
 fn open_audio_encoder(
@@ -1549,8 +1614,47 @@ fn report_link(sink: &Sink, last: LinkState, fail: &Sender<PipelineEvent>) -> Li
 
 #[cfg(test)]
 mod tests {
-    use super::catch_up;
-    use jstream_media::{MediaTime, Timebase};
+    use super::{catch_up, video_config};
+    use jstream_media::{FrameSize, MediaTime, Timebase};
+    use jstream_platform::{HardwarePreference, RateControl};
+    use jstream_protocol::{
+        EncoderProfile, HardwarePreference as ProfileHardware, RateControl as ProfileRate,
+    };
+
+    /// A profile maps onto the encoder config field by field; its keyframe interval in
+    /// seconds becomes frames at the program's 30 fps.
+    #[test]
+    fn a_profile_maps_to_the_encoder_config() {
+        let size = FrameSize::new(64, 36).expect("size");
+        let config = video_config(size, &EncoderProfile::DEFAULT).expect("default");
+        assert_eq!(config.rate_control, RateControl::Cbr { kbps: 2500 });
+        assert_eq!(config.keyframe_interval, 60);
+        assert_eq!(config.hardware, HardwarePreference::Avoid);
+
+        let mut profile = EncoderProfile::DEFAULT;
+        profile.video.rate_control = ProfileRate::Vbr {
+            kbps: 12_000,
+            max_kbps: 20_000,
+        };
+        profile.video.keyframe_interval_s = 4;
+        profile.video.hardware = ProfileHardware::Require;
+        let config = video_config(size, &profile).expect("vbr");
+        assert_eq!(
+            config.rate_control,
+            RateControl::Vbr {
+                kbps: 12_000,
+                max_kbps: 20_000
+            }
+        );
+        assert_eq!(config.keyframe_interval, 120);
+        assert_eq!(config.hardware, HardwarePreference::Require);
+
+        profile.video.hardware = ProfileHardware::Prefer;
+        let config = video_config(size, &profile).expect("prefer");
+        assert_eq!(config.hardware, HardwarePreference::Prefer);
+        profile.video.rate_control = ProfileRate::Unknown;
+        assert!(video_config(size, &profile).is_err());
+    }
 
     fn us(ticks: i64) -> MediaTime {
         MediaTime::new(ticks, Timebase::MICROS)

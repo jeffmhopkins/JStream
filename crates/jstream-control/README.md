@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:e64e024557ae14a1", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: trait, errors, mock and ws bullets hold; the mock now also accepts record outputs with graph's path rule" }
+verified = { hash = "b3:57774130a3d15eca", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: re-read; trait, errors, mock and ws bullets hold" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:12bb0846138edf20", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: added recording-path, set_target-on-recording and unknown kind/target/container checks to the mock's edit list, and recording paths to the parity sentence; matches mock.rs check_record/record_path_problem" }
+verified = { hash = "b3:a8a332a0be913681", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: mock keeps encoder profiles, applies the four encoder edits with graph's checks and order, answers encoder.list and state.get encoders, reports no session in output.status; matches mock.rs" }
 -->
 
 ### The trait
@@ -94,7 +94,7 @@ its own, and is used with default features off.
 ### Mock
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
-`dev-dependencies`) keeps scenes, items, sources and outputs in memory, with an
+`dev-dependencies`) keeps scenes, items, sources, outputs and encoder profiles in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys. A
@@ -116,7 +116,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
     reasons), `output.set_target` on a recording output, and an `unknown` output kind,
-    RTMP target or container.
+    RTMP target or container;
+  - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
+    `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
+    naming a missing output, then a missing profile.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind, stores settings as sent without
@@ -126,16 +129,18 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
-  scene) and `output.list` (ordered by ID), each at the current `rev`. So it keeps
+  scene), `output.list` and `encoder.list` (ordered by ID), each at the current `rev`. So it keeps
   everything an edit sets: source names, kinds and settings, each item's transform,
-  crop and visibility, and each output's kind and target. `video.snapshot` is not one
+  crop and visibility, each output's kind, target and encoder profile, and each
+  profile. `video.snapshot` is not one
   of those reads: the mock has no compositor and answers it with `internal`, as it
   does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
   `output.status`, but it is not in the collection, so `output.list` and `state.get`
-  don't report it and `output.set_key` answers `not_found` for it;
+  don't report it and `output.set_key` answers `not_found` for it. It runs no
+  encoders, so `output.status` reports no encoder session and zero sessions;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty, over-long or whitespace key; `output.clear_key` always succeeds.

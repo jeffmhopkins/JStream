@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:ed042041866f86ba", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166) into F2b: only the CLI README's edit-form wording changed under apps/**; diagram (outputs list includes record) and host table hold" }
+verified = { hash = "b3:999a2cf0b750a23c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: re-read; apps change is the CLI status suffix and goldens only; diagram already shows shared encoder sessions; host table holds" }
 -->
 
 ```
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:39a005ebabd81f23", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge-only round: main (#134 ADR-0040, #163 F5) into F2b; took main's verified line and re-read; ADR-0040 hotkey sentence and depends_on are main's; Built so far still lists Record { path, container: mp4 } with its path checks" }
+verified = { hash = "b3:4189da6f44507454", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: Built so far now lists encoder profiles (ranges, delete blocked while used) and outputs' optional encoder_profile; Not yet drops encoder profile; sharing bullet (ADR-0027) unchanged, matches graph model/encoder.rs" }
 -->
 
 ```
@@ -347,24 +347,29 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
   built-in kinds are stubs in `jstream-core` until `jstream-sources` exists.
-  Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
-  the URL checked to carry no credential, or `Record { path, container: mp4 }`, the path
-  checked to be absolute and to end in a file name. A stream key is never collection state: it
-  lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
+  Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
+  target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
+  container: mp4 }`, the path checked to be absolute and to end in a file name. A stream
+  key is never collection state: it lives in the OS credential store
+  ([R-SEC-001](RULES.md#R-SEC-001)). Encoder profiles, ordered by ID, each a name and an
+  H.264 and AAC encoding (rate control, keyframe interval, hardware preference, audio bit
+  rate), checked against the ranges the protocol states. An output with no profile uses
+  the engine's default; a profile an output uses can't be deleted. The mix is always
+  `Program` until video mixes exist, so outputs share a session by profile alone.
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
   `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
   `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
   variants and overrides, folders, labels, favourites and other organisation metadata,
-  `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
-  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
-  and `outputs`. Nothing is persisted yet.
+  `background`, hotkeys, an output's mix, buses and chains, the
+  `YouTube` and `VirtualCam` kinds, and everything outside `sources`, `scenes`,
+  `outputs` and `encoders`. Nothing is persisted yet.
 
 <a id="threading"></a>
 ## Threads, clock and sync
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:92eb867695f2637b", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; prose is main's collector sentences plus F2b's recording output-thread sentence; both hold for runtime/sink.rs and audio rt cmd/retire" }
+verified = { hash = "b3:09f1982102592944", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: Output pipeline paragraph now says one program stage shared by every running output, starts serialized, sessions per profile fed through channels, last output drains; program failure reaches every output; matches pipeline.rs and engine.rs start_pipeline" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -391,8 +396,14 @@ thread calls the platform capture mailbox, composites one scene on each 1/30 s
 tick, repeats the last frame when capture is empty, and reads that frame back.
 This cut encodes that CPU readback, and the readback is counted. The mixer thread
 polls the media clock and pushes 48 kHz stereo blocks from the microphone and the
-desktop loopback. Encode threads are the
-ones inside the encoder sessions. The output thread muxes FLV and sends tags to the
+desktop loopback. Every running output shares that one program stage (capture,
+render, mixer); the first `output.start` builds it and the last `output.stop` tears it
+down, and starts are serialized. Encode threads are the ones inside the encoder
+sessions: outputs with the same encoder profile share one session, and the render and
+mixer threads take a new session's inputs from a channel, never a lock, and drop a
+session that has finished. Each output has its own output thread. An output leaving a
+session others still use takes what is queued for it and goes; the last one drains the
+encoders. The output thread muxes FLV and sends tags to the
 publish target, or, for a recording output, muxes fragmented MP4 and writes it to the
 file, syncing each fragment (writes may block on the disk; the encoder queues absorb
 that and drop when full). `output.start` also starts `jstream-stats`, which is not a
@@ -407,7 +418,8 @@ its threads. The render and mixer threads catch a panic at their boundary
 one, and a render panic repeats the last frame until teardown. A fatal error on the
 render, mixer or output thread (a publish or recording write failure, an encoder stream that ends
 before stop, a render or mixer panic) is a channel message to a watcher the control
-thread started; the watcher emits `failed` and stops the pipeline. Frame hand-off is the
+thread started; the watcher emits `failed` and stops the pipeline. A program-stage
+failure reaches every running output. Frame hand-off is the
 encoder session queues. Arc-swap snapshots and a GPU encode target are still the
 rows above, not this cut. The collector so far is the mixer's own, and frees only
 input rings and their counters.
@@ -503,7 +515,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:f7428a0902cef033", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: re-read; no message, edit, query or transport rule changed by the mock/parity merge; record kind bullet still says 0.9" }
+verified = { hash = "b3:85853595ec825480", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: added encoder.create/update/delete and output.set_encoder (0.10), encoder.list query, Encoder sessions bullet now built (session-limit code still planned); matches command.rs/query.rs/encoder.rs" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -520,7 +532,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9.
+  0.9. `encoder.create`, `encoder.update` and `encoder.delete` configure encoder
+  profiles, and `output.set_encoder` points an output at one or back at the engine's
+  default (protocol 0.10). A profile an output uses can't be deleted.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -550,13 +564,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   off. Preview streams show the pre-master stage (the editing view) by
   default; a client asks for the post-master stage to see what viewers see, and only
   that stage is covered by the privacy screen.
-- **Encoder sessions** (planned): `output.status` reports, per output, whether it shares
-  an encoder session and with which outputs, plus the hardware sessions in use. When the
-  encoder refuses a session, `output.start` fails with a stable session-limit error code
-  naming the outputs that hold sessions, with no fallback to a software encoder
+- **Encoder sessions** (protocol 0.10): `output.status` reports, per running output,
+  its encoder session's profile and the other outputs sharing it, plus the sessions and
+  hardware sessions in use. A profile's settings at start count, so an output started
+  after `encoder.update` gets a session of its own. Planned: when the encoder refuses a
+  session, `output.start` fails with a stable session-limit error code naming the
+  outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the
+  `output.list`, `output.status`, `encoder.list` (protocol 0.10), `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); later `audio.levels`).
@@ -604,11 +620,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:9b8fb2677f948e39", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#169 Y2, #153 I1) into F2b round 2: took main's verified line and re-read; I1's /mcp text; tools.snap unchanged by round 2 (Unknown variants are schemars-skipped)" }
+verified = { hash = "b3:37b3bb1f91f24cf4", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: tool list gains encoder; tools.snap is now about 105 KB (measured 106104 bytes); rest holds for tools.rs generated from schema" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`encoder`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -618,7 +634,7 @@ verified = { hash = "b3:9b8fb2677f948e39", by = "agent:claude@session_01RsUPFGhw
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 80 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 105 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:40bcd2eae02a4021", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155, 0.8) into A5: re-read; Running bullet (mcp and output set-key read the BufRead) and contents list hold for args.rs with both source.rename and the output commands" }
+verified = { hash = "b3:0bf7d4ccf2380899", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: re-read; run.rs gains the encoder suffix on output status; contents bullets hold" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:5e8970433d7959a4", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: edit-forms bullet now says output.create's URL form is for generic RTMP and the CLI has no recording form yet; args.rs only parses rtmp(s) URLs" }
+verified = { hash = "b3:c20de662638bfbf9", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: edit forms now say encoder edits need a JSON form the CLI lacks; output status line documents the own/shared encoder suffix, matching run.rs and its goldens" }
 -->
 
 ```sh
@@ -101,9 +101,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings. `source.set_settings`, and `source.create`
-  with settings, need a JSON argument form the CLI doesn't have yet, so a source it
-  creates gets its kind's defaults. Several edits on one line go as **one atomic batch**: one new
+  protocol is supported except settings and encoder profiles. `source.set_settings`,
+  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
+  and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
+  source it creates gets its kind's defaults and an output it creates the engine's
+  default encoder (MCP and the WebSocket API take them). Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -135,7 +137,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   that set them; outputs with their `KIND` (`rtmp`) and `TARGET` (the server URL, as
   `output.create` takes it). `state get` prints the sources, then each scene in display
   order with its items, then the outputs. `output status` prints
-  `<id>: <state>, stream key set` (or `not set`). An empty list prints `no scenes`,
+  `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
+  `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
   `video snapshot` prints `rev N, WxH png (N base64 chars)` and does not print the
   payload; `--json` prints the full response.
@@ -206,7 +209,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:fc2eb1855e933b5e", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: control design change is only the mock's recording checks; CLI design text about WsControl and the mock holds" }
+verified = { hash = "b3:24a606109aba5223", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3: re-read; parser, connector, mock and MCP proxy design unchanged; control design change is mock encoder checks only" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
