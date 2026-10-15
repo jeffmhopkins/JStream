@@ -248,13 +248,24 @@ impl Engine {
 
     /// Replaces how the render thread composites. Tests use it to run the pipeline
     /// without a wgpu adapter. Requires [`with_backends`](Self::with_backends) first.
-    #[cfg(test)]
     #[must_use]
     pub(crate) fn with_draw(self, open: crate::runtime::OpenDraw) -> Self {
         if let Some(host) = &self.media {
             *lock(&host.draw) = open;
         }
         self
+    }
+
+    /// Test support, not a product option: the render thread composites on the CPU
+    /// instead of opening the wgpu compositor, so the pipeline runs on a machine with
+    /// no adapter. It copies the captured frame, or draws black, which is what this
+    /// cut's one-item composite produces. Engine scenario tests
+    /// (`crates/jstream-core/tests/scenarios.rs`) use it with the platform fakes.
+    /// Requires [`with_backends`](Self::with_backends) first; otherwise it does nothing.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn with_cpu_compositor(self) -> Self {
+        self.with_draw(crate::runtime::cpu_draw())
     }
 
     /// Opens a new client session. It must send `hello` before any call.

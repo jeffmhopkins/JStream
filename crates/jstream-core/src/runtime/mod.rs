@@ -12,8 +12,10 @@ mod publish;
 
 pub use pipeline::OutputStats;
 #[cfg(test)]
-pub(crate) use pipeline::{DrawFn, OpenDraw};
-pub(crate) use pipeline::{Gate, MediaHost, Pending, PipelineEvent, Running, launch, parts_from};
+pub(crate) use pipeline::{DrawFn, STOP_DRAIN};
+pub(crate) use pipeline::{
+    Gate, MediaHost, OpenDraw, Pending, PipelineEvent, Running, cpu_draw, launch, parts_from,
+};
 #[cfg(test)]
 pub(crate) use publish::tests::serve as serve_rtmp;
 pub use publish::{

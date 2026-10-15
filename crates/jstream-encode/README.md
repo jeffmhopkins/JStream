@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:1d6e4fa3acc301b8", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Stale via ARCH#data-model's Built so far edit (source settings); encoder sessions and EncoderSettings are unrelated to source settings, so the section holds" }
+verified = { hash = "b3:746dfce1adcc56ac", by = "agent:claude@session_01Q6eRwxiAzJidNbXNzEDHVJ", note = "F4: API list adds request_keyframe on VideoSession and Subscription; Tests list covers forced-keyframe joins, the refusing-encoder fallback and coalesced requests" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -41,11 +41,12 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
 - `VideoSession` / `AudioSession`: `open(codecs, config, options)` opens the encoder
   through `Codecs` and starts the thread; `start(encoder, config, options)` takes an
   encoder that is already open. Both check the codec is of the right media kind.
-  `input()`, `subscribe()`, `subscribe_with_capacity(n)`, `info()`, `stats()` and
-  `finish()`. Sessions are `Send + Sync`, so outputs can share one through an `Arc`.
+  `input()`, `subscribe()`, `subscribe_with_capacity(n)`, `request_keyframe()`,
+  `info()`, `stats()` and `finish()`. Sessions are `Send + Sync`, so outputs can share one through an `Arc`.
 - `VideoInput` / `AudioInput`: cloneable push handles. `push` never blocks.
 - `Subscription`: `recv`, `try_recv`, `recv_timeout`, each returning packets in decode
-  order and then a `StreamEnd`; `info()` and per-subscriber `stats()`.
+  order and then a `StreamEnd`; `info()`, per-subscriber `stats()`, and
+  `request_keyframe()` for a consumer that holds only its subscription.
 - `StreamInfo`: the `CodecInfo` that was opened plus `EncoderSettings` (the video or
   audio config it was opened with).
 - `SessionOptions`, `SessionStats`, `SubscriberStats`, `SessionKey`,
@@ -57,7 +58,8 @@ deterministic by construction (queues larger than the pushes, encoders gated by 
 test, subscribers that read only after `finish`), never by sleeping: order and `pts`
 kept for video and audio; a full input queue drops and counts; a busy encoder at
 `finish` drops and counts; a slow subscriber loses packets while a fast one gets all;
-a late subscriber starts at the next keyframe with the stream's `info`; `finish`
+a late subscriber starts at a forced keyframe with the stream's `info`, or at the
+next regular one when the encoder can't force it; keyframe requests coalesce; `finish`
 drains; an encoder error and a panic reach every subscriber; dropping a session closes
 the streams and joins the thread; dropped audio blocks become silence, also when that
 silence is first refused as busy; the fan-out's
@@ -68,7 +70,7 @@ keyframe resync; and the registry.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:66fe049d4c1e167e", by = "agent:grok@stats-tick", note = "Edited the Stats paragraph: video input drops map to encode_frames, audio to encode_blocks, subscriber_drops to output_packets; silence_frames is gap-fill, not a drop. Encode sources unchanged. Re-read against R-RT-002 (encode thread never waits) and R-RT-004 (drops counted, never stalling)." }
+verified = { hash = "b3:5e502916af159578", by = "agent:claude@session_01Q6eRwxiAzJidNbXNzEDHVJ", note = "F4: Late subscribers explains the join-time keyframe request (flag, applied before the next input, coalescing, refusal fallback, no request on resync); drop policy and Stats (keyframes_requested) updated; R-RT-002 holds: one atomic load per input, never blocks" }
 -->
 
 ### Threads and pacing
@@ -98,8 +100,9 @@ crate.
   can accept them, a slow encoder backs up into this queue and the newest inputs are
   dropped at the source.
 - **Video drops need no repair.** The encoder places keyframes by counting the frames
-  it is given, so a dropped frame never removes a keyframe from the stream, and the
-  `VideoEncoder` trait has no forced keyframes to protect. Frame times keep their gap.
+  it is given, so a dropped frame never removes a keyframe from the stream. A keyframe
+  request is passed to the encoder just before the input it applies to, so an input
+  dropped from the queue doesn't lose the request. Frame times keep their gap.
 - **Audio drops are filled with silence.** Audio encoders time packets by counting
   samples from the first block, so a dropped block would pull every later packet
   earlier and drift audio against video. The push after a drop is marked, and the
@@ -128,10 +131,21 @@ crate.
 A new subscriber joins on the encode thread before the next packet is published, and
 is offered packets starting at the next keyframe, so its stream is decodable from the
 first packet; skipping to it isn't counted as a drop. Every AAC packet is a keyframe,
-so audio subscribers start at once. The `VideoEncoder` trait has no keyframe request
-yet ([jstream-platform › Purpose](../jstream-platform/README.md#purpose) lists
-on-demand keyframes as not yet), so a video subscriber waits up to one keyframe
-interval.
+so audio subscribers start at once.
+
+Subscribing also asks for a keyframe. `subscribe` sets a flag, and the encode thread
+clears it and calls `VideoEncoder::request_keyframe` just before it encodes the next
+input. The subscriber is admitted before that input's packet is published, so with an
+encoder that can force keyframes (the fake, Media Foundation's H.264) the new
+subscriber's first packet is the next frame. Requests made before that input coalesce
+into one. An encoder that refuses (the trait's default) leaves the subscriber waiting
+up to one keyframe interval, as before. `VideoSession::request_keyframe` and
+`Subscription::request_keyframe` set the same flag for a consumer that has to restart
+decoding, such as an RTMP output after a reconnect; the engine's output loop does not
+call it yet. The flag is one atomic, so asking never blocks and the encode thread pays
+one relaxed load per input when nobody asked. A subscriber resynchronising after its
+own drop does not ask: a slow subscriber would otherwise make every subscriber pay for
+extra keyframes.
 
 The codec configuration reaches a subscriber through `Subscription::info()`: the
 opened `CodecInfo` and the `EncoderSettings` (frame size, frame period, bit rate,
@@ -173,8 +187,8 @@ lives while an output holds its `Arc`; the output that lets go last should `fini
 ### Stats
 
 `SessionStats`: inputs `received`, `dropped_queue_full`, `dropped_encoder_busy`,
-`encoded`, `packets`, `keyframes`, current `subscribers`, `subscriber_drops` and
-`silence_frames`. `SubscriberStats`: `delivered` and `dropped`. All are relaxed atomic
+`encoded`, `packets`, `keyframes`, `keyframes_requested` (requests the encoder
+accepted), current `subscribers`, `subscriber_drops` and `silence_frames`. `SubscriberStats`: `delivered` and `dropped`. All are relaxed atomic
 counters read without stopping the thread. The engine maps a video session's input
 drops to `encode_frames` and an audio session's to `encode_blocks`, and both sessions'
 `subscriber_drops` to `output_packets`, in `stats.tick`
@@ -201,12 +215,10 @@ The pipeline registers the session; this crate does not emit the event.
 <!-- @section
 -->
 
-1. **Keyframe on demand.** A late video subscriber (an output started while a shared
-   session runs, or an RTMP reconnect in M1d) waits up to one keyframe interval, two
-   seconds in spike S1's setup. A `request_keyframe` on `VideoEncoder` (Media
-   Foundation's `CODECAPI_AVEncVideoForceKeyFrame`) would let the session ask for one
-   when a subscriber joins or resynchronises. That is a change to `jstream-platform`,
-   the owner of the encoder traits.
+1. **Keyframe on demand** (answered for joins): a joining subscriber asks for a
+   keyframe ([Design › Late subscribers](#design)). Still open: whether a subscriber that
+   resynchronises after its own drop should ask too, and how often keyframe requests
+   may be honoured before they cost the shared stream too many bits.
 2. **H.264 parameter sets.** The session relies on each keyframe carrying SPS and PPS
    in-band, which `jstream-mux` needs from the first packet a subscriber gets. Whether
    every Media Foundation hardware encoder repeats them on every IDR frame has not

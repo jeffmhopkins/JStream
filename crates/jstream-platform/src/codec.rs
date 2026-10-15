@@ -7,7 +7,8 @@
 //! a Media Foundation encoder MFT with: check [`can_accept`](VideoEncoder::can_accept),
 //! submit, then [`poll`](VideoEncoder::poll) without blocking for whatever output is
 //! ready, and [`finish`](VideoEncoder::finish) to drain at the end of the stream. A
-//! synchronous codec fits the same pattern.
+//! synchronous codec fits the same pattern. [`request_keyframe`](VideoEncoder::request_keyframe)
+//! forces the next video frame to be a keyframe.
 
 use jstream_media::{AudioBuffer, AudioFormat, Codec, FrameSize, Packet, PixelFormat, Timebase};
 
@@ -179,6 +180,25 @@ pub trait VideoEncoder: Send {
     /// # Errors
     /// [`PlatformError::Os`] when the codec fails.
     fn poll(&mut self, out: &mut Vec<Packet>) -> Result<(), PlatformError>;
+
+    /// Asks for the next frame given to [`encode`](VideoEncoder::encode) to be encoded
+    /// as a keyframe, so a viewer that joins mid-stream can start decoding without
+    /// waiting out the keyframe interval. Several requests before that frame ask for one
+    /// keyframe. Whether the regular keyframe cadence restarts from it is up to the
+    /// codec. Must not block for long: the encode thread calls it (R-RT-002).
+    ///
+    /// The default refuses: an encoder that can't force a keyframe still produces one
+    /// every `keyframe_interval` frames.
+    ///
+    /// # Errors
+    /// [`PlatformError::Unsupported`] when the encoder can't force a keyframe,
+    /// [`PlatformError::InvalidState`] after [`finish`](VideoEncoder::finish), and
+    /// [`PlatformError::Os`] when the codec refuses the request.
+    fn request_keyframe(&mut self) -> Result<(), PlatformError> {
+        Err(PlatformError::Unsupported {
+            what: format!("forcing a keyframe on {}", self.info().name),
+        })
+    }
 
     /// Ends the stream: drains the encoder and appends the remaining packets to `out`.
     /// May block until the codec has drained. Afterwards the session takes no more input.
