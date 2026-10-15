@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:58dc68035cf33f4d", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; crate shape unchanged" }
+verified = { hash = "b3:e13ca2f342ae2caf", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B6-f CLI edits: re-read; crate shape unchanged" }
 -->
 
 ```
@@ -508,7 +508,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:92b7bead00a5a859", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Cascade from protocol#design; re-read, Edits bullet says placement edits take scene_id (0.12), canvas/geometry 0.11; holds" }
+verified = { hash = "b3:087802267a8792dc", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B6-f mock edits: re-read; protocol summary unchanged" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

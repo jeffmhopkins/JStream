@@ -7,8 +7,9 @@
 
 use crate::exit::CliError;
 use jstream_control::protocol::{
-    Action, Batch, Crop, Edit, Finite32, IdempotencyKey, ItemId, ItemTransform, OutputId,
-    OutputKind, Query, Rev, RtmpTarget, SceneId, SourceId, SourceKind, Vec2,
+    Action, Batch, Crop, Edit, Finite32, FitMode, IdempotencyKey, ItemGeometry, ItemId,
+    ItemTransform, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole, Size,
+    SourceId, SourceKind, Vec2,
 };
 
 /// The help text, printed by `help`, `--help` and `-h`.
@@ -61,6 +62,7 @@ Edits (each is its protocol command name followed by its arguments):
   scene.rename <scene-id> <name>
   scene.delete <scene-id>
   scene.reorder <scene-id> <index>
+  scene.set_role <scene-id> scene|group
   source.create <source-id> <name> builtin:<kind> | scene:<scene-id>
   source.rename <source-id> <name>
   source.duplicate <source-id> <new-source-id> <name>
@@ -68,9 +70,13 @@ Edits (each is its protocol command name followed by its arguments):
   item.add <scene-id> <item-id> <source-id>
   item.remove <item-id>
   item.reorder <item-id> <index>
+  item.move <item-id> <scene-id> <index>
   item.set_visible <item-id> true|false
   item.set_crop <item-id> <left> <top> <right> <bottom>
   item.set_transform <item-id> <x> <y> <scale-x> <scale-y> <rotation-deg>
+  item.set_geometry <item-id> <center-x> <center-y> <width> <height> <rotation-deg>
+                    stretch|fit|fill
+  canvas.set_size <width> <height>
   output.create <output-id> <rtmp-url>
   output.set_target <output-id> <rtmp-url>
   output.delete <output-id>
@@ -360,11 +366,13 @@ fn parse_batch(mut args: &[&str]) -> Result<Batch, CliError> {
 fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "scene.delete" | "source.delete" | "item.remove" | "output.delete" => 1,
-        "scene.create" | "scene.rename" | "scene.reorder" | "source.rename" | "item.reorder"
-        | "item.set_visible" | "output.create" | "output.set_target" => 2,
-        "source.create" | "source.duplicate" | "item.add" => 3,
+        "scene.create" | "scene.rename" | "scene.reorder" | "scene.set_role" | "source.rename"
+        | "item.reorder" | "item.set_visible" | "output.create" | "output.set_target"
+        | "canvas.set_size" => 2,
+        "source.create" | "source.duplicate" | "item.add" | "item.move" => 3,
         "item.set_crop" => 5,
         "item.set_transform" => 6,
+        "item.set_geometry" => 7,
         _ => return None,
     })
 }
@@ -402,6 +410,18 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
             scene_id: SceneId::new(*id),
             index: number(index, "index")?,
         },
+        ("scene.set_role", [id, role]) => Edit::SceneSetRole {
+            scene_id: SceneId::new(*id),
+            role: match *role {
+                "scene" => SceneRole::Scene,
+                "group" => SceneRole::Group,
+                other => {
+                    return Err(usage(format!(
+                        "`scene.set_role` takes `scene` or `group`, not `{other}`"
+                    )));
+                }
+            },
+        },
         ("source.create", [id, name, kind]) => Edit::SourceCreate {
             source_id: SourceId::new(*id),
             name: (*name).to_owned(),
@@ -432,6 +452,11 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         },
         ("item.reorder", [id, index]) => Edit::ItemReorder {
             item_id: ItemId::new(*id),
+            index: number(index, "index")?,
+        },
+        ("item.move", [id, scene, index]) => Edit::ItemMove {
+            item_id: ItemId::new(*id),
+            scene_id: SceneId::new(*scene),
             index: number(index, "index")?,
         },
         ("item.set_visible", [id, visible]) => Edit::ItemSetVisible {
@@ -465,6 +490,41 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
                 scale: vec2(sx, sy)?,
                 rotation_deg: finite(rot, "rotation-deg")?,
             },
+        },
+        ("item.set_geometry", [id, x, y, width, height, rot, fit]) => Edit::ItemSetGeometry {
+            item_id: ItemId::new(*id),
+            scene_id: None,
+            // The 3D fields stay neutral: the engine rejects anything else until the
+            // compositor draws 3D (ADR-0022).
+            geometry: ItemGeometry {
+                center: Vec2 {
+                    x: finite(x, "center-x")?,
+                    y: finite(y, "center-y")?,
+                },
+                size: Size {
+                    width: finite(width, "width")?,
+                    height: finite(height, "height")?,
+                },
+                fit_mode: match *fit {
+                    "stretch" => FitMode::Stretch,
+                    "fit" => FitMode::Fit,
+                    "fill" => FitMode::Fill,
+                    other => {
+                        return Err(usage(format!(
+                            "`item.set_geometry` takes `stretch`, `fit` or `fill`, not `{other}`"
+                        )));
+                    }
+                },
+                rotation_deg: finite(rot, "rotation-deg")?,
+                tilt_deg: Finite32::ZERO,
+                turn_deg: Finite32::ZERO,
+                depth_px: Finite32::ZERO,
+                perspective_px: None,
+            },
+        },
+        ("canvas.set_size", [width, height]) => Edit::CanvasSetSize {
+            width: number(width, "width")?,
+            height: number(height, "height")?,
         },
         ("output.create", [id, url]) => Edit::OutputCreate {
             output_id: OutputId::new(*id),
@@ -543,8 +603,8 @@ mod tests {
     use super::{Command, Connection, Invocation, parse};
     use crate::exit::CliError;
     use jstream_control::protocol::{
-        Action, Batch, Crop, Edit, IdempotencyKey, ItemId, OutputId, OutputKind, Query, Rev,
-        RtmpTarget, SceneId, SourceId, SourceKind,
+        Action, Batch, Crop, Edit, FitMode, IdempotencyKey, ItemId, OutputId, OutputKind, Query,
+        Rev, RtmpTarget, SceneId, SceneRole, SourceId, SourceKind,
     };
 
     fn args(line: &[&str]) -> Vec<String> {
@@ -850,6 +910,24 @@ mod tests {
             "1",
             "2",
             "90",
+            "scene.set_role",
+            "s",
+            "group",
+            "item.move",
+            "i",
+            "s",
+            "0",
+            "item.set_geometry",
+            "i",
+            "960",
+            "540",
+            "1920",
+            "1080",
+            "0",
+            "stretch",
+            "canvas.set_size",
+            "1280",
+            "720",
         ];
         let Command::Edit(batch) = ok(&line).command else {
             panic!("not an edit");
@@ -865,7 +943,44 @@ mod tests {
                 "source.delete",
                 "item.remove",
                 "item.set_transform",
+                "scene.set_role",
+                "item.move",
+                "item.set_geometry",
+                "canvas.set_size",
             ]
+        );
+        assert_eq!(
+            batch.edits[7],
+            Edit::SceneSetRole {
+                scene_id: SceneId::new("s"),
+                role: SceneRole::Group,
+            }
+        );
+        assert_eq!(
+            batch.edits[8],
+            Edit::ItemMove {
+                item_id: ItemId::new("i"),
+                scene_id: SceneId::new("s"),
+                index: 0,
+            }
+        );
+        let Edit::ItemSetGeometry {
+            scene_id: None,
+            geometry,
+            ..
+        } = batch.edits[9]
+        else {
+            panic!("not a geometry edit: {:?}", batch.edits[9]);
+        };
+        assert_eq!(geometry.size.width.get(), 1920.0);
+        assert_eq!(geometry.fit_mode, FitMode::Stretch);
+        assert!(geometry.is_neutral_3d());
+        assert_eq!(
+            batch.edits[10],
+            Edit::CanvasSetSize {
+                width: 1280,
+                height: 720,
+            }
         );
         assert_eq!(batch.expected_rev, None);
         assert_eq!(batch.idempotency_key, None);
@@ -1016,6 +1131,46 @@ mod tests {
         assert_eq!(
             err(&["edit", "item.set_transform", "i", "inf", "0", "1", "1", "0"]),
             "`x` must be a finite number, not `inf`"
+        );
+        assert_eq!(
+            err(&["edit", "scene.set_role", "s", "folder"]),
+            "`scene.set_role` takes `scene` or `group`, not `folder`"
+        );
+        assert_eq!(
+            err(&[
+                "edit",
+                "item.set_geometry",
+                "i",
+                "0",
+                "0",
+                "1",
+                "1",
+                "0",
+                "zoom"
+            ]),
+            "`item.set_geometry` takes `stretch`, `fit` or `fill`, not `zoom`"
+        );
+        assert_eq!(
+            err(&[
+                "edit",
+                "item.set_geometry",
+                "i",
+                "0",
+                "NaN",
+                "1",
+                "1",
+                "0",
+                "fit"
+            ]),
+            "`center-y` must be a finite number, not `NaN`"
+        );
+        assert_eq!(
+            err(&["edit", "item.move", "i", "s", "-1"]),
+            "`index` must be a non-negative integer, not `-1`"
+        );
+        assert_eq!(
+            err(&["edit", "canvas.set_size", "1920", "1080.5"]),
+            "`height` must be a non-negative integer, not `1080.5`"
         );
         assert_eq!(
             err(&["events", "--count", "many"]),

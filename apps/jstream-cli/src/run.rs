@@ -312,10 +312,11 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                 vec![
                     scene.scene_id.to_string(),
                     scene.name.clone(),
+                    wire_name(&scene.role),
                     scene.item_count.to_string(),
                 ]
             });
-            table(out, "", &["ID", "NAME", "ITEMS"], rows.collect())?;
+            table(out, "", &["ID", "NAME", "ROLE", "ITEMS"], rows.collect())?;
         }
         QueryResult::OutputStatus {
             output_id,
@@ -367,7 +368,8 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                 writeln!(out, "no scenes")?;
             }
             for scene in scenes {
-                writeln!(out, "scene {} ({}):", scene.scene_id, scene.name)?;
+                let role = wire_name(&scene.role);
+                writeln!(out, "{role} {} ({}):", scene.scene_id, scene.name)?;
                 write_items(out, "  ", &scene.items)?;
             }
             writeln!(out, "outputs:")?;

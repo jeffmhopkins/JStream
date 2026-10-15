@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:11feed9980e3ac36", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#202, #200) into B6: re-read; Conflicts bullet (B3 placement/canvas, B6 role/item.move) and runtime text hold with #202's test-only change" }
+verified = { hash = "b3:ef2b87a5b664cfd3", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Cascade from control#design (B6-f mock edits): re-read; differential-script and internal-answer text holds" }
 -->
 
 ### Engine and sessions
