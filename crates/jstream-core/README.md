@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:2a3c84ae047a0400", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#202 RTMP reconnect test, #200 vcam) into B6: #202 changes only publish.rs's test and stamps; re-read, contents and History bullet hold" }
+verified = { hash = "b3:abb81f036b125c29", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#200, #202, #199, #206, #184 groups, #194 WindowsVcam) into C1a, stamp-only conflicts: re-read; main's groups/item.move text taken as is; C1a's Kinds bullet and Not here yet line still match kinds.rs" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -112,7 +112,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:11feed9980e3ac36", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#202, #200) into B6: re-read; Conflicts bullet (B3 placement/canvas, B6 role/item.move) and runtime text hold with #202's test-only change" }
+verified = { hash = "b3:9a87de9fac4d42d7", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#200, #202, #199, #206, #184 groups, #194 WindowsVcam) into C1a, stamp-only conflicts: re-read; main's text taken as is; C1a's Dependencies (jstream-sources, serde_json dev-only) and Not yet bullet still match Cargo.toml" }
 -->
 
 ### Engine and sessions

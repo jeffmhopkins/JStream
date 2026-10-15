@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:69708ec0315d4fe2", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Round 6 B5 follow-up: Groups and moves bullet's placement-edit list now names item.set_geometry, which takes scene_id after the B3 merge (apply.rs placement_mut)" }
+verified = { hash = "b3:3999b5f35c802ec8", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#200, #202, #199, #206, #184 groups, #194 WindowsVcam) into C1a, stamp-only conflicts: re-read; main's groups text taken as is; C1a's Kind versions bullet holds; graph code untouched by C1a" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

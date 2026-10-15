@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:e426654a0827d75f", by = "agent:claude@session_01HGK7agjEsYDqGN4QkkiUjA", note = "Merge of main (E3a and others) into G3a: took main's rows; re-read the map; G3a only adds jstream-platform-windows -> jstream-vcam-proto (L2 -> L0), and the platform-windows row already lists the vcam sink side" }
+verified = { hash = "b3:afba8a5a64eb537d", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#200, #202, #199, #206, #184 groups, #194 WindowsVcam) into C1a, stamp-only conflicts: re-read; main's platform-windows changes taken as is; jstream-sources row and its decoder deps match Cargo.toml" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:1a3374260c93e175", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Built so far keeps B3's placement/canvas and adds B6's role, item.move and scene_id (0.12); Not yet keeps scene.create role, variants, 3D geometry" }
+verified = { hash = "b3:9bcaa2f5ca023cb6", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#200, #202, #199, #206, #184 groups, #194 WindowsVcam) into C1a, stamp-only conflicts: re-read; main's groups text taken as is; C1a's kinds sentence holds" }
 -->
 
 ```
