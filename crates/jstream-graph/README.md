@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a4ec811e21b6c0ee", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; graph prose unchanged by the merge and still matches model/, apply.rs and read.rs" }
+verified = { hash = "b3:9144a917868e13cd", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Scene bullet has role, Item bullet B3's Placement; tests text lists both; Not yet keeps B7 blend modes and keyframes, drops the done ADR-0022 bullet" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

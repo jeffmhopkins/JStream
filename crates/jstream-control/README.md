@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:03b5a5e95e7b2c05", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; call() now covers history calls (B2) and the mock keeps canvas/geometry (B3); holds" }
+verified = { hash = "b3:b340c8ccb1e16eef", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: re-read; mock contents hold; set_role/item.move unimplemented in the mock as stated" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:21a987fc74e7a497", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; mock reads bullet (canvas, placement forms, outputs) and B2's history text hold against mock.rs" }
+verified = { hash = "b3:3503e916c128a77f", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: mock bullet: every edit but 0.12's set_role/item.move; check list has both B3's geometry/canvas checks and B6's scene_id own-scene check, which set_geometry now also takes" }
 -->
 
 ### The trait

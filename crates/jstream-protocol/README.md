@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:4e2f3cc5820c9b88", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Geometry bullet says 0.11 is canvas+geometry, 0.10 history, 0.9 record; matches version.rs and regenerated snaps" }
+verified = { hash = "b3:c9f8fa7e31b98afb", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Commands list merges B3's set_geometry/canvas.set_size and B6's set_role/item.move; Geometry bullet: 0.12 groups, 0.11 canvas and geometry, 0.10 history" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -104,7 +104,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:e37fd17b91df6495", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: main's history order list kept; undo_conflict paragraph now also names setting the canvas size and says an item's transform and geometry are one property, matching history.rs Prop::Placement and Touched.canvas" }
+verified = { hash = "b3:3e3b71a78a8bc553", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (B3 #183 canvas and geometry, 0.11) into B6, now protocol 0.12: Groups subsection says protocol 0.12 and a 0.11 reader sees no change; B3's Item geometry text kept; set_geometry takes scene_id like the other placement edits" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
