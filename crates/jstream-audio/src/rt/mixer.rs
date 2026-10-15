@@ -3,7 +3,7 @@
 //! meters inputs and buses.
 //!
 //! **Signal order** (docs/adr/0028-audio-model-v2.md): per input, ring → filter chain
-//! → fader and mute → each send's gain → bus sum. Per bus, sum → filter chain → fader
+//! → fader and mute → (meter) → activity gain → each send's gain → bus sum. Per bus, sum → filter chain → fader
 //! and mute → output (the monitor tap, [`Mixer::bus_block`]). Sends are post-fader.
 //! Then (docs/adr/0027-program-master-and-output-chains.md), on each bus that feeds an
 //! output: → master chain (each bus its own copy) → the master bus's block, and each
@@ -32,8 +32,8 @@
 //! block and counts the frames it skipped, rather than mixing stale or overwritten data.
 //!
 //! **Gain** changes ramp linearly across one block, so fader moves don't click. So do
-//! send gains, and a send that starts or stops (or whose bus is added) ramps from or to
-//! silence.
+//! send gains and the activity gain, which scales every send, and a send that starts or
+//! stops (or whose bus is added) ramps from or to silence.
 //!
 //! **Meters** are post-fader (each input before its sends) and each bus's output:
 //! per channel, the peak held until the control plane takes it, and the latest block's
@@ -457,13 +457,15 @@ impl Mixer {
             slot.gain_now = target;
             let (peak, rms) = levels(scratch);
             slot.shared.meter.publish(peak, rms);
+            // The activity gain scales every send, so it ramps with them.
+            let activity = slot.shared.activity.load();
             for (k, (bus, sum)) in buses.iter().zip(acc.chunks_exact_mut(n)).enumerate() {
                 let Some(bus) = bus else { continue };
                 if slot.send_bus[k] != bus.id {
                     slot.send_bus[k] = bus.id;
                     slot.send_now[k] = 0.0;
                 }
-                let target = slot.shared.sends.target(k, bus.id);
+                let target = slot.shared.sends.target(k, bus.id) * activity;
                 add_with_gain(sum, scratch, slot.send_now[k], target);
                 slot.send_now[k] = target;
             }
@@ -565,7 +567,9 @@ impl Mixer {
                     let send_bus: [u64; MAX_BUSES] = std::array::from_fn(|k| {
                         self.buses[k].as_ref().map_or(NO_BUS, |bus| bus.id)
                     });
-                    let send_now = std::array::from_fn(|k| shared.sends.target(k, send_bus[k]));
+                    let activity = shared.activity.load();
+                    let send_now =
+                        std::array::from_fn(|k| shared.sends.target(k, send_bus[k]) * activity);
                     self.inputs.push(Slot {
                         id,
                         ring,
@@ -1211,6 +1215,47 @@ mod tests {
         assert_eq!(ramp, [0.75, 0.5, 0.25, 0.0]);
         // The master was untouched throughout.
         assert_frames(&out, [1.0, 1.0], "master");
+    }
+
+    /// The activity gain scales every send and ramps over one block, but leaves the
+    /// input's post-fader meter alone (ADR-0028's audio that follows the program).
+    #[test]
+    fn activity_gain_ramps_the_sends_and_not_the_meter() {
+        let mut m = Mixer::new(config(4)).unwrap();
+        let (mut a, ca) = m.add_input(stereo48()).unwrap();
+        let aux = m.add_bus().unwrap();
+        ca.set_send(aux.id(), 0.5);
+        feed(&mut a, 1.0, 1.0, 1.0);
+        let mut out = vec![0.0; 8];
+        m.mix(40_000, &mut out).unwrap(); // the aux send ramps in
+        m.mix(40_004, &mut out).unwrap();
+        assert_frames(&out, [1.0, 1.0], "master at full activity");
+        ca.set_activity_gain(f32::NAN);
+        ca.set_activity_gain(-1.0);
+        assert_eq!(ca.activity_gain(), 0.0, "clamped, NaN ignored");
+        let _ = ca.take_meter();
+        m.mix(40_008, &mut out).unwrap();
+        let ramp: Vec<f32> = out.iter().step_by(2).copied().collect();
+        assert_eq!(ramp, [0.75, 0.5, 0.25, 0.0]);
+        let ramp: Vec<f32> = m
+            .bus_block(aux.id())
+            .unwrap()
+            .iter()
+            .step_by(2)
+            .copied()
+            .collect();
+        assert_eq!(ramp, [0.375, 0.25, 0.125, 0.0]);
+        m.mix(40_012, &mut out).unwrap();
+        assert_frames(&out, [0.0, 0.0], "silent while inactive");
+        let meter = ca.take_meter();
+        assert!((meter.peak[0] - 1.0).abs() < 1e-6, "{meter:?}");
+        // The send itself is untouched, so full activity brings it back.
+        assert_eq!(ca.send(aux.id()), Some(0.5));
+        ca.set_activity_gain(2.0);
+        assert_eq!(ca.activity_gain(), 1.0);
+        m.mix(40_016, &mut out).unwrap();
+        let ramp: Vec<f32> = out.iter().step_by(2).copied().collect();
+        assert_eq!(ramp, [0.25, 0.5, 0.75, 1.0]);
     }
 
     /// Removing a bus drops it from the mix; its slot can go to a new bus, which the

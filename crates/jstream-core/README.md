@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:119e8ff233eb074f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at #295 (clock swap re-plan): re-read against both sides: main's clock-swap text is about live sources' timing, not audio routing; D5's audio bullets hold" }
+verified = { hash = "b3:0b14bb91f4448a5e", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync sets activity gain and sends before fader and unmute; Audio bullet names no ordering; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -87,8 +87,9 @@ state machine. Contents:
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
-  mixer input has its fader and its sends (silenced while it is `muted`);
-  `meters.tick` carries their levels about ten times a second, with the master's true
+  mixer input has its fader and its sends (silenced while it is `muted`), scaled by
+  its activity gain (`activity.rs`): a `when_shown` source is heard only while the
+  Program mix shows it; `meters.tick` carries their levels about ten times a second, with the master's true
   peak and BS.1770 loudness, which the mixer thread measures on each block, and
   `audio.reset_loudness` restarts its integrated loudness.
 - **History** (`history.rs`): per-client undo and redo
@@ -161,13 +162,14 @@ state machine. Contents:
   engine in-process. The audio routing (`audio.rs` and
   `src/tests/audio_routing.rs`): a mixer's buses, faders, mutes and sends following
   batches and undo, `meters.tick` while a mixer is attached and none after,
-  `audio.reset_loudness`, and the master's true peak and loudness; `src/tests/audio.rs`
+  `audio.reset_loudness`, the master's true peak and loudness, and a `when_shown`
+  source's activity gain following scene switches, shown and hidden items and undo
+  (`activity.rs` checks reachability itself); `src/tests/audio.rs`
   also checks that a recording audio source is metered, and that turning its audio
   off closes its input and its meter and turning it on opens them again. The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
-Not here yet: live values, `when_shown`'s activity
-gain (D6), the audio and outputs snapshots, a GPU encode target, and
+Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
 the platform's Windows devices. See
 [Design › Not yet](#design).
 
@@ -180,7 +182,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:91a1eb0c9e8c8a93", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#324 merge of main at 94fb25d: request id numbering and backpressure text unaffected by the browser client's error handler; main's audio text read; holds" }
+verified = { hash = "b3:6a6b734392eb6709", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#360, #299 D6, #381) into #324: took main's stamp; re-read; main's D6 activity-gain text; stale via depends_on control#design, where this PR adds the browser client's error-event handling and its e2e tests; core's engine and session text doesn't touch the browser client; holds" }
 -->
 
 ### Engine and sessions
@@ -600,6 +602,14 @@ brings the mixer in line with the collection under the collection lock:
   waits on the mixer thread ([R-RT-003](../../docs/RULES.md#R-RT-003)), and the
   `Routed` lock is the last one taken. The program stage's microphone and desktop
   inputs are not sources and keep sending to the master at unity.
+- each such input's activity gain (`activity.rs`, ADR-0028's "shown"): 1 for a source
+  that follows `always`; for a `when_shown` one, `min(1, Σ w)` over the roots that
+  reach it through visible items and nested scene sources whose audio is on. The roots
+  are the program scene (weight 1) and every nested scene source whose audio is on and
+  follows `always` (weight 1 each). The mixer applies it after the input's fader and
+  meter, scaling every send, and ramps to it over one block, so a cut never clicks
+  and the meter still reads a source that is off program. `scene.switch` and a batch
+  that moves program sync too, after program is reconciled.
 
 The `jstream-stats` sampler also emits `meters.tick` on each of its 100 ms wakes: a
 reading of every routed source's meter (if its audio is on) and every bus's, peak (held since the last
@@ -1003,7 +1013,8 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
-- `when_shown`'s activity gain (D6), filter
+- Activity gains that fade with a transition (T1: only cuts exist, so every weight
+  is 0 or 1), filter
   chains in the protocol (the mixer has them since D7b; the routing sets none yet), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
