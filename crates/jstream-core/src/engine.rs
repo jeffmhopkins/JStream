@@ -11,7 +11,7 @@ use crate::audit::{self, Audit, AuditSink};
 use crate::collection::{CollectionFile, CollectionFileError};
 use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::events::{QueueRef, Subscribers, Subscription};
-use crate::history::{History, Touched};
+use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources};
 use crate::lock;
 use crate::outputs::Outputs;
@@ -180,9 +180,9 @@ impl Engine {
     /// that can't be written fails here rather than at the first change.
     ///
     /// Every applied batch, undo and redo then replaces the file atomically before its
-    /// call returns, so a client that has its `rev` knows the file holds it. A failed
-    /// save is logged at `error` and leaves the call's result as it is: the change is
-    /// applied, and the next change saves again. The `rev` is saved too, so revisions
+    /// call returns, so the client whose call it was knows the file holds its `rev`. A
+    /// failed save is logged at `error` and leaves the call's result as it is: the change
+    /// is applied, and the next change saves again. The `rev` is saved too, so revisions
     /// keep increasing across restarts and an `expected_rev` from before one can't
     /// match a different state. Undo history and idempotency keys are not saved.
     ///
@@ -1496,8 +1496,12 @@ impl State {
             batch.expected_rev,
             &self.outputs.running(),
         )?;
-        self.history
-            .record_batch(client_id, applied.rev, &batch.edits, applied.inverse.edits);
+        self.history.record_batch(
+            client_id,
+            applied.rev,
+            applied.touched,
+            applied.inverse.edits,
+        );
         let result = CallResult::Batch { rev: applied.rev };
         if let Some(keyed) = keyed {
             self.applied.insert(keyed, result.clone());
@@ -1579,8 +1583,10 @@ impl State {
                 return Err(error);
             }
         };
-        let now = Touched::of(&step.edits, &applied.inverse.edits);
-        if let Some(found) = self.history.conflict(client_id, &step, Some(&now)) {
+        if let Some(found) = self
+            .history
+            .conflict(client_id, &step, Some(&applied.touched))
+        {
             let error = conflict(found);
             self.history.dropped();
             return Err(error);
@@ -1593,6 +1599,7 @@ impl State {
             step,
             applied.rev,
             applied.inverse.edits,
+            applied.touched,
         );
         let (undo_depth, redo_depth) = self.history.depths(client_id);
         let result = CallResult::History {
