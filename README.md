@@ -212,7 +212,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned | #359 |
 | 3D1 | 3D transforms: rendering ADR and spike | 🔍 in review | #360 |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned |  |
-| CL1 | CLAP plugin host | 🔍 in review: parts 1 and 2 merged; part 3 (host app, launcher, supervisor, CLAP kinds) in review | #272, #281 |
+| CL1 | CLAP plugin host | 🔍 in review: parts 1 and 2 merged; part 3 (host app, launcher, supervisor, CLAP kinds) in review | #272, #281, #407 |
 | WA1 | WASM automation plugins | ⏳ planned |  |
 | MAC1 | macOS platform crate | ⏳ planned |  |
 | LNX1 | Linux codec path and platform crate | ⏳ planned |  |
