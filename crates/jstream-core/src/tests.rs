@@ -7,13 +7,15 @@ mod audio;
 mod collection;
 mod history;
 mod sources;
+mod transitions;
 
 use crate::{DropSnapshot, Engine, FnDropSource, InProcessControl};
 use jstream_control::{Control, ControlError, EventStream, MockEngine};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EntityKind, Event, Hello,
     IdempotencyKey, ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError,
-    ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SourceId, SourceKind, parity,
+    ProtocolVersion, Query, QueryResult, RequestId, Rev, SceneId, SourceId, SourceKind,
+    TransitionPresetId, TransitionStarted, parity,
 };
 use std::future::Future;
 use std::pin::pin;
@@ -126,6 +128,7 @@ fn switch_call(scene: &str) -> Call {
     Call::Action {
         action: Action::SceneSwitch {
             scene_id: SceneId::new(scene),
+            preset_id: None,
         },
     }
 }
@@ -518,6 +521,8 @@ fn events_reach_every_subscriber_in_order() {
         },
         Event::StudioChanged {
             program_scene: Some(SceneId::new("a")),
+            preview_scene: Some(SceneId::new("a")),
+            transition: None,
             client_id: agent.client_id().expect("agent"),
             request_id: Some(by_agent.id),
         },
@@ -553,15 +558,29 @@ fn scene_switch_changes_program_without_an_edit() {
     let agent = connected(&engine);
     let mut events = user.events();
     let program = |control: &dyn Control| match query(control, Query::StudioGet) {
-        Ok(QueryResult::StudioGet { program_scene }) => program_scene,
+        Ok(QueryResult::StudioGet { program_scene, .. }) => program_scene,
         other => panic!("not a studio result: {other:?}"),
     };
+    // A switch reports the preset it ran: the initial `cut`, which takes no time.
     let switched =
         |scene: &str, client: &InProcessControl, request: RequestId| Event::StudioChanged {
             program_scene: Some(SceneId::new(scene)),
+            preview_scene: Some(SceneId::new("a")),
+            transition: Some(TransitionStarted {
+                preset_id: TransitionPresetId::new("cut"),
+                duration_ms: 0,
+            }),
             client_id: client.client_id().expect("connected"),
             request_id: Some(request),
         };
+    // Batches move program and preview by themselves, with no transition.
+    let moved = |scene: &str, client: &InProcessControl, request: RequestId| Event::StudioChanged {
+        program_scene: Some(SceneId::new(scene)),
+        preview_scene: Some(SceneId::new(scene)),
+        transition: None,
+        client_id: client.client_id().expect("connected"),
+        request_id: Some(request),
+    };
     assert_eq!(program(&user), None);
     assert_eq!(
         code(&block_on(agent.call(switch_call("a"))).expect_err("no scene yet")),
@@ -583,7 +602,7 @@ fn scene_switch_changes_program_without_an_edit() {
                 request_id: Some(built.id.clone()),
                 cause: None,
             },
-            switched("a", &user, built.id),
+            moved("a", &user, built.id),
         ]
     );
     assert_eq!(program(&agent), Some(SceneId::new("a")));
@@ -629,7 +648,7 @@ fn scene_switch_changes_program_without_an_edit() {
     .expect("delete");
     let seen = drain(&mut events);
     assert!(matches!(seen[0], Event::StateChanged { rev: Rev(3), .. }));
-    assert_eq!(seen[1..], [switched("a", &agent, deleted.id)]);
+    assert_eq!(seen[1..], [moved("a", &agent, deleted.id)]);
     batch(
         &agent,
         Batch::single(Edit::SceneDelete {
@@ -855,10 +874,14 @@ fn the_engine_answers_like_the_mock() {
             },
             Event::StudioChanged {
                 program_scene,
+                preview_scene,
+                transition,
                 request_id,
                 ..
             } => Event::StudioChanged {
                 program_scene,
+                preview_scene,
+                transition,
                 client_id: ClientId::new("client"),
                 request_id,
             },
@@ -2199,11 +2222,11 @@ mod cpu_pipeline {
             Arc::new(move || {
                 let seen = Arc::clone(&seen);
                 let mut inner = (cpu_draw())()?;
-                let draw: DrawFn = Box::new(move |shot, size, capture, out| {
+                let draw: DrawFn = Box::new(move |shot, size, capture, out, at| {
                     seen.lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                         .push(shot.program().cloned());
-                    inner(shot, size, capture, out)
+                    inner(shot, size, capture, out, at)
                 });
                 Ok(draw)
             })
@@ -2644,9 +2667,9 @@ mod cpu_pipeline {
             Arc::new(move || {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())()?;
-                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, size, rgba, out, at| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, size, rgba, out)
+                    inner(shot, size, rgba, out, at)
                 });
                 Ok(draw)
             })
@@ -3806,9 +3829,9 @@ mod cpu_pipeline {
             Arc::new(move || {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())()?;
-                let draw: DrawFn = Box::new(move |shot, size, rgba, out| {
+                let draw: DrawFn = Box::new(move |shot, size, rgba, out, at| {
                     assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, size, rgba, out)
+                    inner(shot, size, rgba, out, at)
                 });
                 Ok(draw)
             })

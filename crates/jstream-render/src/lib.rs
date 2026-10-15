@@ -15,6 +15,7 @@ mod gpu;
 mod image;
 mod place;
 mod scene;
+pub mod transition;
 
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;

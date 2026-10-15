@@ -9,7 +9,7 @@ use crate::exit::CliError;
 use jstream_control::protocol::{
     Action, Batch, Crop, Edit, Finite32, FitMode, IdempotencyKey, ItemGeometry, ItemId,
     ItemTransform, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole, Size,
-    SourceId, SourceKind, Vec2,
+    SourceId, SourceKind, TransitionPresetId, Vec2,
 };
 
 /// The help text, printed by `help`, `--help` and `-h`.
@@ -36,9 +36,12 @@ Commands:
   hello                            handshake with the engine and print the session
   state get                        print the whole collection state (query state.get)
   scene list                       list the scenes (query scene.list)
-  scene switch <scene-id>          put a scene on program, with a cut (action
-                                   scene.switch)
-  studio get                       print the scene on program (query studio.get)
+  scene switch <scene-id> [--preset <preset-id>]
+                                   put a scene on program, with its transition
+                                   (action scene.switch)
+  studio get                       print the scenes on program and preview (query
+                                   studio.get)
+  studio set-preview <scene-id>    put a scene on preview (action studio.set_preview)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   output list                      list the configured outputs (query output.list)
@@ -258,8 +261,16 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["scene", "list"] => Command::Query(Query::SceneList),
         ["scene", "switch", id] => Command::Action(Action::SceneSwitch {
             scene_id: SceneId::new(*id),
+            preset_id: None,
+        }),
+        ["scene", "switch", id, "--preset", preset] => Command::Action(Action::SceneSwitch {
+            scene_id: SceneId::new(*id),
+            preset_id: Some(TransitionPresetId::new(*preset)),
         }),
         ["studio", "get"] => Command::Query(Query::StudioGet),
+        ["studio", "set-preview", id] => Command::Action(Action::StudioSetPreview {
+            scene_id: SceneId::new(*id),
+        }),
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -617,7 +628,7 @@ mod tests {
     use crate::exit::CliError;
     use jstream_control::protocol::{
         Action, Batch, Crop, Edit, FitMode, IdempotencyKey, ItemId, OutputId, OutputKind, Query,
-        Rev, RtmpTarget, SceneId, SceneRole, SourceId, SourceKind,
+        Rev, RtmpTarget, SceneId, SceneRole, SourceId, SourceKind, TransitionPresetId,
     };
 
     fn args(line: &[&str]) -> Vec<String> {
@@ -721,7 +732,21 @@ mod tests {
         assert_eq!(
             ok(&["scene", "switch", "s"]).command,
             Command::Action(Action::SceneSwitch {
-                scene_id: SceneId::new("s")
+                scene_id: SceneId::new("s"),
+                preset_id: None,
+            })
+        );
+        assert_eq!(
+            ok(&["scene", "switch", "s", "--preset", "fade"]).command,
+            Command::Action(Action::SceneSwitch {
+                scene_id: SceneId::new("s"),
+                preset_id: Some(TransitionPresetId::new("fade")),
+            })
+        );
+        assert_eq!(
+            ok(&["studio", "set-preview", "s"]).command,
+            Command::Action(Action::StudioSetPreview {
+                scene_id: SceneId::new("s"),
             })
         );
         assert_eq!(

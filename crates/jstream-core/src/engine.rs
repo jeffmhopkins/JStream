@@ -22,14 +22,15 @@ use crate::runtime::{
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{self, Frame, SnapshotReply, SnapshotWorker, SourceFrameError};
-use crate::studio::Studio;
+use crate::studio::{self, Studio};
+use crate::transition;
 use jstream_graph::Graph;
 use jstream_platform::{Backends, Secret, StreamKeyStore};
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, DropCounts, Edit, EncoderProfile,
     EncoderSessionInfo, EntityKind, Event, HistoryCall, HistoryDirection, IdempotencyKey, OutputId,
     OutputKind, OutputState, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    SecretString, SourceId,
+    SceneId, SecretString, SourceId, TransitionPresetId, TransitionStarted,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -1063,11 +1064,11 @@ impl Engine {
     /// together under the collection lock; the snapshot thread renders it after that
     /// lock is released.
     fn video_snapshot(&self) -> SnapshotReply {
-        let (snapshot, rev) = {
+        let (snapshot, rev, at) = {
             let state = lock(&self.shared.state);
-            (state.render.load(), state.graph.rev())
+            (state.render.load(), state.graph.rev(), state.live.now())
         };
-        self.shared.snapshots.request(snapshot, rev)
+        self.shared.snapshots.request(snapshot, rev, at)
     }
 
     /// The render hub the pipeline's render thread reads, for tests.
@@ -1681,7 +1682,7 @@ impl State {
             wake,
         );
         if moved {
-            self.emit_studio(client_id, request_id, wake);
+            self.emit_studio(client_id, request_id, None, wake);
         }
     }
 
@@ -1695,11 +1696,16 @@ impl State {
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
-            Action::SceneSwitch { scene_id } => {
-                if self.studio.switch(self.graph.state(), &scene_id)? {
-                    // The program mix shows the new scene from the next frame: a cut.
-                    self.publish_render();
-                    self.emit_studio(client_id, request_id, wake);
+            Action::SceneSwitch {
+                scene_id,
+                preset_id,
+            } => {
+                self.switch(client_id, request_id, scene_id, preset_id.as_ref(), wake)?;
+                return Ok(CallResult::Action {});
+            }
+            Action::StudioSetPreview { scene_id } => {
+                if self.studio.set_preview(self.graph.state(), &scene_id)? {
+                    self.emit_studio(client_id, request_id, None, wake);
                 }
                 return Ok(CallResult::Action {});
             }
@@ -1735,6 +1741,7 @@ impl State {
                 },
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
+                    preview_scene: self.studio.preview().cloned(),
                 },
                 other => return Err(not_implemented(other.name())),
             },
@@ -1742,11 +1749,84 @@ impl State {
         Ok(CallResult::Query { result })
     }
 
-    /// `studio.changed` with the scene now on program, caused by `request_id`.
-    fn emit_studio(&mut self, client_id: &ClientId, request_id: &RequestId, wake: &mut Vec<Waker>) {
+    /// `scene.switch`: puts `scene_id` on program with the transition its preset runs
+    /// (ADR-0029). A switch while a transition runs retargets it: the new one starts from
+    /// what is on screen now. Switching to the scene already on program (or already
+    /// transitioning onto it) changes nothing and emits nothing.
+    fn switch(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        scene_id: SceneId,
+        named: Option<&TransitionPresetId>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        studio::exists(self.graph.state(), &scene_id)?;
+        let from_scene = self.studio.program().cloned();
+        let (preset_id, run) =
+            transition::resolve(&self.graph, from_scene.as_ref(), &scene_id, named)?;
+        if from_scene.as_ref() == Some(&scene_id) {
+            return Ok(());
+        }
+        let now = self.live.now();
+        let running = match (run, from_scene) {
+            (Some(run), Some(from_scene)) => {
+                let from =
+                    match self.studio.running() {
+                        Some(running) => {
+                            let Self {
+                                graph,
+                                frames,
+                                frame_versions,
+                                live,
+                                ..
+                            } = self;
+                            let visuals =
+                                snapshot::on_screen(graph, running, now, &mut |id| match frames
+                                    .get(id)
+                                {
+                                    Some(frame) => Some((frame.clone(), None)),
+                                    None => live.frame(id, now, frame_versions),
+                                });
+                            transition::From::OnScreen(visuals.into())
+                        }
+                        None => transition::From::Scene(from_scene),
+                    };
+                Some(transition::Running {
+                    from,
+                    to: scene_id.clone(),
+                    start: now,
+                    run,
+                })
+            }
+            // Nothing on program yet: there is nothing to transition from.
+            _ => None,
+        };
+        self.studio.switch(scene_id, running);
+        let end_ms = self.publish_render();
+        self.emit_studio(
+            client_id,
+            request_id,
+            Some(transition::started(preset_id, end_ms)),
+            wake,
+        );
+        Ok(())
+    }
+
+    /// `studio.changed` with the scenes now on program and preview, caused by
+    /// `request_id`, and the transition a switch started.
+    fn emit_studio(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        transition: Option<TransitionStarted>,
+        wake: &mut Vec<Waker>,
+    ) {
         self.subscribers.emit(
             &Event::StudioChanged {
                 program_scene: self.studio.program().cloned(),
+                preview_scene: self.studio.preview().cloned(),
+                transition,
                 client_id: client_id.clone(),
                 request_id: Some(request_id.clone()),
             },
@@ -1757,8 +1837,9 @@ impl State {
     /// Re-plans the program mix at the current time and publishes it if it draws
     /// something new. A source's stored frame wins over its live one. The live sources
     /// are told when the plan's next frame change is due, to re-plan then. The mix shows
-    /// the program scene (ADR-0030).
-    fn publish_render(&mut self) {
+    /// the program scene (ADR-0030), or the transition running toward it (ADR-0029),
+    /// whose length in milliseconds it returns; a transition that has ended is let go.
+    fn publish_render(&mut self) -> Option<f32> {
         let Self {
             graph,
             frames,
@@ -1769,13 +1850,21 @@ impl State {
             ..
         } = self;
         let now = live.now();
-        let (shot, wake) =
-            snapshot::plan_with(graph, studio.program(), &mut |id| match frames.get(id) {
+        let planning = snapshot::plan_with(
+            graph,
+            studio.program(),
+            studio.running().map(|running| (running, now)),
+            &mut |id| match frames.get(id) {
                 Some(frame) => Some((frame.clone(), None)),
                 None => live.frame(id, now, frame_versions),
-            });
-        render.publish(shot);
-        live.wake_at(wake);
+            },
+        );
+        if planning.finished {
+            studio.finish();
+        }
+        render.publish(planning.shot);
+        live.wake_at(planning.wake);
+        planning.end_ms
     }
 
     fn emit_stats(&mut self, drops: DropCounts, wake: &mut Vec<Waker>) {

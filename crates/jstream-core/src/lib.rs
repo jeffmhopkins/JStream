@@ -36,6 +36,7 @@ mod snapshot;
 mod studio;
 #[cfg(test)]
 mod tests;
+mod transition;
 
 pub use audit::{
     AUDIT_FILE, AUDIT_FILE_OLD, AuditEntry, AuditFile, AuditMemory, AuditSink,

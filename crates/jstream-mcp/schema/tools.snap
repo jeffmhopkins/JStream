@@ -4,7 +4,7 @@ source: crates/jstream-mcp/src/tests.rs
 {
   "tools": [
     {
-      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `canvas`, `encoder`, `item`, `output`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `canvas`, `encoder`, `item`, `output`, `scene`, `source`, `transition` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "AudioCodec": {
@@ -72,6 +72,31 @@ source: crates/jstream-mcp/src/tests.rs
               "bottom"
             ],
             "type": "object"
+          },
+          "Easing": {
+            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+            "oneOf": [
+              {
+                "const": "ease_in_out",
+                "description": "Cubic ease-in-out: slow at both ends.",
+                "type": "string"
+              },
+              {
+                "const": "ease_out",
+                "description": "Cubic ease-out: fast at the start, slow at the end.",
+                "type": "string"
+              },
+              {
+                "const": "linear",
+                "description": "Constant speed.",
+                "type": "string"
+              },
+              {
+                "const": "spring",
+                "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
+                "type": "string"
+              }
+            ]
           },
           "Edit": {
             "description": "A change to the collection state: undoable, batchable and atomic.\n\nSerialized with an internal `type` tag holding the command name (`noun.verb`,\nR-API-002). Every variant documents its inverse. The engine (`jstream-graph`)\ncomputes the inverse from the state *before* the edit, so the protocol has to be\nclosed under inversion: every inverse must itself be a sequence of edits, and it is.\n\nPositions are indexes: scenes in display order (0 is first), items in stacking order\nwithin their scene (0 is the bottom).",
@@ -799,6 +824,205 @@ source: crates/jstream-mcp/src/tests.rs
                   "profile_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "Adds a transition preset (ADR-0029, ADR-0037). Inverse: `transition.delete`.",
+                "properties": {
+                  "duration_ms": {
+                    "description": "How long one item takes, in milliseconds; at most 60000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "easing": {
+                    "$ref": "#/$defs/Easing",
+                    "description": "The curve its items follow unless they set their own."
+                  },
+                  "kind": {
+                    "description": "A transition kind `kind.list` reports (`cut`, `fade`, `move`), else\n`invalid_argument`.",
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "preset_id": {
+                    "$ref": "#/$defs/TransitionPresetId",
+                    "description": "The new preset's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "settings": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Initial settings, checked against the kind's descriptor as `source.create`'s\nare. Parameters left out take their defaults. Omitted means all defaults."
+                  },
+                  "type": {
+                    "const": "transition.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "preset_id",
+                  "name",
+                  "kind",
+                  "duration_ms",
+                  "easing"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes a transition preset. Fields left out keep their values; `patch` changes\nsettings as `source.set_settings` does. A new `kind` replaces the settings with\nthat kind's defaults, overlaid by `patch`. Inverse: `transition.update` with the\nprevious values of what it changed (and, after a kind change, the previous kind\nand every previous setting).",
+                "properties": {
+                  "duration_ms": {
+                    "description": "A new duration, in milliseconds; at most 60000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "easing": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Easing"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A new easing."
+                  },
+                  "kind": {
+                    "description": "A new transition kind, checked as in `transition.create`.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "name": {
+                    "description": "A new display name.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "patch": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Parameter ID to new value, or `null` for the default."
+                  },
+                  "preset_id": {
+                    "$ref": "#/$defs/TransitionPresetId",
+                    "description": "The preset to change."
+                  },
+                  "type": {
+                    "const": "transition.update",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "preset_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a transition preset, and clears every scene's `transition_in` and\n`transition_out` that names it. The default preset can't be deleted\n(`invalid_argument`): make another one the default first. Inverse:\n`transition.create` with its name, kind, timing and settings, then\n`scene.set_transitions` for each scene it cleared.",
+                "properties": {
+                  "preset_id": {
+                    "$ref": "#/$defs/TransitionPresetId",
+                    "description": "The preset to delete."
+                  },
+                  "type": {
+                    "const": "transition.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "preset_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Makes a preset the default: the one a switch uses when neither the switch nor\nthe scenes name one. Inverse: `transition.set_default` with the previous default.",
+                "properties": {
+                  "preset_id": {
+                    "$ref": "#/$defs/TransitionPresetId",
+                    "description": "The preset, which must exist, else `not_found`."
+                  },
+                  "type": {
+                    "const": "transition.set_default",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "preset_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the presets a scene overrides switches with: `transition_in` when switching\ninto it, `transition_out` when switching out of it. A switch that names a preset\nwins over both, and `transition_in` wins over the other scene's `transition_out`.\nEach must name an existing preset, else `not_found`; omitted means none. Inverse:\n`scene.set_transitions` with the previous two.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "transition_in": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TransitionPresetId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The preset for switching into this scene, or none."
+                  },
+                  "transition_out": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TransitionPresetId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The preset for switching out of this scene, or none."
+                  },
+                  "type": {
+                    "const": "scene.set_transitions",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an item's transition settings (ADR-0029 §6): its delay, easing, whether\nit may glide to other scenes, and how it appears and disappears without a\npartner. A `delay_ms` over 60000 is `invalid_argument`. Inverse:\n`item.set_transition` with the previous settings.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "transition": {
+                    "$ref": "#/$defs/ItemTransition",
+                    "description": "Its new settings."
+                  },
+                  "type": {
+                    "const": "item.set_transition",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "transition"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -849,6 +1073,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "Glide": {
+            "description": "Whether an item may pair with an item of another scene in a `move` transition.",
+            "oneOf": [
+              {
+                "const": "auto",
+                "description": "It pairs with the other scene's placement of the same source.",
+                "type": "string"
+              },
+              {
+                "const": "never",
+                "description": "It never pairs: it disappears and appears with its effects instead.",
+                "type": "string"
+              }
+            ]
+          },
           "HardwarePreference": {
             "description": "Whether a video encoder runs on the GPU's encoder block. Serialized as a snake_case\nstring. Hardware encoders limit how many sessions run at once, per GPU vendor and\ndriver; the engine doesn't guess that limit, and `output.status` reports the\nhardware sessions in use.",
             "oneOf": [
@@ -872,6 +1111,36 @@ source: crates/jstream-mcp/src/tests.rs
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
+          },
+          "ItemEasing": {
+            "description": "An item's own easing: one of the curves, or the preset's.",
+            "oneOf": [
+              {
+                "const": "inherit",
+                "description": "The preset's easing.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in_out",
+                "description": "[`Easing::EaseInOut`].",
+                "type": "string"
+              },
+              {
+                "const": "ease_out",
+                "description": "[`Easing::EaseOut`].",
+                "type": "string"
+              },
+              {
+                "const": "linear",
+                "description": "[`Easing::Linear`].",
+                "type": "string"
+              },
+              {
+                "const": "spring",
+                "description": "[`Easing::Spring`].",
+                "type": "string"
+              }
+            ]
           },
           "ItemGeometry": {
             "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, and omitted `perspective_px` means orthographic.",
@@ -952,6 +1221,39 @@ source: crates/jstream-mcp/src/tests.rs
               "scale",
               "rotation_deg"
             ],
+            "type": "object"
+          },
+          "ItemTransition": {
+            "description": "An item's transition settings ([ADR-0029](../../../docs/adr/0029-transitions.md) §6).\nThey belong to the placement, keyed by item ID. Items are added with the default:\nno delay, and the preset's easing and effects.",
+            "properties": {
+              "appear": {
+                "$ref": "#/$defs/TransitionEffect",
+                "default": "inherit",
+                "description": "How it appears when it has no partner."
+              },
+              "delay_ms": {
+                "default": 0,
+                "description": "Milliseconds before the item starts moving, on top of the preset's\n`stagger_ms` × its stacking index. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "disappear": {
+                "$ref": "#/$defs/TransitionEffect",
+                "default": "inherit",
+                "description": "How it disappears when it has no partner."
+              },
+              "easing": {
+                "$ref": "#/$defs/ItemEasing",
+                "default": "inherit",
+                "description": "Its easing, or the preset's."
+              },
+              "glide": {
+                "$ref": "#/$defs/Glide",
+                "default": "auto",
+                "description": "Whether it may pair in a `move` transition."
+              }
+            },
             "type": "object"
           },
           "OutputId": {
@@ -1181,6 +1483,40 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "TransitionEffect": {
+            "description": "How an item without a partner appears or disappears.",
+            "oneOf": [
+              {
+                "const": "inherit",
+                "description": "The preset's `unmatched` setting.",
+                "type": "string"
+              },
+              {
+                "const": "fade",
+                "description": "Opacity only.",
+                "type": "string"
+              },
+              {
+                "const": "scale",
+                "description": "Toward 65% of its size about its centre, while fading.",
+                "type": "string"
+              },
+              {
+                "const": "slide",
+                "description": "Toward the nearest canvas edge until it is off the canvas, while fading.",
+                "type": "string"
+              },
+              {
+                "const": "none",
+                "description": "At once, at the item's start: no animation.",
+                "type": "string"
+              }
+            ]
+          },
+          "TransitionPresetId": {
+            "description": "A transition preset in the collection (ADR-0029).",
+            "type": "string"
           },
           "Vec2": {
             "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).\n\nBoth components are [`Finite32`]: a non-finite or out-of-`f32`-range number (`1e39`)\nfails deserialization, so the message is rejected as `malformed`, and in-process code\ncan't build a non-finite value.",
@@ -1852,7 +2188,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "history"
     },
     {
-      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Crop": {
@@ -1916,9 +2252,54 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "Glide": {
+            "description": "Whether an item may pair with an item of another scene in a `move` transition.",
+            "oneOf": [
+              {
+                "const": "auto",
+                "description": "It pairs with the other scene's placement of the same source.",
+                "type": "string"
+              },
+              {
+                "const": "never",
+                "description": "It never pairs: it disappears and appears with its effects instead.",
+                "type": "string"
+              }
+            ]
+          },
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
+          },
+          "ItemEasing": {
+            "description": "An item's own easing: one of the curves, or the preset's.",
+            "oneOf": [
+              {
+                "const": "inherit",
+                "description": "The preset's easing.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in_out",
+                "description": "[`Easing::EaseInOut`].",
+                "type": "string"
+              },
+              {
+                "const": "ease_out",
+                "description": "[`Easing::EaseOut`].",
+                "type": "string"
+              },
+              {
+                "const": "linear",
+                "description": "[`Easing::Linear`].",
+                "type": "string"
+              },
+              {
+                "const": "spring",
+                "description": "[`Easing::Spring`].",
+                "type": "string"
+              }
+            ]
           },
           "ItemGeometry": {
             "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). The formula below still evaluates a non-neutral value; drawing it is\nthe compositor's M3 work, and until then the engine rejects it. [`Self::is_neutral_3d`]\nis that check. A negative `size` is rejected, not read as a flip.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, and omitted `perspective_px` means orthographic.",
@@ -2001,6 +2382,39 @@ source: crates/jstream-mcp/src/tests.rs
             ],
             "type": "object"
           },
+          "ItemTransition": {
+            "description": "An item's transition settings ([ADR-0029](../../../docs/adr/0029-transitions.md) §6).\nThey belong to the placement, keyed by item ID. Items are added with the default:\nno delay, and the preset's easing and effects.",
+            "properties": {
+              "appear": {
+                "$ref": "#/$defs/TransitionEffect",
+                "default": "inherit",
+                "description": "How it appears when it has no partner."
+              },
+              "delay_ms": {
+                "default": 0,
+                "description": "Milliseconds before the item starts moving, on top of the preset's\n`stagger_ms` × its stacking index. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "disappear": {
+                "$ref": "#/$defs/TransitionEffect",
+                "default": "inherit",
+                "description": "How it disappears when it has no partner."
+              },
+              "easing": {
+                "$ref": "#/$defs/ItemEasing",
+                "default": "inherit",
+                "description": "Its easing, or the preset's."
+              },
+              "glide": {
+                "$ref": "#/$defs/Glide",
+                "default": "auto",
+                "description": "Whether it may pair in a `move` transition."
+              }
+            },
+            "type": "object"
+          },
           "Rev": {
             "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
             "format": "uint64",
@@ -2032,6 +2446,36 @@ source: crates/jstream-mcp/src/tests.rs
           "SourceId": {
             "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
             "type": "string"
+          },
+          "TransitionEffect": {
+            "description": "How an item without a partner appears or disappears.",
+            "oneOf": [
+              {
+                "const": "inherit",
+                "description": "The preset's `unmatched` setting.",
+                "type": "string"
+              },
+              {
+                "const": "fade",
+                "description": "Opacity only.",
+                "type": "string"
+              },
+              {
+                "const": "scale",
+                "description": "Toward 65% of its size about its centre, while fading.",
+                "type": "string"
+              },
+              {
+                "const": "slide",
+                "description": "Toward the nearest canvas edge until it is off the canvas, while fading.",
+                "type": "string"
+              },
+              {
+                "const": "none",
+                "description": "At once, at the item's start: no animation.",
+                "type": "string"
+              }
+            ]
           },
           "Vec2": {
             "description": "A 2D position or scale, in output pixels (position) or as a factor (scale).\n\nBoth components are [`Finite32`]: a non-finite or out-of-`f32`-range number (`1e39`)\nfails deserialization, so the message is rejected as `malformed`, and in-process code\ncan't build a non-finite value.",
@@ -2358,6 +2802,29 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "crop"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an item's transition settings (ADR-0029 §6): its delay, easing, whether\nit may glide to other scenes, and how it appears and disappears without a\npartner. A `delay_ms` over 60000 is `invalid_argument`. Inverse:\n`item.set_transition` with the previous settings.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "transition": {
+                    "$ref": "#/$defs/ItemTransition",
+                    "description": "Its new settings."
+                  },
+                  "type": {
+                    "const": "item.set_transition",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "transition"
                 ],
                 "type": "object"
               },
@@ -2784,7 +3251,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "output"
     },
     {
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.switch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "IdempotencyKey": {
@@ -2815,6 +3282,10 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               }
             ]
+          },
+          "TransitionPresetId": {
+            "description": "A transition preset in the collection (ADR-0029).",
+            "type": "string"
           }
         },
         "additionalProperties": false,
@@ -2957,8 +3428,59 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a cut: the program mix (`video.snapshot`, and every\noutput that shows program) shows it from the next frame. The program scene is\nruntime state, not collection state (ADR-0030): the switch changes no `rev`, is\nnever undone, and emits `studio.changed`, which `studio.get` reads back. Switching\nto the scene already on program succeeds and emits nothing. Fails with\n`not_found` for a scene not in the collection.",
+                "description": "Sets the presets a scene overrides switches with: `transition_in` when switching\ninto it, `transition_out` when switching out of it. A switch that names a preset\nwins over both, and `transition_in` wins over the other scene's `transition_out`.\nEach must name an existing preset, else `not_found`; omitted means none. Inverse:\n`scene.set_transitions` with the previous two.",
                 "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "transition_in": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TransitionPresetId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The preset for switching into this scene, or none."
+                  },
+                  "transition_out": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TransitionPresetId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The preset for switching out of this scene, or none."
+                  },
+                  "type": {
+                    "const": "scene.set_transitions",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "properties": {
+                  "preset_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TransitionPresetId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The preset to use, overriding the scenes' and the default."
+                  },
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
                     "description": "The scene to put on program."
@@ -3283,15 +3805,39 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "state"
     },
     {
-      "description": "Runs one `studio` operation: set `op.type` to one of `studio.get` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `studio` operation: set `op.type` to one of `studio.set_preview` (action), `studio.get` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
+        "$defs": {
+          "SceneId": {
+            "description": "A scene in the collection.",
+            "type": "string"
+          }
+        },
         "additionalProperties": false,
         "properties": {
           "op": {
             "description": "The `studio` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Reads the studio state: which scene is on program. It is runtime state, not\ncollection state (ADR-0030), so the result carries no `rev`.",
+                "description": "Puts a scene on preview, the scene studio mode prepares before it goes on program\nwith `scene.switch`. Preview is runtime state like program: it changes no `rev`,\nis never undone, and emits `studio.changed`. It never affects what an output\nshows unless the output's mix is the preview mix. Setting the scene already on\npreview succeeds and emits nothing. Fails with `not_found` for a scene not in\nthe collection.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to put on preview."
+                  },
+                  "type": {
+                    "const": "studio.set_preview",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Reads the studio state: which scenes are on program and on preview. It is runtime\nstate, not collection state (ADR-0030), so the result carries no `rev`.",
                 "properties": {
                   "type": {
                     "const": "studio.get",
@@ -3312,6 +3858,228 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "studio"
+    },
+    {
+      "description": "Runs one `transition` operation: set `op.type` to one of `transition.create` (edit), `transition.update` (edit), `transition.delete` (edit), `transition.set_default` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "Easing": {
+            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+            "oneOf": [
+              {
+                "const": "ease_in_out",
+                "description": "Cubic ease-in-out: slow at both ends.",
+                "type": "string"
+              },
+              {
+                "const": "ease_out",
+                "description": "Cubic ease-out: fast at the start, slow at the end.",
+                "type": "string"
+              },
+              {
+                "const": "linear",
+                "description": "Constant speed.",
+                "type": "string"
+              },
+              {
+                "const": "spring",
+                "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
+                "type": "string"
+              }
+            ]
+          },
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "Settings": {
+            "additionalProperties": true,
+            "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
+            "type": "object"
+          },
+          "TransitionPresetId": {
+            "description": "A transition preset in the collection (ADR-0029).",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `transition` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Adds a transition preset (ADR-0029, ADR-0037). Inverse: `transition.delete`.",
+                "properties": {
+                  "duration_ms": {
+                    "description": "How long one item takes, in milliseconds; at most 60000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "easing": {
+                    "$ref": "#/$defs/Easing",
+                    "description": "The curve its items follow unless they set their own."
+                  },
+                  "kind": {
+                    "description": "A transition kind `kind.list` reports (`cut`, `fade`, `move`), else\n`invalid_argument`.",
+                    "type": "string"
+                  },
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "preset_id": {
+                    "$ref": "#/$defs/TransitionPresetId",
+                    "description": "The new preset's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "settings": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Initial settings, checked against the kind's descriptor as `source.create`'s\nare. Parameters left out take their defaults. Omitted means all defaults."
+                  },
+                  "type": {
+                    "const": "transition.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "preset_id",
+                  "name",
+                  "kind",
+                  "duration_ms",
+                  "easing"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes a transition preset. Fields left out keep their values; `patch` changes\nsettings as `source.set_settings` does. A new `kind` replaces the settings with\nthat kind's defaults, overlaid by `patch`. Inverse: `transition.update` with the\nprevious values of what it changed (and, after a kind change, the previous kind\nand every previous setting).",
+                "properties": {
+                  "duration_ms": {
+                    "description": "A new duration, in milliseconds; at most 60000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "easing": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Easing"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A new easing."
+                  },
+                  "kind": {
+                    "description": "A new transition kind, checked as in `transition.create`.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "name": {
+                    "description": "A new display name.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "patch": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Parameter ID to new value, or `null` for the default."
+                  },
+                  "preset_id": {
+                    "$ref": "#/$defs/TransitionPresetId",
+                    "description": "The preset to change."
+                  },
+                  "type": {
+                    "const": "transition.update",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "preset_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a transition preset, and clears every scene's `transition_in` and\n`transition_out` that names it. The default preset can't be deleted\n(`invalid_argument`): make another one the default first. Inverse:\n`transition.create` with its name, kind, timing and settings, then\n`scene.set_transitions` for each scene it cleared.",
+                "properties": {
+                  "preset_id": {
+                    "$ref": "#/$defs/TransitionPresetId",
+                    "description": "The preset to delete."
+                  },
+                  "type": {
+                    "const": "transition.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "preset_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Makes a preset the default: the one a switch uses when neither the switch nor\nthe scenes name one. Inverse: `transition.set_default` with the previous default.",
+                "properties": {
+                  "preset_id": {
+                    "$ref": "#/$defs/TransitionPresetId",
+                    "description": "The preset, which must exist, else `not_found`."
+                  },
+                  "type": {
+                    "const": "transition.set_default",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "preset_id"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "transition"
     },
     {
       "description": "Runs one `video` operation: set `op.type` to one of `video.snapshot` (query). A query only reads. A `video.snapshot` result leads with the PNG as an image content block; its JSON `png` field only names that block. Failures come back as a tool error whose `error.code` is stable.",

@@ -223,6 +223,7 @@ fn handshake_list_and_call_round_trip() {
             "source",
             "state",
             "studio",
+            "transition",
             "video"
         ]
     );
@@ -279,7 +280,10 @@ fn handshake_list_and_call_round_trip() {
         json!({"type": "state.get", "rev": 2,
                "canvas": {"width": 1920, "height": 1080}, "sources": [cam],
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
-               "outputs": [], "encoders": []})
+               "outputs": [], "encoders": [],
+               "transitions": {"presets": [{"preset_id": "cut", "name": "Cut", "kind": "cut",
+                                            "duration_ms": 300, "easing": "ease_in_out"}],
+                               "default": "cut"}})
     );
     let started = f.call_tool(
         "output",
@@ -330,7 +334,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(15));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(16));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -604,7 +608,7 @@ fn events_report_every_change_with_a_cursor() {
             {"seq": 1, "event": {"type": "state.changed", "rev": 1,
                                  "client_id": "mock_1", "request_id": "req_1"}},
             {"seq": 2, "event": {"type": "studio.changed", "program_scene": "s",
-                                 "client_id": "mock_1", "request_id": "req_1"}},
+                                 "preview_scene": "s", "client_id": "mock_1", "request_id": "req_1"}},
             {"seq": 3, "event": {"type": "output.state_changed",
                                  "output_id": "out_rec", "state": "starting"}},
             {"seq": 4, "event": {"type": "output.state_changed",

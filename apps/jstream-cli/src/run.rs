@@ -282,7 +282,7 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
         | Action::OutputClearKey { output_id } => {
             writeln!(out, "{} accepted for {output_id} ({id})", action.name())?;
         }
-        Action::SceneSwitch { scene_id } => {
+        Action::SceneSwitch { scene_id, .. } | Action::StudioSetPreview { scene_id } => {
             writeln!(out, "{} accepted for {scene_id} ({id})", action.name())?;
         }
         other => writeln!(out, "{} accepted ({id})", other.name())?,
@@ -344,10 +344,17 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
             writeln!(out, "rev {rev}")?;
             write_outputs(out, "", outputs)?;
         }
-        QueryResult::StudioGet { program_scene } => match program_scene {
-            Some(scene_id) => writeln!(out, "program: {scene_id}")?,
-            None => writeln!(out, "program: none (no scenes)")?,
-        },
+        QueryResult::StudioGet {
+            program_scene,
+            preview_scene,
+        } => {
+            for (label, scene) in [("program", program_scene), ("preview", preview_scene)] {
+                match scene {
+                    Some(scene_id) => writeln!(out, "{label}: {scene_id}")?,
+                    None => writeln!(out, "{label}: none (no scenes)")?,
+                }
+            }
+        }
         QueryResult::SourceList { rev, sources } => {
             writeln!(out, "rev {rev}")?;
             write_sources(out, "", sources)?;
@@ -546,12 +553,24 @@ fn write_event(out: &mut dyn Write, event: &Event, json: bool) -> Result<bool, C
         }
         Event::StudioChanged {
             program_scene,
+            preview_scene,
+            transition,
             client_id,
             request_id,
         } => {
-            match program_scene {
-                Some(scene_id) => write!(out, "studio.changed program {scene_id}")?,
-                None => write!(out, "studio.changed program none")?,
+            write!(out, "studio.changed")?;
+            for (label, scene) in [("program", program_scene), ("preview", preview_scene)] {
+                match scene {
+                    Some(scene_id) => write!(out, " {label} {scene_id}")?,
+                    None => write!(out, " {label} none")?,
+                }
+            }
+            if let Some(transition) = transition {
+                write!(
+                    out,
+                    " transition {} {}ms",
+                    transition.preset_id, transition.duration_ms
+                )?;
             }
             write!(out, " by {client_id}")?;
             if let Some(request_id) = request_id {

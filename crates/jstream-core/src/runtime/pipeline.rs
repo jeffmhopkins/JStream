@@ -89,7 +89,8 @@ const OUTPUT_GRACE: Duration = Duration::from_millis(500);
 /// Composites one frame on the render thread: the program mix of the render snapshot's
 /// [`Shot`] at `size`, with `display` sources showing the capture (or, with no program
 /// scene, the capture filling the frame, or black when there is none yet), read back as
-/// RGBA8 into `out` (replacing its contents). Returns the GPU images its cache let go
+/// RGBA8 into `out` (replacing its contents), as it is at the tick's time on the media
+/// clock (a running transition samples it). Returns the GPU images its cache let go
 /// of, for the collector. Created on the render thread and kept there, so it need not
 /// be `Send`.
 pub(crate) type DrawFn = Box<
@@ -98,6 +99,7 @@ pub(crate) type DrawFn = Box<
         FrameSize,
         Option<&CaptureFrame<'_>>,
         &mut Vec<u8>,
+        MediaTime,
     ) -> Result<Option<Reclaimed>, String>,
 >;
 
@@ -113,7 +115,11 @@ pub(crate) type OpenDraw = Arc<dyn Fn() -> Result<DrawFn, String> + Send + Sync>
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|| {
         let draw: DrawFn = Box::new(
-            |_: &Shot, size: FrameSize, capture: Option<&CaptureFrame<'_>>, out: &mut Vec<u8>| {
+            |_: &Shot,
+             size: FrameSize,
+             capture: Option<&CaptureFrame<'_>>,
+             out: &mut Vec<u8>,
+             _: MediaTime| {
                 out.clear();
                 match capture {
                     Some(capture) => out.extend_from_slice(capture.rgba),
@@ -713,9 +719,9 @@ pub(crate) fn gpu_draw() -> OpenDraw {
         let mut compositor =
             Compositor::open(OpenOptions::headless()).map_err(|err| render_open_error(&err))?;
         let mut cache = ResourceCache::<GpuKey>::new();
-        let draw: DrawFn = Box::new(move |shot, size, capture, out| {
+        let draw: DrawFn = Box::new(move |shot, size, capture, out, at| {
             cache.begin_frame();
-            snapshot::compose(&mut compositor, &mut cache, shot, capture, size, true)
+            snapshot::compose(&mut compositor, &mut cache, shot, capture, size, true, at)
                 .and_then(|output| copy_pixels(&output, out))
                 .map_err(|err| err.to_string())?;
             // A failed frame skips this: what it retired waits for the next frame's
@@ -1213,20 +1219,21 @@ impl Frames {
         self.capture = capture.stats();
     }
 
-    /// Composites `shot` into `scratch` and, on success, makes that the shown frame.
-    /// Returns the GPU images the compositor let go of.
+    /// Composites `shot` as it is at `at` into `scratch` and, on success, makes that the
+    /// shown frame. Returns the GPU images the compositor let go of.
     fn draw(
         &mut self,
         draw: &mut DrawFn,
         shot: &Shot,
         size: FrameSize,
+        at: MediaTime,
     ) -> Result<Option<Reclaimed>, String> {
         let capture = (!self.source.is_empty()).then_some(CaptureFrame {
             version: self.source_version,
             size,
             rgba: &self.source,
         });
-        let freed = draw(shot, size, capture.as_ref(), &mut self.scratch)?;
+        let freed = draw(shot, size, capture.as_ref(), &mut self.scratch, at)?;
         std::mem::swap(&mut self.scratch, &mut self.shown);
         Ok(freed)
     }
@@ -1326,7 +1333,7 @@ fn render_loop(job: RenderJob) {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
                 frames.read_capture(capture.as_mut(), size);
                 let snapshot = reader.adopt();
-                frames.draw(&mut draw, snapshot.shot(), size)
+                frames.draw(&mut draw, snapshot.shot(), size, due)
             }));
             match tick {
                 Ok(Ok(freed)) => {
