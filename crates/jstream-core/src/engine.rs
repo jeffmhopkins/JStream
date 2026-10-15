@@ -1927,7 +1927,6 @@ fn no_key_store() -> ProtocolError {
     }
 }
 
-/// A protocol variant added after this engine was written.
 /// A platform capture target as `capture.targets` reports it, or `None` for a kind of
 /// target no source kind captures.
 fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::CaptureTargetInfo> {
@@ -1948,6 +1947,7 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
     })
 }
 
+/// A protocol variant added after this engine was written.
 fn not_implemented(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the engine does not implement {what} yet"),

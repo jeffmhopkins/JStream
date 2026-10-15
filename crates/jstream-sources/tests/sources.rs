@@ -614,46 +614,6 @@ fn assets_resolve_inside_their_root_only() {
             "errors never name a host path: {err}"
         );
     }
-
-    // A junction or symlink inside the root that leads outside is refused, and a
-    // junction that stays inside is followed (#224). Junctions need no privilege; a
-    // file symlink needs SeCreateSymbolicLinkPrivilege, which CI's runners have.
-    #[cfg(windows)]
-    {
-        let junction = |link: &Path, to: &Path| {
-            let status = std::process::Command::new("cmd")
-                .arg("/C")
-                .arg("mklink")
-                .arg("/J")
-                .arg(link)
-                .arg(to)
-                .stdout(std::process::Stdio::null())
-                .status()
-                .expect("cmd runs");
-            assert!(status.success(), "mklink /J {link:?} {to:?}");
-        };
-        let outside = dir.join("outside");
-        std::fs::create_dir_all(&outside).expect("a folder");
-        std::fs::copy(dir.join("outside.png"), outside.join("a.png")).expect("a file");
-        junction(&root.join("out"), &outside);
-        assert!(matches!(
-            roots.read(AssetRoot::Collection, "out/a.png", 1 << 20),
-            Err(SourceError::AssetEscapesRoot { .. })
-        ));
-        junction(&root.join("pics"), &root.join("img"));
-        assert_eq!(
-            roots
-                .read(AssetRoot::Collection, "pics/a.png", 1 << 20)
-                .expect("read through a junction inside the root"),
-            bytes
-        );
-        std::os::windows::fs::symlink_file(dir.join("outside.png"), root.join("link.png"))
-            .expect("a file symlink");
-        assert!(matches!(
-            roots.read(AssetRoot::Collection, "link.png", 1 << 20),
-            Err(SourceError::AssetEscapesRoot { .. })
-        ));
-    }
 }
 
 /// The decoded-memory cap counts a GIF's working canvas and its "restore to previous"

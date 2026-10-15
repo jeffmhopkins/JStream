@@ -71,10 +71,26 @@ pub(crate) fn spawn(backends: Backends, clock: Timebase) -> Result<RenderCapture
 }
 
 fn capture_thread(backends: &Backends, rx: &Receiver<Request>, tx: &Sender<Started>) {
+    // The captures whose last start failed: a retry that fails again logs at `debug`,
+    // so a closed window kept on program doesn't warn every retry.
+    let mut failing = BTreeSet::new();
     for request in rx {
         match request {
             Request::Start(spec) => {
-                let stream = start(backends, &spec);
+                let stream = match start(backends, &spec) {
+                    Ok(stream) => {
+                        failing.remove(&spec);
+                        Some(stream)
+                    }
+                    Err(err) => {
+                        if failing.insert(spec.clone()) {
+                            tracing::warn!(capture = ?spec, error = %err, "capture did not start");
+                        } else {
+                            tracing::debug!(capture = ?spec, error = %err, "capture still does not start");
+                        }
+                        None
+                    }
+                };
                 // An error hands the stream back: the render thread is gone, so it
                 // stops here.
                 drop(tx.send(Started { spec, stream }));
@@ -85,33 +101,24 @@ fn capture_thread(backends: &Backends, rx: &Receiver<Request>, tx: &Sender<Start
 }
 
 /// Starts the capture of `spec`: on the GPU path when the backend has one and it
-/// starts, else on the CPU path. `None`, logged, when neither starts.
-pub(crate) fn start(backends: &Backends, spec: &CaptureSpec) -> Option<Box<dyn CaptureStream>> {
-    let target = match target(backends.cpu.as_ref(), spec) {
-        Ok(target) => target,
-        Err(err) => {
-            tracing::warn!(capture = ?spec, error = %err, "capture target unavailable");
-            return None;
-        }
-    };
+/// starts, else on the CPU path. Fails with the reason when neither starts.
+pub(crate) fn start(
+    backends: &Backends,
+    spec: &CaptureSpec,
+) -> Result<Box<dyn CaptureStream>, String> {
+    let target = target(backends.cpu.as_ref(), spec)?;
     if let Some(gpu) = &backends.gpu {
         match gpu.start(&target) {
             Ok(stream) => {
                 tracing::info!(capture = ?spec, "capture delivers GPU frames");
-                return Some(stream);
+                return Ok(stream);
             }
             Err(err) => {
                 tracing::warn!(capture = ?spec, error = %err, "GPU capture did not start; capturing CPU frames");
             }
         }
     }
-    match backends.cpu.start(&target) {
-        Ok(stream) => Some(stream),
-        Err(err) => {
-            tracing::warn!(capture = ?spec, error = %err, "capture did not start");
-            None
-        }
-    }
+    backends.cpu.start(&target).map_err(|err| err.to_string())
 }
 
 /// The platform target `spec` names: a display or window by its ID, or the primary

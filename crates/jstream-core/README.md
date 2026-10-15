@@ -419,8 +419,9 @@ A `display` or `window` source with no stored frame shows what the pipeline capt
 for it on the render thread, and nothing in `video.snapshot`, which has no capture; a
 stored frame wins. The `Shot` lists what its passes capture (`Shot::captures`, a
 `jstream-sources` `CaptureSpec` each: a display or window by its capture-backend target
-ID, or the primary display), and sources that capture the same thing share one
-capture. A window source with no window chosen shows nothing. The capture is part of
+ID, or the primary display), and sources with the same `target` share one capture.
+Sharing is by `target` value: a `display` source with an empty `target` and one that
+names the primary display's ID capture the same monitor twice. A window source with no window chosen shows nothing. The capture is part of
 what the shot draws, so a new target publishes a new snapshot.
 
 **Live sources.** `live::LiveSources` keeps one running `jstream-sources` `Source` per
@@ -792,7 +793,8 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
 The render thread reuses each capture's buffer, its composite and readback buffers, and its GPU
 textures through the cache. Each tick allocates one frame-sized buffer, the frame the
 encoder session takes ownership of (`VideoInput::push` cannot hand buffers back), the
-item list `compose` fills once per tick, the frame-fence callback, the premultiplied
+item list `compose` fills once per tick, the cache key of each capture that names a
+display or window (a copy of its `target`), the frame-fence callback, the premultiplied
 copy of a CPU capture that changed, and on the GPU path an import (a bind group) the
 first time each of the platform's capture textures is shown. A virtual camera's tap
 reuses the buffers its camera thread hands back, so it allocates only until they
