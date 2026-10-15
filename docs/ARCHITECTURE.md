@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:d7fd61287b02ea41", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2: re-read; added the jstream-anim row (layer 0, no dependencies, no unsafe, ADR-0049 keyframe-scene model); summary matches its Cargo.toml; lint-deps passes" }
+verified = { hash = "b3:511956a2c5e26129", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (d813d07) into #219: re-read; main's jstream-anim row kept; this PR's jstream-core Cargo.toml change is a cfg(windows) dev-dependency and hw-tests feature, core row and layer unchanged; lint-deps passes; holds" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
