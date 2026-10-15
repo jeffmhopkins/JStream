@@ -53,13 +53,15 @@ mod backend {
         self, MfStarted, VIDEO_STREAM, audio_inputs, container_id, start_error, type_info,
     };
     use super::stream::{Capture, Deliver, MfStream};
-    use crate::com::OsResult;
+    use crate::com::{Com, OsResult};
 
     /// Video capture devices (webcams and capture cards) through Media Foundation.
     ///
-    /// It holds no COM objects, so it is `Send + Sync`. Each call starts Media Foundation
-    /// for itself, and each open stream keeps it started, so it can be called from any
-    /// thread that is not a single-threaded apartment (not a UI thread).
+    /// It holds no COM objects, so it is `Send + Sync`. Each call joins the calling
+    /// thread to the multithreaded apartment for its duration (as `WasapiAudio` does) and
+    /// starts Media Foundation for itself, and each open stream keeps it started, so it can
+    /// be called from any thread that is not a single-threaded apartment (not a UI
+    /// thread).
     #[derive(Debug, Default)]
     pub struct MfVideoDevices {
         _private: (),
@@ -76,6 +78,7 @@ mod backend {
         /// IDs are the devices' symbolic links (device interface paths), which stay the
         /// same across reboots and replugging into the same port.
         fn devices(&self) -> Result<Vec<VideoDeviceInfo>, PlatformError> {
+            let _com = Com::init()?;
             let _mf = MfStarted::start()?;
             let found = source::enumerate()?;
             let inputs = if found.is_empty() {
@@ -94,6 +97,7 @@ mod backend {
         }
 
         fn formats(&self, device: &DeviceId) -> Result<Vec<VideoDeviceFormat>, PlatformError> {
+            let _com = Com::init()?;
             let _mf = MfStarted::start()?;
             let opened = source::find(device)?.open()?;
             Ok(opened.natives()?.into_iter().map(|n| n.format).collect())
@@ -117,6 +121,7 @@ mod backend {
                 (true, decoder) => decoder,
                 (false, _) => None,
             };
+            let _com = Com::init()?;
             let mf = MfStarted::start()?;
             let found = source::find(device)?;
             let opened = found.open()?;
@@ -199,8 +204,18 @@ mod device_tests {
 
     fn first_device_formats() -> (jstream_platform::DeviceId, Vec<VideoDeviceFormat>) {
         let devices = MfVideoDevices::new();
-        let list = devices.devices().expect("devices");
-        let first = list.first().expect("a video capture device is plugged in");
+        // A device plugged in just before the test can take a few seconds to enumerate.
+        let start = Instant::now();
+        let list = loop {
+            let list = devices.devices().expect("devices");
+            if !list.is_empty() || start.elapsed() > Duration::from_secs(15) {
+                break list;
+            }
+            std::thread::sleep(Duration::from_millis(250));
+        };
+        let first = list
+            .first()
+            .expect("a video capture device is plugged in (Media Foundation listed none in 15 s)");
         let formats = devices.formats(&first.id).expect("formats");
         assert!(
             !formats.is_empty(),

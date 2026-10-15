@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:37ae40ed1c14cfcb", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (#174, #170, #171) into C4b: main didn't edit this section's text; re-read the MfVideoDevices bullet, WindowsCredentials and Tests paragraph against src/video_device/** and credential.rs; dependencies' changes (platform purpose, crate-map) don't touch what it claims" }
+verified = { hash = "b3:9bd72724f2b33c38", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b hardware follow-up: added the Threads line (each call and the capture thread join the MTA with Com::init, as WasapiAudio does; MF objects released before MFShutdown), matching mod.rs and stream.rs; rest of the bullet and the Tests paragraph unchanged" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -184,6 +184,10 @@ The code is ported from spikes S1 to S3. This first cut has:
     averaging the two rows of its block) on that thread, into the same single-slot
     mailbox as display capture. Their colour is what the type declares, else BT.601
     below 720 lines and BT.709 from there, in limited range.
+  - **Threads:** `devices`, `formats` and `open` join the calling thread to the
+    multithreaded apartment for the call, as `WasapiAudio` does, and the capture thread
+    joins it for its lifetime. Each also starts Media Foundation; the thread releases the
+    reader, source and decoder before shutting it down.
   - **Times:** a sample's `MFSampleExtension_DeviceReferenceSystemTime` (QPC in 100 ns,
     `QpcClock`'s time line) when it has one; otherwise the reader's timestamp, anchored
     to `QpcClock` at the first frame.
