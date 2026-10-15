@@ -2,14 +2,14 @@
 id = "ADR-0043"
 title = "Decision tiers v2: the maintainer decides product-level calls only"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0043: Decision tiers v2: the maintainer decides product-level calls only
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
