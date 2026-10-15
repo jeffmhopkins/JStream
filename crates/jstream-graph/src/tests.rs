@@ -5,7 +5,7 @@ use jstream_protocol::{
     Canvas, Crop, Edit, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform,
     KindCategory, KindDescriptor, Media, OutputId, OutputInfo, OutputKind, ParamDescriptor,
     ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Rev, RtmpTarget,
-    SceneId, Settings, Size, SourceId, SourceKind, Vec2,
+    SceneId, SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
 };
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -877,14 +877,17 @@ fn removing_a_middle_hidden_cropped_item_undoes_exactly() {
             add("a", "i2", "cam"),
             Edit::ItemSetTransform {
                 item_id: ItemId::new("i1"),
+                scene_id: None,
                 transform: t,
             },
             Edit::ItemSetVisible {
                 item_id: ItemId::new("i1"),
+                scene_id: None,
                 visible: false,
             },
             Edit::ItemSetCrop {
                 item_id: ItemId::new("i1"),
+                scene_id: None,
                 crop: Crop {
                     left: 4,
                     ..Crop::NONE
@@ -920,6 +923,7 @@ fn deleting_a_middle_scene_undoes_exactly() {
             add("b", "i1", "mic"),
             Edit::ItemSetVisible {
                 item_id: ItemId::new("i0"),
+                scene_id: None,
                 visible: false,
             },
             Edit::SourceDelete {
@@ -979,7 +983,7 @@ mod property {
     use crate::Graph;
     use jstream_protocol::{
         Crop, Edit, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform, OutputId, Rev, SceneId,
-        Size, SourceId, Vec2,
+        SceneRole, Size, SourceId, Vec2,
     };
     use serde_json::{Value, json};
     use std::collections::BTreeSet;
@@ -1029,6 +1033,14 @@ mod property {
         let output = |rng: &mut Rng| rng.pick(&outputs).unwrap_or_else(|| pool(rng, "out"));
         let url = |rng: &mut Rng| urls[rng.below(urls.len())];
         let index = |rng: &mut Rng| u32::try_from(rng.below(6)).expect("fits");
+        // Usually no addressing; sometimes the item's own scene; sometimes another.
+        let address = |rng: &mut Rng, item: &str| match rng.below(4) {
+            0 | 1 => None,
+            2 => state
+                .item(&ItemId::new(item))
+                .map(|(scene, _)| scene.id().clone()),
+            _ => Some(SceneId::new(scene(rng))),
+        };
         let f = |rng: &mut Rng| f32::from(u16::try_from(rng.below(2000)).expect("fits")) - 1000.0;
         // Mostly valid geometries; one in six has a zero width or a tilt.
         let geometry = |rng: &mut Rng| {
@@ -1049,7 +1061,7 @@ mod property {
                 ..ItemGeometry::covering_canvas(1, 1).expect("positive")
             }
         };
-        match rng.below(23) {
+        match rng.below(26) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1070,19 +1082,28 @@ mod property {
                 item_id: ItemId::new(item(rng)),
                 index: index(rng),
             },
-            8 => Edit::ItemSetTransform {
-                item_id: ItemId::new(item(rng)),
-                transform: ItemTransform {
-                    position: Vec2::new(f(rng), f(rng)).expect("finite"),
-                    ..ItemTransform::IDENTITY
-                },
-            },
-            9 => Edit::ItemSetVisible {
-                item_id: ItemId::new(item(rng)),
-                visible: rng.below(2) == 0,
-            },
+            8 => {
+                let item = item(rng);
+                Edit::ItemSetTransform {
+                    scene_id: address(rng, &item),
+                    item_id: ItemId::new(item),
+                    transform: ItemTransform {
+                        position: Vec2::new(f(rng), f(rng)).expect("finite"),
+                        ..ItemTransform::IDENTITY
+                    },
+                }
+            }
+            9 => {
+                let item = item(rng);
+                Edit::ItemSetVisible {
+                    scene_id: address(rng, &item),
+                    item_id: ItemId::new(item),
+                    visible: rng.below(2) == 0,
+                }
+            }
             10 => Edit::ItemSetCrop {
                 item_id: ItemId::new(item(rng)),
+                scene_id: None,
                 crop: Crop {
                     left: u32::try_from(rng.below(3)).expect("fits"),
                     bottom: u32::try_from(rng.below(3)).expect("fits"),
@@ -1137,11 +1158,28 @@ mod property {
             19 => Edit::OutputDelete {
                 output_id: OutputId::new(output(rng)),
             },
-            20 => Edit::ItemSetGeometry {
-                item_id: ItemId::new(item(rng)),
-                geometry: geometry(rng),
+            20 => Edit::SceneSetRole {
+                scene_id: SceneId::new(scene(rng)),
+                role: if rng.below(2) == 0 {
+                    SceneRole::Group
+                } else {
+                    SceneRole::Scene
+                },
             },
-            21 => Edit::ItemAdd {
+            21 => Edit::ItemMove {
+                item_id: ItemId::new(item(rng)),
+                scene_id: SceneId::new(scene(rng)),
+                index: index(rng),
+            },
+            22 => {
+                let item = item(rng);
+                Edit::ItemSetGeometry {
+                    scene_id: address(rng, &item),
+                    item_id: ItemId::new(item),
+                    geometry: geometry(rng),
+                }
+            }
+            23 => Edit::ItemAdd {
                 scene_id: SceneId::new(scene(rng)),
                 item_id: ItemId::new(pool(rng, "i")),
                 source_id: SourceId::new(source(rng)),
@@ -1212,7 +1250,9 @@ mod property {
             "scene.rename",
             "scene.delete",
             "scene.reorder",
+            "scene.set_role",
             "item.add",
+            "item.move",
             "item.remove",
             "item.reorder",
             "item.set_transform",
@@ -1604,6 +1644,291 @@ fn every_edge_adding_edit_is_cycle_checked() {
     );
 }
 
+fn item_move(item: &str, scene: &str, index: u32) -> Edit {
+    Edit::ItemMove {
+        item_id: ItemId::new(item),
+        scene_id: SceneId::new(scene),
+        index,
+    }
+}
+
+fn set_role(scene: &str, role: SceneRole) -> Edit {
+    Edit::SceneSetRole {
+        scene_id: SceneId::new(scene),
+        role,
+    }
+}
+
+fn role(graph: &Graph, scene: &str) -> SceneRole {
+    graph
+        .state()
+        .scene(&SceneId::new(scene))
+        .expect("scene exists")
+        .role()
+}
+
+#[test]
+fn set_role_changes_only_the_role_and_is_reported() {
+    let mut g = fixture();
+    assert_eq!(role(&g, "b"), SceneRole::Scene);
+    let applied = apply_ok(&mut g, vec![set_role("b", SceneRole::Group)]);
+    assert_eq!(applied.inverse.edits, vec![set_role("b", SceneRole::Scene)]);
+    assert_eq!(role(&g, "b"), SceneRole::Group);
+    let QueryResult::SceneList { scenes, .. } = g.scene_list() else {
+        panic!("not a scene list");
+    };
+    let roles: Vec<SceneRole> = scenes.iter().map(|s| s.role).collect();
+    assert_eq!(
+        roles,
+        [SceneRole::Scene, SceneRole::Group, SceneRole::Scene]
+    );
+    let QueryResult::StateGet { scenes, .. } = g.state_get() else {
+        panic!("not a state");
+    };
+    assert_eq!(scenes[1].role, SceneRole::Group);
+    // Setting the same role again changes nothing, and is still undoable.
+    apply_ok(&mut g, vec![set_role("b", SceneRole::Group)]);
+    assert!(matches!(
+        apply_err(&mut g, vec![set_role("nope", SceneRole::Group)]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Scene,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn deleting_a_group_restores_its_role() {
+    let mut g = fixture();
+    apply_ok(
+        &mut g,
+        vec![
+            scene_create("g"),
+            set_role("g", SceneRole::Group),
+            add("g", "gi", "cam"),
+        ],
+    );
+    let applied = apply_ok(
+        &mut g,
+        vec![Edit::SceneDelete {
+            scene_id: SceneId::new("g"),
+        }],
+    );
+    assert!(
+        applied
+            .inverse
+            .edits
+            .contains(&set_role("g", SceneRole::Group))
+    );
+}
+
+#[test]
+fn move_keeps_the_item_and_undoes_to_its_old_place() {
+    let mut g = fixture();
+    apply_ok(
+        &mut g,
+        vec![
+            add("a", "a0", "cam"),
+            add("a", "a1", "mic"),
+            add("a", "a2", "cam"),
+            add("b", "b0", "mic"),
+            Edit::ItemSetVisible {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                visible: false,
+            },
+            Edit::ItemSetCrop {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                crop: Crop {
+                    left: 4,
+                    ..Crop::NONE
+                },
+            },
+        ],
+    );
+    let before = g
+        .state()
+        .item(&ItemId::new("a1"))
+        .expect("exists")
+        .1
+        .clone();
+    // To the bottom of `b`.
+    let applied = apply_ok(&mut g, vec![item_move("a1", "b", 0)]);
+    assert_eq!(applied.inverse.edits, vec![item_move("a1", "a", 1)]);
+    assert_eq!(ids(&g, "a"), ["a0", "a2"]);
+    assert_eq!(ids(&g, "b"), ["a1", "b0"]);
+    let (scene, item) = g.state().item(&ItemId::new("a1")).expect("exists");
+    assert_eq!(scene.id().as_str(), "b");
+    assert_eq!(item, &before, "the move keeps every property");
+    // One past the top of another scene is allowed.
+    apply_ok(&mut g, vec![item_move("a0", "b", 2)]);
+    assert_eq!(ids(&g, "b"), ["a1", "b0", "a0"]);
+    // Within its own scene it is a reorder, and the top is the last index.
+    apply_ok(&mut g, vec![item_move("a0", "b", 0)]);
+    assert_eq!(ids(&g, "b"), ["a0", "a1", "b0"]);
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![item_move("a0", "b", 3)]));
+    assert_eq!(field, "edits.0.index");
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![item_move("a2", "b", 4)]));
+    assert_eq!(field, "edits.0.index");
+    // Into an empty scene, only index 0.
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![item_move("a2", "c", 1)]));
+    assert_eq!(field, "edits.0.index");
+    apply_ok(&mut g, vec![item_move("a2", "c", 0)]);
+    assert_eq!(ids(&g, "c"), ["a2"]);
+    assert!(matches!(
+        apply_err(&mut g, vec![item_move("nope", "c", 0)]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Item,
+            ..
+        }
+    ));
+    assert!(matches!(
+        apply_err(&mut g, vec![item_move("a2", "nope", 0)]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Scene,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn move_is_cycle_checked() {
+    let mut g = fixture();
+    // `a` shows `b`, and `c` holds an item showing `a`. Moving that item into `b` would
+    // make `b` show `a`, which shows `b`.
+    apply_ok(&mut g, vec![add("a", "ab", "sb"), add("c", "ca", "sa")]);
+    let (field, reason) = invalid_reason(apply_err(&mut g, vec![item_move("ca", "b", 0)]));
+    assert_eq!(field, "edits.0.scene_id");
+    assert!(
+        reason.ends_with("scene `b` -> source `sa` -> scene `a` -> source `sb` -> scene `b`"),
+        "{reason}"
+    );
+    // A scene can't take an item that shows the scene itself.
+    let (field, _) = invalid_reason(apply_err(&mut g, vec![item_move("ca", "a", 0)]));
+    assert_eq!(field, "edits.0.scene_id");
+    // Within its own scene a move adds no edge.
+    apply_ok(&mut g, vec![add("c", "c1", "cam"), item_move("ca", "c", 1)]);
+    assert_eq!(ids(&g, "c"), ["c1", "ca"]);
+}
+
+/// ADR-0024 §1's grouping batch and the ungrouping batch keep every item ID, and each
+/// undoes exactly.
+#[test]
+fn grouping_and_ungrouping_keep_item_ids() {
+    let mut g = fixture();
+    apply_ok(
+        &mut g,
+        vec![
+            add("a", "bottom", "cam"),
+            add("a", "x", "mic"),
+            add("a", "y", "cam"),
+            add("a", "top", "mic"),
+        ],
+    );
+    let before = g.state().clone();
+    // Group `x` and `y`: the placement goes at the lowest selected index, then the
+    // selected items move in, bottom first.
+    apply_ok(
+        &mut g,
+        vec![
+            scene_create("grp"),
+            set_role("grp", SceneRole::Group),
+            scene_source("sgrp", "grp"),
+            add("a", "place", "sgrp"),
+            item_move("place", "a", 1),
+            item_move("x", "grp", 0),
+            item_move("y", "grp", 1),
+        ],
+    );
+    assert_eq!(ids(&g, "a"), ["bottom", "place", "top"]);
+    assert_eq!(ids(&g, "grp"), ["x", "y"]);
+    assert_eq!(role(&g, "grp"), SceneRole::Group);
+    // A group can be placed twice, like any scene (ADR-0040 §2).
+    apply_ok(&mut g, vec![add("b", "again", "sgrp")]);
+    // Ungroup: move the children back above the placement, then remove the group.
+    apply_ok(
+        &mut g,
+        vec![
+            Edit::ItemRemove {
+                item_id: ItemId::new("again"),
+            },
+            item_move("x", "a", 2),
+            item_move("y", "a", 3),
+            Edit::ItemRemove {
+                item_id: ItemId::new("place"),
+            },
+            Edit::SourceDelete {
+                source_id: SourceId::new("sgrp"),
+            },
+            Edit::SceneDelete {
+                scene_id: SceneId::new("grp"),
+            },
+        ],
+    );
+    assert_eq!(g.state(), &before);
+}
+
+#[test]
+fn placement_edits_take_only_the_items_own_scene() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "i", "cam")]);
+    let visible = |scene: Option<&str>| Edit::ItemSetVisible {
+        item_id: ItemId::new("i"),
+        scene_id: scene.map(SceneId::new),
+        visible: false,
+    };
+    // Its own scene, named or not, changes the item, and the inverse keeps the address.
+    let applied = apply_ok(&mut g, vec![visible(Some("a"))]);
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::ItemSetVisible {
+            item_id: ItemId::new("i"),
+            scene_id: Some(SceneId::new("a")),
+            visible: true,
+        }]
+    );
+    assert!(
+        !g.state()
+            .item(&ItemId::new("i"))
+            .expect("exists")
+            .1
+            .visible()
+    );
+    apply_ok(&mut g, vec![visible(None)]);
+    // Any other scene is rejected until keyframe scenes exist.
+    let (field, reason) = invalid_reason(apply_err(&mut g, vec![visible(Some("b"))]));
+    assert_eq!(field, "edits.0.scene_id");
+    assert!(reason.contains("keyframe"), "{reason}");
+    for edit in [
+        Edit::ItemSetTransform {
+            item_id: ItemId::new("i"),
+            scene_id: Some(SceneId::new("b")),
+            transform: ItemTransform::IDENTITY,
+        },
+        Edit::ItemSetCrop {
+            item_id: ItemId::new("i"),
+            scene_id: Some(SceneId::new("c")),
+            crop: Crop::NONE,
+        },
+        Edit::ItemSetGeometry {
+            item_id: ItemId::new("i"),
+            scene_id: Some(SceneId::new("b")),
+            geometry: boxed(),
+        },
+    ] {
+        let (field, _) = invalid_reason(apply_err(&mut g, vec![edit]));
+        assert_eq!(field, "edits.0.scene_id");
+    }
+    assert!(matches!(
+        apply_err(&mut g, vec![visible(Some("nope"))]),
+        ProtocolError::NotFound {
+            entity: EntityKind::Scene,
+            ..
+        }
+    ));
+}
+
 /// A 200×100 box centred at (300, 200), rotated 90° clockwise and filled.
 fn boxed() -> ItemGeometry {
     ItemGeometry {
@@ -1620,6 +1945,7 @@ fn boxed() -> ItemGeometry {
 fn set_geometry(item: &str, geometry: ItemGeometry) -> Edit {
     Edit::ItemSetGeometry {
         item_id: ItemId::new(item),
+        scene_id: None,
         geometry,
     }
 }
@@ -1646,6 +1972,7 @@ fn set_geometry_converts_a_legacy_item_and_undo_restores_the_transform() {
             add("a", "i1", "cam"),
             Edit::ItemSetTransform {
                 item_id: ItemId::new("i1"),
+                scene_id: None,
                 transform: moved,
             },
         ],
@@ -1656,6 +1983,7 @@ fn set_geometry_converts_a_legacy_item_and_undo_restores_the_transform() {
         applied.inverse.edits,
         vec![Edit::ItemSetTransform {
             item_id: ItemId::new("i1"),
+            scene_id: None,
             transform: moved,
         }]
     );
@@ -1664,6 +1992,7 @@ fn set_geometry_converts_a_legacy_item_and_undo_restores_the_transform() {
         &mut graph,
         vec![Edit::ItemSetTransform {
             item_id: ItemId::new("i1"),
+            scene_id: None,
             transform: moved,
         }],
     );
