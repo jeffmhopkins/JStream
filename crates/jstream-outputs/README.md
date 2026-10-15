@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:6631879d7dd3cefb", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main into D7b: took main's stamp; re-read; stale only via ARCH#threading's Collector row (mixer collector frees removed buses and filter chains), which this crate doesn't rely on; holds" }
+verified = { hash = "b3:09934957248a5beb", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (U0-U5, D7b, D8, C5, B6-r, B9, B10, ...) into #237: took main's stamp; stale only via ARCH#threading's Collector row (mixer collector also frees buses and filter chains), which this crate doesn't rely on; re-read; the Transport bullet's shutdown text (#209, #236) and main's text hold" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
