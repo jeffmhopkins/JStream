@@ -378,7 +378,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 ## Threads, clock and sync
 <!-- @section
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0032-live-edits-and-undo.md", "docs/adr/0035-clap-plugins-out-of-process.md"]
-verified = { hash = "b3:a736f599f1a6e11e", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (E1 #172): the render collector is now one per program stage, shared by every running output, not one per output; Collector row and render-snapshot paragraph say so; rest is E1's model and holds" }
+verified = { hash = "b3:7d2feead6f32e91a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: Collector row now says the program stage's collector is fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs) and the mixer's own frees input rings; matches launch_program, push_each and Program::drop (render, mixer, then collector); render-snapshot paragraph holds" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
@@ -396,7 +396,7 @@ every mix runs at the base rate divided by an integer.
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage's render thread while any output runs, and the mixer's own for the mixer and audio threads. |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, GPU images, finished sessions' inputs), and the mixer's own for the input rings the mixer and audio threads release. |
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
 next to its code, which that section covers: the output pipeline in

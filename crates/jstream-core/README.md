@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:3781fc7aa81d5502", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#179 C1a): C1a's Kinds bullet (registry from jstream-sources) is main's; Runtime bullet keeps the shared program stage with E1's render snapshot; holds" }
+verified = { hash = "b3:7cd4b8f078f2dcab", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review N6/N7: pipeline.rs module docs and push_each test only; Runtime bullet holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -136,7 +136,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c64c39e7769e2bb4", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#214 ADR-0041): #214 only repoints ADR-0034 links to ADR-0041 here; re-read against F3's merged text (encoder profiles, protocol 0.13, shared program stage), both hold" }
+verified = { hash = "b3:16b7772a97d6b112", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review N6/N7: push_each refactored to take a retire closure (unit-tested); render and mixer still hand finished inputs to the program stage's collector, joined after both threads; text holds" }
 -->
 
 ### Engine and sessions
@@ -773,7 +773,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:949ce870e72aed2c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B4: render and mixer threads hand a finished session's input to the collector rather than drop it; what they let go of (snapshots, GPU images, finished inputs) goes to jstream-collector; matches pipeline.rs push_each and render.rs Garbage::Video/Audio" }
+verified = { hash = "b3:65493ddbfc38461c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5/N7: last sentence now says the mixer also has its own collector for input rings, beside the program stage's collector the render and mixer threads feed; push_each now takes a retire closure, behaviour unchanged" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
@@ -817,5 +817,5 @@ or mixer panic) is a channel message to a watcher the control thread started; th
 watcher emits `failed` and stops the pipeline. A program-stage failure reaches every
 running output. Frame hand-off is the encoder session queues. The audio and outputs
 snapshots and a GPU encode target are still rows of the ARCH thread table, not this
-cut. The mixer has its own collector so far, which frees only input rings and their
+cut. The mixer also has its own collector, which frees only input rings and their
 counters.

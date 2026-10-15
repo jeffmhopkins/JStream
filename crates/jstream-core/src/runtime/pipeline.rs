@@ -1,11 +1,13 @@
-//! Starts and stops one output's threads.
+//! Starts and stops the program stage every running output shares, and each output's
+//! own threads.
 //!
 //! Capture is the platform's mailbox, read by the render thread. The render thread
 //! composites the program mix from the render snapshot the control side published
 //! ([`RenderHub`]) and, because the fake GPU interop has no encode target, reads the
 //! frame back and pushes CPU RGBA. What it lets go of (a replaced snapshot, GPU images
-//! past their frame fence) goes to the `jstream-collector` thread (R-RT-003). The
-//! mixer thread polls the engine clock. Encode threads live inside the encoder sessions. The output thread muxes
+//! past their frame fence, a finished encoder session's input) goes to the program
+//! stage's `jstream-collector` thread (R-RT-003), and so does a finished session's
+//! input the mixer thread lets go of. The mixer thread polls the engine clock. Encode threads live inside the encoder sessions. The output thread muxes
 //! FLV and publishes it, or muxes fragmented MP4 and writes it to a recording file
 //! ([`Sink`]). None of those threads lock the engine's collection.
 //!
@@ -282,7 +284,7 @@ pub(crate) type EncodeKey = (Option<EncoderProfileId>, EncoderProfile);
 pub(crate) struct Program {
     stop: Arc<AtomicBool>,
     render: Option<JoinHandle<()>>,
-    /// Frees what the render thread lets go of. It ends once the render thread has.
+    /// Frees what the render and mixer threads let go of. It ends once both have.
     collector: Option<JoinHandle<()>>,
     mixer: Option<JoinHandle<()>>,
     forward: Option<JoinHandle<()>>,
@@ -1304,9 +1306,11 @@ fn render_loop(job: RenderJob) {
         }
         drops.publish(capture_drops(frames.capture).saturating_add(render_tick_drops(skipped)));
         if !frames.shown.is_empty() {
-            push_each(&mut targets, &collector, Garbage::Video, |input| {
-                push_frame(input, size, due, &frames.shown)
-            });
+            push_each(
+                &mut targets,
+                |input| push_frame(input, size, due, &frames.shown),
+                |input| collector.free(Garbage::Video(input)),
+            );
         }
         next = match due.checked_add(period) {
             Ok(next) => Some(next),
@@ -1429,22 +1433,17 @@ fn push_frame(input: &VideoInput, size: FrameSize, pts: MediaTime, rgba: &[u8]) 
 }
 
 /// Pushes into every session in `targets` with `push`, which says whether the session
-/// still takes input. A finished one goes to the collector rather than being dropped
-/// here: once its session has dropped, this is the last reference to the session's
-/// shared state and input channel, and freeing them is not a real-time thread's job
-/// (R-RT-003). The order of `targets` does not matter.
-fn push_each<T>(
-    targets: &mut Vec<T>,
-    collector: &Collector,
-    garbage: fn(T) -> Garbage,
-    mut push: impl FnMut(&T) -> bool,
-) {
+/// still takes input. A finished one is taken out and given to `retire`, which hands it
+/// to the collector rather than dropping it here: once its session has dropped, this is
+/// the last reference to the session's shared state and input channel, and freeing them
+/// is not a real-time thread's job (R-RT-003). The order of `targets` does not matter.
+fn push_each<T>(targets: &mut Vec<T>, mut push: impl FnMut(&T) -> bool, mut retire: impl FnMut(T)) {
     let mut i = 0;
     while i < targets.len() {
         if push(&targets[i]) {
             i += 1;
         } else {
-            collector.free(garbage(targets.swap_remove(i)));
+            retire(targets.swap_remove(i));
         }
     }
 }
@@ -1507,8 +1506,6 @@ fn mixer_loop(
                 // early end themselves.
                 push_each(
                     &mut targets,
-                    collector,
-                    Garbage::Audio,
                     |input| match AudioBuffer::new(format, block.pts, samples.clone()) {
                         Ok(buffer) => !matches!(input.push(buffer), Err(PushError::Closed)),
                         Err(err) => {
@@ -1516,6 +1513,7 @@ fn mixer_loop(
                             true
                         }
                     },
+                    |input| collector.free(Garbage::Audio(input)),
                 );
                 if let Some(err) = rejected {
                     report(fail, format!("mixer block rejected: {err}"));
@@ -1708,12 +1706,35 @@ fn report_link(sink: &Sink, last: LinkState, fail: &Sender<PipelineEvent>) -> Li
 
 #[cfg(test)]
 mod tests {
-    use super::{catch_up, video_config};
+    use super::{catch_up, push_each, video_config};
     use jstream_media::{FrameSize, MediaTime, Timebase};
     use jstream_platform::{HardwarePreference, RateControl};
     use jstream_protocol::{
         EncoderProfile, HardwarePreference as ProfileHardware, RateControl as ProfileRate,
     };
+
+    /// Every target is pushed once; exactly the ones that refuse are taken out and
+    /// retired (handed to the collector), and the rest stay.
+    #[test]
+    fn a_finished_target_is_retired_not_dropped() {
+        let mut targets = vec![1, 2, 3, 4, 5];
+        let mut pushed = Vec::new();
+        let mut retired = Vec::new();
+        push_each(
+            &mut targets,
+            |&target| {
+                pushed.push(target);
+                target % 2 == 1
+            },
+            |target| retired.push(target),
+        );
+        pushed.sort_unstable();
+        targets.sort_unstable();
+        retired.sort_unstable();
+        assert_eq!(pushed, [1, 2, 3, 4, 5]);
+        assert_eq!(targets, [1, 3, 5]);
+        assert_eq!(retired, [2, 4]);
+    }
 
     /// A profile maps onto the encoder config field by field; its keyframe interval in
     /// seconds becomes frames at the program's 30 fps.
