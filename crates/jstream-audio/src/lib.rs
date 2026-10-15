@@ -44,6 +44,7 @@ pub use handle::{
     MasterControl, OutputTapControl, OutputTapId,
 };
 pub use rt::chain::{FilterParams, FilterSpec};
+pub use rt::host::HostMemory;
 pub use rt::input::InputProducer;
 pub use rt::mixer::{Block, Mixer, MixerConfig, MixerControl};
 pub use rt::shared::MeterReading;
