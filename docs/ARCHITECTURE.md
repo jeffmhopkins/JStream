@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:546b8a0e7430e457", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; apps changes are test goldens only (CLI reads PROTOCOL_VERSION); diagram and host table hold" }
+verified = { hash = "b3:60268b29b996f021", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: re-read; apps changes are CLI test goldens and geometry: None fields; diagram and host table hold" }
 -->
 
 ```
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:469cd47b05c605ba", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Built so far merged: settings checked and stored complete, settings-reference edges and delete rejection (B4), and outputs with Rtmp Generic url (#142); Not yet drops settings and keeps kind versions; checked against graph model/mod.rs" }
+verified = { hash = "b3:ede98318a54f3be7", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: Built so far lists the placement (geometry or legacy) and the canvas at 0.9 with 3D rejected; Not yet replaces canvas/geometry with 3D geometry; checked against graph model/mod.rs" }
 -->
 
 ```
@@ -340,8 +340,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 - **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind ID or a nested
   scene, with `settings` checked against the kind's descriptor and stored complete; no
   filters yet), scenes in display order, and items in stacking order with `source_id`,
-  protocol 0.3's 2D transform (top-left corner and scale, which ADR-0022 replaces),
-  `crop` and `visible`. Items refer to sources; they never copy them. Scene and source
+  a placement, `crop` and `visible`. The placement is a `geometry` or, until 1.0, a
+  legacy placement (protocol 0.3's 2D transform as written), and the collection has
+  its `canvas` (protocol 0.9); non-neutral 3D geometry is still rejected. Items refer to sources; they never copy them. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
@@ -350,8 +351,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the URL checked to carry no credential. A stream key is never collection state: it
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
   Not yet: kind versions on stored settings, filters, source audio settings, `opacity`, `blend`, the reserved
-  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, the canvas,
-  `geometry`, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
+  `effects[]`, `duplicated_from`, `item.set_source`, the transition fields, 3D
+  geometry, scene `role` and `item.move`, the `scene_id` addressing of placement edits,
   variants and overrides, folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses, encoder profile and chains, the
   `YouTube`, `Record` and `VirtualCam` kinds, and everything outside `sources`, `scenes`
@@ -496,7 +497,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1a7f8a46e389a409", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): output edits and stream-key bullets (#142) and kind queries marked protocol 0.8 (B4); queries bullet lists output.list and kind.list/describe; transport bullets unchanged" }
+verified = { hash = "b3:4f36fff0eb27c853", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: only jstream-protocol geometry.rs tests changed since the last verify; Edits and Queries bullets hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -512,7 +513,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   id, and placement edits take an optional `scene_id` so they can write a keyframe
   scene's override ([ADR-0024](adr/0024-scene-structure.md); not built yet).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
-  outputs (protocol 0.7).
+  outputs (protocol 0.7). `canvas.set_size` and `item.set_geometry` set the canvas and
+  an item's box ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.9),
+  which deprecates `item.set_transform`.
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -547,7 +550,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   encoder refuses a session, `output.start` fails with a stable session-limit error code
   naming the outputs that hold sessions, with no fallback to a software encoder
   ([ADR-0027](adr/0027-program-master-and-output-chains.md)).
-- **Queries** (`state.get` → state + `rev`, `scene.list`, `source.list`, `item.list`,
+- **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `video.snapshot` → the program mix as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
@@ -596,11 +599,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:cc2b2df213a2b7f3", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): grouped tools list includes kind and output; tools.snap is about 79 KB, so the size line says about 80 KB" }
+verified = { hash = "b3:547bfcea8c0099ff", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: grouped tools list includes canvas; tools.snap is now about 97 KB, so the size line says about 95 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -610,7 +613,7 @@ verified = { hash = "b3:cc2b2df213a2b7f3", by = "agent:claude@session_011XVJmf1Y
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 80 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 95 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -639,7 +642,7 @@ verified = { hash = "b3:cc2b2df213a2b7f3", by = "agent:claude@session_011XVJmf1Y
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:40d6041b79574568", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the one-scene paragraph against the premultiply-on-upload change: the composite still writes premultiplied linear into Rgba16Float and resolves to Rgba8UnormSrgb, blend still premultiplied src-over; source alpha handling is detailed in the crate README, not here. Steps 1-6 unchanged." }
+verified = { hash = "b3:273a4e222bca7134", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: One-scene compositor paragraph describes both placement forms through the shared formula, fit modes built with fill clipped; still-outside list drops fit modes; transitions and measurements unchanged" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
@@ -666,16 +669,18 @@ The Windows path is validated by **spike S1 in M0** before M1 builds on it:
    back and reports it.
 
 **One-scene compositor** (`jstream-render`), the part of step 3 that is built. It draws
-one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement is
-that 0.3 evaluation from `jstream-protocol`'s `legacy_quad` (crop in source pixels, scale
-against the current source size, top-left at `position`, clockwise rotation about that
-corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
+one canvas: a straight-alpha sRGB clear and a bottom-first stack of images. Placement
+is evaluated with `jstream-protocol`'s shared formula in either of ADR-0022's forms: a
+geometry (crop in source pixels, fitted into the box by `stretch`, `fit` or `fill`,
+which is clipped to the box, then rotated about the box centre), or a legacy 0.3
+transform through `legacy_quad` (crop, scale against the current source size,
+top-left at `position`, clockwise rotation about that corner). Opacity is a straight multiplier in `[0, 1]` and the blend is premultiplied
 src-over. The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a software adapter
 first. Still outside this crate: the render thread, NV12/P010 conversion (steps 4 and 5),
-fit modes, 3D, effect packs, and the output path below.
+3D, effect packs, and the output path below.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md)), not built yet. A Move is not a
 texture blend: during it, the program mix is a synthetic item list whose transforms and

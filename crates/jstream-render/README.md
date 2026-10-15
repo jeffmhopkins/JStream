@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:10fb68e90ec3ddda", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rewrote the source-image bullet: uploads are premultiplied in linear light into Rgba16Float (image.rs premultiply_to_f16), imports stay Rgba8/Bgra8UnormSrgb read as straight alpha (Alpha::Straight). Added the bullet that render refuses another compositor's Image with Invalid (Owner check in prepare). Placement via legacy_quad, readback and not-in-this-cut list unchanged." }
+verified = { hash = "b3:7917cfcabd78f096", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: What one scene means now lists both placement forms (geometry fit/fill clip/rotation about centre, legacy); scene types bullet names Placement::Geometry(ItemGeometry) and LegacyTransform and the 3D Invalid; Not in this cut drops fit modes (place.rs boxed)" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -36,12 +36,17 @@ and calls this crate.
 - A canvas size (`jstream-media`'s `FrameSize`: both dimensions non-zero) and a
   straight-alpha sRGB clear colour.
 - Items in stacking order, bottom first, matching `Scene::items`.
-- Each item places one image with the **legacy 0.3 placement**
-  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) decision 5): crop in
-  source pixels, then scale the remaining rectangle by `scale` relative to the
-  source's current size, put its top-left at `position` in canvas pixels, and rotate
-  clockwise about that corner. The source size is the image's size, which is runtime
-  state, so the compositor evaluates it on every `render`.
+- Each item places one image with one of
+  [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two placement forms:
+  - a **geometry** (decisions 2 and 3): a box on the canvas. The image is cropped in
+    source pixels, fitted into the box by its fit mode (`stretch`, `fit` or `fill`,
+    which is clipped to the box), and rotated clockwise about the box's centre;
+  - a **legacy 0.3 placement** (decision 5): crop in source pixels, then scale the
+    remaining rectangle by `scale` relative to the source's current size, put its
+    top-left at `position` in canvas pixels, and rotate clockwise about that corner.
+
+  Both depend on the image's size, which is runtime state, so the compositor evaluates
+  the placement on every `render`.
 - `visible == false`, a crop that leaves no pixels, or a scale of zero draws nothing.
 - Opacity is a straight-alpha multiplier in `[0, 1]`, default 1. The graph does not
   store it; the snapshot carries it so `jstream-core` can pass it when it does
@@ -73,20 +78,22 @@ and calls this crate.
   compositor's identity, and `render` refuses an item whose image came from another
   one with `RenderError::Invalid` before any GPU work, instead of reaching wgpu's panic
   on a foreign bind group.
-- The public scene types stay `Placement` and `Crop`: the same fields as the
-  protocol's `ItemTransform` and `Crop` (top-left `position`, `scale`, clockwise
-  `rotation_deg`; crop insets in source pixels), so the engine's mapping is field by
-  field. `place` maps them onto those protocol types and calls `legacy_quad` for the
-  corners and UVs. Fit modes and 3D are still not drawn here.
+- The public scene types are `Placement` and `Crop`. `Placement::Geometry` holds the
+  protocol's own `ItemGeometry`, and `Placement::Legacy` a `LegacyTransform` with the
+  same fields as the protocol's `ItemTransform` (top-left `position`, `scale`,
+  clockwise `rotation_deg`); `Crop` has the protocol's insets in source pixels. So the
+  engine's mapping is field by field, and `place` evaluates both with the protocol's
+  shared functions ([Placement math](#design)). 3D is not drawn: a geometry with a
+  non-neutral 3D field is `RenderError::Invalid`.
 - Readback is an owned tightly packed RGBA8 buffer, straight alpha, sRGB transfer,
   BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.
 
 **Not in this cut.** The render thread (`frame_loop.rs`), arc-swap snapshots, NV12 or
 P010 conversion, encode-target export and the D3D12 `PRESENT` transition, WGSL effect
-packs, fit modes, 3D tilt/turn/depth/perspective, transitions, the master chain and
-the privacy stage. The protocol formula for fit modes and 3D exists; this crate
-still does not draw them. 3D fields stay neutral until M3. The GPU pipeline's encode
+packs, 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
+stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
+fields stay neutral until M3. The GPU pipeline's encode
 steps stay in
 [ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline).
 
@@ -95,7 +102,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:8c2fbfe838d7906d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Rewrote Passes 1-2 against image.rs/composite.wgsl/compositor.rs: CPU sRGB-decode LUT, premultiply, binary16 into Rgba16Float via write_texture without row padding; shader multiplies by sampled alpha only for straight imports, then by opacity; vertex is six f32 (24 bytes). Added the foreign-image Invalid case. Resolve, readback (still 256-byte rows), resources table and R-RT-002 still hold; the owner check allocates only on error." }
+verified = { hash = "b3:c167e74aa056e715", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: Placement math gains the Geometry paragraph (content, local-frame clip with proportional UVs, place, affine with neutral 3D) checked against place.rs; legacy list unchanged; passes, device selection and resources unchanged" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -170,9 +177,24 @@ are a separate owned copy.
 
 ### Placement math
 
-Canvas coordinates: x right, y down, origin at the top left. `place` asks
-[`legacy_quad`](../jstream-protocol/src/geometry.rs) for the quad. For a source of size
-`(sw, sh)` and crop `(left, top, right, bottom)` that function:
+Canvas coordinates: x right, y down, origin at the top left. Every quad comes from the
+protocol's shared formula ([`geometry.rs`](../jstream-protocol/src/geometry.rs)), so
+what the compositor draws and what a UI overlay computes cannot disagree.
+
+**Geometry.** `ItemGeometry::content` gives the cropped image's rectangle in the box's
+local frame (origin at the box centre, before rotation) and its UVs: the whole box for
+`stretch`, the centred largest rectangle of the crop's aspect ratio for `fit`, the
+centred smallest covering one for `fill`. `place` intersects that rectangle with the
+box, which only changes `fill`, and cuts the UVs in proportion, so the clip needs no
+scissor or shader change. Clipping in the local frame is exact for any in-plane
+rotation. `ItemGeometry::place` then maps the four clipped corners: rotation about the
+centre, then `center` added. With 3D neutral that mapping is affine, so linear UVs
+across the quad are correct; a non-neutral 3D field would need perspective-correct
+UVs, and is refused until M3.
+
+**Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
+quad. For a source of size `(sw, sh)` and crop `(left, top, right, bottom)` that
+function:
 
 - takes `cw = sw - left - right`, `ch = sh - top - bottom`, and skips when either is
   `<= 0` or the source size is zero;
@@ -216,7 +238,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:96c3b86ad5f1598c", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Added the alpha-edge, straight-import and foreign-compositor GPU tests and the adapter-free f16/premultiply/owner unit tests to What is checked. Fixed CI install: per open() in tests.rs a macOS runner without Metal panics because CI is set; the macos job is continue-on-error (ci.yml), not a skip. Device lock, skip-outside-CI and no goldens unchanged." }
+verified = { hash = "b3:341bf9b42de5d1d5", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: added Geometry goldens (sampled text grids in tests.rs: fit, fill clip, stretch 90 deg, crop, legacy, rotated box) and why they are not R-TEST-003 PNGs; tolerance, device lock, skip and CI install unchanged" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -236,6 +258,17 @@ partial-alpha blend, where implementations round differently. Sampling stays off
 quad edge. That is a pixel check on both CI operating systems, which is stronger than
 a Linux run that only proves the frame compiled, and it does not freeze a WARP image
 the golden tooling cannot update.
+
+**Geometry goldens.** The ADR-0022 placements are checked as small text grids rather
+than images: the scene is sampled every 4 pixels, each sample classified as black,
+red, green, blue, white, or `?`, and the grid compared with one written in the test.
+Every box edge and every band edge in the test images sits more than a texel away
+from a sample, so the grid is the same on lavapipe and on WARP, and a reviewer reads
+the expected layout in the diff. These are not R-TEST-003's golden PNGs under
+`tests/golden/`, which wait for `cargo xtask golden`. The grids cover `fit`
+(letterboxed), `fill` (clipped to the box, the middle of the image showing), `stretch`
+rotated 90° about the box centre, crop before fitting, a legacy item beside them, and
+a non-axis-aligned box turning about its centre.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; integer scale; 90° rotation about the top-left; opacity over an
@@ -279,9 +312,6 @@ adds a package so tests can render, and it does not weaken a check.
 <!-- @section
 -->
 
-- **Geometry and fit modes.** `place.rs` calls `legacy_quad` for the 0.3 placement.
-  The snapshot still carries `Placement` and `Crop`, not `ItemGeometry`. `fill` still
-  needs a clip to the box, which this pipeline does not have, and 3D is not drawn.
 - **3D.** `tilt_deg`, `turn_deg`, `depth_px` and `perspective_px` are fields on
   `ItemGeometry` and default to neutral. `is_neutral_3d` is the check an engine uses
   to reject a non-neutral value until M3 draws it. No 3D uniforms here.
@@ -302,8 +332,8 @@ adds a package so tests can render, and it does not weaken a check.
 - **Background.** The clear colour is a field of the snapshot. `Scene.background` is
   not in the graph.
 - **Golden files.** When `cargo xtask golden` exists, WARP renders under
-  `tests/golden/` should freeze the cases these tolerance checks cover. Until then
-  the tolerance checks are the pixel oracle on both software adapters.
+  `tests/golden/` should freeze the cases these tolerance checks and geometry grids
+  cover. Until then they are the pixel oracle on both software adapters.
 - **Render thread.** Per-frame work is bounded for a caller that reuses `Image`s, but
   the thread, the snapshot swap and the panic boundary
   ([R-RT-006](../../docs/RULES.md#R-RT-006)) belong to `jstream-core`.

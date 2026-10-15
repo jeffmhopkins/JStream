@@ -2,6 +2,7 @@
 
 use crate::command::{Crop, ItemTransform, SourceKind};
 use crate::event::OutputState;
+use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
 use crate::id::{ItemId, OutputId, Rev, SceneId, SourceId};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::output::OutputInfo;
@@ -37,9 +38,9 @@ pub enum Query {
         /// The scene whose items to list.
         scene_id: SceneId,
     },
-    /// Reads the whole collection state (every source, every scene with its items, and
-    /// every output) at one revision: what a client reads on connecting, after a `state.changed` it
-    /// didn't cause, or before an edit it sends with `expected_rev`.
+    /// Reads the whole collection state (the canvas, every source, every scene with its
+    /// items, and every output) at one revision: what a client reads on connecting, after
+    /// a `state.changed` it didn't cause, or before an edit it sends with `expected_rev`.
     #[serde(rename = "state.get")]
     StateGet,
     /// The current program mix, as a PNG.
@@ -133,6 +134,10 @@ pub enum QueryResult {
     StateGet {
         /// The revision the state was read at.
         rev: Rev,
+        /// The canvas every scene is laid out on. Missing (from a server older than 0.9)
+        /// parses as 1920×1080.
+        #[serde(default)]
+        canvas: Canvas,
         /// Every source, ordered by ID.
         sources: Vec<SourceInfo>,
         /// Every scene with its items, in display order.
@@ -241,8 +246,19 @@ pub struct ItemInfo {
     pub item_id: ItemId,
     /// The source it places.
     pub source_id: SourceId,
-    /// Where it sits in its scene.
+    /// Which form its placement is stored in. Missing (from a server older than 0.9)
+    /// parses as `legacy`.
+    #[serde(default)]
+    pub placement: PlacementForm,
+    /// **Deprecated** since 0.9 (ADR-0022), removed in 1.0: read `geometry`. For a
+    /// legacy item, the stored transform exactly as written. For a geometry item, a
+    /// view computed from the geometry alone: the box's rotated top-left corner, its
+    /// rotation, and scale (1, 1).
     pub transform: ItemTransform,
+    /// The stored geometry. Absent for a legacy item, whose box depends on the source's
+    /// runtime size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub geometry: Option<ItemGeometry>,
     /// How much of the source it cuts off.
     pub crop: Crop,
     /// Whether it is drawn.

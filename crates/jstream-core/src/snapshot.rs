@@ -16,22 +16,17 @@ use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use jstream_graph::{Graph, State};
+use jstream_graph::{Graph, Placement as GraphPlacement, State};
 use jstream_media::FrameSize;
 use jstream_protocol::{
-    Crop as ProtocolCrop, ItemTransform, ProtocolError, QueryResult, Rev, SceneId, SourceId,
-    SourceKind,
+    Canvas, Crop as ProtocolCrop, ProtocolError, QueryResult, Rev, SceneId, SourceId, SourceKind,
 };
 use jstream_render::{
-    Color, Compositor, Crop, Image, Item, OpenOptions, Placement, RenderError, Scene, Snapshot,
+    Color, Compositor, Crop, Image, Item, LegacyTransform, OpenOptions, Placement, RenderError,
+    Scene, Snapshot,
 };
 
 use crate::lock;
-
-/// ADR-0022's default canvas. `canvas.set_size` is not in the protocol yet, so every
-/// snapshot uses this size.
-const CANVAS_WIDTH: u32 = 1920;
-const CANVAS_HEIGHT: u32 = 1080;
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
@@ -117,6 +112,8 @@ struct Placed {
 /// Everything `draw` needs, owned so the collection lock can be dropped first.
 pub(crate) struct Shot {
     rev: Rev,
+    /// The collection's canvas: the size every scene, nested ones included, is drawn at.
+    canvas: Canvas,
     /// The first scene in display order. `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
@@ -133,6 +130,7 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
     }
     Shot {
         rev: graph.rev(),
+        canvas: state.canvas(),
         program,
         scenes,
     }
@@ -169,7 +167,7 @@ fn collect(
             };
             placed.push(Placed {
                 source,
-                placement: placement(item.transform()),
+                placement: placement(item.placement()),
                 crop: crop(item.crop()),
             });
         }
@@ -178,11 +176,21 @@ fn collect(
     path.remove(id);
 }
 
-fn placement(transform: &ItemTransform) -> Placement {
-    Placement {
-        position: [transform.position.x.get(), transform.position.y.get()],
-        scale: [transform.scale.x.get(), transform.scale.y.get()],
-        rotation_deg: transform.rotation_deg.get(),
+/// The compositor's placement for an item's stored one, in the same form (ADR-0022): a
+/// legacy transform is evaluated against the frame's size when it is drawn.
+fn placement(placement: &GraphPlacement) -> Placement {
+    match placement {
+        GraphPlacement::Geometry(geometry) => Placement::Geometry(*geometry),
+        GraphPlacement::Legacy(transform) => Placement::Legacy(LegacyTransform {
+            position: [transform.position.x.get(), transform.position.y.get()],
+            scale: [transform.scale.x.get(), transform.scale.y.get()],
+            rotation_deg: transform.rotation_deg.get(),
+        }),
+        // A placement form newer than this engine draws nothing rather than guessing.
+        _ => Placement::Legacy(LegacyTransform {
+            scale: [0.0, 0.0],
+            ..LegacyTransform::IDENTITY
+        }),
     }
 }
 
@@ -424,7 +432,7 @@ fn draw(shot: &Shot, compositor: &mut Compositor) -> Result<QueryResult, Protoco
     let mut stack = BTreeSet::new();
     let full = match &shot.program {
         Some(id) => render_scene(compositor, shot, id, &mut stack)?,
-        None => paint(compositor, &[])?,
+        None => paint(compositor, shot.canvas, &[])?,
     };
     let (width, height) = fit(full.width(), full.height());
     let rgba = scale_down(full.width(), full.height(), full.rgba(), width, height);
@@ -445,7 +453,7 @@ fn render_scene(
     stack: &mut BTreeSet<SceneId>,
 ) -> Result<Snapshot, ProtocolError> {
     if !stack.insert(id.clone()) {
-        return paint(compositor, &[]);
+        return paint(compositor, shot.canvas, &[]);
     }
     let layers = shot.scenes.get(id).map(Vec::as_slice).unwrap_or(&[]);
     let mut stored = Vec::with_capacity(layers.len());
@@ -469,7 +477,7 @@ fn render_scene(
             visible: true,
         })
         .collect();
-    let snapshot = paint(compositor, &items)?;
+    let snapshot = paint(compositor, shot.canvas, &items)?;
     stack.remove(id);
     Ok(snapshot)
 }
@@ -485,8 +493,12 @@ fn upload(
         .map_err(from_render)
 }
 
-fn paint(compositor: &mut Compositor, items: &[Item<'_>]) -> Result<Snapshot, ProtocolError> {
-    let canvas = FrameSize::new(CANVAS_WIDTH, CANVAS_HEIGHT).map_err(|_| RenderError::Invalid {
+fn paint(
+    compositor: &mut Compositor,
+    canvas: Canvas,
+    items: &[Item<'_>],
+) -> Result<Snapshot, ProtocolError> {
+    let canvas = FrameSize::new(canvas.width, canvas.height).map_err(|_| RenderError::Invalid {
         what: "canvas",
         detail: "the canvas size is zero".into(),
     });

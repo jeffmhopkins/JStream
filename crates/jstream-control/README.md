@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:7ef650d094893271", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; trait, errors, mock and ws bullets hold for mock.rs with both settings and key_set changes" }
+verified = { hash = "b3:1b1ff7c990a85176", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: re-read; trait, errors, mock and ws bullets still hold with the mock's canvas and geometry support" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:d8d8be3bd6a0c3ef", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Mock section merged: output.status key_set false, sources keep names, kinds and settings; settings checks, settings-reference delete rejection and 0.7 output fallthroughs (internal) all match mock.rs" }
+verified = { hash = "b3:e97b8025ea2c4922", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: Mock section adds the geometry/canvas checks (geometry_view, check_canvas_side in mock.rs, same fields and reasons as the graph) and the read of canvas and placement; outputs still internal" }
 -->
 
 ### The trait
@@ -108,6 +108,8 @@ protocol's rules for them:
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
   - reorder indices out of range;
+  - both `transform` and `geometry` on `item.add`, a geometry that is not positive,
+    not finite or not neutral in 3D, and a canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source shows, or
     either while a source's settings refer to it;
   - nesting cycles.
@@ -122,7 +124,8 @@ protocol's rules for them:
   `source.list` (ordered by ID) and `item.list` (bottom first; `not_found` for a missing
   scene), each at the current `rev`, and `output.status`, whose `key_set` is always
   `false` because the mock has no key store. So it keeps everything an edit sets:
-  source names, kinds and settings, and each item's transform, crop and visibility.
+  the canvas, source names, kinds and settings, and each item's placement (its
+  transform, or its geometry and the transform view of it), crop and visibility.
   `video.snapshot` is not one of those reads: the mock has no compositor and answers
   it with `internal`, as it does for any protocol variant it does not implement. The
   0.7 output configuration is not implemented either: `output.create`,

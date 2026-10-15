@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:15e8ec2e9262bce9", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; contents list holds for both (run.rs ignores key_set/outputs and settings alike)" }
+verified = { hash = "b3:0b76cc0738c0d4f8", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: re-read; contents list holds (args.rs/run.rs only gained geometry: None fields)" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:46f8a234ede5d0ab", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Edits bullet merged to say settings and outputs are both unsupported (args.rs has source.rename, no settings or output edits); Reads bullet keeps #142's outputs/key_set note; version line reads PROTOCOL_VERSION" }
+verified = { hash = "b3:4f91ae6e9af5e439", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: Edits bullet says canvas.set_size, item.set_geometry and item.add geometry are not in the CLI and item.add makes a legacy item (args.rs sends geometry: None); Reads bullet says a geometry item's columns are the transform view and only --json shows geometry and canvas (run/tests.rs goldens)" }
 -->
 
 ```sh
@@ -98,7 +98,10 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `source.create` with settings, need a JSON argument form the CLI doesn't have yet, so
   a source it creates gets its kind's defaults. Protocol 0.7's output edits
   (`output.create`, `output.set_target`, `output.delete`), `output.list` and the
-  stream-key actions are not in the CLI yet. Several edits on one line go as **one atomic batch**: one new
+  stream-key actions are not in the CLI yet, nor are protocol 0.9's
+  `canvas.set_size`, `item.set_geometry` and `item.add`'s `geometry`
+  ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)); `item.add` sends
+  neither placement, so its item is a legacy one. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
 - **Output:** human-readable by default; a call's line ends with its request ID
   (`applied: rev 4 (req_1)`, `output.start accepted for out_1 (req_1)`), which matches
@@ -110,7 +113,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   sources with their kind in the `source.create` spelling (`builtin:webcam`,
   `scene:main`); items bottom first, with `VISIBLE`, `POSITION` (`x,y`), `SCALE`,
   `ROTATION` and `CROP` (`left,top,right,bottom`) in the argument order of the edits
-  that set them. `state get` prints the sources, then each scene in display order with
+  that set them; for an item placed with a geometry, those columns show the
+  protocol's deprecated transform view of it, and only `--json` shows its `geometry`
+  and the canvas. `state get` prints the sources, then each scene in display order with
   its items; it doesn't print the outputs, and `output status` prints the state but
   not `key_set`, so read those with `--json`. An empty list prints `no scenes`,
   `no sources` or `no items`.
@@ -183,7 +188,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1c04bb14bd2bf578", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; parsing, block_on, connector, mock, writers and MCP proxy bullets unaffected by either change" }
+verified = { hash = "b3:963c5802a8e5b2a7", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: re-read; parsing, block_on, connector, mock, writers and MCP proxy bullets unaffected" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

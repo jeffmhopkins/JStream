@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:77ddb8e8f9eb794c", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Engine, Kinds, Runtime and Tests bullets; #133 only reorders Running's fields and launch's bindings so input rings drop off the real-time thread, which no bullet describes" }
+verified = { hash = "b3:ba245a5f035ceabd", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: re-read; snapshot.rs now copies the canvas and the placement form, which the Snapshot bullet's wording already covers; Tests bullet's headless video.snapshot includes the new geometry case" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -97,7 +97,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8e54430793e482ea", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Calls (kind queries), Outputs, Pipeline and Locking; #133's drop order changes no described state, error, lock or deadline" }
+verified = { hash = "b3:5caca533c4580d42", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "B3: Snapshots paragraph rewritten: canvas from State::canvas copied into the Shot (paint takes it), each item drawn in its placement form via placement(); the rest (program scene, skips, opacity, frames, snapshot thread) unchanged" }
 -->
 
 ### Engine and sessions
@@ -205,9 +205,13 @@ state exists, that scene is the first one in display order. `Program` will follo
 ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)); that state is M2
 ([ROADMAP › M2](../../ROADMAP.md#m2)). An empty collection is an opaque black canvas.
 
-The canvas is [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s default,
-1920×1080. `canvas.set_size` is not a message yet, so every snapshot uses that size.
-A nested `scene` source is composited at the canvas size and then placed. Hidden
+The canvas is the collection's (`State::canvas`, default 1920×1080, changed by
+`canvas.set_size`), copied into the shot with the items, so every scene of a snapshot,
+nested ones included, is composited at that size; the PNG is that canvas scaled to fit
+1280. Each item is drawn in its stored placement form
+([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)): a geometry by the
+shared formula, a legacy transform evaluated against the frame's size. A nested
+`scene` source is composited at the canvas size and then placed. Hidden
 items are skipped. A source with no stored frame is skipped, not drawn as a
 placeholder. Opacity is 1 and the only blend is src-over: the graph does not store
 either yet, and the compositor's blend is src-over. The graph already rejects a

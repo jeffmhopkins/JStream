@@ -106,6 +106,48 @@ pub struct ItemGeometry {
     pub perspective_px: Option<Finite32>,
 }
 
+/// The collection's canvas: every scene's coordinate space, in whole pixels.
+///
+/// x points right and y down, with (0, 0) at the top-left corner. A `scene` source's
+/// native size is the canvas size, and a mix renders the canvas fitted inside its
+/// resolution. Missing (from a server older than 0.9) parses as the 1920×1080 default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct Canvas {
+    /// Width in pixels, greater than zero.
+    pub width: u32,
+    /// Height in pixels, greater than zero.
+    pub height: u32,
+}
+
+impl Canvas {
+    /// ADR-0022's default canvas, 1920×1080.
+    pub const DEFAULT: Canvas = Canvas {
+        width: 1920,
+        height: 1080,
+    };
+}
+
+impl Default for Canvas {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+/// Which of the two forms an item's stored placement has (ADR-0022 decision 5).
+///
+/// The two values are the complete set until 1.0, which removes `legacy`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum PlacementForm {
+    /// A 0.3 `ItemTransform`, evaluated every frame against the source's current size.
+    /// What a server older than 0.9 stores, so a missing field parses as this.
+    #[default]
+    Legacy,
+    /// An [`ItemGeometry`]: a box on the canvas.
+    Geometry,
+}
+
 /// Why a geometry could not be placed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -366,6 +408,27 @@ impl ItemGeometry {
         }))
     }
 
+    /// The deprecated 0.3 view of this geometry, which `ItemInfo.transform` reports for
+    /// a geometry item: `position` is the box's top-left corner after rotation about
+    /// `center`, `rotation_deg` is the box's rotation, and `scale` is (1, 1), as if the
+    /// source were exactly the box's size. It depends on no source size. The 3D fields
+    /// and the fit mode are not in it.
+    ///
+    /// # Errors
+    /// [`GeometryError::NotFinite`] when the corner is not finite.
+    pub fn transform_view(self) -> Result<ItemTransform, GeometryError> {
+        let half_w = self.size.width.get() * 0.5;
+        let half_h = self.size.height.get() * 0.5;
+        let (dx, dy, _) = rotate_z(-half_w, -half_h, 0.0, self.rotation_deg.get());
+        let position = Vec2::new(self.center.x.get() + dx, self.center.y.get() + dy)
+            .ok_or(GeometryError::NotFinite)?;
+        Ok(ItemTransform {
+            position,
+            scale: ItemTransform::IDENTITY.scale,
+            rotation_deg: self.rotation_deg,
+        })
+    }
+
     /// The box a 0.3 transform draws for this source, or `Ok(None)` when the crop or
     /// the scale leaves nothing.
     ///
@@ -535,7 +598,8 @@ fn rotate_x(x: f32, y: f32, z: f32, degrees: f32) -> (f32, f32, f32) {
 #[cfg(test)]
 mod tests {
     use super::{
-        CanvasPoint, FitMode, GeometryError, ItemGeometry, LegacyBox, Placed, Size, legacy_quad,
+        Canvas, CanvasPoint, FitMode, GeometryError, ItemGeometry, LegacyBox, Placed,
+        PlacementForm, Size, legacy_quad,
     };
     use crate::command::{Crop, ItemTransform, Vec2};
     use crate::finite::Finite32;
@@ -1002,5 +1066,47 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn the_transform_view_is_the_rotated_top_left_at_unit_scale() {
+        let unrotated = box_at(100.0, 50.0, 40.0, 20.0)
+            .transform_view()
+            .expect("finite");
+        assert_eq!(unrotated.position, Vec2::new(80.0, 40.0).expect("finite"));
+        assert_eq!(unrotated.scale, ItemTransform::IDENTITY.scale);
+        assert_eq!(unrotated.rotation_deg, Finite32::ZERO);
+
+        // 90° clockwise about (100, 50): the top-left (-20, -10) goes to (10, -20).
+        let turned = ItemGeometry {
+            rotation_deg: finite(90.0),
+            ..box_at(100.0, 50.0, 40.0, 20.0)
+        };
+        let view = turned.transform_view().expect("finite");
+        near(
+            (view.position.x.get(), view.position.y.get()),
+            (110.0, 30.0),
+        );
+        assert_eq!(view.rotation_deg, finite(90.0));
+        // The view's corner is the projected box's first corner.
+        let quad = turned.project().expect("finite");
+        near(xy(quad.corners[0]), (110.0, 30.0));
+    }
+
+    #[test]
+    fn canvas_and_placement_form_parse_their_pre_0_9_defaults() {
+        assert_eq!(
+            Canvas::default(),
+            Canvas {
+                width: 1920,
+                height: 1080
+            }
+        );
+        assert_eq!(PlacementForm::default(), PlacementForm::Legacy);
+        assert_eq!(
+            serde_json::to_value(PlacementForm::Geometry).expect("serializes"),
+            "geometry"
+        );
+        assert!(serde_json::from_str::<PlacementForm>("\"box\"").is_err());
     }
 }

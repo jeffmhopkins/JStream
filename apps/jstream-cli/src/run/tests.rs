@@ -111,12 +111,14 @@ fn populated() -> MockEngine {
                 item_id: ItemId::new("cam_1"),
                 source_id: SourceId::new("cam"),
                 transform: None,
+                geometry: None,
             },
             Edit::ItemAdd {
                 scene_id: SceneId::new("main"),
                 item_id: ItemId::new("cam_2"),
                 source_id: SourceId::new("cam"),
                 transform: None,
+                geometry: None,
             },
         ],
         expected_rev: None,
@@ -281,10 +283,10 @@ fn item_list_golden() {
         run_on(&engine, &["--json", "--mock", "item", "list", "main"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"item.list","rev":2,"#,
-            r#""scene_id":"main","items":[{"item_id":"cam_1","source_id":"cam","#,
+            r#""scene_id":"main","items":[{"item_id":"cam_1","source_id":"cam","placement":"legacy","#,
             r#""transform":{"position":{"x":0.0,"y":0.0},"scale":{"x":1.0,"y":1.0},"rotation_deg":0.0},"#,
             r#""crop":{"left":0,"top":0,"right":0,"bottom":0},"visible":true},"#,
-            r#"{"item_id":"cam_2","source_id":"cam","#,
+            r#"{"item_id":"cam_2","source_id":"cam","placement":"legacy","#,
             r#""transform":{"position":{"x":100.0,"y":50.5},"scale":{"x":0.5,"y":0.5},"rotation_deg":-90.0},"#,
             r#""crop":{"left":0,"top":0,"right":10,"bottom":0},"visible":false}]}}}"#,
             "\n"
@@ -322,14 +324,14 @@ fn state_get_golden() {
     );
     let item = |id: &str| {
         format!(
-            r#"{{"item_id":"{id}","source_id":"cam","transform":{{"position":{{"x":0.0,"y":0.0}},"scale":{{"x":1.0,"y":1.0}},"rotation_deg":0.0}},"crop":{{"left":0,"top":0,"right":0,"bottom":0}},"visible":true}}"#
+            r#"{{"item_id":"{id}","source_id":"cam","placement":"legacy","transform":{{"position":{{"x":0.0,"y":0.0}},"scale":{{"x":1.0,"y":1.0}},"rotation_deg":0.0}},"crop":{{"left":0,"top":0,"right":0,"bottom":0}},"visible":true}}"#
         )
     };
     assert_eq!(
         run_on(&engine, &["--json", "--mock", "state", "get"]),
         ok(&format!(
             "{}{}{},{}{}\n",
-            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"state.get","rev":2,"#,
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"state.get","rev":2,"canvas":{"width":1920,"height":1080},"#,
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
