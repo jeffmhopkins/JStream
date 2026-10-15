@@ -45,8 +45,8 @@ allow = [
 # script downloads and unpacks CEF with `download-cef`, which reaches `libbz2-rs-sys`
 # through `bzip2` and `webpki-roots` through `ureq`. Neither is linked into any JStream
 # binary, and neither is in the graph unless the `cef` feature of jstream-browser is on
-# (ADR-0046). A license decision is the maintainer's (ADR-0043); these two entries wait
-# on his decision on the browser source's PR (C8).
+# (ADR-0046). A license decision is the maintainer's (ADR-0043); these two entries rest
+# on his decision on PR #283 (C8).
 exceptions = [
     { crate = "assert_no_alloc", allow = ["BSD-1-Clause"] },
     { crate = "xxhash-rust", allow = ["BSL-1.0"] },
