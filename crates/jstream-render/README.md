@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:f8fec75ecf0af180", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:d2490546c7c57297", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V2 multi-pass filters; the chain runtime is still not here, the passes are; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:c17ddc66af14c910", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after adding the empty filter group modules; nothing these sections state changed; holds" }
+verified = { hash = "b3:0410dfb0e078b386", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Re-read after the V2 multi-pass filters; added the video delay's held frames to the resources table; the rest holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -200,6 +200,7 @@ the compositor's own, not a shared encode target, so nothing transitions it to
 | Per-image texture and bind group | `Image`, dropped with it |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
+| A video delay filter's held frames | Its `VideoFilter`: reused as the ring turns; dropped when the input size changes or the delay is set to 0 ([Filters](#filters)) |
 | `ResourceCache` entries | While a frame uses them; then retired until the GPU finishes the last frame that used them, and handed back as `Reclaimed` |
 
 **`ResourceCache`.** A frame runs `begin_frame`, `upload` or `layer` for each image it
@@ -280,7 +281,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:70c4b4131cfd19bb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Group modules (pack, aspect, multipass, assets) and the descriptor test described as built" }
+verified = { hash = "b3:042625d576b81fd2", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "V2 kinds (blur, pixelate, drop_shadow, outline, glow, video_delay) described with their settings, tap bounds, bounds growth and the delay ring cap; checked against src/filter/multipass" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -324,7 +325,46 @@ The single-pass pack (V1): not yet.
 
 Aspect ratio (V1a): not yet.
 
-The multi-pass filters (V2): not yet.
+The multi-pass filters (V2), in `src/filter/multipass/`:
+
+- `blur`: `radius` (0 to 100 px, default 8) and an area: `area` (`whole`, `inside` or
+  `outside` a rectangle) with `area_x`, `area_y`, `area_width`, `area_height` (fractions
+  of the frame). A separable gaussian (sigma radius / 3). Its cost is bounded for every
+  radius: it runs at the smallest working scale of 1, 2, 4 or 8 that keeps radius /
+  scale at 16 or less, so a box downsample reads at most 64 texels a texel and each
+  blur pass at most 33. It uses three scratch layers. The frame's edges clamp, so they
+  don't darken. The area's edge is hard (no feather), and the blur inside it still
+  reads pixels just outside it.
+- `pixelate`: `block_size` (1 to 256 px, default 16) and the same area. Blocks are
+  aligned to the top-left and are the mean of their pixels: exact up to 8 px, an 8 x 8
+  grid of samples above that.
+- `drop_shadow`: `color` (with alpha, default `#000000b3`), `offset_x`, `offset_y`
+  (-200 to 200 px, default 8) and `blur` (0 to 100 px, default 8). The input's alpha is
+  blurred, tinted, moved and drawn under the input. There is no spread.
+- `outline`: `width` (0 to 64 px, default 4), `color` and `position` (`outside` or
+  `inside`). It uses a jump flood: a seed pass, then steps of S, S/2, ..., 1 and one
+  more step of 1, with S the power of two that reaches width + 1. That is at most 8
+  steps of 9 loads each, in two scratch layers. Coverage is antialiased over one pixel.
+  An inside stroke treats the area past the frame as outside the shape.
+- `glow`: `color`, `radius` (0 to 100 px, default 16) and `strength` (0 to 4, default
+  1, which multiplies the blurred alpha before it is clamped). It is a drop shadow with
+  no offset.
+- `video_delay`: `delay_ms` (0 to 5000, default 0, which passes the input through) and
+  `max_memory_mb` (64 to 16384, default 1024). The pass keeps a ring of frame copies
+  stamped with the clock and shows the newest one at or before now minus the delay, or
+  the oldest one while the ring fills. The ring holds `min(300, memory / (w x h x 8))`
+  frames, and never fewer than 2. To fit the delay into that many frames, it stores a
+  frame only once delay / (capacity - 1) has passed since the last one. Past the cap
+  the delay holds and the delayed picture's frame rate drops. Frames older than the one
+  shown are reused. A new input size empties the ring, and so does a clock that goes
+  backwards.
+
+**Bounds.** Drop shadow, outline (outside) and glow grow their output by the effect's
+extent on each side, rounded up to whole pixels: the blur radius plus the offset
+toward that side, or the stroke width. The input is drawn 1:1 at the matching inset, so
+**these filters change the source's reported size**. Until the chain runtime (V0)
+reports the inset, a placement fits the grown frame rather than the original content
+box.
 
 Assets and references (V3): not yet.
 
