@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:36fed1e5f4bbff3b", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "ADR-0051 accepted (Jeff, #367): re-read; links re-pointed from superseded ADR-0041 to ADR-0051, which restates its decision with the API optional; text holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

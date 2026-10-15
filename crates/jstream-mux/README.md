@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**", "crates/jstream-mux/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mux", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0051-youtube-without-a-required-oauth-client.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:972a2501f406643d", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "ADR-0051 gains Jeff's UX answers (channel-following chat preset, client ID and secret in the OS credential store): re-read; this section cites ADR-0051 only for the RTMP(S) container, which is unchanged; holds" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):

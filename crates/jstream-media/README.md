@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-media/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-media", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:5ee1acfd729e8631", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "#367 N3: re-read; packet.rs's plain-text ADR-0041 path now names ADR-0051, which keeps ADR-0041's RTMP decision; holds" }
 -->
 
 Layer-0 media value types: plain data and the invariants that keep it consistent. No I/O,
