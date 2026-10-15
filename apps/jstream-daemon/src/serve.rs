@@ -26,7 +26,8 @@ pub type Connect =
     Arc<dyn Fn(&str, &Secret) -> Result<Box<dyn LivePublish>, PublishError> + Send + Sync>;
 
 /// The engine the daemon serves: the collection in `--collection`'s file (else an empty
-/// one that is not saved), the placeholder outputs, and `audit` recording every call.
+/// one that is not saved), the placeholder outputs, and `audit` recording every batch,
+/// undo, redo and action.
 ///
 /// On Windows it is live (see `live`, which is Windows and test only): the OS backends (WGC capture, WASAPI audio, Media
 /// Foundation codecs and webcams, the QPC clock), stream keys in Credential Manager, and a publish
@@ -563,7 +564,7 @@ mod tests {
     }
 
     /// `--collection` loads the file and saves every change to it, so a second engine on
-    /// the same file starts where the first stopped; the audit sink sees every call.
+    /// the same file starts where the first stopped; the audit sink sees the batch.
     #[tokio::test]
     async fn the_collection_file_persists_and_every_call_is_audited() {
         let dir =

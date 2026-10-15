@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:114e5dd09be607f6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 1: only serve.rs and daemon.rs comments changed; Purpose text (startup opens the audit log, serving builds the engine with it and --collection) still holds" }
+verified = { hash = "b3:fe6c01ebd0f4cee6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2 N6: Serving bullet rewrapped; main.rs crate doc now says the audit log records batches, undos, redos and actions (not queries); purpose text holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -35,8 +35,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Token file** (`token.rs`): reuses the token in an existing user-only file, or
   creates the file with a new random token ([Design](#design)).
 - **Serving** (`serve.rs`): builds the engine (with the audit log, the `--collection`
-  file and the placeholder outputs; on Windows a live one, [Design](#design)), installs the signal handlers that stop it,
-  then binds the server with MCP on.
+  file and the placeholder outputs; on Windows a live one, [Design](#design)), installs
+  the signal handlers that stop it, then binds the server with MCP on.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
   advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
   ([Design](#design)).
@@ -68,7 +68,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:1d557b6b55d4a1f2", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 1 N4: Collection file bullet now says two daemons on one file overwrite each other's saves (save_collection skips only by its own saved rev); rest re-read and holds" }
+verified = { hash = "b3:694a71b7535885d9", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2: only main.rs/serve.rs doc comments changed (audit wording); Usage options, Collection file and Audit log bullets re-read and hold" }
 -->
 
 ```sh
@@ -168,7 +168,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:97fcf7c1643a6627", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#207 bounded output.stop, #233) into A6: took main's stamp; re-read every Design bullet: A6's collection file and audit log bullet (declared outputs survive a load, audit.jsonl in the log dir) plus A3's live engine and opener; #207 changes no daemon code; holds" }
+verified = { hash = "b3:18a55818b0bf0ddf", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6 review round 2 N6: collection/audit bullet rewrapped, text unchanged; engine() doc now says audit records batches, undos, redos and actions; rest re-read and holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -220,8 +220,8 @@ verified = { hash = "b3:97fcf7c1643a6627", by = "agent:claude@session_01YKRrREb5
   placeholders are declared outputs, which a loaded collection never removes, so they
   are added after the load only for reading order. The audit log lives in the log
   directory, which the daemon already creates (user-only on Unix) and which `--log-dir`
-  moves, rather than in a directory of its own. Its entries are written as they come; on a graceful stop the writer finishes the
-  queue when the engine is dropped. Without `--collection` nothing is saved, as before
+  moves, rather than in a directory of its own. Its entries are written as they come;
+  on a graceful stop the writer finishes the queue when the engine is dropped. Without `--collection` nothing is saved, as before
   ([Open questions](#open-questions), 6).
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server
   answers MCP at `/mcp` on the same port, with its default MCP session cap and idle

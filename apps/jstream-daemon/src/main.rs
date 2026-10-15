@@ -8,8 +8,8 @@
 //! and stops gracefully on Ctrl-C. On Windows the engine is live: it runs the media
 //! pipeline on the Windows backends and publishes over RTMP(S), after checking that
 //! Media Foundation is installed. With `--collection` it loads the collection from a file
-//! and saves every change there, and it records every call in an audit log next to its
-//! log files. Not yet: the web UI.
+//! and saves every change there, and it records every batch, undo, redo and action in an
+//! audit log next to its log files. Not yet: the web UI.
 //!
 //! Docs: docs/ARCHITECTURE.md#shape, docs/ARCHITECTURE.md#crate-map, apps/jstream-daemon/README.md#purpose, apps/jstream-daemon/README.md#usage, apps/jstream-daemon/README.md#design, docs/adr/0001-library-first-engine.md, docs/adr/0006-mcp-full-access.md
 
