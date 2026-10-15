@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:bac0dff0e665cd28", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (B5 #196 0.14, #225, #195, #192, #227), protocol 0.15: re-read; mock text holds beside B5's" }
+verified = { hash = "b3:fb6654585c0e8adc", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; contents list holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:9168e9adab8d9e6e", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (B5 #196 0.14, #225, #195, #192, #227), protocol 0.15: re-read; youtube variants answer internal in the mock, as stated" }
+verified = { hash = "b3:c9db94df2b9b9a37", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read the merged Mock section; B5's item.set_source and duplicated_from text kept; undo bullet now says a deleted source comes back with its duplicated_from and item.set_source undoes to the previous source, as jstream-graph's inverses do" }
 -->
 
 ### The trait
@@ -97,8 +97,8 @@ its own, and is used with default features off.
 `dev-dependencies`) keeps scenes, items, sources, outputs and encoder profiles in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
-- atomic batches that bump `rev` by exactly one, and per-client idempotency keys. A
-  retry with a known key answers first; then, in `Graph::apply`'s order, a stale
+- atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
+  shared with history calls. A retry with a known key gets its first result; then, in `Graph::apply`'s order, a stale
   `expected_rev` fails with `rev_conflict` before an empty batch fails with
   `empty_batch`;
 - every protocol edit but protocol 0.12's `scene.set_role` and `item.move` (which answer
@@ -157,14 +157,34 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `MockEngine::stream_key` lets a client test check what was stored. Unlike an
   `Engine` built without `with_key_store`, which answers `action_failed`, the mock
   always has a store, so clients can test the whole flow;
-- `state.changed` events carrying the request ID, and `output.start`/`output.stop`
+- per-client undo and redo (`history.undo`, `history.redo`,
+  [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Each batch is a step built
+  from the same inverse edits `jstream-graph` returns: a removed item comes back at its
+  index with its placement in its own form (transform or geometry), crop and
+  visibility, a deleted scene at its position with its items, a deleted source with its
+  settings and `duplicated_from`, `item.set_source` back to the item's previous source,
+  a placement, crop or
+  visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
+  back with its encoder profile, encoder profile edits undo to the profile as it was,
+  and `canvas.set_size` undoes to the previous size. The checks run in the engine's order (the key, then `expected_rev`, then
+  `history_empty`). The result carries `step_rev` and both depths, a new batch clears
+  the client's redo stack, undoing the `output.create` of a running output fails with
+  the graph's `invalid_argument` and keeps the step, the history is bounded
+  (`MockEngine::with_history_limit`, 100 by default) and a session's history goes when
+  its `MockControl` is dropped. Conflicts are **stricter than the engine's**: once
+  another client has changed the collection since a step was last applied or undone,
+  undoing or redoing it fails with `undo_conflict` naming the first such change, and
+  the step is dropped, where the engine refuses only a change that touches what the
+  step touches. So an undo that succeeds against the mock succeeds against the engine
+  too, but not the other way round;
+- `state.changed` events carrying the request ID (and `cause` for an undo or redo), and `output.start`/`output.stop`
   reported as `output.state_changed` events (`starting` → `active`, `stopping` →
   `stopped`). `MockEngine::emit` injects any other event;
 - event streams that end, after what they have buffered, when their `MockControl` or
   the engine is dropped, the way a socket's streams end when it closes. An ended stream
   stays ended: later events, including those other sessions cause, never reach it.
 
-Its futures are always ready. It has no undo, persistence, credential store or real
+Its futures are always ready. It has no persistence, credential store or real
 outputs, and answers a protocol variant it doesn't know with `internal`.
 
 The mock re-implements these checks and reads rather than calling
@@ -174,7 +194,10 @@ for dev-dependencies, so the dependency would need a layering change. The duplic
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
 its outputs, the exact answer to every read of it, and the exact error for batches
-rejected against it, RTMP URL and recording path rejections included.
+rejected against it, RTMP URL and recording path rejections included. The mock's
+undo test tears that collection down in one batch and checks that undo gives back
+exactly the fixture's state, which `jstream-graph`'s inverse property test guarantees
+for the graph.
 If the mock and the graph drift apart on any of those, one of the two tests fails. The
 mock's own tests pin the remaining shared error paths.
 

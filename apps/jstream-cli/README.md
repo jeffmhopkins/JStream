@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:d516c44dd07288ed", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (A3 #226 daemon, #229, #230), protocol 0.15 still one past main's 0.14: re-read; contents hold, CLI gains no YouTube commands" }
+verified = { hash = "b3:7d6895f2ac3f8f89", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#226 A3, #229, #230) into B2-f3: re-read; contents list holds, main changed only its stamp context" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:80c75dbbcddea08a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (B5 #196 0.14, #225, #195, #192, #227), protocol 0.15: re-read; says the CLI has none of 0.15's YouTube commands; other output kinds list as JSON" }
+verified = { hash = "b3:923151b966533522", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; B5's Edits text and the No undo or redo command bullet hold" }
 -->
 
 ```sh
@@ -121,6 +121,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
   the URL.
+- **No undo or redo command.** Undo history belongs to a client and ends with its
+  session ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), and each run of a
+  command is a new client, so a one-shot `undo` would always find nothing to undo.
+  `mcp` is one client for its whole run: its `history` tool undoes and redoes the
+  agent's own edits.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
@@ -220,7 +225,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:67aaca499eef7076", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main (B5 #196 0.14, #225, #195, #192, #227), protocol 0.15: re-read; Y3 changes only CallResult::Action { result: None } here" }
+verified = { hash = "b3:237f2c2d77fddc0e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters
