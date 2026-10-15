@@ -1197,7 +1197,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "OutputKind": {
-      "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nOnly RTMP(S) to a generic URL is configurable so far. Recording, the virtual camera\nand the YouTube-bound target of the data model come later as new variants.",
+      "description": "What an output is and where it sends. Serialized with an internal `type` tag.\n\nRTMP(S) to a generic URL and recording to a file are configurable so far. The\nvirtual camera and the YouTube-bound target of the data model come later as new\nvariants.",
       "oneOf": [
         {
           "description": "A stream sent over RTMP or RTMPS.",
@@ -1214,6 +1214,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "target"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A recording to a file on the engine's machine.",
+          "properties": {
+            "container": {
+              "$ref": "#/$defs/RecordContainer",
+              "description": "The file format."
+            },
+            "path": {
+              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one with control\ncharacters or a `..` segment, and one that ends in a separator or names no\nfile. `output.start` also fails when the path is not absolute on the\nengine's own machine.",
+              "type": "string"
+            },
+            "type": {
+              "const": "record",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path",
+            "container"
           ],
           "type": "object"
         }
@@ -1958,6 +1981,16 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "RecordContainer": {
+      "description": "The file format a recording is written in. Serialized as a snake_case string.",
+      "oneOf": [
+        {
+          "const": "mp4",
+          "description": "MP4 with H.264 video and AAC audio, written fragmented (a fragment per video\nkeyframe, each synced to disk), so a crash loses at most the last fragment and\nthe `.part` file it leaves plays up to there.",
+          "type": "string"
+        }
+      ]
+    },
     "Request": {
       "description": "One request: a call plus the client-chosen ID its answer will carry.",
       "properties": {
@@ -2503,5 +2536,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.8"
+  "title": "JStream protocol 0.9"
 }
