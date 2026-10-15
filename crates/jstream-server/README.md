@@ -51,7 +51,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:4904fabf20b5269c", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5: control#design changed only in the Mock section; server design (serving a Control, Origin/Host, slow clients, shutdown) unaffected" }
+verified = { hash = "b3:de14c5d7a6589e39", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: prose is main's; control#design changed only in its Mock section, which the server doesn't rely on" }
 -->
 
 ### Listening and admission

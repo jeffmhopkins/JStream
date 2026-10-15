@@ -15,7 +15,7 @@ use jstream_control::protocol::{
 };
 use jstream_control::{Control, ControlError, EventStream, WsConfig, WsControl};
 use serde_json::json;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, Read, Write};
 
 /// The name this client gives in `hello`, shown in the engine's audit log.
 pub const CLIENT_NAME: &str = "jstream-cli";
@@ -83,20 +83,37 @@ fn read_token(path: Option<String>) -> Result<String, CliError> {
     Ok(token.to_owned())
 }
 
+/// The most `output set-key` reads, in bytes. The engine takes keys of up to 1024 bytes;
+/// the slack covers surrounding whitespace. More than this is not a stream key (a file
+/// piped in by mistake, say), so it is refused before it is buffered or sent.
+const MAX_KEY_INPUT: u64 = 4096;
+
 /// Reads the stream key for `output set-key`: the file's text, or else all of `input`
 /// (stdin), without surrounding whitespace (a key has none, and a file or a pipe usually
-/// ends with a newline). No message repeats any of what was read.
+/// ends with a newline). At most [`MAX_KEY_INPUT`] bytes are read. No message repeats
+/// any of what was read.
 fn read_key(key_file: Option<&str>, input: &mut dyn BufRead) -> Result<SecretString, CliError> {
-    let text = match key_file {
-        Some(path) => std::fs::read_to_string(path).map_err(|error| {
-            CliError::Usage(format!("could not read the key file `{path}`: {error}"))
-        })?,
-        None => {
-            let mut text = String::new();
-            input.read_to_string(&mut text).map_err(CliError::Read)?;
-            text
-        }
+    let mut text = String::new();
+    let read = match key_file {
+        Some(path) => std::fs::File::open(path)
+            .and_then(|file| file.take(MAX_KEY_INPUT + 1).read_to_string(&mut text))
+            .map_err(|error| {
+                CliError::Usage(format!("could not read the key file `{path}`: {error}"))
+            })?,
+        None => input
+            .take(MAX_KEY_INPUT + 1)
+            .read_to_string(&mut text)
+            .map_err(CliError::Read)?,
     };
+    let source = match key_file {
+        Some(path) => format!("the key file `{path}`"),
+        None => "stdin".into(),
+    };
+    if !u64::try_from(read).is_ok_and(|read| read <= MAX_KEY_INPUT) {
+        return Err(CliError::Usage(format!(
+            "{source} holds more than {MAX_KEY_INPUT} bytes, which is not a stream key"
+        )));
+    }
     let key = text.trim();
     if key.is_empty() {
         return Err(CliError::Usage(match key_file {

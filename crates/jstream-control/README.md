@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:568c395a8708d000", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5 changed mock.rs only (output edits, output.list, key actions, stream_key probe); the trait, errors, mock and ws bullets still hold" }
+verified = { hash = "b3:2dd67cd1963ab6cb", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: re-read; trait, errors, mock and ws bullets hold for mock.rs with settings (B4) and outputs/keys (A5)" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:23d9589a4c8ca9fe", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5: Mock section rewritten against mock.rs: every edit incl. output ones with graph's URL checks and running-delete refusal, output.list, configured vs declared outputs (sync_outputs), key actions with core's check order and errors, in-memory keys kept on delete, stream_key, always-present store; parity paragraph mentions outputs" }
+verified = { hash = "b3:e3539a9229f4e9be", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: Mock section merged: edit checks list keeps B4's settings-reference delete rule and A5's RTMP URL and running-delete rules; the kinds/settings paragraph is B4's; queries now list output.list and settings; A5's outputs and stream-key bullets match mock.rs (apply has both settings handling and running)" }
 -->
 
 ### The trait
@@ -108,21 +108,26 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     `source.create`'s `source_id`, `source.duplicate`'s `new_source_id`), empty or blank
     names, and empty builtin kind names;
   - reorder indices out of range;
-  - deleting a source that an item places, or a scene that a scene source shows;
+  - deleting a source that an item places, or a scene that a scene source shows, or
+    either while a source's settings refer to it;
   - nesting cycles;
   - RTMP server URLs in `output.create` and `output.set_target` (`jstream-graph`'s
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`.
 
-  Error messages may differ; clients match on codes and fields;
+  Error messages may differ; clients match on codes and fields. The mock describes no
+  kinds, so it accepts any non-empty builtin kind, stores settings as sent without
+  checking them or filling in defaults (a `null` in a `source.set_settings` patch
+  removes the entry), and doesn't follow settings references when it looks for cycles.
+  `kind.list` and `kind.describe` answer `internal`;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
   scene) and `output.list` (ordered by ID), each at the current `rev`. So it keeps
-  everything an edit sets: source names and kinds, each item's transform, crop and
-  visibility, and each output's kind and target. `video.snapshot` is not one of those
-  reads: the mock has no compositor and answers it with `internal`, as it does for any
-  protocol variant it does not implement;
+  everything an edit sets: source names, kinds and settings, each item's transform,
+  crop and visibility, and each output's kind and target. `video.snapshot` is not one
+  of those reads: the mock has no compositor and answers it with `internal`, as it
+  does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with

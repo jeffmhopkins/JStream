@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:93a7efe02f924dd8", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5: Running bullet now says output set-key also reads the BufRead (run.rs read_key); commands/exit/block/mcp bullets unchanged" }
+verified = { hash = "b3:40bcd2eae02a4021", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155, 0.8) into A5: re-read; Running bullet (mcp and output set-key read the BufRead) and contents list hold for args.rs with both source.rename and the output commands" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:32a595195baa5f21", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5: table adds output list, set-key, clear-key; Edits bullet covers output.create/set_target/delete with rtmp_target's scheme check; new Stream keys bullet matches parse_set_key and read_key (stdin or --key-file, trimmed, usage errors that don't echo, read before connecting); Reads bullet matches write_outputs and the output.status line; exit code 1 covers set-key's stdin read" }
+verified = { hash = "b3:ef7e1b0211c4ba8d", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: Edits bullet merged to say every edit but settings is supported (args.rs arity has source.rename and the three output edits; source.set_settings has no form); output commands, Stream keys bullet (now with the 4096-byte input cap from read_key, review N1) and Reads bullet match run.rs" }
 -->
 
 ```sh
@@ -101,7 +101,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported. Several edits on one line go as **one atomic batch**: one new
+  protocol is supported except settings. `source.set_settings`, and `source.create`
+  with settings, need a JSON argument form the CLI doesn't have yet, so a source it
+  creates gets its kind's defaults. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -114,8 +116,9 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
   and press Ctrl-D; the terminal shows what is typed). Surrounding whitespace, such as
   a final newline, is dropped. Anything else after the output ID is a usage error that
-  doesn't repeat it, an empty key or an unreadable file is a usage error, and the key
-  is read before connecting. Neither the CLI nor the engine prints a key back: the
+  doesn't repeat it. An empty key, an unreadable file, or input over 4096 bytes (no
+  stream key is that long; it is refused before it is buffered or sent) is a usage
+  error too, and the key is read before connecting. Neither the CLI nor the engine prints a key back: the
   reply is `output.set_key accepted for <id> (<request>)`, and `output status` says
   only whether one is set.
 - **Output:** human-readable by default; a call's line ends with its request ID
@@ -202,7 +205,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:ce476f5afc7a4aa6", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "A5: Output through writers bullet now names output set-key reading the BufRead; parser, block_on, connector seam, opt-in mock, MCP and typed errors bullets unchanged by args.rs/run.rs/exit.rs" }
+verified = { hash = "b3:97399bf670f90c91", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (B4 #155) into A5: re-read; parsing, block_on, connector, opt-in mock, writers (mcp and set-key read the BufRead) and MCP bullets unaffected by source.rename or the key-input cap" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

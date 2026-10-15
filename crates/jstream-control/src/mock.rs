@@ -16,8 +16,9 @@ use futures_core::Stream;
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, Crop, Edit, EntityKind, Event, Hello,
     IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
-    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, RequestId, Response, Rev, RtmpTarget,
-    SceneId, SceneInfo, SceneSummary, SecretString, SourceId, SourceInfo, SourceKind, Welcome,
+    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, Reference, RequestId, Response, Rev,
+    RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, Settings, SourceId, SourceInfo,
+    SourceKind, Welcome,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -210,11 +211,13 @@ struct Collection {
     outputs: BTreeMap<OutputId, OutputKind>,
 }
 
-/// A source: its name and what it shows. Sources have no settings yet.
+/// A source: its name, what it shows, and its settings. The mock describes no kinds, so
+/// it stores settings as sent, without checking them or filling in defaults.
 #[derive(Clone)]
 struct Source {
     name: String,
     kind: SourceKind,
+    settings: Settings,
 }
 
 #[derive(Clone)]
@@ -479,7 +482,9 @@ impl Collection {
     /// It follows the rules `jstream-graph` enforces for the same edits (existence,
     /// unique IDs, no deleting what is still referenced, index bounds, no nesting
     /// cycles, no deleting a running output, RTMP server URLs), with the same error
-    /// codes and `edits.<at>.<field>` paths. `running` are the outputs that run.
+    /// codes and `edits.<at>.<field>` paths. It describes no kinds, so it doesn't check
+    /// settings, fill in defaults, or follow settings references when it looks for
+    /// cycles. `running` are the outputs that run.
     fn apply(
         &mut self,
         edit: Edit,
@@ -514,6 +519,15 @@ impl Collection {
                         at,
                         "scene_id",
                         format!("scene `{scene_id}` is shown by a scene source; delete it first"),
+                    ));
+                }
+                if self.is_referred_to(
+                    |r| matches!(r, Reference::Scene { scene_id: s } if *s == scene_id),
+                ) {
+                    return Err(invalid(
+                        at,
+                        "scene_id",
+                        format!("scene `{scene_id}` is referred to by settings; clear them first"),
                     ));
                 }
                 let scene = self.scenes.remove(index);
@@ -593,6 +607,7 @@ impl Collection {
                 source_id,
                 name,
                 kind,
+                settings,
             } => {
                 check_id(source_id.as_str(), at, "source_id")?;
                 check_name(&name, at)?;
@@ -606,19 +621,38 @@ impl Collection {
                     SourceKind::Builtin { .. } => {}
                     _ => return Err(unimplemented_by_mock("this source kind")),
                 }
-                self.create_source(source_id, name, kind)?;
+                self.create_source(source_id, name, kind, settings)?;
+            }
+            Edit::SourceRename { source_id, name } => {
+                check_name(&name, at)?;
+                self.existing_source(&source_id)?.name = name;
+            }
+            Edit::SourceSetSettings { source_id, patch } => {
+                // No descriptor to reset from: `null` removes the entry.
+                let source = self.existing_source(&source_id)?;
+                for (id, value) in patch.0 {
+                    if value.is_null() {
+                        source.settings.0.remove(&id);
+                    } else {
+                        source.settings.0.insert(id, value);
+                    }
+                }
             }
             Edit::SourceDuplicate {
                 source_id,
                 new_source_id,
                 name,
             } => {
-                let Some(kind) = self.sources.get(&source_id).map(|s| s.kind.clone()) else {
+                let Some((kind, settings)) = self
+                    .sources
+                    .get(&source_id)
+                    .map(|s| (s.kind.clone(), s.settings.clone()))
+                else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
                 check_id(new_source_id.as_str(), at, "new_source_id")?;
                 check_name(&name, at)?;
-                self.create_source(new_source_id, name, kind)?;
+                self.create_source(new_source_id, name, kind, settings)?;
             }
             Edit::SourceDelete { source_id } => {
                 if !self.sources.contains_key(&source_id) {
@@ -629,6 +663,17 @@ impl Collection {
                         at,
                         "source_id",
                         format!("source `{source_id}` is placed by items; remove them first"),
+                    ));
+                }
+                if self.is_referred_to(
+                    |r| matches!(r, Reference::Source { source_id: s } if *s == source_id),
+                ) {
+                    return Err(invalid(
+                        at,
+                        "source_id",
+                        format!(
+                            "source `{source_id}` is referred to by settings; clear them first"
+                        ),
                     ));
                 }
                 self.sources.remove(&source_id);
@@ -676,12 +721,33 @@ impl Collection {
         id: SourceId,
         name: String,
         kind: SourceKind,
+        settings: Settings,
     ) -> Result<(), ProtocolError> {
         if self.sources.contains_key(&id) {
             return Err(already_exists(EntityKind::Source, id.as_str()));
         }
-        self.sources.insert(id, Source { name, kind });
+        self.sources.insert(
+            id,
+            Source {
+                name,
+                kind,
+                settings,
+            },
+        );
         Ok(())
+    }
+
+    fn existing_source(&mut self, source_id: &SourceId) -> Result<&mut Source, ProtocolError> {
+        self.sources
+            .get_mut(source_id)
+            .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))
+    }
+
+    /// Whether any source's settings hold a reference matching `is_target`.
+    fn is_referred_to(&self, is_target: impl Fn(&Reference) -> bool) -> bool {
+        self.sources
+            .values()
+            .any(|source| source.settings.references().any(|(_, r)| is_target(&r)))
     }
 
     /// Every source, ordered by ID, as queries report them.
@@ -692,6 +758,7 @@ impl Collection {
                 source_id: id.clone(),
                 name: source.name.clone(),
                 kind: source.kind.clone(),
+                settings: source.settings.clone(),
             })
             .collect()
     }
@@ -1017,6 +1084,7 @@ mod tests {
             kind: SourceKind::Builtin {
                 kind: "webcam".into(),
             },
+            settings: Default::default(),
         }
     }
 
@@ -1160,6 +1228,7 @@ mod tests {
                     kind: SourceKind::Scene {
                         scene_id: SceneId::new("b"),
                     },
+                    settings: Default::default(),
                 },
                 add("a", "i1", "webcam"),
                 add("a", "i2", "nested_b"),
@@ -1206,6 +1275,7 @@ mod tests {
                     kind: SourceKind::Scene {
                         scene_id: SceneId::new("a"),
                     },
+                    settings: Default::default(),
                 },
                 add("b", "i3", "nested_a"),
             ],
@@ -1364,6 +1434,7 @@ mod tests {
             kind: SourceKind::Builtin {
                 kind: "color".into(),
             },
+            settings: Default::default(),
         };
         assert_eq!(field(source), "edits.0.source_id");
         let duplicate = Edit::SourceDuplicate {

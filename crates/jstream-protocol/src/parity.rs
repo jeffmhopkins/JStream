@@ -10,14 +10,29 @@
 //! Docs: crates/jstream-protocol/README.md#purpose
 
 use crate::{
-    Batch, Crop, Edit, EntityKind, Finite32, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo,
-    OutputKind, ProtocolError, Query, QueryResult, Rev, RtmpTarget, SceneId, SceneInfo,
-    SceneSummary, SourceId, SourceInfo, SourceKind, Vec2,
+    Batch, Crop, Edit, EntityKind, Finite32, ItemId, ItemInfo, ItemTransform, KindCategory,
+    KindDescriptor, OutputId, OutputInfo, OutputKind, ProtocolError, Query, QueryResult, Rev,
+    RtmpTarget, SceneId, SceneInfo, SceneSummary, SourceId, SourceInfo, SourceKind, Vec2,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
 /// applied to it: the batch is applied as one batch, so exactly one revision later.
 pub const COLLECTION_REV: Rev = Rev(1);
+
+/// The kinds an implementation must describe for [`collection`] to apply: `webcam`, a
+/// source kind without parameters, so every implementation reports its settings as an
+/// empty map.
+pub fn kinds() -> Vec<KindDescriptor> {
+    vec![KindDescriptor {
+        kind_id: "webcam".into(),
+        category: KindCategory::Source,
+        name: "Webcam".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        params: vec![],
+    }]
+}
 
 /// The batch that builds the fixture collection from an empty one: scenes `b` then `a`
 /// (created `a` first, then reordered), source `cam` placed twice in `a` (the second
@@ -32,6 +47,7 @@ pub fn collection() -> Batch {
         source_id: s.source_id,
         name: s.name,
         kind: s.kind,
+        settings: s.settings,
     };
     let add = |item: &str, source: &str| Edit::ItemAdd {
         scene_id: SceneId::new("a"),
@@ -418,6 +434,7 @@ fn cam() -> SourceInfo {
         kind: SourceKind::Builtin {
             kind: "webcam".into(),
         },
+        settings: crate::Settings::new(),
     }
 }
 
@@ -428,6 +445,7 @@ fn nested_b() -> SourceInfo {
         kind: SourceKind::Scene {
             scene_id: SceneId::new("b"),
         },
+        settings: crate::Settings::new(),
     }
 }
 
