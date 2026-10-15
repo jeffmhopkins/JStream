@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:3b0bb9b79c4b0d56", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "CI doc fix: serve.rs engine() doc no longer intra-links the cfg(windows, test) live fn; code unchanged, contents list holds" }
+verified = { hash = "b3:9c3cf659bf5fda8a", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#225 Backends.video_devices) into A3: build.rs bullet now says it delay-loads the Media Foundation DLLs; delay_load.rs test bullet checks the backends' DLLs are delayed and none is a load-time import; other contents hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -67,7 +67,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:d53d551e2de20c45", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: --output row says a placeholder has no target on Windows; Going live and Media Foundation bullets match serve.rs opener reasons and main.rs check order (after logging, before token); exit code 3 row and exit 1 for the QPC clock and codec listing match main.rs" }
+verified = { hash = "b3:548561c153a39b06", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#225) into A3 plus review N2: --help exit 3 now names the AAC encoder too, matching the exit-code table and the Media Foundation bullet; options and Going live bullets unchanged and hold" }
 -->
 
 ```sh
@@ -151,7 +151,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:52cc6e4874faa0db", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "CI doc fix: serve.rs engine() doc no longer intra-links the cfg(windows, test) live fn; Live on Windows and opener bullets unchanged and hold" }
+verified = { hash = "b3:e60a24013bdbad86", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (#225) into A3: Live on Windows lists MfVideoDevices; delay-load bullet names mfplat, mf, mfreadwrite (what MfCodecs and MfVideoDevices import) and why mfsensorgroup waits for the vcam (LNK4199); matches build.rs and delay_load.rs" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
