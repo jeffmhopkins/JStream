@@ -185,7 +185,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             </header>
             <aside class="region scenes"><SceneTree /></aside>
             <section class="region canvas"><Canvas /></section>
-            <aside class="region inspector"><Inspector /></aside>
+            <aside class="region inspector"><Inspector /><crate::panels::Outputs /></aside>
             <footer class="region mixer"><Mixer /></footer>
         </div>
     }

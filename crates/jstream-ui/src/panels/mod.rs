@@ -6,6 +6,10 @@
 
 use leptos::prelude::*;
 
+pub mod outputs;
+
+pub use outputs::Outputs;
+
 /// The scenes and sources tree.
 #[component]
 pub fn SceneTree() -> impl IntoView {

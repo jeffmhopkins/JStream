@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:f77129a46f3e8525", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
+verified = { hash = "b3:5948ab52c39e10a3", by = "agent:claude@session_01458UdCECYpNmex7sr1Hbtc", note = "U3b: Panels bullet names outputs.rs (Outputs under the inspector, its calls tested against MockEngine); app.rs adds it in the inspector region; re-read, holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -32,7 +32,10 @@ Contents (the skeleton; [Design](#design) explains the choices):
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Panels** (`panels/`): the scenes and sources tree, the inspector and the mixer.
-  Placeholders for now.
+  Placeholders for now, except `outputs.rs`: `Outputs`, the outputs panel under the
+  inspector (creating, editing and deleting outputs, their stream keys, start and stop,
+  go-live and the pipeline's health), and the calls and logic behind it, tested
+  natively against `MockEngine`.
 - **Canvas** (`canvas/`): the preview canvas. A placeholder for now.
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
@@ -43,7 +46,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5d91e7e926945a0d", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
+verified = { hash = "b3:c1bb0c382472d8c8", by = "agent:claude@session_01458UdCECYpNmex7sr1Hbtc", note = "U3b: new Outputs and write-only stream key bullets match outputs.rs (state.get + output.status loads, event handling, go-live/end-stream rules, 5-tick health window, key read from an unbound password field into SecretString and cleared); style.css panel block; shell bullet still holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -71,6 +74,24 @@ verified = { hash = "b3:5d91e7e926945a0d", by = "agent:claude@session_01SHnfsdCu
   bottom; narrow windows stack them. Each region is its own component, so the panels
   and the canvas are built separately without touching the shell. Colours follow the
   system's light or dark scheme.
+- **Outputs.** The panel reads the outputs and encoder profiles with `state.get`, then
+  each output's `output.status`, and re-reads them on `state.changed` and
+  `events.dropped`; `output.state_changed` updates one output's state in place. It
+  creates RTMP(S) and recording outputs (IDs `output-N`, the first free one), changes
+  an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
+  output, and starts and stops each. "Go live" starts every stopped or failed RTMP
+  output whose stream key is set, and "End stream" stops the running ones; recordings
+  have only their own buttons. An RTMP output without a key can't be started from the
+  panel. The health line sums `stats.tick`'s drop totals over the last five ticks; a
+  `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
+  over.
+- **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
+  password field is not bound to a signal: the panel reads it only on save, wraps it in
+  a `SecretString` at once (trimming a pasted newline), empties the field and sends
+  `output.set_key`. It never stores, logs or displays the key, and the engine never
+  sends it back: the panel shows only `output.status`'s `key_set`, re-read after it
+  sets or clears a key, since no event reports that. Another client's key change shows
+  on the next re-read.
 - **Native builds.** The crate is a workspace member, so `cargo clippy` and
   `cargo test` build it natively. Its logic is tested there against `MockEngine`
   (`session.rs`); only `start()` needs a browser.
