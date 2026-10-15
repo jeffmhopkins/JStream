@@ -47,10 +47,10 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 | [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 83% | 29 | 3 | 3 |
 | [M1c: Virtual camera](ROADMAP.md#m1) | `████████░░` 83% | 5 | 0 | 1 |
 | [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 30% | 6 | 8 | 6 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 29% | 6 | 9 | 6 |
 | [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 13% | 1 | 0 | 7 |
 
-74 of 107 items are merged; 7 of those still wait on a run on Windows hardware.
+74 of 108 items are merged; 7 of those still wait on a run on Windows hardware.
 
 <details>
 <summary><b>M0</b> Foundation and risk spikes: 11 of 11 merged</summary>
@@ -172,7 +172,7 @@ and drift-checked by `docs check`, so it changes in the same PR as the work.
 </details>
 
 <details>
-<summary><b>M2</b> UI: 6 of 20 merged</summary>
+<summary><b>M2</b> UI: 6 of 21 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
