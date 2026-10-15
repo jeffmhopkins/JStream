@@ -36,8 +36,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 - **Serving** (`serve.rs`): builds the engine (with its placeholder outputs; on
   Windows a live one, [Design](#design)), installs the signal handlers that stop it,
   then binds the server with MCP on.
-- **Media Foundation check** (`main.rs`, Windows only): exits with advice when Windows
-  lacks Media Foundation, as N editions do ([Design](#design)).
+- **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
+  advice when Windows lacks Media Foundation or its AAC encoder, as N editions do
+  ([Design](#design)).
 - **Build script** (`build.rs`): delay-loads `mfplat.dll` on Windows (MSVC), so that
   check can run at all.
 - **Log files** (`logs.rs`): the data directory, and the size-capped rotating log files
@@ -49,7 +50,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   platform fakes, in `serve.rs`; `tests/daemon.rs`, the built binary driven by
   `jstream-control`'s WebSocket client and a raw HTTP MCP client, and stopped with
   SIGINT; `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE
-  headers to check that `mfplat.dll` is delay-loaded, not a load-time import).
+  headers to check that `mfplat.dll` is delay-loaded and no Media Foundation DLL is a
+  load-time import).
 
 Not here yet: serving the web UI (it waits on `jstream-server`,
 [jstream-server › Design](../../crates/jstream-server/README.md#design)),
@@ -132,7 +134,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   edition without the Media Feature Pack, or Windows Server without its "Server Media
   Foundation" feature), the daemon logs the problem, prints `error: Media Foundation
   is not installed: <what to install>` and exits 3, after creating the log directory
-  and before touching the token file.
+  and before touching the token file. If Media Foundation is there but has no AAC
+  encoder, it does the same with `error: Media Foundation's AAC encoder is not
+  installed: …`. Listing the codecs fails with exit 1.
 - `--collection` is refused with a usage error that says it is not supported yet.
 
 | Exit code | Meaning |
@@ -140,7 +144,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | 0 | Stopped by a signal, or printed the help or version |
 | 1 | Failed: the log directory or a log file can't be created, the token file is unusable or can't be created, the media clock can't be opened (Windows), the port can't be bound, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
-| 3 | Windows only: Media Foundation is not installed (see **Media Foundation** above) |
+| 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
 <a id="design"></a>
 ## Design
@@ -180,9 +184,15 @@ verified = { hash = "b3:81409d4a8cf737e0", by = "agent:claude@session_01Fuozqmqh
   links the binary (not its test binaries) with `/DELAYLOAD:mfplat.dll` and
   `delayimp.lib` when the target is MSVC, so the DLL loads on the first call into it.
   `main.rs` runs `jstream_platform_windows::check_media_foundation` right after
-  logging starts, before the engine is built or anything calls Media Foundation, and
-  maps `MissingComponent` to exit code 3 with its advice. Every Media Foundation
-  function the daemon reaches is in `mfplat.dll`. `tests/delay_load.rs` checks the built
+  logging starts, before the engine is built or anything else calls Media Foundation,
+  then lists `MfCodecs`' codecs and requires an AAC encoder (`components.rs`, plain
+  data in and out, tested everywhere), since every stream's audio needs one. Either
+  failure is a `MissingComponent`, mapped to exit code 3 with its advice. Every Media
+  Foundation function the daemon reaches is in `mfplat.dll`, the only DLL `build.rs`
+  delay-loads: the other backends import from `mf.dll`, `mfreadwrite.dll`
+  (`MfVideoDevices`) and `mfsensorgroup.dll` (`WindowsVcam`), which N editions lack
+  too, and each joins the list when the daemon links its backend. Listing one early
+  would make the linker warn (LNK4199), which CI's `-D warnings` turns into an error. `tests/delay_load.rs` checks the built
   binary's import tables, so CI's Windows job proves `/DELAYLOAD` applies to the
   `windows` crate's raw-dylib imports.
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server
@@ -264,7 +274,8 @@ verified = { hash = "b3:81409d4a8cf737e0", by = "agent:claude@session_01Fuozqmqh
 - **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
   `jstream-platform` (`Backends`, the key store trait), `jstream-platform-windows` on
   Windows only (the backends, the key store and the Media Foundation check),
-  `jstream-protocol` (`OutputId`, `OutputKind`), `anyhow`, `tracing` (the startup line) and `blake3`
+  `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
+  check), `anyhow`, `tracing` (the startup line) and `blake3`
   (the crash reports' secret digests), both already in the tree through the server, tokio (`rt-multi-thread` for the runtime,
   `signal` for Ctrl-C, which adds `signal-hook-registry` on Unix), `tracing-subscriber`
   (features `fmt` and `std` only: no `ansi`, `env-filter` or `tracing-log`, so it adds
@@ -274,8 +285,7 @@ verified = { hash = "b3:81409d4a8cf737e0", by = "agent:claude@session_01Fuozqmqh
   (`RandomState`'s hash keys, reading `/dev/urandom`) are either not documented as
   cryptographic or Unix only. Dev-dependencies: `jstream-control` (feature `ws`),
   `futures-util` and tokio's `time`, to drive the daemon as a client would;
-  `jstream-platform` (feature `fake`) and `jstream-media` (`Timebase`), for the live
-  engine and opener tests.
+  `jstream-platform` (feature `fake`), for the live engine and opener tests.
 
 <a id="open-questions"></a>
 ### Open questions

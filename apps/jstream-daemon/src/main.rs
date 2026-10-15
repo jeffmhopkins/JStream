@@ -41,6 +41,7 @@ const FAILED: u8 = 1;
 const USAGE: u8 = 2;
 /// Windows lacks a component the engine needs: Media Foundation, on an N edition
 /// without the Media Feature Pack or a Windows Server without its feature.
+#[cfg(windows)]
 const MISSING_COMPONENT: u8 = 3;
 
 /// The environment variable naming the token file when `--token-file` is not given,
@@ -55,10 +56,7 @@ enum Failure {
     Usage(String),
     Failed(anyhow::Error),
     /// The message says what is missing and how to install it.
-    #[cfg_attr(
-        not(windows),
-        expect(dead_code, reason = "only Windows checks a component")
-    )]
+    #[cfg(windows)]
     MissingComponent(String),
 }
 
@@ -106,6 +104,7 @@ fn main() -> ExitCode {
             let _ = writeln!(stderr().lock(), "error: {error:#}");
             FAILED
         }
+        #[cfg(windows)]
         Err(Failure::MissingComponent(message)) => {
             let _ = writeln!(stderr().lock(), "error: {message}");
             MISSING_COMPONENT

@@ -334,8 +334,7 @@ The code is ported from spikes S1 to S3. This first cut has:
   returns `PlatformError::MissingComponent`, and the registry's `EditionID` picks the
   advice: the Media Feature Pack for an N edition (an ID ending in a capital `N`), the
   server feature for an ID starting with `Server`, and both otherwise. The host must
-  call it before creating the backends; nothing calls it yet (the daemon's startup
-  will).
+  call it before creating the backends, as `jstream-daemon`'s startup does.
   - **Delay-loading:** the `windows` crate imports `mfplat.dll` when the process
     loads, so on such a machine Windows refuses to start a binary that links `MfCodecs`
     before any check can run. That binary must delay-load the DLL (MSVC
