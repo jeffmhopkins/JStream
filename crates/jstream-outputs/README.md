@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:e24e1c05c8b2211e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose after merging main and the #355 review fixes: recorder bullet now says the file is moved (hard link, then .part unlinked) with the exclusive-placeholder fallback; test list names the Unix dangling-symlink test that makes the finish race deterministic; main's shutdown_over_tls test paragraph, error list (Finish/Exists/Rename keep .part) and dependency list still hold" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
