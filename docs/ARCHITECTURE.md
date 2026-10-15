@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:95dec81291a1504b", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 review N1: Built so far now says audio_input, desktop_audio and app_audio have no Source and are recorded as mixer inputs sent to master while an output runs, matching audio_sources.rs and live.rs framed; rest unchanged" }
+verified = { hash = "b3:7021d11fa3e50d0d", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221 C2 text): Built so far now lists color, image and text as built and keeps C5's audio-only sentence; re-read, holds" }
 -->
 
 ```

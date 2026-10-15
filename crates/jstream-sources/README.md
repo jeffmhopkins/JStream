@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:21ff8216b8e34881", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5: Kinds adds audio_input/desktop_audio/app_audio (audio-only, create fails AudioOnly, AudioTarget::of, free-text settings so an unplugged device still loads); unit tests line adds the audio target test; rest re-read and holds" }
+verified = { hash = "b3:a5e2e80619a5977e", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221 C2 text): resolved by hand; Kinds lists text (main's paragraph) and C5's audio-only kinds, described-only list is now display/media/webcam/window; Tests paragraph names both the text distance transform and the audio target unit test; matches registry.rs and lib.rs" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
