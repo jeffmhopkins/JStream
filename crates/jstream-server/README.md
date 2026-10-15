@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:53aa1d07722e01de", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; studio.changed rewrite holds" }
+verified = { hash = "b3:27d1cfcf17e31cd3", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
 -->
 
 ### Listening and admission
@@ -265,8 +265,11 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    `jstream-outputs`' RTMPS, so that needs no further governance change.
 2. **Browser token.** Browsers can't set `Authorization` on a WebSocket. The client
    design sends the token in `Sec-WebSocket-Protocol` instead
-   ([jstream-control › Design](../jstream-control/README.md#design)); the subprotocol
-   naming is not decided, so the server accepts only `Authorization` today.
+   ([jstream-control › Design](../jstream-control/README.md#design)): the subprotocols
+   `jstream` and `jstream.token.<token>`, of which the server selects `jstream`
+   ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). The browser client sends them
+   when it has the token, and otherwise offers no subprotocol and relies on the
+   credentials the browser already sends. The server accepts only `Authorization` today.
 3. **UI assets.** Serving the web UI is deferred. MCP over streamable HTTP is settled
    and built (see *MCP over streamable HTTP*); whether it should also offer SSE, once
    the MCP server has notifications to push, is open.

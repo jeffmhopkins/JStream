@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:027aa172b5f16304", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (B9 #197 delete.plan 0.15, B5, F3, E1/C1b render, C2, mock undo #203) into B10, now protocol 0.16: rule text unchanged; re-read, holds for an additive minor at 0.16" }
+verified = { hash = "b3:b99448c79ee66cf9", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
 -->
 
 <a id="R-API-001"></a>

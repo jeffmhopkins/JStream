@@ -591,7 +591,7 @@ disables the check, only review and the weekly audit stand behind it.
 <!-- @section
 covers = ["xtask/src/lint_deps.rs"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003", "docs/RULES.md#R-ARCH-005", "docs/RULES.md#R-UNSAFE-001", "docs/RULES.md#R-DEP-002", "docs/RULES.md#R-DEP-003"]
-verified = { hash = "b3:2c9f8f14815edcce", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "#100: first hash of its rule dependencies' text. Re-read each bullet against its rule: R-ARCH-005 metadata, R-ARCH-002 layering, R-ARCH-003 clients, R-UNSAFE-001 allowlist and forbid, R-DEP-002 native-code allowlist, R-DEP-003 workspace deps; all match" }
+verified = { hash = "b3:149b25cff1834907", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: lint_deps.rs gains one native-code allowlist entry (prettyplease, links key only, no C), which the native-code bullet covers; every other bullet still matches the code" }
 -->
 
 `cargo xtask lint-deps` (CI check `lint-deps`) checks the rules whose `enforced_by` names

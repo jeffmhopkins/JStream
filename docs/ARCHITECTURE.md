@@ -19,8 +19,8 @@ provisional, and globs that match nothing are only warnings.
 ## Shape of the system
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
-depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:fd2f10fecf76c5ac", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6): daemon row is main's (loads and saves --collection) plus registering the virtual camera (--register-vcam); diagram unchanged" }
+depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
+verified = { hash = "b3:4d2d232d9f0f4f13", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: depends_on moved from superseded ADR-0002 to ADR-0045, which keeps the same web-UI decision; diagram's jstream-ui (Leptos to WASM) client unchanged" }
 -->
 
 ```
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:a80da1a5d3a45874", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (C4b follow-up N7: platform summary row) into A3 (apps row: desktop and daemon link their OS platform crate); both rows match manifests, lint-deps passes" }
+verified = { hash = "b3:1b409ee708c3c06c", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0 vs main: jstream-ui row moves from — to layer 3 with ADR-0045, matching crates/jstream-ui/Cargo.toml (layer 3, depends on control L2 and protocol L1); lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -154,7 +154,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
-| — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
+| 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
@@ -523,7 +523,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:7d085801f43bd2e3", by = "agent:claude@session_01TkdJbk8gULwe9Bmz8SUYDc", note = "Merge of main (#231 D7b, #210 B6-f mock/CLI groups) into B10 at 0.16: re-read; Program scene bullet at 0.16; no wire change in #231 or #210" }
+verified = { hash = "b3:d5e25ccd1e21a596", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "Merge of main (B10 #201 program scene and scene.switch, and others) into U0: took main's text and stamp, re-read; main's changes and U0's browser client, token subprotocol and ADR-0045 text both hold; server still accepts only Authorization on main" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -621,7 +621,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the API review ([R-TEST-002](RULES.md#R-TEST-002)).
 - **Transport:** the `Control` trait is implemented in-process by core
   (`InProcessControl`, [jstream-core › Design](../crates/jstream-core/README.md#design))
-  and over WebSocket by `jstream-control` (`WsControl`, feature `ws`). `jstream-server`
+  and over WebSocket by `jstream-control` (`WsControl`, feature `ws`), natively and in
+  the browser, where the token travels as a subprotocol because a page can't set
+  `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)); `jstream-server` doesn't accept
+  that yet. `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
   default, with the token required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
