@@ -20,9 +20,9 @@ use windows::Win32::Media::MediaFoundation::{
 };
 
 use super::convert::Layout;
-use super::mailbox::Mailbox;
 use super::source::{MfStarted, Opened, VIDEO_STREAM, start_error, with_bytes};
 use crate::QpcClock;
+use crate::capture::mailbox::Mailbox;
 use crate::com::{Com, os_error};
 
 /// How long `open` waits for the device's first read, which is where a device held by
@@ -36,8 +36,7 @@ struct Shared {
     failure: OnceLock<PlatformError>,
     captured: AtomicU64,
     skipped: AtomicU64,
-    /// Frames the decoder rejected (dropped, per the `CaptureDecoder` contract). Not in
-    /// `CaptureStats` yet, which has no field for it.
+    /// Frames the decoder rejected (dropped, per the `CaptureDecoder` contract).
     decode_failures: AtomicU64,
     /// Set when the stream is dropped: the thread stops after its current read.
     stop: AtomicBool,
@@ -166,6 +165,7 @@ impl CaptureStream for MfStream {
         CaptureStats {
             frames_captured: self.shared.captured.load(Ordering::Relaxed),
             frames_skipped: self.shared.skipped.load(Ordering::Relaxed),
+            frames_undecodable: self.shared.decode_failures.load(Ordering::Relaxed),
         }
     }
 }

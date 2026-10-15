@@ -45,6 +45,8 @@ enum Prop {
     Visible,
     /// An item's stacking position.
     Index,
+    /// Which source an item places (`item.set_source`, ADR-0023).
+    Source,
     /// One parameter of a source's settings.
     Setting(String),
     /// An output's publish target.
@@ -120,6 +122,10 @@ impl Touched {
             }
             Edit::ItemReorder { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Index);
+            }
+            Edit::ItemSetSource { item_id, source_id } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Source);
+                self.uses.insert(Object::Source(source_id.clone()));
             }
             // A move sets the item's position, in the scene it names; its inverse names
             // the scene it left.
@@ -512,6 +518,34 @@ mod tests {
             item_id: ItemId::new(item),
             scene_id: None,
             visible: false,
+        }
+    }
+
+    fn set_source(item: &str, source: &str) -> Edit {
+        Edit::ItemSetSource {
+            item_id: ItemId::new(item),
+            source_id: SourceId::new(source),
+        }
+    }
+
+    /// `item.set_source` sets the item's source and uses both sources (the inverse names
+    /// the old one), so a step that deletes either source conflicts with it.
+    #[test]
+    fn set_source_conflicts_with_its_own_property_and_both_sources() {
+        let retarget = Touched::of(&[set_source("i", "clone")], &[set_source("i", "cam")]);
+        assert!(retarget.conflicts_with(&Touched::of(
+            &[set_source("i", "other")],
+            &[set_source("i", "cam")]
+        )));
+        assert!(!retarget.conflicts_with(&Touched::of(&[transform("i")], &[transform("i")])));
+        for source in ["cam", "clone"] {
+            let deleted = Touched::of(
+                &[Edit::SourceDelete {
+                    source_id: SourceId::new(source),
+                }],
+                &[],
+            );
+            assert!(retarget.conflicts_with(&deleted), "{source}");
         }
     }
 

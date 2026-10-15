@@ -1,7 +1,7 @@
-//! Lock-free commands that add and remove mixer inputs while the mixer runs.
+//! Lock-free commands that add and remove mixer inputs and buses while the mixer runs.
 //!
-//! The control thread allocates the ring and the producer, then `try_send`s the input
-//! to the mixer. The mixer applies the command at the start of the next block and does
+//! The control thread allocates the ring and the producer (or a bus's shared state),
+//! then `try_send`s it to the mixer. The mixer applies the command at the start of the next block and does
 //! not allocate to do it (R-RT-001). The queue is bounded and lock-free
 //! ([`crossbeam_channel`]).
 
@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use crossbeam_channel::Sender;
 use jstream_media::{AudioFormat, SampleFormat};
 
+use super::bus::{BusShared, MASTER_ID, MAX_BUSES};
 use super::input::{InputProducer, InputShared};
 use super::retire::Retirer;
 use super::ring::FrameRing;
@@ -32,6 +33,15 @@ pub(crate) enum Command {
         shared: Arc<InputShared>,
     },
     Remove(u64),
+    AddBus {
+        slot: usize,
+        id: u64,
+        shared: Arc<BusShared>,
+    },
+    RemoveBus {
+        slot: usize,
+        id: u64,
+    },
 }
 
 #[derive(Debug)]
@@ -41,12 +51,16 @@ pub(crate) struct ControlPlane {
     /// Ids accepted and not yet removed. Touched only from the control plane, never
     /// from the mixer thread.
     admitted: Mutex<BTreeSet<u64>>,
+    /// The id of the bus in each slot, as the control plane has queued it. Slot 0 is
+    /// the master. Touched only from the control plane.
+    buses: Mutex<[Option<u64>; MAX_BUSES]>,
+    next_bus_id: AtomicU64,
     retirer: Retirer,
     sample_rate: u32,
     ring_frames: usize,
 }
 
-fn lock(mutex: &Mutex<BTreeSet<u64>>) -> std::sync::MutexGuard<'_, BTreeSet<u64>> {
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
@@ -61,6 +75,8 @@ impl ControlPlane {
             tx,
             next_id: AtomicU64::new(1),
             admitted: Mutex::new(BTreeSet::new()),
+            buses: Mutex::new(std::array::from_fn(|slot| (slot == 0).then_some(MASTER_ID))),
+            next_bus_id: AtomicU64::new(MASTER_ID + 1),
             retirer,
             sample_rate,
             ring_frames,
@@ -126,6 +142,44 @@ impl ControlPlane {
             admitted.insert(id);
             return false;
         }
+        true
+    }
+
+    /// Allocates a bus and queues it for the mixer. Returns its slot, its id and its
+    /// shared state.
+    pub(crate) fn add_bus(&self) -> Result<(usize, u64, Arc<BusShared>), AudioError> {
+        let mut buses = lock(&self.buses);
+        let Some(slot) = buses.iter().position(Option::is_none) else {
+            return Err(AudioError::TooManyBuses);
+        };
+        let id = self.next_bus_id.fetch_add(1, Ordering::Relaxed);
+        let shared = Arc::new(BusShared::new());
+        let queued = Command::AddBus {
+            slot,
+            id,
+            shared: Arc::clone(&shared),
+        };
+        if self.tx.try_send(queued).is_err() {
+            return Err(AudioError::CommandQueueFull);
+        }
+        buses[slot] = Some(id);
+        Ok((slot, id, shared))
+    }
+
+    /// Queues removal of bus `id` in `slot`. False for the master, for a bus already
+    /// removed, or when the command queue cannot take it (the bus stays).
+    pub(crate) fn remove_bus(&self, slot: usize, id: u64) -> bool {
+        if id == MASTER_ID {
+            return false;
+        }
+        let mut buses = lock(&self.buses);
+        if buses.get(slot).copied().flatten() != Some(id) {
+            return false;
+        }
+        if self.tx.try_send(Command::RemoveBus { slot, id }).is_err() {
+            return false;
+        }
+        buses[slot] = None;
         true
     }
 }

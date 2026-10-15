@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:90cf1722254d4270", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b, #148 MF N editions): stamp-only conflict, main's text taken; F3 wrote nothing here that C1b or #148 changes; holds" }
+verified = { hash = "b3:5de498de12175cfb", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Model list has Source's duplicated_from, Item's set_source and F3's Encoder/Output; collection-file paragraph lists duplicated_from and encoders; tests paragraph names both fixtures' additions and both round-trip tests" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -33,14 +33,19 @@ codes, so the engine passes them to clients unchanged.
   kind ID, or `scene`, a nested scene) and its `Settings`: every parameter of its kind,
   or none for a `scene` source. `item.add` places an existing source by reference,
   so one source can sit in many scenes, or several times in one, and is still one
-  capture. `source.duplicate` makes a separate copy under a new ID. Removing an item
-  never deletes its source.
+  capture. `source.duplicate` makes a separate copy under a new ID and records the
+  original in the copy's `duplicated_from`, a plain link that is no dependency edge:
+  the original may be deleted, and reads then omit the link. Removing an item never
+  deletes its source.
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
   here) and its items in stacking order, bottom first.
 - `Item`: the source it places, a `Placement`, a `crop` and `visible`. `Placement` is
   one of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two forms: a
   `Geometry` (a box on the canvas) or a `Legacy` 0.3 `ItemTransform`, kept exactly as
   written. Only an edit changes the form.
+  `item.set_source` changes the source and keeps the rest, the item's ID and its
+  stacking position, so it converts the item between a reference and a clone
+  ([ADR-0023](../../docs/adr/0023-placements-references-and-clones.md)).
 - `Encoder`: an encoder profile, an ID, a name and the protocol's `EncoderProfile`.
   `State::encoding_of` gives the encoding an output starts with.
 - `Output`: an ID, an `OutputKind` (so far RTMP to a generic URL, or a recording
@@ -67,7 +72,9 @@ goes up by exactly one, and the result carries the **inverse batch**.
   given value with the protocol's `ParamDescriptor::check`, and stores the complete map
   with defaults filled in. `source.set_settings` checks and applies a patch (`null`
   resets a parameter to its default) and its inverse is the patch of the old values.
-  `source.rename` renames. A reference to a missing scene or source is `not_found`, and
+  `source.rename` renames. `source.create` rejects a `duplicated_from` naming the new
+  source itself, and accepts one naming a missing source, as `source.delete`'s inverse
+  may need after the original went first. A reference to a missing scene or source is `not_found`, and
   a `source` reference restricted to `media` needs a source whose kind produces it.
 - **References are never left dangling.** `source.delete` is rejected while an item
   places the source or a setting refers to it, and `scene.delete` while a `scene`
@@ -119,7 +126,8 @@ goes up by exactly one, and the result carries the **inverse batch**.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
   scenes and sources its settings refer to. Asset references are not edges. Every edit
-  that adds an edge runs the cycle check: `item.add`, `item.move`, `source.create` and
+  that adds an edge runs the cycle check: `item.add`, `item.move`, `item.set_source`
+  (from the item's scene to its new source), `source.create` and
   `source.set_settings`; `source.duplicate` copies outgoing edges onto a source nothing
   depends on, so it can't close one. A cycle is `invalid_argument` naming it
   (for example scene `a` -> source `sa` -> scene `a`).
@@ -135,7 +143,8 @@ display order, items bottom first, outputs and encoder profiles ordered by ID.
 `state.get` carries the
 canvas. A geometry item reads its `geometry`, and the deprecated `transform` view the
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
-stored transform and no geometry. `Source::to_info`,
+stored transform and no geometry. `Source::to_info` (given the `State`, to omit a
+`duplicated_from` whose source is gone),
 `Scene::to_info`, `Item::to_info` and `Output::to_info` convert single objects. Reads change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
@@ -144,7 +153,8 @@ stored transform and no geometry. `Source::to_info`,
 `role: "group"`, ADR-0024) with their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
 and `visible`), sources ordered by ID (with `kind_version`, the descriptor version a
-`builtin` source's settings follow, ADR-0025), outputs ordered by ID (each with its
+`builtin` source's settings follow, ADR-0025, and `duplicated_from` as stored, even
+when it names a deleted source), outputs ordered by ID (each with its
 `encoder_profile`, omitted for the default), and encoder profiles (`encoders`) ordered by
 ID, omitted when there are none. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -171,8 +181,10 @@ the engine's; this crate does no I/O.
   name, a fixed reason, and the line and column of a syntax error.
 
 **Tests** (`tests.rs`; the reads' own in `read.rs`): validation and error codes per
-edit, shared sources, cycles (self, 2- and 3-cycles, legal diamonds, and through
-settings references, one case per edge-adding edit), settings checks and defaults,
+edit, shared sources, references and clones (`item.set_source` keeping the item, the
+`duplicated_from` link through deletes and undo, and both conversions as one batch),
+cycles (self, 2- and 3-cycles, legal diamonds, and through settings references, one
+case per edge-adding edit), settings checks and defaults,
 placement conversions and their inverses, geometry and canvas validation,
 delete rejection by references, roles, moves and the grouping and ungrouping batches,
 `scene_id` addressing, output URL checks and the refused delete of a running
@@ -182,18 +194,18 @@ what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
-batches of every edit, including moves, role changes and addressed placement edits. After each successful one, applying its
+batches of every edit, including moves, role changes, source switches and addressed placement edits. After each successful one, the state must hold no cycle, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
-scene `b` made a group) plus a source whose
+scene `b` made a group, a clone and a `duplicated_from` naming a missing source) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema
 moves on, and a migration has to load it); a file without `encoders` or any
 `encoder_profile` (as saved before profiles existed) loading with none; a profile's
-round trip; the migration runner over stand-in
+round trip; a clone's link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that
