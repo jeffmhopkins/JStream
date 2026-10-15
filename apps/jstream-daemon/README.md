@@ -122,7 +122,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:1c1b65a22e35d7cc", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): re-read; serve.rs still builds one Engine (now with the built-in kinds via Engine::default) with with_output only; session, listening, token, logging bullets hold" }
+verified = { hash = "b3:66cea1178284e8c9", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1a: stale through core#design only (its Dependencies list gained jstream-sources); re-read the daemon Design bullets, which cite core's Design for sessions and events, unchanged; daemon code untouched" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

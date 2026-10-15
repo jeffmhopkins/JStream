@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:767f24f532d7cc15", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Model lists kinds, settings and outputs; Settings, references, Outputs (target.rs, apply_with_running) and deps.rs cycle bullets checked against apply.rs/deps.rs/read.rs; property test now generates rename, set_settings and output edits (below(20))" }
+verified = { hash = "b3:3d79210727ea907c", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1a: stale through ARCH#data-model only (kinds now from jstream-sources); graph code untouched, Model bullets still hold" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -118,9 +118,9 @@ Planned, and kept possible by the private fields of the model types:
   `src/persist/`. Deferred to keep this first cut reviewable; nothing is saved yet.
 - **Filters and effects:** `filters[]` on sources (applied wherever the source is
   placed) and `effects[]` on items (per placement), with their edits.
-- **Kinds from `jstream-sources`.** The engine's kinds are stubs until that crate
-  supplies the real ones. Kind versions on stored settings, migrations, and keeping
-  data for a missing kind come with persistence.
+- **Kind versions.** The engine's kinds come from `jstream-sources`. Kind versions on
+  stored settings, migrations, and keeping data for a missing kind come with
+  persistence.
 - The collection canvas and item `geometry` of
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md), replacing the protocol's
   2D `ItemTransform`, which an item keeps as a legacy placement until 1.0 unless an

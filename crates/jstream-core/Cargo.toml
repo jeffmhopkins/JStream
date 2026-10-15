@@ -27,10 +27,10 @@ jstream-outputs.workspace = true
 jstream-platform.workspace = true
 jstream-protocol.workspace = true
 jstream-render.workspace = true
+# The built-in source kinds and their descriptors (ADR-0031, ADR-0025).
+jstream-sources.workspace = true
 # PNG for `video.snapshot` (ADR-0031). Encoding only; deflate stays pure Rust.
 png.workspace = true
-# Settings values and defaults in the built-in kind descriptors (ADR-0025).
-serde_json.workspace = true
 thiserror.workspace = true
 # Spans around commands, outputs and sessions (R-RS-005).
 tracing.workspace = true
@@ -42,5 +42,7 @@ jstream-control = { workspace = true, features = ["mock"] }
 jstream-platform = { workspace = true, features = ["fake"] }
 # `tests/mcp.rs`: an MCP agent driving the real engine through `InProcessControl`.
 jstream-mcp.workspace = true
+# Settings maps in the kind tests.
+serde_json.workspace = true
 # The shared parity fixture that `jstream-graph` and the mock are held to.
 jstream-protocol = { workspace = true, features = ["fixtures"] }

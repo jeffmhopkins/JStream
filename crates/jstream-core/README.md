@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:77ddb8e8f9eb794c", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Engine, Kinds, Runtime and Tests bullets; #133 only reorders Running's fields and launch's bindings so input rings drop off the real-time thread, which no bullet describes" }
+verified = { hash = "b3:6555a4a33b0ce5b2", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1a: Kinds bullet now says kinds.rs takes jstream-sources' registry descriptors; Not here yet says rendering from the registry; tests and other bullets unchanged" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -40,10 +40,9 @@ state machine. Contents:
   subscribers behind one lock, and the drop ledger behind another, and executes
   batches, actions and queries. The pipeline threads do not take the collection lock.
 - **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
-  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)).
-  They are stubs: `color`, `image`, `media` and `text` take a first set of parameters,
-  and `display`, `webcam` and `window` none. Nothing renders from them yet; frames
-  still come from `set_source_frame`. `jstream-sources` replaces them.
+  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)),
+  taken from `jstream-sources`' built-in registry. Nothing renders from them yet;
+  frames still come from `set_source_frame`.
 - **Snapshot** (`snapshot.rs`): `video.snapshot`, the program mix read back as a PNG
   on the engine's own snapshot thread, which owns the snapshot compositor.
 - **Runtime** (`runtime/`): the `output.start` pipeline. The render thread reads the
@@ -84,8 +83,8 @@ state machine. Contents:
   which captures the engine's traces), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
-Not here yet: per-client undo, the audit log, persistence, real source kinds, arc-swap
-snapshots, a GPU encode target, and the platform's Windows devices. See
+Not here yet: per-client undo, the audit log, persistence, rendering from the source
+registry, arc-swap snapshots, a GPU encode target, and the platform's Windows devices. See
 [Design › Not yet](#design).
 
 Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
@@ -97,7 +96,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8e54430793e482ea", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: prose identical on both sides; re-read Calls (kind queries), Outputs, Pipeline and Locking; #133's drop order changes no described state, error, lock or deadline" }
+verified = { hash = "b3:652772d0b7e3af74", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1a: Dependencies list adds jstream-sources and moves serde_json to dev-dependencies (kind tests); Not yet bullet says rendering from the registry; Calls and Locking unchanged" }
 -->
 
 ### Engine and sessions
@@ -135,16 +134,17 @@ canvas `FrameSize` and the media clock's time base), `jstream-render` (the snaps
 and the pipeline compositor), `jstream-platform` (backend traits the host injects, and
 the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its drop
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
-`jstream-mux` (FLV), `jstream-outputs` (the reconnecting RTMP publisher), `png`
+`jstream-mux` (FLV), `jstream-outputs` (the reconnecting RTMP publisher),
+`jstream-sources` (the built-in kind descriptors), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
-[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `serde_json`
-(settings values in the built-in kind descriptors), `thiserror`
+[ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
 `tracing` (see *Logging*). No async runtime: `output.start` blocks the call until
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
-`tests/scenarios.rs`) and `jstream-mcp` (`tests/mcp.rs`). All of them
+`tests/scenarios.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
+maps in the kind tests). All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
@@ -494,8 +494,8 @@ revisions and error codes are logged, never a call's arguments
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- The audit log, persistence (the collection file), and real source kinds with
-  settings that change what renders (`jstream-sources`).
+- The audit log, persistence (the collection file), and rendering sources from
+  `jstream-sources`' registry, so settings change what renders.
 - Arc-swap snapshots, the collector thread, live-value handover, and a GPU encode
   target. `output.start` is the first cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): one scene, a CPU readback

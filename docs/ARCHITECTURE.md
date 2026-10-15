@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml", "apps/*/Cargo.toml"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:ab2169e2c211fe79", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#133, #156, #157, #158, #160) into B4: re-read the map; the jstream-outputs row names recording as its Cargo description now does (#156); vcam-proto row holds; B4 adds no layer edge" }
+verified = { hash = "b3:0e93f00ede99bdba", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1a adds jstream-sources (L4, depends on media L0 and protocol L1) and core (L5) depends on it; the existing row already describes the crate; no layer edge breaks R-ARCH-002" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md"]
-verified = { hash = "b3:469cd47b05c605ba", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Built so far merged: settings checked and stored complete, settings-reference edges and delete rejection (B4), and outputs with Rtmp Generic url (#142); Not yet drops settings and keeps kind versions; checked against graph model/mod.rs" }
+verified = { hash = "b3:9d107217f09b0481", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1a: Built so far now says the built-in kind descriptors come from jstream-sources (color and image produce frames, not rendered yet); rest unchanged" }
 -->
 
 ```
@@ -345,7 +345,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
-  built-in kinds are stubs in `jstream-core` until `jstream-sources` exists.
+  built-in kinds' descriptors come from `jstream-sources`, whose `color` and `image`
+  kinds produce frames; the engine doesn't render from them yet.
   Outputs, ordered by ID, with only their `kind`: `Rtmp { target: Generic { url } }`,
   the URL checked to carry no credential. A stream key is never collection state: it
   lives in the OS credential store ([R-SEC-001](RULES.md#R-SEC-001)).
