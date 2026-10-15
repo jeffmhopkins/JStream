@@ -116,6 +116,9 @@ fn undo_and_redo_are_saved() {
     assert!(block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo)))).is_ok());
     assert_eq!(saved(&path)["rev"], 2);
     assert_eq!(saved(&path)["scenes"], serde_json::json!([]));
+    assert!(block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Redo)))).is_ok());
+    assert_eq!(saved(&path)["rev"], 3);
+    assert_eq!(saved(&path)["scenes"][0]["id"], "a");
     let _ = fs::remove_dir_all(dir);
 }
 

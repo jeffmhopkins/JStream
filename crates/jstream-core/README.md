@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:9e2ee48731f351e4", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6, G3a): re-read; Collection file bullet and tests list still hold beside main's additions" }
+verified = { hash = "b3:dd2a5205b1c56007", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 round 3 B4: Tests bullet now names src/tests/collection.rs (not tests/), and says batches, an undo and a redo are each saved (undo_and_redo_are_saved now redoes too) and a saved collection loads in a new engine (changes_are_saved_and_load_in_a_new_engine); checked each claim against the test file" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -102,8 +102,9 @@ state machine. Contents:
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
   rotation (`audit.rs`), and of undo and redo (`undo_and_redo_are_audited`), the
-  collection file (`tests/collection.rs`: created when missing, every batch, undo and
-  redo saved and loaded by a new engine with its `rev` and outputs, refused files left
+  collection file (`src/tests/collection.rs`: created when missing, batches, an undo
+  and a redo each saved, a saved collection loaded by a new engine with its `rev` and
+  outputs, refused files left
   as they were, a failed save that the next change recovers, and concurrent sessions
   leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
@@ -121,7 +122,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:b1bbb604a242fa0d", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 merge of main (B6, G3a): re-read Collection file subsection; unchanged and still matches engine.rs/collection.rs" }
+verified = { hash = "b3:243c298aad8f82e5", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 round 3: only src/tests/collection.rs changed (redo added to a test); Collection file subsection re-read, unchanged and still accurate" }
 -->
 
 ### Engine and sessions
