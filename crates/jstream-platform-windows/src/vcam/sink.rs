@@ -53,8 +53,7 @@ const HEARTBEAT: Duration = Duration::from_millis(200);
 ///
 /// - **Format:** only the contract's, 1920x1080 BGRA at 30 fps
 ///   ([`offered_format`](Self::offered_format)). Frames are system-memory BGRA
-///   (`VideoSurface::Cpu`); GPU frames are `Unsupported` until the D3D11 side of the GPU
-///   path exists.
+///   (`VideoSurface::Cpu`); GPU frames are `Unsupported` for now.
 /// - **Registration:** the media source must already be registered machine-wide (the
 ///   app's `--register-vcam` step). `start` checks for its `HKLM` class key and is
 ///   `Unsupported` without it.
