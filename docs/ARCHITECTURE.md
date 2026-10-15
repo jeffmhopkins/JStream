@@ -644,7 +644,7 @@ verified = { hash = "b3:90489d48b902b02d", by = "agent:claude@session_017CbEsAJT
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:d9ef248382cce5c7", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): added the sentence that a nested scene goes through render_image as an on-GPU Rgba16Float image placed in its parent, with the caller bounding depth; plus review N5 rename; steps 1-6, S1 table and output path unchanged" }
+verified = { hash = "b3:d4c7ac3c7850d9fe", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into E3a: body is main's (C6's nested-scene render_image sentence kept); re-read steps 1-2 against gpu/capture.rs (one GPU copy into JStream-allocated shared NT-handle textures, opened in D3D12 via wgpu-hal; D3D11 signals a per-stream fence the wgpu queue waits on, the queue signals the release) and the one-scene paragraph against C6" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

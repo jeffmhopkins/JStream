@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:69efcea78a892425", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3a: re-read the purpose section; WgcCapture now has on_gpu (context's D3D11 device, 4-slot BGRA shared-texture ring, per-stream D3D11-signalled fence, drop-and-count when full), WindowsGpu fence values (only the wgpu queue signals the context fence), Not yet and Tests updated to match capture/ring.rs, gpu/capture.rs and wgc.rs" }
+verified = { hash = "b3:34658075d3c0001e", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main into E3a: section text is E3a's (main changed only the verified line, via D1's ARCH#threading/crate-map edits, which don't concern this crate); re-read WgcCapture on_gpu, WindowsGpu fence values, Not yet, Tests against capture/ring.rs, gpu/capture.rs, wgc.rs, and the edited platform README purpose" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

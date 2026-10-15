@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:10dfd4b0711bd43d", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "C6 (#147): rewrote the nested-scene bullet (render_image returns an Image on this compositor that the caller places; depth and cycles are jstream-core's); plus review N5 helper rename; other bullets unchanged against main" }
+verified = { hash = "b3:9a5663443c72eb70", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3a: stale only via platform#gpu-frames and ARCH#gpu-pipeline; re-read the import bullets: Bgra8UnormSrgb opaque GpuFrames with FrameSync staged once per hold are exactly what WgcCapture::on_gpu delivers; no render code changed" }
 -->
 
 One scene, composited on the GPU with wgpu

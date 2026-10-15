@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:09d7b482bf1e535b", by = "agent:claude@session_01Y9GgDKrfu3Ryj3xUXSu39h", note = "Merge of main into D1: section text is main's; stale only via ARCH#threading/crate-map, where D1 changes only the audio mixer's collector sentences and audio's crossbeam dependency; re-read its threading and crate-map references, none concerns either" }
+verified = { hash = "b3:bbdc1cc3214a5e9a", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3a review B1: Not yet now says Windows capture delivers GPU frames via WgcCapture::on_gpu and only consumers (encoders, vcam) are missing; rest of the list (VideoDevices impl, MJPEG codec, adapter selection) unchanged against main" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -127,7 +127,7 @@ from the platform's decoder, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:6deb5c7d15855e99", by = "agent:claude@session_01JqJ6xRuYcPcvHxrfYpsRFJ", note = "Merge of main (#158 capture device, #169 OAuth store, #141/G1 crate-map rows) into C6 #147: the GpuInterop/GpuFrame design is unchanged, and C6's ARCH gpu-pipeline render_image sentence keeps render on the platform device when present, never writing the NV12 target" }
+verified = { hash = "b3:f5ddba403c99beac", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3a review B1: intro now says Windows capture delivers frames in a ring of shared BGRA textures (Frame lifetime bullet matches capture/ring.rs: free when unheld and fence passed, drop and count when full); only the encoders' GPU input comes next; types and render sentence unchanged" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu
