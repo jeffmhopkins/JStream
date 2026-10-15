@@ -36,11 +36,12 @@ mod tests {
     }
 
     /// The shared parity collection needs its kinds described exactly as the fixture
-    /// does, so every implementation reports the same settings.
+    /// does, so every implementation reports the same settings. Its audio kind, `mic`, is
+    /// not a built-in kind; the engine's parity tests add it themselves.
     #[test]
     fn parity_kinds_are_builtin() {
         let kinds = builtin();
-        for kind in parity::kinds() {
+        for kind in parity::kinds().into_iter().filter(|k| !k.audio) {
             assert!(kinds.contains(&kind), "{}", kind.kind_id);
         }
     }
