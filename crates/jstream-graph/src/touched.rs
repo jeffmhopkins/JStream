@@ -4,7 +4,7 @@
 //! history logs it and checks a step's touched set against other clients' later ones.
 
 use jstream_protocol::{
-    Edit, EncoderProfileId, ItemId, OutputId, SceneId, SourceId, SourceKind, VideoMixId,
+    BusId, Edit, EncoderProfileId, ItemId, OutputId, SceneId, SourceId, SourceKind, VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -17,6 +17,10 @@ enum Object {
     Output(OutputId),
     Encoder(EncoderProfileId),
     VideoMix(VideoMixId),
+    /// An audio bus.
+    Bus(BusId),
+    /// One source's send into one bus.
+    Send(SourceId, BusId),
 }
 
 /// A property an edit sets, on its object.
@@ -46,6 +50,14 @@ enum Prop {
     MixChoice,
     /// A video mix's input, resolution and rate.
     Mix,
+    /// Whether a source's audio is open.
+    AudioEnabled,
+    /// When a source's audio is heard.
+    AudioFollow,
+    /// A source's or bus's fader, or a send's gain.
+    Gain,
+    /// A source's or bus's mute.
+    Muted,
 }
 
 /// What a batch touched: computed from its edits and its inverse's, so a delete also
@@ -202,6 +214,58 @@ impl Touched {
                     self.uses.insert(Object::VideoMix(mix_id.clone()));
                 }
             }
+            Edit::SourceSetAudio {
+                source_id,
+                enabled,
+                follow,
+                gain_db,
+                muted,
+            } => {
+                let source = Object::Source(source_id.clone());
+                let set = [
+                    (enabled.is_some(), Prop::AudioEnabled),
+                    (follow.is_some(), Prop::AudioFollow),
+                    (gain_db.is_some(), Prop::Gain),
+                    (muted.is_some(), Prop::Muted),
+                ];
+                for (_, prop) in set.into_iter().filter(|(set, _)| *set) {
+                    self.prop(source.clone(), prop);
+                }
+            }
+            Edit::BusCreate { bus_id, .. } | Edit::BusDelete { bus_id } => {
+                self.exists.insert(Object::Bus(bus_id.clone()));
+            }
+            Edit::BusRename { bus_id, .. } => {
+                self.prop(Object::Bus(bus_id.clone()), Prop::Name);
+            }
+            Edit::BusSetFader {
+                bus_id,
+                gain_db,
+                muted,
+            } => {
+                let bus = Object::Bus(bus_id.clone());
+                if gain_db.is_some() {
+                    self.prop(bus.clone(), Prop::Gain);
+                }
+                if muted.is_some() {
+                    self.prop(bus, Prop::Muted);
+                }
+            }
+            // Setting a send creates it or sets its gain: the inverse of a new one is
+            // `send.remove`, which names it as created or deleted.
+            Edit::SendSet {
+                source_id, bus_id, ..
+            } => {
+                self.prop(Object::Send(source_id.clone(), bus_id.clone()), Prop::Gain);
+                self.uses.insert(Object::Source(source_id.clone()));
+                self.uses.insert(Object::Bus(bus_id.clone()));
+            }
+            Edit::SendRemove { source_id, bus_id } => {
+                self.exists
+                    .insert(Object::Send(source_id.clone(), bus_id.clone()));
+                self.uses.insert(Object::Source(source_id.clone()));
+                self.uses.insert(Object::Bus(bus_id.clone()));
+            }
             _ => self.unknown = true,
         }
     }
@@ -246,8 +310,8 @@ impl Touched {
 mod tests {
     use super::Touched;
     use jstream_protocol::{
-        Edit, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform, OutputId,
-        SceneId, SourceId,
+        BusId, Edit, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
+        OutputId, SceneId, SourceId,
     };
 
     fn add(scene: &str, item: &str, source: &str) -> Edit {
@@ -456,5 +520,73 @@ mod tests {
         let sized = Touched::of(&[canvas()], &[canvas()]);
         assert!(sized.conflicts_with(&Touched::of(&[canvas()], &[canvas()])));
         assert!(!sized.conflicts_with(&boxed));
+    }
+
+    /// Audio edits are known: faders conflict per property, a send with its own gain and
+    /// with deleting its bus, and two sources' sends into one bus don't conflict.
+    #[test]
+    fn audio_edits_conflict_on_their_source_bus_or_send() {
+        let db = |v| jstream_protocol::Finite32::new(v).expect("finite");
+        let send = |source: &str, gain| Edit::SendSet {
+            source_id: SourceId::new(source),
+            bus_id: BusId::new("vod"),
+            gain_db: db(gain),
+        };
+        let gain = |source: &str| Edit::SourceSetAudio {
+            source_id: SourceId::new(source),
+            enabled: None,
+            follow: None,
+            gain_db: Some(db(-3.0)),
+            muted: None,
+        };
+        let mute = Edit::SourceSetAudio {
+            source_id: SourceId::new("mic"),
+            enabled: None,
+            follow: None,
+            gain_db: None,
+            muted: Some(true),
+        };
+        let faded = Touched::of(&[gain("mic")], &[gain("mic")]);
+        assert!(!faded.unknown);
+        assert!(faded.conflicts_with(&faded.clone()));
+        assert!(!faded.conflicts_with(&Touched::of(
+            std::slice::from_ref(&mute),
+            std::slice::from_ref(&mute)
+        )));
+        assert!(!faded.conflicts_with(&Touched::of(&[gain("aux")], &[gain("aux")])));
+
+        let mic = Touched::of(&[send("mic", -3.0)], &[send("mic", 0.0)]);
+        let aux = Touched::of(&[send("aux", -3.0)], &[send("aux", 0.0)]);
+        assert!(!mic.unknown);
+        assert!(mic.conflicts_with(&mic.clone()));
+        assert!(!mic.conflicts_with(&aux));
+        let removed = Touched::of(
+            &[Edit::SendRemove {
+                source_id: SourceId::new("mic"),
+                bus_id: BusId::new("vod"),
+            }],
+            &[send("mic", -3.0)],
+        );
+        assert!(mic.conflicts_with(&removed));
+        assert!(!aux.conflicts_with(&removed));
+        let deleted = Touched::of(
+            &[Edit::BusDelete {
+                bus_id: BusId::new("vod"),
+            }],
+            &[Edit::BusCreate {
+                bus_id: BusId::new("vod"),
+                name: "VOD".into(),
+            }],
+        );
+        assert!(mic.conflicts_with(&deleted));
+        let renamed = Touched::of(
+            &[Edit::BusRename {
+                bus_id: BusId::new("vod"),
+                name: "VOD".into(),
+            }],
+            &[],
+        );
+        assert!(!renamed.unknown);
+        assert!(!renamed.conflicts_with(&mic));
     }
 }

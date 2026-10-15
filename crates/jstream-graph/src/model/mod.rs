@@ -28,14 +28,21 @@
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
 //! - Every output's video mix exists, every mix passes `VideoMix::problem`, and the
 //!   scene a `scene` mix shows exists.
+//! - A source has audio settings exactly when it is an audio source: its kind produces
+//!   audio, or it is a `scene` source (ADR-0028). A `scene` source's fader is 0 dB and
+//!   unmuted.
+//! - The master bus always exists, and there are at most [`MAX_BUSES`] buses. Every
+//!   fader and send gain is within the protocol's −100 to +24 dB.
+//! - Every send's source is an audio source that is not a `scene` source, and its bus
+//!   exists. Sends only run from sources into buses, so the audio graph has no cycle.
 //!
 //! The structs have private fields so that later additions (source `filters[]`, item
 //! `effects[]`, the full 3D transform) don't break callers.
 
 use jstream_protocol::{
-    Canvas, Crop, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
-    KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole, Settings,
-    SourceId, SourceKind, VideoMix as MixSpec, VideoMixId,
+    BusId, Canvas, Crop, EncoderProfile, EncoderProfileId, Finite32, ItemGeometry, ItemId,
+    ItemTransform, KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole,
+    Settings, SourceAudio, SourceId, SourceKind, VideoMix as MixSpec, VideoMixId,
 };
 use std::collections::BTreeMap;
 
@@ -92,8 +99,11 @@ impl Graph {
 /// 7680×4320; each side may be up to this, in either orientation.
 pub const MAX_CANVAS_EDGE: u32 = 8192;
 
+/// The most buses a collection holds, the master included: what the mixer holds.
+pub const MAX_BUSES: usize = 16;
+
 /// The collection state without its revision: what undo restores exactly.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct State {
     pub(crate) canvas: Canvas,
     pub(crate) sources: BTreeMap<SourceId, Source>,
@@ -101,7 +111,32 @@ pub struct State {
     pub(crate) outputs: BTreeMap<OutputId, Output>,
     pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
     pub(crate) video_mixes: BTreeMap<VideoMixId, VideoMix>,
+    /// The master bus among them.
+    pub(crate) buses: BTreeMap<BusId, Bus>,
+    /// Each send's gain in dB, keyed by bus, then by source: the order `bus.list`
+    /// reports them in.
+    pub(crate) sends: BTreeMap<(BusId, SourceId), Finite32>,
 }
+
+impl Default for State {
+    /// An empty collection: the default canvas and the master bus.
+    fn default() -> Self {
+        let master = Bus::new(BusId::master(), MASTER_NAME.to_owned());
+        Self {
+            canvas: Canvas::default(),
+            sources: BTreeMap::new(),
+            scenes: Vec::new(),
+            outputs: BTreeMap::new(),
+            encoders: BTreeMap::new(),
+            video_mixes: BTreeMap::new(),
+            buses: BTreeMap::from([(master.id.clone(), master)]),
+            sends: BTreeMap::new(),
+        }
+    }
+}
+
+/// The master bus's name in a new collection.
+pub(crate) const MASTER_NAME: &str = "Master";
 
 impl State {
     /// The canvas every scene is laid out on.
@@ -184,6 +219,28 @@ impl State {
         self.video_mixes.get(id)
     }
 
+    /// Every bus, ordered by ID, the master among them.
+    pub fn buses(&self) -> impl ExactSizeIterator<Item = &Bus> {
+        self.buses.values()
+    }
+
+    /// The bus with this ID.
+    pub fn bus(&self, id: &BusId) -> Option<&Bus> {
+        self.buses.get(id)
+    }
+
+    /// Every send as (source, bus, gain in dB), ordered by bus, then by source.
+    pub fn sends(&self) -> impl Iterator<Item = (&SourceId, &BusId, Finite32)> {
+        self.sends
+            .iter()
+            .map(|((bus, source), gain)| (source, bus, *gain))
+    }
+
+    /// The gain in dB of `source`'s send into `bus`, if it has one.
+    pub fn send(&self, source: &SourceId, bus: &BusId) -> Option<Finite32> {
+        self.sends.get(&(bus.clone(), source.clone())).copied()
+    }
+
     pub(crate) fn scene_index(&self, id: &SceneId) -> Option<usize> {
         self.scenes.iter().position(|s| &s.id == id)
     }
@@ -205,6 +262,8 @@ pub struct Source {
     pub(crate) kind: SourceKind,
     pub(crate) settings: Settings,
     pub(crate) duplicated_from: Option<SourceId>,
+    /// Set exactly for an audio source.
+    pub(crate) audio: Option<SourceAudio>,
 }
 
 impl Source {
@@ -233,6 +292,12 @@ impl Source {
     /// deleted, and queries report it only while that source exists.
     pub fn duplicated_from(&self) -> Option<&SourceId> {
         self.duplicated_from.as_ref()
+    }
+
+    /// Its audio settings, if it is an audio source: its kind produces audio, or it is
+    /// a `scene` source.
+    pub fn audio(&self) -> Option<&SourceAudio> {
+        self.audio.as_ref()
     }
 }
 
@@ -379,6 +444,47 @@ impl Encoder {
     /// The encoding.
     pub fn profile(&self) -> &EncoderProfile {
         &self.profile
+    }
+}
+
+/// One audio bus: its fader and mute, applied after the sum of its sends.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Bus {
+    pub(crate) id: BusId,
+    pub(crate) name: String,
+    pub(crate) gain_db: Finite32,
+    pub(crate) muted: bool,
+}
+
+impl Bus {
+    /// A new bus: at 0 dB, unmuted.
+    pub(crate) fn new(id: BusId, name: String) -> Self {
+        Self {
+            id,
+            name,
+            gain_db: Finite32::ZERO,
+            muted: false,
+        }
+    }
+
+    /// Its ID.
+    pub fn id(&self) -> &BusId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Its fader, in dB.
+    pub fn gain_db(&self) -> Finite32 {
+        self.gain_db
+    }
+
+    /// Whether it is muted.
+    pub fn muted(&self) -> bool {
+        self.muted
     }
 }
 

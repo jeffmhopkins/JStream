@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:e067f8a40a0c8989", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "E2 round 2 (merge of main with G3b virtual camera; mixes now 0.19): cascade only; outputs panel text still accurate (OutputInfo gained video_mix, UI ignores it)" }
+verified = { hash = "b3:5147b8af968798bb", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at Q3 (#309): the design text is main's (Playwright against a mock daemon); D5's mock additions (buses, sends, audio) are additive to the state the mock daemon serves; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
