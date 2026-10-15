@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:d062616cd6fdcbc4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: only lib.rs's test module and style.css's header comment changed; contents list holds" }
+verified = { hash = "b3:b1dc07970289328b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "G3d: re-read; outputs panel covers the virtual camera; host.rs bullet adds desktop_vcam" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -29,15 +29,16 @@ Contents (the skeleton; [Design](#design) explains the choices):
   session is open, then the shell with its regions, and follows the engine's revision
   from `state.changed` events. `SessionContext` gives components the open session.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
-  app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there.
+  app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
+  and `desktop_vcam()`, what that global says about the virtual camera.
 - **Session** (`session.rs`): `Session` (the connection and the engine's `welcome`),
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
   and `engine_url_for_page`, the engine URL the connect form offers.
 - **Panels** (`panels/`): the scenes and sources tree, the inspector and the mixer.
   Placeholders for now, except `outputs.rs`: `Outputs`, the outputs panel under the
-  inspector (creating, editing and deleting outputs, their stream keys, start and stop,
-  go-live and the pipeline's health), and the calls and logic behind it, tested
-  natively against `MockEngine`.
+  inspector (creating, editing and deleting streams, recordings and the virtual
+  camera, their stream keys, start and stop, go-live and the pipeline's health), and
+  the calls and logic behind it, tested natively against `MockEngine`.
 - **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
   over a placeholder background, edits their geometry with the pointer and the
   keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
@@ -51,7 +52,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:be814d81e88b36fd", by = "agent:claude@session_01Wfrx1wPtLnDmWjyjwBTwba", note = "G3b merge-only round: merged main at 8d080c0 (#269 daemon e2e test, #282 UI inline-style check, #276 README progress table, #270 ADR-0047 proposed); stamp-only conflicts; re-read main's text beside this PR's (no output-kind text changed); holds" }
+verified = { hash = "b3:22c64ddf081fe8c4", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "G3d: re-read; Outputs bullet: vcam outputs created without target, no key or encoder, outside go-live; registration status from the desktop global, start blocked when not registered or off, hint on a refused start in a browser; matches outputs.rs" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -87,13 +88,20 @@ verified = { hash = "b3:be814d81e88b36fd", by = "agent:claude@session_01Wfrx1wPt
 - **Outputs.** The panel reads the outputs and encoder profiles with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
   `events.dropped`; `output.state_changed` updates one output's state in place. It
-  creates RTMP(S) and recording outputs (IDs `output-N`, the first free one), changes
+  creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) and the encoder profile, deletes a stopped
   output, and starts and stops each. "Go live" starts every stopped or failed RTMP
   output whose stream key is set, and "End stream" stops the running ones; recordings
   have only their own buttons. Both try every output, even after one fails, and report
   each failure. An RTMP output without a key can't be started from the
-  panel. The health line sums `stats.tick`'s drop totals over the last five ticks; a
+  panel.
+  A virtual camera output (`virtual_cam`) has no target, key or encoder profile, so its
+  card shows none of them; neither "Go live" nor "End stream" touches it. The card says
+  what the page knows of the camera's registration. Only the desktop app knows (its global's `vcam`,
+  read in `host.rs`): there an unregistered camera, or one turned off with `--no-vcam`,
+  can't be started, and the card gives the `jstream-daemon --register-vcam` hint. In a
+  browser the page can't tell, so it lets the engine decide, and a start refused for
+  want of a camera ("no virtual camera") gets the same hint. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its

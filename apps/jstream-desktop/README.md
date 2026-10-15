@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f0925d97c67e7dbc", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "CI fixes: Host::stop rustdoc says 5 s instead of linking private STOP_TIMEOUT; data.rs tests import PathBuf only where used (macOS unused import). Behaviour unchanged, section holds" }
+verified = { hash = "b3:8b167989c29de613", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "G3d: re-read; host bullet names the virtual camera and vcam_status, bootstrap hands its status, tests list the command line and status values; Not-here-yet's register mode still holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
@@ -30,16 +30,19 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Startup** (`app.rs`, `main.rs`): the command line, the log file, then the engine,
   its server and the UI bundle. Anything that fails becomes the page the window shows.
 - **Engine host** (`host.rs`): the engine (on Windows a live one, wired as the daemon's
-  is) and its server on a free port, with a token made fresh at each start.
+  is, plus the virtual camera) and its server on a free port, with a token made fresh
+  at each start; `vcam_status`, whether the camera is registered.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
-- **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token.
+- **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
+  and the virtual camera's status.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard and
   shutdown.
 - **Data folder and log file** (`data.rs`, `logs.rs`).
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
-  script's escaping, the data folder and the capped log file).
+  script's escaping, the command line, the virtual camera's status values, the data
+  folder and the capped log file).
 
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
 virtual camera's registration mode (`jstream.exe --register-vcam`, which
@@ -51,7 +54,7 @@ folder.
 ## Usage
 <!-- @section
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/data.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
-verified = { hash = "b3:1806a584c2b4f0f0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into U2: no longer says the server refuses the desktop's subprotocol token; a refused connect still shows the form with the error; holds" }
+verified = { hash = "b3:8c167af622f8c230", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "G3d: re-read; --no-vcam row and Virtual camera bullet match app.rs parse and host.rs; registration stays the daemon's" }
 -->
 
 On Windows, with the UI built first:
@@ -70,6 +73,7 @@ Closing the window stops the engine.
 | Option | Meaning |
 |---|---|
 | `--ui-dir <folder>` | The UI bundle (`trunk build`'s `dist`). Default: the `ui` folder beside the exe. |
+| `--no-vcam` | Run without the virtual camera: a `virtual_cam` output can't start. |
 
 - **Data folder.** `%APPDATA%\JStream`, the daemon's too. When a file named `portable`
   sits beside the exe, a `data` folder beside the exe instead, so the app can run from
@@ -85,6 +89,11 @@ Closing the window stops the engine.
   details. An unknown command-line argument is shown the same way.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
   (kept in Windows Credential Manager) and start it.
+- **The virtual camera.** Add a "Virtual camera" output in the outputs panel and start
+  it: other apps then see the program as the webcam *JStream Virtual Camera*. The
+  camera must be registered once, with `jstream-daemon --register-vcam` from the same
+  folder (one administrator prompt); the panel says whether it is, as the app read it
+  at start, so restart the app after registering. `--no-vcam` turns the camera off.
 - **Elsewhere** the binary prints that the app runs on Windows only for now and exits 1.
 
 <a id="design"></a>
@@ -92,7 +101,7 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:f6d32a6fab0050f4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 now excepts GET /pair on a TLS listener and allows a device-token cookie; desktop serves loopback without TLS, pairs nothing and uses its in-memory token, so nothing here changes; holds" }
+verified = { hash = "b3:393ee63fefea2752", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "G3d: re-read; global carries vcam with the five values of VcamStatus::as_str; WindowsVcam in the backends unless --no-vcam; vcam_registration read unelevated; build.rs delay-loads mfsensorgroup.dll" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
@@ -117,7 +126,19 @@ verified = { hash = "b3:f6d32a6fab0050f4", by = "agent:claude@session_01WbL3WRbc
   reassigned, and only when the page's origin is the app's. `jstream-ui` checks for it
   at start (its `host.rs`) and connects at once; the browser client offers the token as
   its subprotocol, as in a browser ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
-  The strings are written as escaped JavaScript literals.
+  The strings are written as escaped JavaScript literals. The global also carries
+  `vcam`, the virtual camera's status as the app read it at start: `registered`,
+  `not_registered`, `moved`, `off` (`--no-vcam`) or `unavailable` (not Windows). The UI
+  uses it only to say whether the camera can start (its outputs panel); the engine
+  still decides.
+- **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
+  the app was started with `--no-vcam`; creating it opens nothing, and its `start`
+  refuses an unregistered camera. `vcam_status` reads the registration with no
+  elevation (`vcam_registration`, for the `jstream_vcam_windows.dll` beside the exe)
+  and logs a registration that names another folder. Registering stays the daemon's
+  `--register-vcam` for now, and so does the hardware check. The build script also
+  delay-loads `mfsensorgroup.dll`, which `WindowsVcam` imports `MFCreateVirtualCamera`
+  from, so a Windows without it still starts the app.
 - **The window stays on the app.** Navigation to anything but the app's scheme is
   refused, and so are new windows, so no other page loads in a webview that runs the
   bootstrap script. The page gets no Tauri IPC: the app defines no commands and grants

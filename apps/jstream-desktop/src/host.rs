@@ -126,29 +126,104 @@ fn new_token() -> anyhow::Result<String> {
 /// time), saved on every change, with `audit` recording every batch and action.
 ///
 /// On Windows it is live, as the daemon's is: the OS backends, stream keys in
-/// Credential Manager, and RTMP(S) publishing on `output.start`. Elsewhere there are
-/// no backends yet.
+/// Credential Manager, and RTMP(S) publishing on `output.start`, plus the virtual
+/// camera (`WindowsVcam`) unless `vcam` is false (`--no-vcam`). Elsewhere there are no
+/// backends yet.
 ///
 /// # Errors
 /// When the collection file can't be read, loaded or created, and on Windows when a
 /// backend can't be created (the QPC clock).
-pub fn engine(collection: &Path, audit: Arc<dyn AuditSink>) -> anyhow::Result<Arc<Engine>> {
+pub fn engine(
+    collection: &Path,
+    audit: Arc<dyn AuditSink>,
+    vcam: bool,
+) -> anyhow::Result<Arc<Engine>> {
     let engine = Engine::new()
         .with_audit(audit)
         .with_collection_file(collection)
         .context("could not open the collection")?;
     #[cfg(windows)]
-    let engine = live(engine, windows_backends()?);
+    let engine = live(engine, windows_backends(vcam)?);
     #[cfg(not(windows))]
-    let engine = Arc::new(engine);
+    let engine = {
+        let _ = vcam;
+        Arc::new(engine)
+    };
     Ok(engine)
 }
 
-/// The Windows backends, as the daemon creates them. Creating them opens no device.
+/// What the app tells the UI about its virtual camera.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VcamStatus {
+    /// Registered for the DLL beside the exe: a `virtual_cam` output can start.
+    Registered,
+    /// Not registered, or the registration couldn't be read: `jstream-daemon
+    /// --register-vcam` registers it.
+    NotRegistered,
+    /// Registered for another folder, such as one the app was moved from.
+    Moved,
+    /// Turned off with `--no-vcam`: the engine has no camera.
+    Off,
+    /// No virtual camera on this platform.
+    Unavailable,
+}
+
+impl VcamStatus {
+    /// The value the bootstrap script hands the UI (`jstream-ui`'s `Vcam::from_host`).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            VcamStatus::Registered => "registered",
+            VcamStatus::NotRegistered => "not_registered",
+            VcamStatus::Moved => "moved",
+            VcamStatus::Off => "off",
+            VcamStatus::Unavailable => "unavailable",
+        }
+    }
+}
+
+/// The virtual camera's status: off when `enabled` is false, else on Windows whether
+/// the media source is registered for the DLL beside the exe (`exe_dir`), read from
+/// the registry with no elevation.
+pub fn vcam_status(exe_dir: Option<&Path>, enabled: bool) -> VcamStatus {
+    if !enabled {
+        return VcamStatus::Off;
+    }
+    #[cfg(windows)]
+    {
+        use jstream_platform_windows::{VCAM_DLL, VcamRegistration, vcam_registration};
+        let Some(dll) = exe_dir.map(|dir| dir.join(VCAM_DLL)) else {
+            return VcamStatus::NotRegistered;
+        };
+        match vcam_registration(&dll) {
+            Ok(VcamRegistration::Current) => VcamStatus::Registered,
+            Ok(VcamRegistration::Missing) => VcamStatus::NotRegistered,
+            Ok(VcamRegistration::Moved { registered }) => {
+                tracing::warn!(
+                    registered = %registered.display(),
+                    "the virtual camera is registered for another folder"
+                );
+                VcamStatus::Moved
+            }
+            Err(error) => {
+                tracing::warn!(%error, "could not read the virtual camera's registration");
+                VcamStatus::NotRegistered
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = exe_dir;
+        VcamStatus::Unavailable
+    }
+}
+
+/// The Windows backends, as the daemon creates them, plus the virtual camera when
+/// `vcam` is true. Creating them opens no device: the camera checks its registration
+/// and opens only on `output.start`.
 #[cfg(windows)]
-fn windows_backends() -> anyhow::Result<Backends> {
+fn windows_backends(vcam: bool) -> anyhow::Result<Backends> {
     use jstream_platform_windows::{
-        MfCodecs, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu,
+        MfCodecs, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu, WindowsVcam,
     };
     Ok(Backends {
         clock: Arc::new(QpcClock::new().context("could not open the QPC media clock")?),
@@ -157,7 +232,7 @@ fn windows_backends() -> anyhow::Result<Backends> {
         audio: Arc::new(WasapiAudio::new()),
         codecs: Arc::new(MfCodecs::new()),
         gpu: Arc::new(WindowsGpu::new()),
-        vcam: None,
+        vcam: vcam.then(|| Box::new(WindowsVcam::new()) as Box<dyn jstream_platform::VcamSink>),
     })
 }
 
@@ -221,7 +296,7 @@ fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{Host, engine, new_token};
+    use super::{Host, VcamStatus, engine, new_token, vcam_status};
     use crate::ui::ORIGIN;
     use jstream_control::protocol::{Hello, PROTOCOL_VERSION};
     use jstream_control::{Control, WsConfig, WsControl};
@@ -229,6 +304,36 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpStream;
     use std::sync::Arc;
+
+    /// `--no-vcam` is off whatever the registry says; the UI reads these exact values.
+    #[test]
+    fn the_vcam_status_names_what_the_ui_reads() {
+        assert_eq!(vcam_status(None, false), VcamStatus::Off);
+        let names: Vec<&str> = [
+            VcamStatus::Registered,
+            VcamStatus::NotRegistered,
+            VcamStatus::Moved,
+            VcamStatus::Off,
+            VcamStatus::Unavailable,
+        ]
+        .into_iter()
+        .map(VcamStatus::as_str)
+        .collect();
+        assert_eq!(
+            names,
+            [
+                "registered",
+                "not_registered",
+                "moved",
+                "off",
+                "unavailable"
+            ]
+        );
+        #[cfg(not(windows))]
+        assert_eq!(vcam_status(None, true), VcamStatus::Unavailable);
+        #[cfg(windows)]
+        assert_eq!(vcam_status(None, true), VcamStatus::NotRegistered);
+    }
 
     #[test]
     fn tokens_are_fresh_lowercase_hex() {
@@ -247,7 +352,7 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_file(&collection);
-        let engine = engine(&collection, Arc::new(AuditMemory::new()))
+        let engine = engine(&collection, Arc::new(AuditMemory::new()), true)
             .unwrap_or_else(|e| panic!("an engine: {e:#}"));
         let host = Host::start(engine, "http://jstream.localhost")
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
@@ -319,7 +424,7 @@ mod tests {
             std::process::id()
         ));
         let _ = std::fs::remove_file(&collection);
-        let engine = engine(&collection, Arc::new(AuditMemory::new()))
+        let engine = engine(&collection, Arc::new(AuditMemory::new()), false)
             .unwrap_or_else(|e| panic!("an engine: {e:#}"));
         let host = Host::start(engine, ORIGIN).unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(upgrade_status(&host, ORIGIN), "HTTP/1.1 101");
