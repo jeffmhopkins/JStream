@@ -1,5 +1,7 @@
-//! The Windows.Graphics.Capture backend, CPU path: each frame is copied into a staging
-//! texture, read back, converted to NV12 and published to the stream's mailbox.
+//! The Windows.Graphics.Capture backend. On the CPU path each frame is copied into a
+//! staging texture, read back, converted to NV12 and published to the stream's mailbox.
+//! On the GPU path each frame is copied into a shared texture of the stream's ring
+//! (`gpu::CaptureRing`) and published as a `GpuFrame`.
 
 use std::ffi::c_void;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -10,8 +12,8 @@ use jstream_platform::media::{
     ColorInfo, FrameSize, MediaTime, PixelFormat, VideoFrame, VideoFrameInfo,
 };
 use jstream_platform::{
-    Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, PlatformError,
-    VideoSurface,
+    Capture, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, GpuContext,
+    PlatformError, VideoSurface,
 };
 use windows::Foundation::TypedEventHandler;
 use windows::Graphics::Capture::{
@@ -48,7 +50,7 @@ use super::mailbox::Mailbox;
 use super::targets;
 use crate::clock::timebase;
 use crate::com::{MtaUsage, OsResult};
-use crate::gpu::adapter_drives_monitor;
+use crate::gpu::{CaptureGpu, CaptureRing, adapter_drives_monitor};
 
 /// The frame pool's format: 8-bit BGRA, which the converter reads.
 const PIXEL_FORMAT: DirectXPixelFormat = DirectXPixelFormat::B8G8R8A8UIntNormalized;
@@ -57,22 +59,42 @@ const BUFFERS: i32 = 2;
 
 /// Display and window capture through Windows.Graphics.Capture.
 ///
-/// Frames are `VideoSurface::Cpu` NV12 frames in BT.709 limited range, with `pts` on the
-/// [`QpcClock`](crate::QpcClock) time line. Each capture has its own D3D11 device, on the
-/// adapter that drives the captured display.
+/// Made with [`new`](Self::new), it delivers `VideoSurface::Cpu` NV12 frames in BT.709
+/// limited range, and each capture has its own D3D11 device, on the adapter that drives
+/// the captured display. Made with [`on_gpu`](Self::on_gpu), it delivers
+/// `VideoSurface::Gpu` frames on that context's device instead. Either way `pts` is on
+/// the [`QpcClock`](crate::QpcClock) time line.
 ///
-/// It holds nothing, so it is `Send + Sync`. Each capture keeps the process's
-/// multithreaded apartment alive, so it can be started, read and dropped from threads
-/// that never initialised COM.
+/// It is `Send + Sync`. Each capture keeps the process's multithreaded apartment alive,
+/// so it can be started, read and dropped from threads that never initialised COM.
 #[derive(Debug, Default)]
 pub struct WgcCapture {
-    _private: (),
+    /// The context's GPU state, on the GPU path.
+    gpu: Option<CaptureGpu>,
 }
 
 impl WgcCapture {
-    /// The backend. Opening nothing yet, it can't fail.
+    /// The backend on the CPU path. Opening nothing yet, it can't fail.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// The backend on the GPU path, for `context`, which [`WindowsGpu`](crate::WindowsGpu)
+    /// opened. Every capture uses the context's D3D11 device, so its frames are on the
+    /// context's adapter, and delivers each frame as a `GpuFrame`: a BGRA texture shared
+    /// with the context's wgpu device (`Bgra8UnormSrgb`, `TEXTURE_BINDING | COPY_SRC`),
+    /// in sRGB (BT.709 primaries, full range), opaque. Render stages the frame
+    /// ([`GpuFrame::stage`](jstream_platform::GpuFrame::stage)) on each submit that
+    /// reads it.
+    ///
+    /// The backend keeps the context's device alive, not the context itself.
+    ///
+    /// # Errors
+    /// [`PlatformError::InvalidState`] for a context another backend opened.
+    pub fn on_gpu(context: &GpuContext) -> Result<Self, PlatformError> {
+        Ok(Self {
+            gpu: Some(CaptureGpu::of(context)?),
+        })
     }
 }
 
@@ -105,7 +127,11 @@ impl Capture for WgcCapture {
                 what: "Windows.Graphics.Capture on this system".into(),
             });
         }
-        Ok(Box::new(WgcStream::start(resolved, mta)?))
+        Ok(Box::new(WgcStream::start(
+            resolved,
+            self.gpu.as_ref(),
+            mta,
+        )?))
     }
 }
 
@@ -290,6 +316,19 @@ fn create_device(monitor: HMONITOR) -> Result<Device, PlatformError> {
     let mt: ID3D11Multithread = context.cast().os("ID3D11Multithread")?;
     // SAFETY: plain COM call on a live object.
     let _ = unsafe { mt.SetMultithreadProtected(true) };
+    wrap_device(d3d, context)
+}
+
+/// The GPU context's D3D11 device (already multithread-protected), for the GPU path.
+fn context_device(gpu: &CaptureGpu) -> Result<Device, PlatformError> {
+    let d3d = gpu.d3d11()?;
+    // SAFETY: plain COM call on a live object.
+    let context = unsafe { d3d.GetImmediateContext() }.os("ID3D11Device::GetImmediateContext")?;
+    wrap_device(d3d, context)
+}
+
+/// Bundles a multithread-protected D3D11 device with its WinRT wrapper.
+fn wrap_device(d3d: ID3D11Device, context: ID3D11DeviceContext) -> Result<Device, PlatformError> {
     let dxgi: IDXGIDevice = d3d.cast().os("IDXGIDevice")?;
     // SAFETY: `dxgi` is a live DXGI device; the WinRT wrapper takes its own reference.
     let winrt: IDirect3DDevice = unsafe { CreateDirect3D11DeviceFromDXGIDevice(&dxgi) }
@@ -306,11 +345,13 @@ fn create_device(monitor: HMONITOR) -> Result<Device, PlatformError> {
 /// What the frame handler and the stream share.
 struct Shared {
     /// The newest converted frame.
-    mailbox: Mailbox<VideoFrame>,
+    mailbox: Mailbox<VideoSurface>,
     /// Set once, by the first failure or by the item's `Closed` event. After it is set
     /// the handler does nothing and the stream returns it.
     failure: OnceLock<PlatformError>,
     captured: AtomicU64,
+    /// Frames replaced in the mailbox, plus, on the GPU path, frames dropped because
+    /// every slot of the ring was held.
     skipped: AtomicU64,
 }
 
@@ -327,50 +368,74 @@ struct Staging {
     size: (u32, u32),
 }
 
-/// The frame handler's state: the device, the staging texture and the spare frame.
+/// The frame handler's state: the device, and what the path needs.
 struct Converter {
     device: Device,
     /// The size the pool's buffers were last created with.
     pool_size: SizeInt32,
-    staging: Option<Staging>,
-    /// A frame the reader never took, reused for the next one of the same size, so a
-    /// reader that falls behind doesn't reallocate the frame's planes. (The mailbox still
-    /// boxes each frame it is given.)
-    spare: Option<VideoFrame>,
+    path: Path,
 }
 
-// SAFETY: the D3D11 device is multithread-protected and the WinRT device is agile. The
-// converter lives in a `Mutex`, so one thread at a time uses the immediate context and
-// the textures.
+/// Where frames go.
+enum Path {
+    /// Read back and converted to NV12.
+    Cpu {
+        staging: Option<Staging>,
+        /// A frame the reader never took, reused for the next one of the same size, so a
+        /// reader that falls behind doesn't reallocate the frame's planes. (The mailbox
+        /// still boxes each frame it is given.)
+        spare: Option<VideoFrame>,
+    },
+    /// Copied into shared textures.
+    Gpu(CaptureRing),
+}
+
+// SAFETY: the D3D11 device is multithread-protected and the WinRT device is agile; the
+// ring is `Send`. The converter lives in a `Mutex`, so one thread at a time uses the
+// immediate context and the textures.
 unsafe impl Send for Converter {}
 
 impl Converter {
-    /// Copies the frame's content into a staging texture and converts it to NV12.
-    /// `Ok(None)` when the content is smaller than 2x2 (a minimised window).
+    /// Converts the frame for the stream's path. `Ok(None)` when there is nothing to
+    /// publish: the content is empty (a minimised window), smaller than 2x2 on the CPU
+    /// path, or, on the GPU path, every slot of the ring is held.
     fn convert(
         &mut self,
         frame: &Direct3D11CaptureFrame,
         content: SizeInt32,
-    ) -> Result<Option<VideoFrame>, PlatformError> {
-        let time = frame
-            .SystemRelativeTime()
-            .os("Direct3D11CaptureFrame::SystemRelativeTime")?;
-        let access: IDirect3DDxgiInterfaceAccess = frame
-            .Surface()
-            .os("Direct3D11CaptureFrame::Surface")?
-            .cast()
-            .os("IDirect3DDxgiInterfaceAccess")?;
-        // SAFETY: plain COM call on a live object.
-        let texture: ID3D11Texture2D =
-            unsafe { access.GetInterface() }.os("IDirect3DDxgiInterfaceAccess::GetInterface")?;
+    ) -> Result<Option<VideoSurface>, PlatformError> {
+        let Path::Gpu(ring) = &mut self.path else {
+            return Ok(self.convert_cpu(frame, content)?.map(VideoSurface::Cpu));
+        };
+        let (texture, time) = frame_texture(frame)?;
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         // SAFETY: `desc` is a valid out-pointer.
         unsafe { texture.GetDesc(&mut desc) };
-        if desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM {
-            return Err(PlatformError::Unsupported {
-                what: format!("a WGC frame in DXGI format {}", desc.Format.0),
-            });
-        }
+        // Clipped to the buffer, as on the CPU path; any size of at least 1x1.
+        let clip = |content: i32, buffer: u32| u32::try_from(content).unwrap_or(0).min(buffer);
+        let Ok(size) = FrameSize::new(
+            clip(content.Width, desc.Width),
+            clip(content.Height, desc.Height),
+        ) else {
+            return Ok(None);
+        };
+        // SystemRelativeTime is QPC in 100 ns units, the clock's own time line and
+        // unit.
+        let pts = MediaTime::new(time, timebase());
+        Ok(ring.copy(&texture, size, pts)?.map(VideoSurface::Gpu))
+    }
+
+    /// Copies the frame's content into a staging texture and converts it to NV12.
+    /// `Ok(None)` when the content is smaller than 2x2 (a minimised window).
+    fn convert_cpu(
+        &mut self,
+        frame: &Direct3D11CaptureFrame,
+        content: SizeInt32,
+    ) -> Result<Option<VideoFrame>, PlatformError> {
+        let (texture, time) = frame_texture(frame)?;
+        let mut desc = D3D11_TEXTURE2D_DESC::default();
+        // SAFETY: `desc` is a valid out-pointer.
+        unsafe { texture.GetDesc(&mut desc) };
         // The content can be smaller than the buffer (the window shrank before the pool
         // was recreated) or larger (it grew; the excess is cut off until then). An odd
         // size loses its last column or row.
@@ -407,7 +472,7 @@ impl Converter {
         }
         let mut out = self.output(w, h)?;
         // SystemRelativeTime is QPC in 100 ns units, the clock's own time line and unit.
-        out.set_pts(MediaTime::new(time.Duration, timebase()));
+        out.set_pts(MediaTime::new(time, timebase()));
         let mapped = Mapped::new(&self.device.context, &staging, (w, h))?;
         bgra_to_nv12(mapped.bytes(), mapped.pitch(), &mut out)?;
         Ok(Some(out))
@@ -415,7 +480,10 @@ impl Converter {
 
     /// The staging texture, recreated when the size changes.
     fn staging(&mut self, w: u32, h: u32) -> Result<ID3D11Texture2D, PlatformError> {
-        if let Some(s) = &self.staging
+        let Path::Cpu { staging, .. } = &mut self.path else {
+            return Err(gpu_path_mixup());
+        };
+        if let Some(s) = staging
             && s.size == (w, h)
         {
             return Ok(s.texture.clone());
@@ -448,7 +516,7 @@ impl Converter {
             code: None,
             message: "returned no texture".into(),
         })?;
-        self.staging = Some(Staging {
+        *staging = Some(Staging {
             texture: texture.clone(),
             size: (w, h),
         });
@@ -457,8 +525,11 @@ impl Converter {
 
     /// The frame to convert into: the spare one if it has this size, else a new one.
     fn output(&mut self, w: u32, h: u32) -> Result<VideoFrame, PlatformError> {
+        let Path::Cpu { spare, .. } = &mut self.path else {
+            return Err(gpu_path_mixup());
+        };
         let size = FrameSize::new(w, h)?;
-        match self.spare.take() {
+        match spare.take() {
             Some(f) if f.info().size == size => Ok(f),
             _ => Ok(VideoFrame::zeroed(VideoFrameInfo {
                 size,
@@ -468,6 +539,40 @@ impl Converter {
             })?),
         }
     }
+}
+
+/// A CPU-path helper called on the GPU path: a bug, reported rather than panicking on a
+/// WinRT thread.
+fn gpu_path_mixup() -> PlatformError {
+    PlatformError::InvalidState {
+        what: "WGC capture",
+        state: "a CPU-path step ran on the GPU path",
+    }
+}
+
+/// The frame's BGRA texture and its `SystemRelativeTime` (100 ns QPC ticks). The pool's
+/// format is BGRA, so another format is `Unsupported`.
+fn frame_texture(frame: &Direct3D11CaptureFrame) -> Result<(ID3D11Texture2D, i64), PlatformError> {
+    let time = frame
+        .SystemRelativeTime()
+        .os("Direct3D11CaptureFrame::SystemRelativeTime")?;
+    let access: IDirect3DDxgiInterfaceAccess = frame
+        .Surface()
+        .os("Direct3D11CaptureFrame::Surface")?
+        .cast()
+        .os("IDirect3DDxgiInterfaceAccess")?;
+    // SAFETY: plain COM call on a live object.
+    let texture: ID3D11Texture2D =
+        unsafe { access.GetInterface() }.os("IDirect3DDxgiInterfaceAccess::GetInterface")?;
+    let mut desc = D3D11_TEXTURE2D_DESC::default();
+    // SAFETY: `desc` is a valid out-pointer.
+    unsafe { texture.GetDesc(&mut desc) };
+    if desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM {
+        return Err(PlatformError::Unsupported {
+            what: format!("a WGC frame in DXGI format {}", desc.Format.0),
+        });
+    }
+    Ok((texture, time.Duration))
 }
 
 /// A staging texture mapped for reading, unmapped on drop.
@@ -564,11 +669,21 @@ fn on_frame(
             .os("Direct3D11CaptureFramePool::Recreate")?;
         conv.pool_size = content;
     }
-    if let Some(out) = converted?
-        && let Some(old) = shared.mailbox.put(out)
-    {
-        shared.skipped.fetch_add(1, Ordering::Relaxed);
-        conv.spare = Some(old);
+    match converted? {
+        Some(out) => {
+            if let Some(old) = shared.mailbox.put(out) {
+                shared.skipped.fetch_add(1, Ordering::Relaxed);
+                // A GPU frame just drops, which frees its slot.
+                if let (VideoSurface::Cpu(old), Path::Cpu { spare, .. }) = (old, &mut conv.path) {
+                    *spare = Some(old);
+                }
+            }
+        }
+        // Every slot of the ring is held: the frame is dropped.
+        None if matches!(conv.path, Path::Gpu(_)) && content.Width > 0 && content.Height > 0 => {
+            shared.skipped.fetch_add(1, Ordering::Relaxed);
+        }
+        None => {}
     }
     Ok(())
 }
@@ -586,9 +701,22 @@ struct WgcStream {
 }
 
 impl WgcStream {
-    fn start(resolved: Resolved, mta: MtaUsage) -> Result<Self, PlatformError> {
+    fn start(
+        resolved: Resolved,
+        gpu: Option<&CaptureGpu>,
+        mta: MtaUsage,
+    ) -> Result<Self, PlatformError> {
         let item = create_item(&resolved)?;
-        let device = create_device(resolved.monitor)?;
+        let (device, path) = match gpu {
+            Some(gpu) => (context_device(gpu)?, Path::Gpu(gpu.ring()?)),
+            None => (
+                create_device(resolved.monitor)?,
+                Path::Cpu {
+                    staging: None,
+                    spare: None,
+                },
+            ),
+        };
         let size = item.Size().os("GraphicsCaptureItem::Size")?;
         let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(
             &device.winrt,
@@ -613,8 +741,7 @@ impl WgcStream {
         let converter = Mutex::new(Converter {
             device,
             pool_size: size,
-            staging: None,
-            spare: None,
+            path,
         });
         // From here on, dropping the stream unregisters and closes everything.
         let mut stream = Self {
@@ -685,7 +812,7 @@ impl CaptureStream for WgcStream {
         if let Some(e) = self.shared.failure.get() {
             return Err(e.clone());
         }
-        Ok(self.shared.mailbox.take().map(VideoSurface::Cpu))
+        Ok(self.shared.mailbox.take())
     }
 
     fn stats(&self) -> CaptureStats {
@@ -796,11 +923,13 @@ mod tests {
 mod device_tests {
     use std::time::{Duration, Instant};
 
-    use jstream_platform::media::{ColorInfo, PixelFormat};
-    use jstream_platform::{Capture, CaptureTarget, MediaClock, PlatformError, VideoSurface};
+    use jstream_platform::media::{ColorInfo, ColorRange, ColorSpace, PixelFormat};
+    use jstream_platform::{
+        Capture, CaptureTarget, GpuFrame, GpuInterop, MediaClock, PlatformError, VideoSurface,
+    };
 
     use super::WgcCapture;
-    use crate::QpcClock;
+    use crate::{QpcClock, WindowsGpu};
 
     /// The whole start path for the race in `tests`: the real `CreateForWindow` on a
     /// destroyed window gives `NotFound`.
@@ -897,5 +1026,227 @@ mod device_tests {
             capture.start(&missing).err(),
             Some(PlatformError::NotFound { .. })
         ));
+    }
+
+    /// The primary display's capture target.
+    fn primary(capture: &WgcCapture) -> jstream_platform::CaptureTargetInfo {
+        capture
+            .targets()
+            .expect("targets")
+            .into_iter()
+            .find(|t| t.primary)
+            .expect("a primary display")
+    }
+
+    /// Reads back the top-left 64x64 pixels of `frame` (BGRA, 256 bytes a row) through
+    /// `ctx`, staging the frame on that submit as render will.
+    fn read_corner(ctx: &jstream_platform::GpuContext, frame: &GpuFrame) -> Vec<u8> {
+        const SIDE: u32 = 64;
+        let device = ctx.device();
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("capture readback"),
+            size: u64::from(SIDE * SIDE * 4),
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut enc = device.create_command_encoder(&Default::default());
+        enc.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: frame.texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(SIDE * 4),
+                    rows_per_image: Some(SIDE),
+                },
+            },
+            wgpu::Extent3d {
+                width: SIDE,
+                height: SIDE,
+                depth_or_array_layers: 1,
+            },
+        );
+        // Back to COMMON for D3D11, before the staged signal (GpuFrame::stage).
+        enc.transition_resources(
+            std::iter::empty(),
+            std::iter::once(wgpu::TextureTransition {
+                texture: frame.texture(),
+                selector: None,
+                state: wgpu::TextureUses::PRESENT,
+            }),
+        );
+        frame.stage(ctx.queue()).expect("stage");
+        ctx.queue().submit([enc.finish()]);
+        buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, |r| r.expect("map"));
+        device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(Duration::from_secs(5)),
+            })
+            .expect("the readback completes");
+        let bytes = buffer
+            .slice(..)
+            .get_mapped_range()
+            .expect("mapped")
+            .to_vec();
+        buffer.unmap();
+        bytes
+    }
+
+    /// The GPU path: frames are shared BGRA textures on the context's device, with the
+    /// copy finished before render reads them, and the ring's slots come back after each
+    /// staged use. Needs screen activity to deliver more frames than the ring has slots:
+    /// move the mouse over the primary display while it runs.
+    #[test]
+    #[ignore = "needs a display, Windows.Graphics.Capture and a DX12 GPU; move the mouse"]
+    fn captures_the_primary_display_into_shared_textures() {
+        let gpu = WindowsGpu::new();
+        let ctx = gpu.open_device().expect("open the media adapter's device");
+        let capture = WgcCapture::on_gpu(&ctx).expect("our context");
+        let primary = primary(&capture);
+        let clock = QpcClock::new().expect("clock");
+        let mut stream = capture.start(&primary.target).expect("start");
+        let start = Instant::now();
+        let mut frames = 0u32;
+        let mut last_pts = None;
+        while frames < 20 {
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "{frames} frames in 10 s: move the mouse over the primary display; {:?}",
+                stream.stats()
+            );
+            let Some(surface) = stream.latest().expect("latest") else {
+                std::thread::sleep(Duration::from_millis(5));
+                continue;
+            };
+            let now = clock.now();
+            let VideoSurface::Gpu(frame) = surface else {
+                panic!("a CPU frame from the GPU path");
+            };
+            let info = *frame.info();
+            assert_eq!(info.format, PixelFormat::Bgra8);
+            assert_eq!(info.color.range, ColorRange::Full);
+            assert_eq!(info.color.space, ColorSpace::Bt709);
+            let texture = frame.texture();
+            assert_eq!(texture.format(), wgpu::TextureFormat::Bgra8UnormSrgb);
+            assert_eq!(
+                (texture.width(), texture.height()),
+                (info.size.width(), info.size.height())
+            );
+            if let Some(size) = primary.size {
+                assert_eq!(size, info.size);
+            }
+            assert_eq!(info.pts.timebase(), clock.timebase());
+            assert!(
+                info.pts.ticks() <= now.ticks(),
+                "{:?} after {now:?}",
+                info.pts
+            );
+            assert!(
+                now.ticks() - info.pts.ticks() < 10_000_000,
+                "{:?} vs {now:?}",
+                info.pts
+            );
+            assert!(
+                last_pts.is_none_or(|p| p < info.pts.ticks()),
+                "pts increase"
+            );
+            last_pts = Some(info.pts.ticks());
+            // Every frame is staged and read, so every slot is reused after a staged use.
+            let corner = read_corner(&ctx, &frame);
+            assert!(
+                corner.chunks_exact(4).all(|px| px[3] == 255),
+                "frame {frames}: the desktop is opaque, so a copy that hadn't finished \
+                 (or garbage) shows as alpha below 255"
+            );
+            frames += 1;
+        }
+        // A queue of another device is refused.
+        let other = gpu.open_device().expect("a second context");
+        loop {
+            assert!(
+                start.elapsed() < Duration::from_secs(20),
+                "no frame for the queue check"
+            );
+            if let Some(VideoSurface::Gpu(frame)) = stream.latest().expect("latest") {
+                assert!(matches!(
+                    frame.stage(other.queue()),
+                    Err(PlatformError::InvalidState { .. })
+                ));
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        // The capture keeps the device's driver loaded, so the context can go first
+        // (spike S1 crashed when raw objects outlived it).
+        drop(other);
+        drop(ctx);
+        for _ in 0..10 {
+            drop(stream.latest().expect("latest"));
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        drop(stream);
+        drop(capture);
+    }
+
+    /// The GPU path never blocks on a full ring: with every frame held, new frames are
+    /// dropped and counted as skipped, and once they are released, frames flow again.
+    /// Move the mouse over the primary display while it runs.
+    #[test]
+    #[ignore = "needs a display, Windows.Graphics.Capture and a DX12 GPU; move the mouse"]
+    fn drops_frames_while_every_slot_is_held() {
+        let gpu = WindowsGpu::new();
+        let ctx = gpu.open_device().expect("open the media adapter's device");
+        let capture = WgcCapture::on_gpu(&ctx).expect("our context");
+        let mut stream = capture.start(&primary(&capture).target).expect("start");
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut held = Vec::new();
+        let skipped_before = loop {
+            assert!(
+                Instant::now() < deadline,
+                "the ring never filled with {} frames held: move the mouse; {:?}",
+                held.len(),
+                stream.stats()
+            );
+            if let Some(surface) = stream.latest().expect("latest") {
+                held.push(surface);
+            }
+            // The ring has four slots: once they are all held, frames are dropped.
+            if held.len() >= 4 {
+                let skipped = stream.stats().frames_skipped;
+                std::thread::sleep(Duration::from_millis(500));
+                if stream.stats().frames_skipped > skipped {
+                    break skipped;
+                }
+            } else {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        };
+        assert!(
+            held.len() <= 5,
+            "{} frames held from a ring of four",
+            held.len()
+        );
+        assert!(skipped_before < stream.stats().frames_skipped);
+        // Unstaged frames free their slots as soon as they drop.
+        held.clear();
+        let _ = stream.latest().expect("latest");
+        loop {
+            assert!(
+                Instant::now() < deadline,
+                "no frame after the release: move the mouse"
+            );
+            if stream.latest().expect("latest").is_some() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 }

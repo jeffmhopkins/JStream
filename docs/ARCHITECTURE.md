@@ -639,7 +639,7 @@ verified = { hash = "b3:cc2b2df213a2b7f3", by = "agent:claude@session_011XVJmf1Y
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:40d6041b79574568", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read the one-scene paragraph against the premultiply-on-upload change: the composite still writes premultiplied linear into Rgba16Float and resolves to Rgba8UnormSrgb, blend still premultiplied src-over; source alpha handling is detailed in the crate README, not here. Steps 1-6 unchanged." }
+verified = { hash = "b3:57216a3fd7223e45", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3a: re-read steps 1-2 against gpu/capture.rs: WGC frames are copied once into JStream-allocated shared NT-handle textures opened in D3D12 and wrapped through wgpu-hal; D3D11 signals a fence the wgpu queue waits on, the queue signals the release. Rest of the section unchanged (render not touched)" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:
