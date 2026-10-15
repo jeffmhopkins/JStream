@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:25e79175cd75f103", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: Codecs::on_context and FrameSync::platform bullets hold; Not yet combines main's video_devices item with E3c's vcam and vendor-ID items; holds" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -145,7 +144,6 @@ adapter LUID.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:73846bead15d64ca", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (6b987c5) into #325: stamp-only conflict; E3c encoder text (on_context, release fence, FrameSync::platform, LUID filter) unchanged; holds" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

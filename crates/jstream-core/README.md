@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:b3093cec2405ee04", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (d813d07) into #219: re-read main's Audio bullet, meters.tick and audio Tests text beside E3b's GPU capture path and gpu_capture/windows_gpu Tests text; separate bullets, no contradiction; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -191,7 +190,6 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1773ec4c9a051eb2", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (d813d07) into #219: re-read main's Audio routing section and audio-sources edits beside E3b's capture import and allocation text; independent paragraphs; holds" }
 -->
 
 ### Engine and sessions
@@ -1045,7 +1043,6 @@ history, idempotency keys and the program scene are not saved (see *Program scen
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:5956caa994bd76ca", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "Merge of main (d813d07) into #219: re-read; main's mixer attach/detach on the program stage (detach_audio) sits beside E3b's Capture path paragraph, which still matches open_capture and launch_program; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

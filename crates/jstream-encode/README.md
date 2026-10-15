@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:2c16aebc4fe358ec", by = "agent:claude@session_017gppowEjn8Z7a6QFLA6MWc", note = "Merge of #219 (6b987c5) into #325: stamp-only conflict; re-read E3c's open_on/VideoPath/wgpu dev-dep/gpu_tests text against #219's D5 restamp; applied review N1 (skips only the tests that need a context); holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
@@ -82,7 +81,6 @@ wgpu adapter skips the ones that need a context, except on CI.
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/RULES.md#R-RT-004", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md"]
-verified = { hash = "b3:715a9af9ef56dd90", by = "agent:claude@session_01VJKy1iBUkPGMEPXxjpVjkc", note = "E3c rebased onto #219's merge of main: GPU frames subsection sits beside main's F3 profile-keyed sharing text; Not yet keeps only 'GPU frames in the engine' (main dropped encoder profiles); holds" }
 -->
 
 ### Threads and pacing
