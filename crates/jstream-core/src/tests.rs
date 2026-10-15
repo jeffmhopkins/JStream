@@ -913,6 +913,12 @@ fn the_engine_answers_like_the_mock() {
         Call::History(jstream_protocol::HistoryCall::new(
             jstream_protocol::HistoryOp::Redo,
         )),
+        // After the redo, `i1` is in `b`.
+        Call::Query {
+            query: Query::ItemList {
+                scene_id: SceneId::new("b"),
+            },
+        },
         move_call("i2", "b"),
         move_call("ghost", "b"),
         move_call("i3", "ghost"),
