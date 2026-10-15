@@ -12,14 +12,14 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0034-youtube-interaction-scope-v2.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:d2722f14d5148e13", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "#207 macOS fix: Transport bullet now says deadline writes send at most 16 KiB each (BSD/macOS restart SO_SNDTIMEO on progress); re-read the whole section against transport.rs; holds" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
+verified = { hash = "b3:ef53c92177c408c8", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: stale via ARCH#threading's Collector row rewording only (program-stage collector fed by render and mixer; mixer's own for input rings); this section's text unchanged and consistent; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The
 first piece is an **RTMP and RTMPS publish client** in the `rtmp` module, written in Rust
 as [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md) requires and needed for the
-generic RTMP/RTMPS output of [ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md). The
+generic RTMP/RTMPS output of [ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md). The
 second is the **recording file sink** in the `record` module (below). The `Output` trait
 and the virtual-camera output come later. Its JStream dependencies are `jstream-media`
 (for `MediaTime` and `Packet`) and the layer-2 `jstream-mux`, whose public `amf0` codec

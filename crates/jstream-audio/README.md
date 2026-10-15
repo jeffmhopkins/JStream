@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:91436bca45ae1e09", by = "agent:claude", note = "Merge of main (D4 no_alloc) into #199: took main's text; re-read; D4's no_alloc paragraphs and the ring Tests line both hold; #199 changes only the torn-frame test" }
+verified = { hash = "b3:f07236117b959ad7", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: stale via ARCH#threading's Collector row rewording only (program-stage collector fed by render and mixer; mixer's own for input rings); this section's text unchanged and consistent; holds" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -114,7 +114,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:65f6ad5545a12d2a", by = "agent:claude", note = "Merge of main (D4 no_alloc) into #199: took main's text; re-read; D4's no_alloc paragraphs and the ring Tests line both hold; #199 changes only the torn-frame test" }
+verified = { hash = "b3:4b14be3ec63e284a", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: stale via ARCH#threading's Collector row rewording only (program-stage collector fed by render and mixer; mixer's own for input rings); this section's text unchanged and consistent; holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

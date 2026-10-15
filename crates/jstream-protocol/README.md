@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:4e2f3cc5820c9b88", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: Geometry bullet says 0.11 is canvas+geometry, 0.10 history, 0.9 record; matches version.rs and regenerated snaps" }
+verified = { hash = "b3:7e3c1f99020fac25", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#217 asset paths): #217 adds ':' to the rejected asset-path forms and changes no text F3 wrote here; F3's encoder profile, protocol 0.13 and program-stage text hold beside it" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -33,11 +33,13 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   kind, and `HistoryDirection` (`undo`, `redo`), the `cause` of a `state.changed` and
   the `direction` of a `history_empty` error.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
-  `scene.reorder`, `item.add`, `item.remove`, `item.reorder`, `item.set_geometry`,
-  `item.set_transform` (deprecated), `item.set_crop`, `item.set_visible`,
-  `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
-  `source.duplicate`, `source.delete`, `output.create`, `output.set_target`,
-  `output.delete`), with `ItemTransform` (deprecated), `Crop` and `SourceKind`;
+  `scene.reorder`, `scene.set_role`, `item.add`, `item.remove`, `item.reorder`,
+  `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
+  `item.set_visible`, `canvas.set_size`, `source.create`, `source.rename`,
+  `source.set_settings`, `source.duplicate`, `source.delete`, `output.create`,
+  `output.set_target`, `output.set_encoder`, `output.delete`, `encoder.create`,
+  `encoder.update`, `encoder.delete`), with `ItemTransform` (deprecated), `Crop`,
+  `SourceKind` and `SceneRole`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
@@ -45,8 +47,13 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+- **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264 and AAC, with rate
+  control, keyframe interval and hardware preference), its range checks
+  (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
+  and `EncoderSessionInfo`, the per-output sharing `output.status` reports
+  ([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
-  `output.list`, `output.status`, `video.snapshot`, `kind.list` and `kind.describe`,
+  `output.list`, `output.status`, `encoder.list`, `video.snapshot`, `kind.list` and `kind.describe`,
   with `QueryResult` and the `SceneSummary`, `SceneInfo`, `SourceInfo` and `ItemInfo`
   shapes the collection reads report. `state.get` carries the `Canvas`, and `ItemInfo`
   the item's `placement` form and its `geometry`. `video.snapshot` returns the program
@@ -76,20 +83,22 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline and flags the
-  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.11 because of the
-  canvas and the geometry wire surface ([Item geometry](#design)); 0.10 added the
-  `history` calls, 0.9 the `record` output kind, 0.8 the kind queries and settings,
-  0.7 the output edits, `output.list`, the key actions and `key_set`, 0.6 `stats.tick`
-  and 0.5 `video.snapshot`.
+  reflection, which geometry cannot store. `PROTOCOL_VERSION` is 0.13 because of
+  encoder profiles and session sharing; 0.12 added groups (`scene.set_role`,
+  `item.move`, a scene's `role` and the placement edits' `scene_id`), 0.11 the canvas
+  and the geometry wire surface ([Item geometry](#design)), 0.10 the `history` calls,
+  0.9 the `record` output kind, 0.8 the kind queries and settings, 0.7 the output
+  edits, `output.list`, the key actions and `key_set`, 0.6 `stats.tick` and 0.5
+  `video.snapshot`.
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
-  canvas, legacy items, one geometry item, two RTMP outputs and a recording output),
-  the exact answer to every collection read of it (`output.list` included), and the
-  exact error for batches rejected against it (geometry, canvas, RTMP URL and
-  recording path checks included).
+  canvas, legacy items, one geometry item, two RTMP outputs, a recording output and two
+  encoder profiles), the exact answer to every collection read of it (`output.list`
+  included), and the exact error for batches rejected against it (geometry, canvas, RTMP
+  URL, recording path and encoder profile checks included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -102,7 +111,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:e37fd17b91df6495", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: main's history order list kept; undo_conflict paragraph now also names setting the canvas size and says an item's transform and geometry are one property, matching history.rs Prop::Placement and Touched.canvas" }
+verified = { hash = "b3:9f10c1a8d6bfc58c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#217 asset paths): #217 adds ':' to the rejected asset-path forms and changes no text F3 wrote here; F3's encoder profile, protocol 0.13 and program-stage text hold beside it" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -198,6 +207,29 @@ renames one. A `SourceKind` is `builtin` (a kind the engine describes) or `scene
 nests another scene. Positions are indexes: scenes in display order, items in stacking
 order with 0 at the bottom.
 
+### Groups and placement addressing
+
+[ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
+`role: group` (protocol 0.12). `SceneRole` is `scene` or `group`, and
+`scene.set_role { scene_id, role }` changes it; the role changes no engine behaviour.
+`scene.list` and `state.get` report `role`, omitted for `scene`, so a 0.11 reader sees
+no change for ordinary scenes. `item.move { item_id, scene_id, index }` moves an item
+to a position in another scene, keeping its ID and every placement property, under the
+same cycle check as `item.add` (field `scene_id`). `index` is the item's position after
+the move: up to the number of items already there for another scene, and below it for
+the item's own scene, where the move is a reorder. Grouping is a client-built batch:
+`scene.create`, `scene.set_role` to `group`, `source.create` of a `scene` source,
+`item.add` of it with `item.move` to the lowest selected index, then an `item.move` of
+each selected item into the group, bottom first. `scene.create` doesn't take a `role`
+yet.
+
+The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
+`item.set_visible`) take an
+optional `scene_id`, fixed now so that keyframe scenes can arrive additively (ADR-0024
+§2). Absent, or the item's own scene, changes the item. Until keyframe scenes exist,
+any other existing scene is `invalid_argument` on `edits.N.scene_id`, and a missing one
+`not_found`. An inverse keeps the addressing of the edit it undoes.
+
 ### Kinds and settings
 
 [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) decides the shape. A
@@ -234,10 +266,12 @@ never a type per kind.
   reference to a missing scene or source is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
   `collection` and `app` are relative, with `/` separators and no `..` segment, drive
-  letter or leading `/`; an asset that doesn't exist yet is accepted.
+  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows); an
+  asset that doesn't exist yet is accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
-  edit that would close a cycle (`item.add`, `source.create`, `source.set_settings`) is
+  edit that would close a cycle (`item.add`, `item.move`, `source.create`,
+  `source.set_settings`) is
   rejected with `invalid_argument` naming it (for example scene `a` -> source `sa` ->
   scene `a`). `scene.delete` and `source.delete` are rejected while a setting refers to the
   target, naming each `<source>.settings.<param>`. Asset references are not edges.
@@ -276,6 +310,20 @@ outlives `output.delete`, so undoing the delete gives back a working output; a c
 that deletes for good also sends `output.clear_key`, which succeeds for an output no
 longer in the collection. Its errors carry fixed reasons that never quote the key.
 
+Encoder profiles (0.13) are collection state as well
+([ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)).
+`encoder.create` and `encoder.update` take a `profile_id`, a `name` and an
+`EncoderProfile`: H.264 video with `cbr` or `vbr` rate control (100..=100000 kbit/s;
+a `vbr` peak at least the average and at most 200000), a keyframe interval of 1..=10 s
+and a hardware preference (`prefer`, `require` or `avoid`, the default), and AAC audio
+at 32..=320 kbit/s. Anything else, including a value a newer server sent as `unknown`,
+is refused with `invalid_argument` naming the field. `encoder.delete` is refused while
+an output uses the profile. `output.set_encoder` points an output at a profile, or with
+no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe every
+2 s, software, AAC 160 kbit/s). Both apply from the output's next `output.start`.
+Running outputs with the same mix and the same profile, as it was when each started,
+share one encoder session, and `output.status` reports the sharing.
+
 ### Batches, revisions and `expected_rev`
 
 Edits are only sent inside a `Batch`; a single edit is a batch of one.
@@ -303,19 +351,28 @@ Queries read and never change `rev`. Those that read the collection state carry 
 
 - `state.get`: the whole collection at one revision: the `canvas` (missing from a
   pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
-  with its items, and every output (`outputs`, ordered by ID; missing from a pre-0.7
-  server, it parses as empty). A client reads it on connecting, and again after a
+  with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
+  server, it parses as empty) and every encoder profile (`encoders`, ordered by ID;
+  missing from a pre-0.13 server, it parses as empty). A client reads it on connecting, and again after a
   `state.changed` it didn't cause.
-- `scene.list`: the scenes in display order, each with its name and item count.
+- `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
+  `scene`) and item count.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
   its name, `SourceKind` and settings.
 - `item.list {scene_id}`: one scene's items in stacking order, bottom first, or
   `not_found` for a missing scene.
 - `output.list`: the outputs, ordered by ID (outputs have no display order), each with
-  its `OutputKind`, at a `rev`.
+  its `OutputKind` and `encoder_profile` (absent for the default), at a `rev`.
+- `encoder.list`: the encoder profiles, ordered by ID, at a `rev` (0.13).
 - `output.status {output_id}`: an output's runtime state and `key_set`, whether the
   credential store holds its key (missing from a pre-0.7 server, it parses as
-  `false`). Neither is collection state, so it carries no `rev`.
+  `false`). While it runs, `encoder` names its session's profile (absent for the
+  default), the other running outputs that share the session (`shared_with`, by ID)
+  and whether the session is a hardware one; `encoder_sessions` and
+  `hardware_sessions` count the video sessions open across every output, since
+  hardware encoders cap them per GPU vendor and driver and the engine doesn't guess
+  the cap (0.13; missing, they parse as absent and 0). None of it is collection state,
+  so it carries no `rev`.
 - `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
 - `video.snapshot`: the current program mix as a PNG. `png` is the file in standard
@@ -358,7 +415,9 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop` and
 `item.set_visible` the removed item needs, and undoing `scene.delete` is `scene.create`,
-`scene.reorder` unless it was last, and each item's restore, bottom to top. Undoing
+`scene.reorder` unless it was last, `scene.set_role` for a group, and each item's
+restore, bottom to top. `item.move` and `scene.set_role` are each undone by the same
+edit with the old scene and index, or the old role. Undoing
 `source.delete` is `source.create` with the complete stored settings, and undoing
 `source.set_settings` is a patch of the old values. Deleting a source that items still
 place or a setting refers to, or a scene that a `scene` source shows or a setting refers
@@ -449,7 +508,7 @@ After `welcome`, the server pushes every event to every client.
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
   built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
   those meters exist, as later optional fields. Audience figures are `youtube.stats`
-  ([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)).
+  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)).
 
 ### Errors
 
@@ -502,7 +561,11 @@ after 1.0:
   break happened once, in 0.9 itself: `OutputKind` had no fallback in 0.7 and 0.8, so a
   0.7 or 0.8 client can't parse `output.list` or `state.get` once a `record` output
   exists (the whole response fails, and `WsControl` ends the session). Whether that
-  counts as a minor bump is part of open question 8.
+  counts as a minor bump is part of open question 8. 0.13 adds the `EntityKind` value
+  `encoder`, which only an error answering an encoder edit names, so a client older
+  than 0.13, which sends none, never reads it. The encoder enums (`VideoCodec`,
+  `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
+  `Unknown` from the start.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.

@@ -1,14 +1,14 @@
 //! Reading the graph as protocol query results: what an engine answers to the queries
 //! that read collection state (`scene.list`, `source.list`, `item.list`, `output.list`,
-//! `state.get`), and to the kind queries (`kind.list`, `kind.describe`).
+//! `encoder.list`, `state.get`), and to the kind queries (`kind.list`, `kind.describe`).
 //!
 //! Reads never change the graph. Each collection result carries the revision it was
 //! read at; kinds are not collection state, so their results carry none.
 
-use crate::model::{Graph, Item, Output, Placement, Scene, Source};
+use crate::model::{Encoder, Graph, Item, Output, Placement, Scene, Source};
 use jstream_protocol::{
-    EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query, QueryResult, SceneId,
-    SceneInfo, SceneSummary, SourceInfo,
+    EncoderProfileInfo, EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query,
+    QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
 };
 
 impl Graph {
@@ -27,6 +27,7 @@ impl Graph {
             Query::KindList => Ok(self.kind_list()),
             Query::KindDescribe { kind_id } => self.kind_describe(kind_id),
             Query::OutputList => Ok(self.output_list()),
+            Query::EncoderList => Ok(self.encoder_list()),
             _ => return None,
         })
     }
@@ -64,6 +65,7 @@ impl Graph {
                 .map(|scene| SceneSummary {
                     scene_id: scene.id.clone(),
                     name: scene.name.clone(),
+                    role: scene.role,
                     item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                 })
                 .collect(),
@@ -103,8 +105,16 @@ impl Graph {
         }
     }
 
+    /// The `encoder.list` result: every encoder profile, ordered by ID.
+    pub fn encoder_list(&self) -> QueryResult {
+        QueryResult::EncoderList {
+            rev: self.rev,
+            encoders: self.state.encoders().map(Encoder::to_info).collect(),
+        }
+    }
+
     /// The `state.get` result: the canvas, every source by ID, every scene with its items
-    /// in display order, and every output by ID.
+    /// in display order, and every output and encoder profile by ID.
     pub fn state_get(&self) -> QueryResult {
         QueryResult::StateGet {
             rev: self.rev,
@@ -112,6 +122,7 @@ impl Graph {
             sources: self.state.sources().map(Source::to_info).collect(),
             scenes: self.state.scenes().iter().map(Scene::to_info).collect(),
             outputs: self.state.outputs().map(Output::to_info).collect(),
+            encoders: self.state.encoders().map(Encoder::to_info).collect(),
         }
     }
 }
@@ -134,6 +145,18 @@ impl Output {
         OutputInfo {
             output_id: self.id.clone(),
             kind: self.kind.clone(),
+            encoder_profile: self.encoder_profile.clone(),
+        }
+    }
+}
+
+impl Encoder {
+    /// This profile as `encoder.list` and `state.get` report it.
+    pub fn to_info(&self) -> EncoderProfileInfo {
+        EncoderProfileInfo {
+            profile_id: self.id.clone(),
+            name: self.name.clone(),
+            profile: self.profile,
         }
     }
 }
@@ -144,6 +167,7 @@ impl Scene {
         SceneInfo {
             scene_id: self.id.clone(),
             name: self.name.clone(),
+            role: self.role,
             items: self.items.iter().map(Item::to_info).collect(),
         }
     }
@@ -249,6 +273,7 @@ mod tests {
                 sources: vec![],
                 scenes: vec![],
                 outputs: vec![],
+                encoders: vec![],
             }
         );
         assert_eq!(

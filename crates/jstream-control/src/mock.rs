@@ -14,11 +14,12 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EntityKind, Event,
-    GeometryError, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId,
-    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind, Welcome,
+    Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
+    EncoderProfileId, EncoderProfileInfo, EntityKind, Event, GeometryError, Hello, IdempotencyKey,
+    ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
+    PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference,
+    RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
+    SecretString, Settings, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -210,6 +211,10 @@ struct Collection {
     sources: BTreeMap<SourceId, Source>,
     /// The configured outputs, ordered by ID, as `output.list` reports them.
     outputs: BTreeMap<OutputId, OutputKind>,
+    /// The encoder profile each output uses, for those that chose one.
+    output_encoders: BTreeMap<OutputId, EncoderProfileId>,
+    /// The encoder profiles, ordered by ID: name and encoding.
+    encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
 }
 
 /// A source: its name, what it shows, and its settings. The mock describes no kinds, so
@@ -385,6 +390,7 @@ impl State {
                     .map(|scene| SceneSummary {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
+                        role: SceneRole::Scene,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                     })
                     .collect(),
@@ -393,10 +399,14 @@ impl State {
                 let Some(&state) = self.outputs.get(&output_id) else {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 };
+                // The mock opens no encoders, so it reports no sessions.
                 QueryResult::OutputStatus {
                     key_set: self.keys.contains_key(&output_id),
                     output_id,
                     state,
+                    encoder: None,
+                    encoder_sessions: 0,
+                    hardware_sessions: 0,
                 }
             }
             Query::SourceList => QueryResult::SourceList {
@@ -422,14 +432,20 @@ impl State {
                     .map(|scene| SceneInfo {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
+                        role: SceneRole::Scene,
                         items: self.collection.item_infos(scene),
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
+                encoders: self.collection.encoder_infos(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
                 outputs: self.collection.output_infos(),
+            },
+            Query::EncoderList => QueryResult::EncoderList {
+                rev: self.collection.rev,
+                encoders: self.collection.encoder_infos(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -612,13 +628,21 @@ impl Collection {
                 items.retain(|id| *id != item_id);
                 items.insert(to, item_id);
             }
-            Edit::ItemSetTransform { item_id, transform } => {
-                let item = self.existing_item(&item_id)?;
+            Edit::ItemSetTransform {
+                item_id,
+                scene_id,
+                transform,
+            } => {
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
                 item.transform = transform;
                 item.geometry = None;
             }
-            Edit::ItemSetGeometry { item_id, geometry } => {
-                self.existing_item(&item_id)?;
+            Edit::ItemSetGeometry {
+                item_id,
+                scene_id,
+                geometry,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?;
                 let view = geometry_view(&geometry, at)?;
                 let item = self.existing_item(&item_id)?;
                 item.transform = view;
@@ -629,11 +653,19 @@ impl Collection {
                 check_canvas_side(height, at, "height")?;
                 self.canvas = Canvas { width, height };
             }
-            Edit::ItemSetCrop { item_id, crop } => {
-                self.existing_item(&item_id)?.crop = crop;
+            Edit::ItemSetCrop {
+                item_id,
+                scene_id,
+                crop,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?.crop = crop;
             }
-            Edit::ItemSetVisible { item_id, visible } => {
-                self.existing_item(&item_id)?.visible = visible;
+            Edit::ItemSetVisible {
+                item_id,
+                scene_id,
+                visible,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?.visible = visible;
             }
             Edit::SourceCreate {
                 source_id,
@@ -750,6 +782,70 @@ impl Collection {
                 if self.outputs.remove(&output_id).is_none() {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 }
+                self.output_encoders.remove(&output_id);
+            }
+            Edit::OutputSetEncoder {
+                output_id,
+                profile_id,
+            } => {
+                if !self.outputs.contains_key(&output_id) {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                }
+                match profile_id {
+                    Some(id) => {
+                        if !self.encoders.contains_key(&id) {
+                            return Err(not_found(EntityKind::Encoder, id.as_str()));
+                        }
+                        self.output_encoders.insert(output_id, id);
+                    }
+                    None => {
+                        self.output_encoders.remove(&output_id);
+                    }
+                }
+            }
+            Edit::EncoderCreate {
+                profile_id,
+                name,
+                profile,
+            } => {
+                check_id(profile_id.as_str(), at, "profile_id")?;
+                if self.encoders.contains_key(&profile_id) {
+                    return Err(already_exists(EntityKind::Encoder, profile_id.as_str()));
+                }
+                check_name(&name, at)?;
+                check_profile(&profile, at)?;
+                self.encoders.insert(profile_id, (name, profile));
+            }
+            Edit::EncoderUpdate {
+                profile_id,
+                name,
+                profile,
+            } => {
+                if !self.encoders.contains_key(&profile_id) {
+                    return Err(not_found(EntityKind::Encoder, profile_id.as_str()));
+                }
+                check_name(&name, at)?;
+                check_profile(&profile, at)?;
+                self.encoders.insert(profile_id, (name, profile));
+            }
+            Edit::EncoderDelete { profile_id } => {
+                if !self.encoders.contains_key(&profile_id) {
+                    return Err(not_found(EntityKind::Encoder, profile_id.as_str()));
+                }
+                if let Some((user, _)) = self
+                    .output_encoders
+                    .iter()
+                    .find(|(_, id)| **id == profile_id)
+                {
+                    return Err(invalid(
+                        at,
+                        "profile_id",
+                        format!(
+                            "encoder profile `{profile_id}` is used by output `{user}`; point it elsewhere first"
+                        ),
+                    ));
+                }
+                self.encoders.remove(&profile_id);
             }
             other => return Err(unimplemented_by_mock(other.name())),
         }
@@ -810,6 +906,19 @@ impl Collection {
             .map(|(id, kind)| OutputInfo {
                 output_id: id.clone(),
                 kind: kind.clone(),
+                encoder_profile: self.output_encoders.get(id).cloned(),
+            })
+            .collect()
+    }
+
+    /// Every encoder profile, ordered by ID, as queries report them.
+    fn encoder_infos(&self) -> Vec<EncoderProfileInfo> {
+        self.encoders
+            .iter()
+            .map(|(id, (name, profile))| EncoderProfileInfo {
+                profile_id: id.clone(),
+                name: name.clone(),
+                profile: *profile,
             })
             .collect()
     }
@@ -869,6 +978,31 @@ impl Collection {
         self.items
             .get_mut(item_id)
             .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))
+    }
+
+    /// The item a placement edit changes, with its optional `scene_id` checked as
+    /// `jstream-graph` checks it: only the item's own scene, until keyframe scenes exist.
+    fn placement(
+        &mut self,
+        item_id: &ItemId,
+        scene_id: Option<&SceneId>,
+        at: usize,
+    ) -> Result<&mut Item, ProtocolError> {
+        let own = self.existing_item(item_id)?.scene_id.clone();
+        if let Some(scene_id) = scene_id
+            && *scene_id != own
+        {
+            self.existing_scene(scene_id)?;
+            return Err(invalid(
+                at,
+                "scene_id",
+                format!(
+                    "item `{item_id}` is in scene `{own}`, and only its own scene can be named \
+                     until keyframe scenes exist"
+                ),
+            ));
+        }
+        self.existing_item(item_id)
     }
 }
 
@@ -977,6 +1111,14 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
 }
 
 /// Checks an RTMP target; `name` is its field path within the edit (`kind.target`).
+/// Checks an encoder profile as the engine does.
+fn check_profile(profile: &EncoderProfile, at: usize) -> Result<(), ProtocolError> {
+    match profile.problem() {
+        Some((name, reason)) => Err(invalid(at, &format!("profile.{name}"), reason)),
+        None => Ok(()),
+    }
+}
+
 fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), ProtocolError> {
     match target {
         RtmpTarget::Generic { url } => match rtmp_url_problem(url) {
@@ -1386,6 +1528,7 @@ mod tests {
                 add("a", "i2", "nested_b"),
                 Edit::ItemSetVisible {
                     item_id: ItemId::new("i1"),
+                    scene_id: None,
                     visible: false,
                 },
                 Edit::ItemReorder {
@@ -1800,6 +1943,9 @@ mod tests {
                     output_id: OutputId::new("yt"),
                     state: OutputState::Active,
                     key_set: false,
+                    encoder: None,
+                    encoder_sessions: 0,
+                    hardware_sessions: 0,
                 }
             }
         );
@@ -1857,6 +2003,7 @@ mod tests {
                 outputs: vec![OutputInfo {
                     output_id: OutputId::new("yt"),
                     kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+                    encoder_profile: None,
                 }],
             })
         );
