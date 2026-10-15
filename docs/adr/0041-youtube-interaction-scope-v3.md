@@ -23,9 +23,8 @@ in a single sign-in instead of asking for it incrementally.
 broadcast control or turns chat sending on.
 
 Building `jstream-youtube` (roadmap Y1) found two things:
-- Google's guide to OAuth 2.0 for installed apps (the `google-oauth-native-app` entry in
-  `docs/external.toml`) says incremental authorization is not supported for installed
-  apps. "Incrementally" would therefore mean a second, complete sign-in later, not
+- Google's [guide to OAuth 2.0 for installed apps](https://developers.google.com/identity/protocols/oauth2/native-app)
+  says incremental authorization is not supported for installed apps. "Incrementally" would therefore mean a second, complete sign-in later, not
   Google's incremental flow.
 - JStream's main use is going live, which needs broadcast control, so almost every user
   would see that second consent screen soon after the first.

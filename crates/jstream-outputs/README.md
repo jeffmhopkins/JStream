@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:28b3e78c84d88d6b", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the generic RTMP/RTMPS output's ADR link and depends_on; ADR-0041 keeps that output and its reconnect-with-backoff unchanged" }
+verified = { hash = "b3:e33d5ea8c696e8ff", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ADR-0041, whose only change is that Context now links Google's installed-app OAuth guide directly instead of naming its external.toml id; the decision text is unchanged, so this section holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mux/src/**", "crates/jstream-mux/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mux", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0041-youtube-interaction-scope-v3.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:c4b2fceb3f4b9dc4", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the enhanced-RTMP link and depends_on; ADR-0041 keeps the generic RTMP/RTMPS output with enhanced RTMP for HEVC/AV1 unchanged" }
+verified = { hash = "b3:640b252d64c9d8a3", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ADR-0041, whose only change is that Context now links Google's installed-app OAuth guide directly instead of naming its external.toml id; the decision text is unchanged, so this section holds" }
 -->
 
 Layer-2 pure-Rust container muxers ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md):

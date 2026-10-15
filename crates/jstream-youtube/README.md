@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-youtube/src/**", "crates/jstream-youtube/fixtures/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-youtube", "docs/adr/0041-youtube-interaction-scope-v3.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-DEP-006", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:b6af8b3247d37fa2", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted: links and depends_on re-pointed from ADR-0034; Scopes bullet now says JStream signs in once asking for Manage (youtube), which the reads accept, with Readonly kept for a grant holding only it (ADR-0041 §4); quota and Not-yet references still match ADR-0041 §5 and §1-3" }
+verified = { hash = "b3:ffbba1940e136c6e", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ADR-0041, whose only change is that Context now links Google's installed-app OAuth guide directly instead of naming its external.toml id; the decision text is unchanged, so this section holds" }
 -->
 
 Layer-2 client for Google sign-in and the
