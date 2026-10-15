@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-anim/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-anim", "docs/adr/0049-keyframe-scene-model-and-evaluation.md#decision"]
-verified = { hash = "b3:df060caaf2ef569b", by = "agent:claude@session_01GLjL5hF5jZU4Zs8b6dKnau", note = "K2: new crate; re-read every bullet against lib.rs, keyframe.rs and switch.rs: Field names, Props/Value, opacity check, Override::apply live follow, write/clear/reset/drop_unless/restore/undo inverses, no empty override, plan_switch Motion cases and order, tests list incl. 5000-step seeded walk" }
 -->
 
 Layer-0 model of keyframe scenes

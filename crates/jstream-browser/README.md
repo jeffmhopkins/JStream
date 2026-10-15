@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:1b5eb3a918642972", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 round 2 N5: intro now says frames land on a GPU device the host hands the backend, matching the seam paragraph; use_device rustdoc and FakeBrowser::has_device say the same; rest re-read, holds" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
@@ -107,7 +106,6 @@ and the shutdown time. It runs on Windows with the `cef` feature only.
 ## Open items
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md"]
-verified = { hash = "b3:661681ac38fa86e7", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2: file-access item removed now that the request policy limits file pages to their folder; the sandbox and packaging items still block shipping" }
 -->
 
 What ADR-0021 asks for that this crate doesn't do yet. The first two block any host
