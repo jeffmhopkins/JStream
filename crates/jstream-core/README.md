@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:51a20a5af7f537b2", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b: Kinds bullet narrowed to descriptors; new Live sources bullet matches live.rs (build on create, rebuild on settings change, drop on delete, jstream-sources thread, stored frame wins, display capture); Not here yet drops rendering from the registry" }
+verified = { hash = "b3:4f0cadd2c8881d43", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b: Live sources bullet matches live.rs (build on create, rebuild on settings change, drop on delete, stored frame wins, display capture); Not here yet line rewrapped only, drops registry rendering" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -122,7 +122,8 @@ state machine. Contents:
   leaving the latest collection and no temporary file), and an MCP agent (`jstream-mcp`, a
   dev-dependency) driving the engine in-process.
 
-Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and the platform's Windows devices. See
+Not here yet: live values, the audio and outputs snapshots, a GPU encode target, and
+the platform's Windows devices. See
 [Design › Not yet](#design).
 
 Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
@@ -134,7 +135,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:7815fde412760a2b", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b: render-snapshot paragraph adds live builds and due frames as re-plan triggers; new Live sources paragraphs match live.rs (sync under lock, tickets, install, warn on failure, NotBuilt silent, clock from with_backends else own monotonic, collection folder from the collection file) and snapshot.rs plan_with (stored frame first, shared Arc VideoFrame, version on new frame, earliest next_change); Dependencies says jstream-sources draws the kinds; Not yet lists app asset folder, client-visible build errors, in-place live updates" }
+verified = { hash = "b3:60cc80bfe2234827", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b on main after #217: re-read the Live sources paragraphs and re-plan triggers against live.rs, snapshot.rs plan_with and engine.rs publish_render; collection asset references go through #217's AssetRoots::read; holds" }
 -->
 
 ### Engine and sessions

@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:3da827eaeaf549c1", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b: Seams Registry bullet now says the engine creates sources on its jstream-sources thread and asks frame/next_change from its program mix; crate code unchanged" }
+verified = { hash = "b3:3f1ff0d78b67fa09", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "C1b: Seams Registry bullet matches the engine's jstream-sources thread calling create/frame/next_change; Assets paragraph now says the Windows walk refuses only name-surrogate reparse points (file_type().is_symlink()), so OneDrive placeholders and dedup files are read (#217 N4)" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -87,8 +87,8 @@ the root afterwards. Stable Rust has no file IDs on Windows, so there the resolv
 is walked from the root and each folder on it is held open without delete sharing,
 which stops it being renamed or replaced until the file is open; one that has become a
 link (a symlink, junction or other name-surrogate reparse point) is refused, while a
-OneDrive placeholder or dedup file, also a reparse point, is read. The root folder itself is the host's configuration and is
-trusted.
+OneDrive placeholder or dedup file, also a reparse point, is read. The root folder
+itself is the host's configuration and is trusted.
 Errors name an asset by the root and path its setting holds, never by the host path
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). A missing or
 undecodable file is an error from `create`, never from the edit that set it.
