@@ -129,7 +129,7 @@ MJPEG `Codec` variant, and encoder selection by GPU adapter.
 ## GPU frames
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#crate-map", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/RULES.md#unsafe"]
-verified = { hash = "b3:02b6ead9e4c7cecc", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (E1 arc-swap render snapshots) into C4b: section text is main's, untouched by C4b; stale only via platform purpose's C4b Not yet line; design unchanged" }
+verified = { hash = "b3:6b6ae4d9b5d54f13", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH crate-map apps row only (A3: daemon links its OS platform crate); GPU frame design untouched" }
 -->
 
 The design for frames that stay on the GPU, which ARCH's pipeline needs (capture → wgpu

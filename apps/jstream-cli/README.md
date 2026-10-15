@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:a3db2c72a9fa1c29", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "Merge of main (B2 #176, B3 #183, B6 #184, B8 #171, G3a, E3a) into F3, protocol 0.13: re-read; contents hold" }
+verified = { hash = "b3:4e8a3605c77c6a22", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Stale via ARCH crate-map apps row (A3 adds 'and the platform crate of the OS they run on' for desktop/daemon); the CLI still links only control and mcp, so the purpose holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client

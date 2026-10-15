@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:6bca2dabf15a604d", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (F3 #208) into C4b: stamp-only conflict, main's text unchanged here; stale via ARCH#threading (program-stage collector), which doesn't touch the Windows backends; MfVideoDevices bullet, H1 bullet and Tests re-read and hold" }
+verified = { hash = "b3:f428fd7007e60c8f", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: the H1 check bullet now says jstream-daemon's startup calls check_media_foundation; delay-loading sub-bullet (mfplat.dll for MfCodecs) holds, the daemon delay-loads it via build.rs" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

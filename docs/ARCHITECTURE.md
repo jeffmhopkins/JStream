@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:12acea01746e7b87", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#184 B6, #206, #199, G3a) into ADR-0042: no shape text changed on main and no app manifest view or main.rs changed; host table holds" }
+verified = { hash = "b3:73e78a15981937b9", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: daemon host row now says the first cut serves WebSocket and MCP over HTTP (not the UI or --collection) and on Windows links jstream-platform-windows to go live over RTMP(S); diagram unchanged" }
 -->
 
 ```
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:237d353f74247e4a", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "Merge of main (Y1, C1a, YA ADR-0041) into C4b: kept main's rows (youtube now ADR-0041, new jstream-sources) and C4b's jstream-platform and jstream-platform-windows rows; re-read both against their manifest summaries; no new layer edge" }
+verified = { hash = "b3:2a1282c3420be669", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: layer 6 apps row says desktop and daemon link core, server and their OS's platform crate; jstream-daemon's Cargo.toml adds jstream-platform (all) and jstream-platform-windows (cfg windows), both lower layers; lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).

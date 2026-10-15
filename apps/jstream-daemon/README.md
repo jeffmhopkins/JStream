@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:6777f086abb3388a", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205 B1 finding: Not-here-yet now says the engine can load and save a collection file but the daemon doesn't wire --collection yet (A6); rest unchanged" }
+verified = { hash = "b3:1df32d164d19dffe", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3 merged with #153 and #148: contents list serve.rs (live engine on Windows, MCP on), the MF/AAC check in main.rs and components.rs, build.rs delay-load, and the opener, live-engine and delay_load.rs tests; Not here yet still holds" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -67,7 +67,7 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:f0074e842b9bc57a", by = "agent:claude@session_01CTdkkkirX1XQvQD39hWcva", note = "#205: args.rs only rewords the --collection refusal (daemon wires no collection file yet); the usage bullet 'refused with a usage error that says it is not supported yet' still holds" }
+verified = { hash = "b3:d53d551e2de20c45", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: --output row says a placeholder has no target on Windows; Going live and Media Foundation bullets match serve.rs opener reasons and main.rs check order (after logging, before token); exit code 3 row and exit 1 for the QPC clock and codec listing match main.rs" }
 -->
 
 ```sh
@@ -151,7 +151,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:81409d4a8cf737e0", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#222 C1b, #148 MF N editions): stamp-only conflict, main's text taken; F3 wrote nothing here that C1b or #148 changes; holds" }
+verified = { hash = "b3:6af0aadc37fcf7e4", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: Live on Windows, publish opener (Weak to the Arc engine, PublishError::new reasons, no key in errors), MF + AAC check and mfplat-only delay-load (LNK4199 reason) bullets match serve.rs, main.rs, components.rs, build.rs; MCP bullet from #153 kept; dependencies list platform, platform-windows (Windows), media, protocol" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

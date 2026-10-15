@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:0ccda6723c3bb204", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
+verified = { hash = "b3:8cb414ec9546f5e3", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: PublishError::new is now public so a host's opener can fail a start; the purpose's Engine and runtime bullets are unchanged and still hold" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -140,7 +140,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:0a1d6d40d7cae6a3", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#218 png 0.18): #218 bumps png and its dependency wording only; F3's runtime, collector and encoder-profile text holds" }
+verified = { hash = "b3:355ec349e1f106e6", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3: Outputs paragraph now says jstream-daemon reads output_kind in its opener on Windows (merged with main's Record sentence); Pipeline paragraph says an opener builds its errors with PublishError::new and they must not carry a key" }
 -->
 
 ### Engine and sessions
@@ -810,7 +810,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:65493ddbfc38461c", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5/N7: last sentence now says the mixer also has its own collector for input rings, beside the program stage's collector the render and mixer threads feed; push_each now takes a retire closure, behaviour unchanged" }
+verified = { hash = "b3:a7e45af16f8c9a7d", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A3 made PublishError::new public in runtime/publish.rs; the section's description of the publish target and opener flow is unchanged and holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of
