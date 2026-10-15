@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:6a2cb17c6d42fe45", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (C5 #238 audio sources) into C9: C5's process list and input_format text kept beside C9's MfMediaDecoders bullet; re-read" }
+verified = { hash = "b3:6c99c33f843a3a38", by = "agent:claude@session_01MjzPr23VZGbNvi9iGqnMxs", note = "Merge of main into D7b: took main's stamp; re-read; stale only via ARCH#threading's Collector row (mixer collector frees removed buses and filter chains), which this crate doesn't rely on; holds" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)

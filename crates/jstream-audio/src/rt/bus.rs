@@ -67,8 +67,11 @@ impl SendParam {
     }
 
     /// Points the send at `bus` with `gain`, clamped to `0..=MAX_GAIN`; NaN changes
-    /// nothing. The gain is stored before the target is published, so the mixer never
-    /// applies another send's gain to this bus.
+    /// nothing. The gain is stored before the target is published, so once the mixer
+    /// sees the new target it also sees the new gain. Until then it may apply the new
+    /// gain to the old target for a block. That target is a bus already gone from this
+    /// slot, since a slot holds one bus at a time, so no installed bus gets another
+    /// send's gain.
     fn set(&self, bus: u64, gain: f32) {
         if gain.is_nan() {
             return;
