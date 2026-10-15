@@ -121,10 +121,7 @@ mod tests {
                 entity: EntityKind::Scene,
                 id: "s".into(),
             },
-            ProtocolError::InvalidArgument {
-                field: "f".into(),
-                reason: "r".into(),
-            },
+            ProtocolError::invalid_argument("f", "r"),
             ProtocolError::ActionFailed { reason: "r".into() },
             ProtocolError::Internal { reason: "r".into() },
             ProtocolError::Unknown,

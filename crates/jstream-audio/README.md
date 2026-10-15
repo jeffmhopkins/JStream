@@ -418,11 +418,6 @@ and the protocol, and a CPU measurement: their cost is not measured ([R-RT-005](
 <!-- @section
 -->
 
-- **Input format before the first packet.** `AudioIo::open_input` takes the handler
-  before it reports the stream's format (`AudioStream::format`), but `add_input` needs
-  the format to build the producer. Until the platform API reports it up front (for
-  example, a format query per target, or the format in the first callback), the engine
-  must know the device format before opening the stream.
 - **State snapshots** ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). Gains
   stay atomics, which is ARCH's "continuous parameters bypass snapshots". The input
   list changes through the command queue in [Real-time design](#realtime), not through

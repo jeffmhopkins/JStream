@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:a7f8991885cafd45", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (B5 protocol 0.14, #185) into A3: CLI text is main's (adds item.set_source); A3 only changed ARCH's apps crate-map row, and the CLI still links only control and mcp; holds" }
+verified = { hash = "b3:d305302e89ac48f5", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; B9 only swaps a test's error constructor in exit.rs; #203's text holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:755df2de125dafe1", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Edits bullet merges F3's encoder edits and B5's duplicated_from as not in the CLI, with B5's item.set_source form" }
+verified = { hash = "b3:b528a9cd7c52ba57", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; No undo or redo command bullet and Edits text hold; B9 adds no CLI command" }
 -->
 
 ```sh
@@ -120,6 +120,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
   the URL.
+- **No undo or redo command.** Undo history belongs to a client and ends with its
+  session ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), and each run of a
+  command is a new client, so a one-shot `undo` would always find nothing to undo.
+  `mcp` is one client for its whole run: its `history` tool undoes and redoes the
+  agent's own edits.
 - **Stream keys** are never arguments, so they stay out of shell history and the
   process list (`ps`), as the control token does. `output set-key <id>` reads the key
   from `--key-file <path>`, or else from stdin until it ends (pipe it in, or type it
@@ -218,7 +223,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5e47f224376d60e5", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: re-read; parser has item.set_source beside F3's output status encoder suffix" }
+verified = { hash = "b3:96f8118049fee449", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#203 mock undo and redo) into B9 at 0.15: took main's stamp, re-read; exit-code table still maps invalid_argument to 17; blockers ride in its detail" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

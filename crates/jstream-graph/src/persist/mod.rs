@@ -82,8 +82,8 @@ pub enum LoadError {
     Invalid {
         /// The object being rebuilt.
         object: String,
-        /// Why it was refused.
-        error: ProtocolError,
+        /// Why it was refused. Boxed, so a `Result` carrying a `LoadError` stays small.
+        error: Box<ProtocolError>,
     },
 }
 
@@ -273,7 +273,10 @@ impl Graph {
         for (object, edit) in rebuild(&graph, &file)? {
             graph
                 .apply(std::slice::from_ref(&edit), None)
-                .map_err(|error| LoadError::Invalid { object, error })?;
+                .map_err(|error| LoadError::Invalid {
+                    object,
+                    error: Box::new(error),
+                })?;
         }
         graph.rev = file.rev;
         Ok(graph)

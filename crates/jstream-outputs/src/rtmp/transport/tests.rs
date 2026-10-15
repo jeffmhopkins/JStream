@@ -213,3 +213,28 @@ fn a_write_deadline_bounds_a_large_write_over_tls() {
         "the write failed after {took:?}"
     );
 }
+
+/// #209: `shutdown`'s TLS flush goes through the write deadline too. Past the deadline
+/// `close_notify` is not sent and the shutdown fails at once, where it used to be sent
+/// with only the socket's write timeout to bound it.
+#[test]
+fn shutdown_over_tls_honours_the_write_deadline() {
+    let pki = TestPki::new(&["localhost"]);
+    let (port, server) = tls_server(pki.server_config(&[&TLS13]), |mut s| {
+        // No close_notify arrives, so the end of stream is not a clean one.
+        let mut rest = Vec::new();
+        s.read_to_end(&mut rest).is_err()
+    });
+    let config = client_config(pki.roots.clone()).unwrap();
+    let mut t = connect_tls(&url("rtmps", "localhost", port), TIMEOUT, config).unwrap();
+    t.set_write_deadline(Some(std::time::Instant::now()));
+    let err = t
+        .shutdown()
+        .expect_err("close_notify was sent past the deadline");
+    assert_eq!(err.kind(), io::ErrorKind::TimedOut, "{err:?}");
+    drop(t);
+    assert!(
+        server.join().unwrap().unwrap(),
+        "the server saw a clean TLS close"
+    );
+}

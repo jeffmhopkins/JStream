@@ -19,9 +19,9 @@ use jstream_media::{
 use crate::{
     AudioDeviceInfo, AudioDirection, AudioEncoder, AudioEncoderConfig, AudioInputHandler,
     AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget, AudioPacket,
-    AudioPacketFlags, AudioRenderBuffer, AudioStream, Backends, Capture, CaptureDecoder,
-    CaptureEncoding, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo,
-    CodecRole, Codecs, CompressedFrame, DeviceId, GpuContext, GpuFrame, GpuInterop,
+    AudioPacketFlags, AudioProcess, AudioRenderBuffer, AudioStream, Backends, Capture,
+    CaptureDecoder, CaptureEncoding, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
+    CodecInfo, CodecRole, Codecs, CompressedFrame, DeviceId, GpuContext, GpuFrame, GpuInterop,
     HardwarePreference, MediaClock, OAuthTokenStore, PlatformError, Secret, StreamKeyStore,
     VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat, VideoDeviceInfo,
     VideoDevices, VideoEncoder, VideoEncoderConfig, VideoSurface,
@@ -454,7 +454,8 @@ pub const FAKE_SPEAKERS: &str = "fake-speakers";
 /// in one format. Input streams receive packets only when [`deliver`](Self::deliver) is
 /// called, and output streams are asked for samples only when [`render`](Self::render)
 /// is. Clones share the open streams, so a test keeps a clone after handing one to the
-/// engine. Process loopback is unsupported.
+/// engine. It lists no processes until [`set_processes`](Self::set_processes) gives it
+/// some; process loopback opens only on a listed one.
 #[derive(Clone)]
 pub struct FakeAudioIo {
     clock: FakeClock,
@@ -466,7 +467,10 @@ pub struct FakeAudioIo {
 struct AudioState {
     next_id: u64,
     inputs: BTreeMap<u64, (Box<dyn AudioInputHandler>, u64)>,
+    /// What each open input stream records.
+    targets: BTreeMap<u64, AudioInputTarget>,
     outputs: BTreeMap<u64, (Box<dyn AudioOutputHandler>, u64)>,
+    processes: Vec<AudioProcess>,
 }
 
 impl FakeAudioIo {
@@ -534,9 +538,21 @@ impl FakeAudioIo {
         for (mut handler, _) in std::mem::take(&mut state.inputs).into_values() {
             handler.on_error(&lost);
         }
+        state.targets.clear();
         for (mut handler, _) in std::mem::take(&mut state.outputs).into_values() {
             handler.on_error(&lost);
         }
+    }
+
+    /// Replaces the processes [`processes`](AudioIo::processes) lists. Process loopback
+    /// streams already open stay open, as a real one does when its process exits.
+    pub fn set_processes(&self, processes: Vec<AudioProcess>) {
+        lock(&self.state).processes = processes;
+    }
+
+    /// What each open input stream records, in the order they were opened.
+    pub fn input_targets(&self) -> Vec<AudioInputTarget> {
+        lock(&self.state).targets.values().cloned().collect()
     }
 
     /// How many input and output streams are open.
@@ -572,31 +588,26 @@ impl AudioIo for FakeAudioIo {
         ])
     }
 
+    fn processes(&self) -> Result<Vec<AudioProcess>, PlatformError> {
+        Ok(lock(&self.state).processes.clone())
+    }
+
+    fn input_format(&self, target: &AudioInputTarget) -> Result<AudioFormat, PlatformError> {
+        check_input(target, &lock(&self.state))?;
+        Ok(self.format)
+    }
+
     fn open_input(
         &self,
         target: &AudioInputTarget,
         handler: Box<dyn AudioInputHandler>,
     ) -> Result<Box<dyn AudioStream>, PlatformError> {
-        match target {
-            AudioInputTarget::DefaultInput | AudioInputTarget::DefaultOutputLoopback => {}
-            AudioInputTarget::Input(id) if id.as_str() == FAKE_MIC => {}
-            AudioInputTarget::OutputLoopback(id) if id.as_str() == FAKE_SPEAKERS => {}
-            AudioInputTarget::Input(id) | AudioInputTarget::OutputLoopback(id) => {
-                return Err(PlatformError::NotFound {
-                    kind: "audio device",
-                    id: id.to_string(),
-                });
-            }
-            AudioInputTarget::ProcessLoopback { .. } => {
-                return Err(PlatformError::Unsupported {
-                    what: "process loopback".into(),
-                });
-            }
-        }
         let mut state = lock(&self.state);
+        check_input(target, &state)?;
         let id = state.next_id;
         state.next_id += 1;
         state.inputs.insert(id, (handler, 0));
+        state.targets.insert(id, target.clone());
         Ok(self.stream(id))
     }
 
@@ -623,6 +634,32 @@ impl AudioIo for FakeAudioIo {
     }
 }
 
+/// Whether [`FakeAudioIo`] can open `target`: its two devices, either default, and the
+/// processes it lists.
+fn check_input(target: &AudioInputTarget, state: &AudioState) -> Result<(), PlatformError> {
+    match target {
+        AudioInputTarget::DefaultInput | AudioInputTarget::DefaultOutputLoopback => Ok(()),
+        AudioInputTarget::Input(id) if id.as_str() == FAKE_MIC => Ok(()),
+        AudioInputTarget::OutputLoopback(id) if id.as_str() == FAKE_SPEAKERS => Ok(()),
+        AudioInputTarget::Input(id) | AudioInputTarget::OutputLoopback(id) => {
+            Err(PlatformError::NotFound {
+                kind: "audio device",
+                id: id.to_string(),
+            })
+        }
+        AudioInputTarget::ProcessLoopback { pid } => {
+            if state.processes.iter().any(|p| p.pid == *pid) {
+                Ok(())
+            } else {
+                Err(PlatformError::NotFound {
+                    kind: "process",
+                    id: pid.to_string(),
+                })
+            }
+        }
+    }
+}
+
 struct FakeAudioStream {
     id: u64,
     format: AudioFormat,
@@ -639,6 +676,7 @@ impl Drop for FakeAudioStream {
     fn drop(&mut self) {
         let mut state = lock(&self.state);
         state.inputs.remove(&self.id);
+        state.targets.remove(&self.id);
         state.outputs.remove(&self.id);
     }
 }
