@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:34036b9f6b4ddd56", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Merge of main (Q3 e2e, #266/#274 styles) into U3a: contents list unchanged by the merge and still matches the modules; re-read, holds" }
+verified = { hash = "b3:a75cb5fedfdc794c", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Review N4: properties.rs only (asset root follows a stored reference only); contents list unaffected; holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -58,7 +58,7 @@ Contents ([Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:c62055b6e524769a", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Merge of main into U3a: main's Styles bullet and lib.rs Docs line kept; added that a new session starts on the program scene and that a failing kind.list offers no new kinds; RenameField tolerates its post-removal blur; re-read, holds" }
+verified = { hash = "b3:dfc132b23d4d9009", by = "agent:claude@session_01FnBvDaHWEbSca763xGBa1z", note = "Review N4: the asset field keeps the user's root pick while no file is stored and follows a stored reference's root; the form bullet's claims still hold" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The

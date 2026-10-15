@@ -583,11 +583,17 @@ fn asset_input(
         _ => (AssetRoot::Collection, String::new()),
     };
     let root = RwSignal::new(untrack(|| parts().0));
-    // Follows the stored root when it changes elsewhere (another client, an agent), so
-    // a later path edit doesn't send a stale one.
+    // Follows the stored root when a stored reference has one (another client or an
+    // agent may change it), so a later path edit doesn't send a stale root. With no file
+    // stored the user's pick stands: there is no stored root to follow.
     Effect::new({
         let parts = parts.clone();
-        move |_| root.set(parts().0)
+        move |_| {
+            let (stored, path) = parts();
+            if !path.is_empty() && root.get_untracked() != stored {
+                root.set(stored);
+            }
+        }
     });
     let path = {
         let parts = parts.clone();
