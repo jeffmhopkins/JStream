@@ -55,3 +55,6 @@ SHA, and a skipped run counts as passed, so a failed check could read as green.
   already gets. Fork PRs are not dispatched.
 - A branch without `after-review.yml` can't be dispatched, so the gate logs a warning. That
   PR gets its Windows checks once it merges `main`.
+- A PR that changes `after-review.yml` runs it on every push. That tests the change, and it
+  is how the PR adding the file gets its Windows checks: `workflow_dispatch` can only start
+  a workflow that is already on the default branch.

@@ -14,6 +14,11 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  # A PR that changes this file runs it on every push: the change gets tested, and
+  # workflow_dispatch can't start a workflow that isn't on the default branch yet.
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: [.github/workflows/after-review.yml]
 
 permissions:
   contents: read
