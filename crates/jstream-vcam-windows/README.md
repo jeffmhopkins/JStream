@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:547f49f5e93f54bc", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#200 session trust rule) into ADR-0042: purpose also covers Cargo.toml; 'depends only on layer-0 crates and Microsoft's windows bindings' still matches (jstream-vcam-proto, windows, windows-core); main's trust text is main's" }
+verified = { hash = "b3:106e1b210d9e71d3", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (#200 trust rule, #190): Purpose text is main's, trust bullet and tests paragraph match trust.rs/session.rs; RequestSample still unpaced, as Packaging says" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -78,7 +78,7 @@ and the example on Windows.
 <!-- @section
 covers = ["crates/jstream-vcam-windows/examples/**"]
 depends_on = ["docs/ARCHITECTURE.md#packaging"]
-verified = { hash = "b3:6eb98f3fbaed2d14", by = "agent:claude", note = "Added the expected-no-refused-line step for the session-block trust rule (review N2 on #200); vcam_smoke steps otherwise unchanged" }
+verified = { hash = "b3:9ce129ffa6b83ad0", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main: #200's no-refused-line step and this PR's hardware-pass sentence both kept; steps match vcam_smoke" }
 -->
 
 `examples/vcam_smoke` stands in for the engine side: it publishes the ring, the fence and
@@ -99,7 +99,9 @@ root:
 5. Clean up in an elevated prompt with
    `regsvr32 /u C:\JStreamVcamTest\jstream_vcam_windows.dll`.
 
-The report's `verdict` line says whether shared frames reached the camera. The DLL's log
+The report's `verdict` line says whether shared frames reached the camera. The first
+run on hardware passed without step 2's folder needing any extra grant
+([ARCHITECTURE › Packaging](../../docs/ARCHITECTURE.md#packaging)). The DLL's log
 is `C:\Windows\ServiceProfiles\LocalService\AppData\Local\JStream\vcam\vcam.log`, readable
 from an elevated prompt. Run from a normal, non-elevated session, it should have no
 `refused` line: one means the session-block trust rule turned the smoke test's own block

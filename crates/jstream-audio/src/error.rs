@@ -36,8 +36,13 @@ pub enum AudioError {
     /// mixer thread.
     #[error("the mixer already has the maximum number of inputs")]
     TooManyInputs,
-    /// Input changes are waiting for the mixer to apply them, and the queue is full.
-    #[error("the mixer input command queue is full")]
+    /// The mixer already has as many buses, the master included, as it reserved mix
+    /// buffers for.
+    #[error("the mixer already has the maximum number of buses")]
+    TooManyBuses,
+    /// Input or bus changes are waiting for the mixer to apply them, and the queue is
+    /// full.
+    #[error("the mixer command queue is full")]
     CommandQueueFull,
     /// The thread that frees the mixer's retired rings could not be started.
     #[error("the mixer's collector thread could not be started")]

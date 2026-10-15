@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 pub(crate) struct AtomicF32(AtomicU32);
 
 impl AtomicF32 {
-    pub(crate) fn new(v: f32) -> Self {
+    pub(crate) const fn new(v: f32) -> Self {
         Self(AtomicU32::new(v.to_bits()))
     }
 
