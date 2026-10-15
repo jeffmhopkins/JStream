@@ -121,9 +121,9 @@ The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-
 in canvas pixels. `transform.rs` maps the page to the canvas, hit-tests boxes and
 handles, and turns a drag into a new geometry; `snap.rs` snaps; `model.rs` reads the
 scene and sends the edits; `preview.rs` chooses the preview stream and decides what
-to do with each H.264 frame and when each JPEG decodes. These are pure and tested natively (`model.rs` against
-`MockEngine`). `screen.rs` decodes and draws the preview in the browser, and `mod.rs`
-is the component.
+to do with each H.264 frame and when each JPEG decodes. These are pure and tested
+natively (`model.rs` against `MockEngine`). `screen.rs` decodes and draws the preview
+in the browser, and `mod.rs` is the component.
 
 - **What it shows.** The scene on program (`studio.get`, or the first non-group scene
   if none is), re-read on every `state.changed`, `studio.changed` and

@@ -2355,7 +2355,7 @@ stamp = { hash = "b3:8547ab2b9342942f" }
 stamp = { hash = "b3:b0fabe46ab68dffb" }
 
 ["CRATE-jstream-ui#canvas"."body"]
-stamp = { hash = "b3:2c42943b912b6f1d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#274: Styles bullet now says the test refuses any style attribute, static or set at run time (style=move, attr:style), outside test modules; matches sets_style_attribute in lib.rs" }
+stamp = { hash = "b3:44595a6d72347c5d", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376) and U1's branch: intro (preview.rs H.264 feed and JpegSlot, screen.rs browser side) and Preview bullet re-checked against preview.rs, screen.rs and mod.rs; rewrapped one line" }
 
 ["CRATE-jstream-ui#canvas"."dep:docs/adr/0022-item-transform-and-canvas.md"]
 stamp = { hash = "b3:af178dd41ff64ab0" }
@@ -2364,10 +2364,16 @@ stamp = { hash = "b3:af178dd41ff64ab0" }
 stamp = { hash = "b3:ff923b70ae781b73" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376) and U1's branch: intro (preview.rs H.264 feed and JpegSlot, screen.rs browser side) and Preview bullet re-checked against preview.rs, screen.rs and mod.rs; rewrapped one line" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:a216b2e0e45b54ef" }
+
+["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/preview.rs"]
+stamp = { hash = "b3:496a37975201c003", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376) and U1's branch: intro (preview.rs H.264 feed and JpegSlot, screen.rs browser side) and Preview bullet re-checked against preview.rs, screen.rs and mod.rs; rewrapped one line" }
+
+["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/screen.rs"]
+stamp = { hash = "b3:63ad6f74be1d92c5", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376) and U1's branch: intro (preview.rs H.264 feed and JpegSlot, screen.rs browser side) and Preview bullet re-checked against preview.rs, screen.rs and mod.rs; rewrapped one line" }
 
 ["CRATE-jstream-ui#canvas"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2388,10 +2394,16 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:8c1bea968ba0a189" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376) and U1's branch: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; .stage-screen is a style.css class, placement via style: bindings; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:a216b2e0e45b54ef" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/preview.rs"]
+stamp = { hash = "b3:496a37975201c003", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376) and U1's branch: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; .stage-screen is a style.css class, placement via style: bindings; holds" }
+
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/screen.rs"]
+stamp = { hash = "b3:63ad6f74be1d92c5", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376) and U1's branch: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; .stage-screen is a style.css class, placement via style: bindings; holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
@@ -2418,10 +2430,10 @@ stamp = { hash = "b3:81728ddff971bf23" }
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:bd8197d3c2a90a4b" }
+stamp = { hash = "b3:2ff680727d552e40", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376) and U1's branch: the preview keeps only the binary stream and a Weak control, JPEG settle closures hold no Control, so disconnecting still closes the socket; .stage-screen is a style.css class, placement via style: bindings; holds" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:e5df397b64055237", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: only lib.rs's Docs line gained the e2e README sections; contents list holds" }
+stamp = { hash = "b3:69e1f2de77c70514", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376 stamp ledger) and U1's branch: Canvas bullet (boxes over the live program preview) still matches canvas/mod.rs; rest holds" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -2430,10 +2442,16 @@ stamp = { hash = "b3:8b72f650cbef12f9" }
 stamp = { hash = "b3:8c1bea968ba0a189" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/mod.rs"]
-stamp = { hash = "b3:49945f646dfa549c" }
+stamp = { hash = "b3:dddaf2769a245f9b", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376 stamp ledger) and U1's branch: Canvas bullet (boxes over the live program preview) still matches canvas/mod.rs; rest holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/model.rs"]
 stamp = { hash = "b3:a216b2e0e45b54ef" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/preview.rs"]
+stamp = { hash = "b3:496a37975201c003", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376 stamp ledger) and U1's branch: Canvas bullet (boxes over the live program preview) still matches canvas/mod.rs; rest holds" }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/screen.rs"]
+stamp = { hash = "b3:63ad6f74be1d92c5", by = "agent:claude@session_01PE5EjidrHZa45cD9qxQTvL", note = "Merge of main (#376 stamp ledger) and U1's branch: Canvas bullet (boxes over the live program preview) still matches canvas/mod.rs; rest holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/canvas/snap.rs"]
 stamp = { hash = "b3:7e81b19db47fd220" }
