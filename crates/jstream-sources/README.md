@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:0f10f768295e30bd", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "C10: Seams name Context's audio scope and AudioScope (16384-sample mono ring of atomics, one pusher, seqlock read of up to MAX_WINDOW 2048 samples, analysis in frame not on the mixer thread); Kinds adds waveform and spectrum with their params, frame pool, 1/30 s ticks, silence after 250 ms still, realfft details; Dependencies add realfft; Tests list the scope tests and scope_no_alloc; checked against src/scope" }
+verified = { hash = "b3:cc08e81ab6d3b669", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 N1: Windows walk split out of open_inside into walk_below (takes the already-resolved path below the root); Assets paragraph's walk description unchanged and still holds; Tests sentence now says the Windows test refuses links both at resolve and in the walk on its own" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -187,7 +187,12 @@ FFT, and for fonts `skrifa` (with `read-fonts`, `font-types`, `bytemuck`, `yoke`
 ([ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
-distance transform and reading an audio target from settings. `tests/sources.rs` checks
+distance transform and reading an audio target from settings, and in `source.rs` the
+asset checks refuse a file swapped in from outside the root (Unix) and a junction or
+symbolic link inside the root that leads outside it (Windows, both when the path is
+resolved and in the walk on its own, as a link swapped in after resolving would meet
+it; a symbolic link is skipped, with a note, where the test may not create one).
+`tests/sources.rs` checks
 the registry and runs the colour and image kinds through the public API on files in a
 temporary folder: PNG, GIF and lossless WebP files are encoded by the test, and
 `tests/data` holds a JPEG, a lossy WebP and an animated WebP made once with Pillow, as
