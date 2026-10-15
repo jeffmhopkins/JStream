@@ -59,4 +59,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0044](0044-pairing-remote-browsers.md) | Pairing remote browsers with a one-time code | accepted | maintainer |  |
 | [ADR-0045](0045-leptos-web-ui.md) | One web UI on Leptos, confirmed for M2 | accepted | agent |  |
 | [ADR-0046](0046-browser-crate-and-helper.md) | Browser sources live in their own crate, with a helper exe | accepted | agent |  |
+| [ADR-0048](0048-sandboxed-browser-helper.md) | Browser pages run in a sandboxed helper process | accepted | agent |  |
 <!-- @generated end adr-index -->

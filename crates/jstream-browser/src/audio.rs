@@ -1,5 +1,5 @@
-//! A page's audio: CEF's planar packets handed to the engine's mixer input as the
-//! interleaved packets an audio device delivers.
+//! A page's audio: CEF's planar packets, or the browser helper's interleaved ones, handed
+//! to the engine's mixer input as the interleaved packets an audio device delivers.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, TryLockError};
@@ -106,19 +106,37 @@ impl PageAudio {
     /// channel. `arrived` is when it arrived, on the media clock; the packet is stamped as
     /// recorded that long before, which is when its first frame played in the page.
     ///
-    /// Runs on CEF's audio thread: it neither blocks nor allocates. A packet with no
-    /// channels, or with a channel shorter than `frames`, is dropped as malformed.
+    /// Neither blocks nor allocates. A packet with no channels, or with a channel shorter
+    /// than `frames`, is dropped as malformed.
     pub fn push_planar(&self, planes: &[&[f32]], frames: usize, arrived: Option<MediaTime>) {
-        let first = self.position.fetch_add(frames as u64, Ordering::Relaxed);
-        if frames == 0 {
-            return;
-        }
         let (left, right) = match planes {
             [mono] => (*mono, *mono),
             [left, right, ..] => (*left, *right),
-            [] => return,
+            [] => {
+                self.position.fetch_add(frames as u64, Ordering::Relaxed);
+                return;
+            }
         };
         if left.len() < frames || right.len() < frames {
+            self.position.fetch_add(frames as u64, Ordering::Relaxed);
+            return;
+        }
+        self.push(frames, arrived, |i| (left[i], right[i]));
+    }
+
+    /// Hands on one packet of interleaved stereo samples, as the browser helper sends
+    /// them; otherwise as [`push_planar`](Self::push_planar). A trailing odd sample is
+    /// ignored.
+    pub fn push_interleaved(&self, samples: &[f32], arrived: Option<MediaTime>) {
+        let frames = samples.len() / 2;
+        self.push(frames, arrived, |i| (samples[2 * i], samples[2 * i + 1]));
+    }
+
+    /// Hands on `frames` frames, frame `i` being `frame(i)`, in chunks of at most
+    /// [`MAX_CHUNK_FRAMES`].
+    fn push(&self, frames: usize, arrived: Option<MediaTime>, frame: impl Fn(usize) -> (f32, f32)) {
+        let first = self.position.fetch_add(frames as u64, Ordering::Relaxed);
+        if frames == 0 {
             return;
         }
         let mut sink = match self.sink.try_lock() {
@@ -141,8 +159,7 @@ impl PageAudio {
             let n = (frames - done).min(MAX_CHUNK_FRAMES);
             let out = &mut scratch[..n * 2];
             for (i, pair) in out.chunks_exact_mut(2).enumerate() {
-                pair[0] = left[done + i];
-                pair[1] = right[done + i];
+                (pair[0], pair[1]) = frame(done + i);
             }
             let time = start.and_then(|s| s.checked_add(frames_at(done, s.timebase())?).ok());
             handler.on_packet(&AudioPacket {
@@ -276,6 +293,22 @@ mod tests {
         drop(stream);
         audio.push_planar(&[&[0.5; 2]], 2, None);
         assert_eq!(seen.lock().expect("lock").packets.len(), 2);
+    }
+
+    #[test]
+    fn interleaved_packets_pass_through_and_are_stamped() {
+        let audio = PageAudio::new();
+        let (handler, seen) = recorder();
+        let _stream = audio.open(handler);
+        let samples: Vec<f32> = (0..960).map(|i| i as f32).collect();
+        audio.push_interleaved(&samples, Some(MediaTime::new(10_000_000, hns())));
+        // A trailing odd sample is ignored.
+        audio.push_interleaved(&[1.0, 2.0, 3.0], None);
+        let seen = seen.lock().expect("lock");
+        assert_eq!(seen.packets[0].0, samples);
+        assert_eq!(seen.packets[0].2, Some(MediaTime::new(9_900_000, hns())));
+        assert_eq!(seen.packets[1].0, vec![1.0, 2.0]);
+        assert_eq!(seen.packets[1].1, 480);
     }
 
     #[test]

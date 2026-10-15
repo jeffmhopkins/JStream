@@ -12,21 +12,25 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["apps/jstream-browser-helper/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*", "crates/jstream-browser/README.md#purpose"]
-verified = { hash = "b3:c887d499492666c7", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2: stale via the browser README only; the helper is unchanged" }
+depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*", "crates/jstream-browser/README.md#purpose", "docs/adr/0048-sandboxed-browser-helper.md"]
+verified = { hash = "b3:e3a122b903edd942", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: rewritten for the cdylib loaded by CEF's bootstrap exe (RunWinMain export, unsafe_allowed, cef feature turning on jstream-browser/helper), checked against src/lib.rs and Cargo.toml" }
 -->
 
-CEF's subprocess exe for browser sources
-([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.md)). The CEF backend in
-[`jstream-browser`](../../crates/jstream-browser/README.md) sets it as
-`browser_subprocess_path`, so Chromium's renderer, GPU and utility processes start as
-`jstream-browser-helper.exe` and the engine's own exe never does. It must sit next to the
-host's exe.
+The sandboxed browser helper
+([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): a DLL, not an exe. It
+ships as `jstream-browser-helper.dll` (Cargo builds it as `jstream_browser_helper.dll`)
+beside CEF's `bootstrap.exe` renamed `jstream-browser-helper.exe`, both next to CEF's
+runtime files. The CEF backend in
+[`jstream-browser`](../../crates/jstream-browser/README.md) starts that exe; the bootstrap
+sets up Chromium's sandbox and calls the DLL's `RunWinMain` export, which hands the
+process to `jstream_browser::run_helper`. The process becomes CEF's browser process for
+the engine's pages, and every renderer, GPU and utility process starts as the same exe,
+sandboxed. The bootstrap brings its own manifest. If releases are signed, the exe and the
+DLL must be signed with the same certificate.
 
-Its `main` hands the process to CEF (`jstream_browser::run_subprocess`) and exits with
-the code CEF returns. It is a GUI-subsystem exe, so no console window opens per
-subprocess, and `build.rs` embeds `jstream-browser-helper.exe.manifest`, whose Windows 10 and 11
-compatibility entry lets Chromium read the real Windows version.
+The export is the crate's only code. It is unmangled (`#[unsafe(no_mangle)]`), so the
+crate declares `unsafe_allowed` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)).
 
-Like `jstream-browser`, it builds CEF only with its `cef` feature (Windows). Without it,
-it does nothing and exits with 1; `dox` compile-checks it without building CEF.
+Like `jstream-browser`, it builds CEF only with its `cef` feature (Windows), which turns
+on `jstream-browser`'s `helper` feature; without it, the DLL exports nothing. `dox`
+compile-checks it without building CEF.

@@ -203,7 +203,8 @@ applies_to = ["crates/**"]
 -->
 Only crates whose metadata declares `unsafe_allowed = true` may contain `unsafe`:
 `jstream-platform-windows`, `jstream-platform-macos`, `jstream-platform-linux`,
-`jstream-vcam-windows`, `jstream-browser` (ADR-0046) and `*-sys`. All other crates have `#![forbid(unsafe_code)]`,
+`jstream-vcam-windows`, `jstream-browser` (ADR-0046), `jstream-browser-helper` (ADR-0048,
+for its `RunWinMain` export) and `*-sys`. All other crates have `#![forbid(unsafe_code)]`,
 and lint-deps checks that it's present.
 
 <a id="R-UNSAFE-002"></a>

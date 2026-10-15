@@ -591,7 +591,7 @@ disables the check, only review and the weekly audit stand behind it.
 <!-- @section
 covers = ["xtask/src/lint_deps.rs"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003", "docs/RULES.md#R-ARCH-005", "docs/RULES.md#R-UNSAFE-001", "docs/RULES.md#R-DEP-002", "docs/RULES.md#R-DEP-003"]
-verified = { hash = "b3:3d509fa89f1514b9", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: unsafe bullet names browser crates; native bullet says the graph is default features, so cef-dll-sys is covered by its entry and cargo deny --all-features" }
+verified = { hash = "b3:1482765eaf4b1d13", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: unsafe bullet adds the browser-helper crate; cef-dll-sys now sits behind jstream-browser's helper feature; checked against xtask lint_deps.rs" }
 -->
 
 `cargo xtask lint-deps` (CI check `lint-deps`) checks the rules whose `enforced_by` names
@@ -609,8 +609,8 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
 - **Clients** ([R-ARCH-003](RULES.md#R-ARCH-003)): `jstream-ui`, `jstream-mcp`,
   `jstream-server` and `jstream-cli` never reach `jstream-core`, directly or through other
   members. The finding shows the path.
-- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam and browser
-  crates on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
+- **`unsafe`** ([R-UNSAFE-001](RULES.md#R-UNSAFE-001)): only the platform, vcam, browser and
+  browser-helper crates on the `unsafe` allowlist and `*-sys` crates may declare `unsafe_allowed = true`. For a
   member that declares `false`, every library and binary crate root must carry
   `#![forbid(unsafe_code)]` (alone or among other lints, possibly wrapped over several
   lines) among its leading inner attributes: only whitespace, comments and other inner
@@ -624,7 +624,7 @@ there is any. `xtask/src/lint_deps.rs` holds its allowlists, so editing it is a
   Deeper chains, and build scripts that run a compiler without those crates, are not
   detected; the `deny.toml` bans and review cover them. The graph is the one default
   features resolve, so a package that only an off-by-default feature reaches (CEF's
-  `cef-dll-sys`, behind `jstream-browser`'s `cef` feature) isn't checked: its allowlist
+  `cef-dll-sys`, behind `jstream-browser`'s `helper` feature) isn't checked: its allowlist
   entry records the decision, and `cargo deny check --all-features` still sees it.
 - **Workspace dependencies** ([R-DEP-003](RULES.md#R-DEP-003)): every entry in a member's
   `[dependencies]`, `[dev-dependencies]` and `[build-dependencies]` tables, including

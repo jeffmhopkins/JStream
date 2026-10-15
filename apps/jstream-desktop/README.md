@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-desktop/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:d40cf29820e1fc9f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via ARCH crate-map apps row (adds jstream-browser-helper); the desktop app creates no browser backend yet, text holds" }
+verified = { hash = "b3:9276a3897d23a0a7", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via the crate-map apps row (helper now a DLL); the desktop app creates no browser backend, text holds" }
 -->
 
 The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a

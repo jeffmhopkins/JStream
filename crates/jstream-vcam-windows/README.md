@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-windows/src/**", "crates/jstream-vcam-windows/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-windows", "docs/ARCHITECTURE.md#packaging", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "crates/jstream-vcam-proto/README.md#purpose"]
-verified = { hash = "b3:18ae317be15aa296", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: stale via R-UNSAFE-001 (adds jstream-browser) and the crate map; vcam text unaffected" }
+verified = { hash = "b3:498c1e1019b5042a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via R-UNSAFE-001 and ARCH packaging (CEF helper sentence only); vcam text unaffected" }
 -->
 
 The virtual camera's media source: a COM DLL (`jstream_vcam_windows.dll`) that the
@@ -84,7 +84,7 @@ and the example on Windows.
 <!-- @section
 covers = ["crates/jstream-vcam-windows/examples/**"]
 depends_on = ["docs/ARCHITECTURE.md#packaging"]
-verified = { hash = "b3:9ffd14a404b267aa", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
+verified = { hash = "b3:a5e83524be50f968", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: stale via ARCH packaging, whose change is the CEF helper sentence only; regsvr32 and vcam_smoke steps unchanged" }
 -->
 
 `examples/vcam_smoke` stands in for the engine side: it publishes the ring, the fence and

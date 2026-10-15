@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:bab3a709a6be2e47", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: hosts table gains jstream-browser-helper as a non-host subprocess exe; diagram unchanged" }
+verified = { hash = "b3:3878f355429caa19", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: hosts-table row for jstream-browser-helper now describes the sandboxed helper (bootstrap exe plus DLL) the CEF backend starts; diagram unchanged" }
 -->
 
 ```
@@ -56,7 +56,7 @@ verified = { hash = "b3:bab3a709a6be2e47", by = "agent:claude@session_01E4Mb9bbG
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). |
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
-| `jstream-browser-helper` | Not a host: CEF's subprocess exe for browser sources, which hosts that turn on browser sources ship next to their own exe ([ADR-0046](adr/0046-browser-crate-and-helper.md), [its README](../apps/jstream-browser-helper/README.md#purpose)). |
+| `jstream-browser-helper` | Not a host: the sandboxed browser helper, CEF's bootstrap exe renamed plus this crate's DLL, which a host's CEF backend starts and drives over pipes. Hosts that turn on browser sources ship it next to their own exe ([ADR-0048](adr/0048-sandboxed-browser-helper.md), [its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -117,7 +117,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:33bc1c3b4c13439f", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8 after merging main: main's plugin-proto row plus this PR's jstream-browser row, platform-windows row without CEF and the helper in the apps row; lint-deps passes" }
+verified = { hash = "b3:53f0944dfebd012c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: jstream-browser row names cef (helper client) and helper (CEF) features and ADR-0048; apps row says the helper is a DLL with unsafe for its export; lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -150,14 +150,14 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0020](adr/0020-portable-windows-distribution.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0027](adr/0027-program-master-and-output-chains.md)); rate control; fan-out of packet streams | no |
 | 3 | `jstream-mcp` | MCP server over `dyn Control`: generated grouped tools and the stdio transport; its streamable-HTTP transport is served by `jstream-server` | no |
-| 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md)): the `BrowserBackend` seam, pages' audio hand-off and custom CSS, and the CEF off-screen backend (Windows, feature `cef`), which copies shared-texture paints onto the engine's device | **yes** |
+| 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md), [ADR-0048](adr/0048-sandboxed-browser-helper.md)): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, feature `cef`), which drives the sandboxed browser helper over pipes and copies its shared-texture frames onto the engine's device; and the CEF code the helper runs (feature `helper`) | **yes** |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins (calls the API through `Control`) | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0031](adr/0031-source-types-and-decoding-scope.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0041](adr/0041-youtube-interaction-scope-v3.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, CEF's subprocess exe ([ADR-0046](adr/0046-browser-crate-and-helper.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -788,19 +788,25 @@ the output gets a black frame. None of this is built yet.
 ## Browser source
 <!-- @section
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:373cc6c6528e4876", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8: intro now says built in jstream-browser, not yet in a host or the program mix; S4 choices and results untouched" }
+verified = { hash = "b3:f957ad6f239236a9", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: intro describes the helper process, the helper's copy into shared textures and the engine's import; S4 helper bullet notes ADR-0048 replaced it; sandbox bullet decided; still-open list asks for a re-run in the helper" }
 -->
 
 A browser source is a CEF off-screen browser
 ([ADR-0021](adr/0021-browser-source.md)), built in `jstream-browser`
 ([ADR-0046](adr/0046-browser-crate-and-helper.md),
 [its README](../crates/jstream-browser/README.md)) but not yet wired into a host or the
-program mix. Each `OnAcceleratedPaint`
+program mix.
+CEF runs in the sandboxed browser helper process, never in the engine's
+([ADR-0048](adr/0048-sandboxed-browser-helper.md)), which the engine drives over two named
+pipes. Each `OnAcceleratedPaint`
 hands over an NT handle to a D3D11 BGRA texture with premultiplied alpha, no keyed mutex
 and no fence. CEF takes the texture back into its pool when the callback returns. So the
-callback opens the handle on the wgpu D3D12 device, imports it through hal as in the GPU
-pipeline's step 2, copies it into a texture the source owns, and waits for that copy
-before it returns. The source's audio comes from CEF's audio handler as planar float PCM.
+helper copies it, inside the callback, into one of three textures it shares with the
+engine and waits for that copy. The engine opens that texture on its wgpu D3D12 device,
+imports it through hal as in the GPU pipeline's step 2, copies it into a texture the
+source owns, waits for that copy, and hands the shared texture back. The source's audio
+comes from CEF's audio handler as planar float PCM, which crosses the pipe interleaved;
+the engine stamps frames and audio as they arrive.
 
 **Choices made by spike S4:**
 - **Bindings:** the `cef` crate (tauri-apps/cef-rs), pinned exactly, with default
@@ -810,12 +816,12 @@ before it returns. The source's audio comes from CEF's audio handler as planar f
   ADR-0021 names.
 - **Helper processes:** a separate small `jstream-browser-helper.exe`, set as CEF's
   `browser_subprocess_path`, so the engine exe never runs as a Chromium subprocess. Both
-  layouts that ADR-0021 allows measured the same.
-- **Not yet decided:** the sandbox. ADR-0021 requires it where supported. On Windows,
-  CEF sandboxes subprocesses only in its bootstrap layout, where CEF's `bootstrap.exe` is
-  the exe and loads the application as a DLL. S4 ran unsandboxed and didn't test that
-  layout. The browser source must adopt it before it ships, which may replace the helper
-  exe above, or a superseding ADR must accept running unsandboxed.
+  layouts that ADR-0021 allows measured the same. ADR-0048 has since replaced this
+  layout to get the sandbox.
+- **The sandbox:** S4 ran unsandboxed and didn't test it. On Windows, CEF sandboxes only
+  in its bootstrap layout, where CEF's `bootstrap.exe` is the exe and loads the
+  application as a DLL, and every CEF process is that exe. ADR-0048 adopts it in a helper
+  process of its own, which S4's measurements below don't cover.
 
 **S4 result**, on the S1 machine with CEF 154.0.34 (Chromium 154.0.8037.98). Each run
 measured 30 s of the built-in test page, which has a frame counter, alpha probes and a
@@ -849,10 +855,10 @@ measured 30 s of the built-in test page, which has a frame counter, alpha probes
   of 150–250 MB added to the zip is still unchecked. The runtime includes CEF's
   `CREDITS.html`.
 
-Still open, before the browser source is built: the CEF runtime's compressed size in
-the zip, other GPU vendors and multi-GPU machines (Chromium must render on the adapter
-the engine imports on), several browsers at once, pages with video, input events, and
-the sandboxed layout.
+Still open: the CEF runtime's compressed size in the zip, other GPU vendors and
+multi-GPU machines (Chromium must render on the adapter the engine imports on), several
+browsers at once, pages with video, input events, and a re-run of S4's measurements in
+the sandboxed helper, whose frames take a second copy.
 
 <a id="persistence"></a>
 ## Persistence, config and secrets
@@ -881,16 +887,16 @@ verified = { hash = "b3:042c342d215b5bc4", by = "agent:claude@session_01TiAAtPXb
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:981e101ec9dc1d4b", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5: the virtual camera bullet now says the daemon is the --register-vcam mode until the desktop app has it (the app exists but lacks that mode); rest unchanged" }
+verified = { hash = "b3:affb5f993ef15309", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1: the CEF runtime sentence names the renamed bootstrap exe and DLL and the same-certificate rule (ADR-0048)" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
 admin ([ADR-0020](adr/0020-portable-windows-distribution.md)). The folder also holds
 `jstream-daemon.exe`, `jstream-cli.exe`, the `jstream-vcam-windows` DLL, and the CEF
 runtime for browser sources ([ADR-0021](adr/0021-browser-source.md)), in its own folder,
-with `jstream-browser-helper.exe` for CEF's subprocesses
-([ARCH › Browser source](#browser-source); the sandbox decision may replace it with
-CEF's bootstrap layout).
+with the sandboxed browser helper: CEF's `bootstrap.exe` renamed
+`jstream-browser-helper.exe` and `jstream-browser-helper.dll`, signed with the same
+certificate if releases are signed ([ADR-0048](adr/0048-sandboxed-browser-helper.md)).
 From M3 it also holds `jstream-plugin-host.exe`, the out-of-process CLAP plugin host
 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). Release builds
 link the C runtime statically and need only OS components (WebView2, Media Foundation,
