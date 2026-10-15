@@ -33,13 +33,13 @@ pub const REVOCATION_ENDPOINT: &str = "https://oauth2.googleapis.com/revoke";
 /// never starts with a token about to expire.
 pub const REFRESH_MARGIN: Duration = Duration::from_secs(60);
 
-/// A YouTube OAuth scope (ADR-0034 §4).
+/// A YouTube OAuth scope (ADR-0041 §4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Scope {
     /// `youtube.readonly`: listing broadcasts and streams, and stream health.
     Readonly,
     /// `youtube`: everything `Readonly` allows, plus creating broadcasts and streams,
-    /// binding and transitioning. Asked for only when broadcast control is first used.
+    /// binding and transitioning. JStream signs in once, asking for this alone.
     Manage,
 }
 
@@ -116,8 +116,8 @@ impl OAuthClient {
     /// finish it with. `redirect_uri` is the loopback listener's
     /// ([`LoopbackRedirect::redirect_uri`](crate::LoopbackRedirect::redirect_uri)).
     ///
-    /// Google doesn't support incremental authorization for installed apps, so to add
-    /// [`Scope::Manage`] later, sign in again asking for every scope wanted.
+    /// JStream asks for [`Scope::Manage`] once (ADR-0041 §4); Google has no incremental
+    /// authorization for installed apps, so a later scope means a new sign-in.
     ///
     /// # Errors
     /// [`YoutubeError::InvalidArgument`] when `scopes` is empty;

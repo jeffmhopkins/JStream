@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:29b2dd4fafa1e1c2", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r: mock stores the role scene.create names and reports it in scene.list/state.get; set_role and item.move still answer internal" }
+verified = { hash = "b3:fb675d8fbcc38ecf", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Stale via ARCH#protocol, whose only change is the YouTube bullet's ADR link (0034 -> 0041, same design restated); nothing here relies on it" }
 -->
 
 ### The trait

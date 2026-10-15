@@ -104,7 +104,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:05d294b8c6702ab7", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r round 2: split the Groups sentence (N3); scene.create's optional role and delete inverse text hold" }
+verified = { hash = "b3:cee51e3468583d57", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "ADR-0041 accepted, superseding ADR-0034: the only change here is the YouTube planned-commands link (0034 -> 0041); ADR-0041 restates those commands unchanged" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -478,7 +478,7 @@ After `welcome`, the server pushes every event to every client.
   ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)); that host is not
   built. Per-output bitrate, render and encode times, and CPU and GPU load wait until
   those meters exist, as later optional fields. Audience figures are `youtube.stats`
-  ([ADR-0034](../../docs/adr/0034-youtube-interaction-scope-v2.md)).
+  ([ADR-0041](../../docs/adr/0041-youtube-interaction-scope-v3.md)).
 
 ### Errors
 

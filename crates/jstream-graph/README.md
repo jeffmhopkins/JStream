@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:d5a9cdf904b286eb", by = "agent:claude@session_01TiAAtPXbX68C2WPpy1bKp8", note = "B6-r merge of main: persist::rebuild now creates each scene with its role on scene.create (no separate scene.set_role), matching scene.delete's inverse; 'scenes with their roles' and B6-r inverse text hold" }
+verified = { hash = "b3:9077e3c3a2817ff4", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the YouTube ADR link in protocol README#design (0034 -> 0041); main's text kept; holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
