@@ -2964,7 +2964,7 @@ stamp = { hash = "b3:df9a842e2252a01f", by = "agent:claude", note = "New. Keeps 
 stamp = { hash = "b3:27ef1830af9f4a1c", by = "agent:claude", note = "New. Keeps the queue order by routing every PROTOCOL_VERSION bump to the earliest wave." }
 
 ["RUNBOOK-WAVES#which-wave"."body"]
-stamp = { hash = "b3:30468b372b42a1aa", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
+stamp = { hash = "b3:bb39765e7bd6ad52", by = "agent:claude", note = "Narrowed the main-only row to PRs whose subject is CI, the gate, governance or the rules; feature PRs that add their own rule or CI step go to their wave, where governance.yml (no branch filter) still checks them." }
 
 ["RUNBOOK-WAVES#which-wave"."dep:docs/adr/0055-wave-branches.md#decision"]
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
