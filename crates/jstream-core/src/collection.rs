@@ -11,7 +11,7 @@
 
 use jstream_graph::{Graph, LoadError};
 use jstream_protocol::Rev;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
@@ -129,7 +129,7 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
             Some(dir) if !dir.as_os_str().is_empty() => dir,
             _ => Path::new("."),
         };
-        File::open(dir)?.sync_all()?;
+        fs::File::open(dir)?.sync_all()?;
     }
     Ok(())
 }
