@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "crates/jstream-media/README.md#purpose"]
-verified = { hash = "b3:be1c4f369145d665", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (Y2 #169 OAuth tokens bullet, MemoryTokenStore) into H1: re-read both; Y2's text is main's, unchanged; the IDs and errors bullet still names PlatformError::MissingComponent, which keys.rs doesn't use" }
+verified = { hash = "b3:b598a0e635051bab", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (F5 #163: Codec gains Hevc and Av1) into H1: re-read both; F5's text is main's and platform encoders still emit only H.264 and AAC; the IDs and errors bullet still names PlatformError::MissingComponent" }
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
