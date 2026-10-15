@@ -20,5 +20,6 @@ pub(crate) mod retire;
 pub(crate) mod ring;
 pub(crate) mod shared;
 pub(crate) mod sinc;
+pub(crate) mod tap;
 #[cfg(test)]
 pub(crate) mod testutil;
