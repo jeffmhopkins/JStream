@@ -153,7 +153,8 @@ state machine. Contents:
   output running, a failed stream reopened, an application found again under a new
   process ID, and a settings change reopening its input), the audio filter kinds and
   their kernels (`filters.rs`: defaults, range edges, and a chain updated in place or
-  rebuilt on a real mixer), item opacity in linear light through a nested scene
+  rebuilt on a real mixer, and new settings a full command queue refuses kept off
+  the record and tried again), item opacity in linear light through a nested scene
   (`snapshot.rs`), the output edits and the
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
