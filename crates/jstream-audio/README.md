@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:17047740bbb4b746", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ring keep-alive: the API bullet now says the control plane keeps an InputControl until the stream is closed and the mixer dropped (InputControl holds the ring and counters); add_input, poll, gains, meters, counters and tests unchanged; the new unit test is under the mixer's tests" }
+verified = { hash = "b3:70f0f8b14d30db2e", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#139, #140) into #133: re-read; the API bullet's InputControl keep-alive sentence matches handle.rs, and main's SeqCst handover text adds nothing this section claims about the built mixer API" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -94,7 +94,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:e438800679eb9ff3", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against handle.rs/mixer.rs: InputControl now holds Arc<FrameRing> and Arc<InputShared>, so with a control kept past the stream and mixer the last reference is dropped on the control plane; the rewritten R-RT-003 bullet says so and that there is still no collector thread; producer and mixer own buffers still freed as their threads end" }
+verified = { hash = "b3:d2fe91f5ecad9a36", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#139, #140) into #133: re-read; the no-collector bullet (InputControl holds ring and counters so the last reference drops on the control plane) matches mixer.rs/handle.rs, and the section still claims only rings and atomics on the RT threads, consistent with ARCH#threading's SeqCst handover" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`

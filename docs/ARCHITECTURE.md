@@ -353,7 +353,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**", "crates/jstream-audio/src/rt/**", "crates/jstream-render/src/frame_loop.rs"]
 depends_on = ["docs/adr/0014-media-clock.md", "docs/adr/0028-audio-model-v2.md"]
-verified = { hash = "b3:195222e6f208a199", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the jstream-audio/core change: InputControl keeping each input ring alive so it is freed on the control plane is not the Collector row; the output-pipeline paragraph's claim that the collector thread is still a row above, not this cut, holds; thread table and mixer/render panic text unchanged" }
+verified = { hash = "b3:a177433eb5348508", by = "agent:claude@session_01PiP5mMM8PmhBXNRpPfR4Ff", note = "Merge of main (#139 SeqCst handover, #140) into #133: re-read the whole section; main's handover paragraph is intact, #133's drop-order change in runtime/pipeline.rs (mic/desktop controls outlive streams and mixer) fits 'the collector thread ... still the rows above, not this cut'; no thread or RT-rule change" }
 -->
 
 **Clock** ([ADR-0014](adr/0014-media-clock.md)): one monotonic **media clock** derived from
