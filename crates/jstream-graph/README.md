@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:8b3c7c7776443c1e", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1 (protocol README only changed): re-read; apply.rs expected_rev/empty_batch order and inverse-without-expected_rev text unaffected" }
+verified = { hash = "b3:e49e29924f4ca5a7", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#198, #173, #190, #191) into B6: re-read; scene role, Groups and moves bullet and item.move cycle check hold" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

@@ -113,7 +113,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3f8a5ffe3da8d846", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1 (protocol README only changed): re-read Undo and redo; Order of checks and Conflicts agree with the protocol README's new wording" }
+verified = { hash = "b3:5ac26cede1210a77", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#198 undo check order, #173, #190, #191) into B6: re-read; Conflicts bullet (role, item.move index and both scenes) fits #198's touched-object wording" }
 -->
 
 ### Engine and sessions

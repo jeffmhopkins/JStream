@@ -101,7 +101,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:124d3cf1910b12af", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1: re-read Undo and redo requests; check order (key, expected_rev, stack) and the keep-step case now match core engine.rs history() and core README Order of checks/Conflicts; reading of ADR-0032's 'checked first' stated" }
+verified = { hash = "b3:7130a67e876399d0", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#198 undo check order) into B6: re-read; #198's key/expected_rev/stack order and 'places or names' fit item.move naming both scenes; 0.11 version text and Groups subsection hold" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open

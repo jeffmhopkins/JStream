@@ -507,7 +507,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:acec851b35f8fa00", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1 (protocol README only changed): re-read; History bullet (undo_conflict, protocol 0.10) still holds" }
+verified = { hash = "b3:92b3488f1d8b820c", by = "agent:claude@session_01Vy4KuKBCruDTJakQ9j2gFA", note = "Merge of main (#198, #173, #190, #191) into B6: re-read; protocol 0.11 edits bullet holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
