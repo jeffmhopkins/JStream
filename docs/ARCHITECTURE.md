@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/**"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:348e93b0bafdf766", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Merge of main (#155 kinds/protocol 0.8, #165 sweep) into I1 #153: re-read; main's repo-tree comment change and I1's daemon row both hold" }
+verified = { hash = "b3:7f8049945ccc2f18", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (I1 #153 /mcp) into A5: only the verified line conflicted; re-read I1's daemon row (WebSocket API and /mcp) and A5's CLI change (output commands, still only through jstream-control); diagram and host table hold" }
 -->
 
 ```
@@ -500,7 +500,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:1dbe914dd531c477", by = "agent:claude@session_017CbEsAJTsNE6yE4tdDMzJm", note = "Stale via jstream-server src (I1 413 from Content-Length): transport bullet's /mcp sentence still holds" }
+verified = { hash = "b3:e2cd81f519d286e1", by = "agent:claude@session_01Mo7WC9bBBSRM5XVVPEwVDG", note = "Merge of main (I1 #153 /mcp) into A5: only the verified line conflicted; re-read I1's /mcp transport sentence; A5 changed only the mock and parity fixture, so no message, edit, query or transport rule here changed" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

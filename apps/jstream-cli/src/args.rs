@@ -7,8 +7,8 @@
 
 use crate::exit::CliError;
 use jstream_control::protocol::{
-    Action, Batch, Crop, Edit, Finite32, IdempotencyKey, ItemId, ItemTransform, OutputId, Query,
-    Rev, SceneId, SourceId, SourceKind, Vec2,
+    Action, Batch, Crop, Edit, Finite32, IdempotencyKey, ItemId, ItemTransform, OutputId,
+    OutputKind, Query, Rev, RtmpTarget, SceneId, SourceId, SourceKind, Vec2,
 };
 
 /// The help text, printed by `help`, `--help` and `-h`.
@@ -37,10 +37,18 @@ Commands:
   scene list                       list the scenes (query scene.list)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
-  output status <output-id>        report an output's state (query output.status)
+  output list                      list the configured outputs (query output.list)
+  output status <output-id>        report an output's state and whether its stream
+                                   key is set (query output.status)
   video snapshot                   the program mix as a PNG (query video.snapshot)
   output start <output-id>         start an output (action output.start)
   output stop <output-id>          stop an output (action output.stop)
+  output set-key <output-id> [--key-file <path>]
+                                   store the output's stream key (action
+                                   output.set_key), read from the file or else from
+                                   stdin; never from the command line
+  output clear-key <output-id>     remove the output's stream key (action
+                                   output.clear_key)
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
   events [--count <n>]             print events as they arrive; stop after <n>
@@ -63,6 +71,11 @@ Edits (each is its protocol command name followed by its arguments):
   item.set_visible <item-id> true|false
   item.set_crop <item-id> <left> <top> <right> <bottom>
   item.set_transform <item-id> <x> <y> <scale-x> <scale-y> <rotation-deg>
+  output.create <output-id> <rtmp-url>
+  output.set_target <output-id> <rtmp-url>
+  output.delete <output-id>
+  An <rtmp-url> is the ingest server, rtmp://host[:port]/app or rtmps://...,
+  without the stream key: set that with `output set-key`.
 
 Exit codes: 0 ok, 1 output error, 2 usage, 3 disconnected, 10-20 engine errors
 (see the README for the full table).
@@ -110,6 +123,15 @@ pub enum Command {
     Query(Query),
     /// Run an action.
     Action(Action),
+    /// Run `output.set_key`, with the key read when the command runs: from `key_file`,
+    /// or else from the input (stdin). The key is never an argument, so it stays out of
+    /// shell history and the process list.
+    SetKey {
+        /// The output whose key to set.
+        output_id: OutputId,
+        /// `--key-file`: the file holding the key.
+        key_file: Option<String>,
+    },
     /// Apply a batch of edits.
     Edit(Batch),
     /// Print events, stopping after `count` if given.
@@ -238,6 +260,11 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["output", "stop", id] => Command::Action(Action::OutputStop {
             output_id: OutputId::new(*id),
         }),
+        ["output", "list"] => Command::Query(Query::OutputList),
+        ["output", "set-key", id, rest @ ..] => parse_set_key(id, rest)?,
+        ["output", "clear-key", id] => Command::Action(Action::OutputClearKey {
+            output_id: OutputId::new(*id),
+        }),
         ["edit", rest @ ..] => Command::Edit(parse_batch(rest)?),
         ["events", rest @ ..] => parse_events(rest)?,
         ["mcp"] => Command::Mcp,
@@ -256,6 +283,26 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         }
     };
     Ok(command)
+}
+
+/// `output set-key <id> [--key-file <path>]`. Anything else after the ID is refused
+/// without being repeated, since it may be the key itself.
+fn parse_set_key(id: &str, args: &[&str]) -> Result<Command, CliError> {
+    let key_file = match args {
+        [] => None,
+        ["--key-file", path] => Some((*path).to_owned()),
+        ["--key-file"] => return Err(usage("`--key-file` needs a path")),
+        _ => {
+            return Err(usage(
+                "`output set-key` reads the key from stdin or `--key-file <path>`, \
+                 never from the command line",
+            ));
+        }
+    };
+    Ok(Command::SetKey {
+        output_id: OutputId::new(id),
+        key_file,
+    })
 }
 
 fn parse_events(mut args: &[&str]) -> Result<Command, CliError> {
@@ -312,9 +359,9 @@ fn parse_batch(mut args: &[&str]) -> Result<Batch, CliError> {
 /// How many arguments each edit takes, after its name.
 fn arity(name: &str) -> Option<usize> {
     Some(match name {
-        "scene.delete" | "source.delete" | "item.remove" => 1,
+        "scene.delete" | "source.delete" | "item.remove" | "output.delete" => 1,
         "scene.create" | "scene.rename" | "scene.reorder" | "source.rename" | "item.reorder"
-        | "item.set_visible" => 2,
+        | "item.set_visible" | "output.create" | "output.set_target" => 2,
         "source.create" | "source.duplicate" | "item.add" => 3,
         "item.set_crop" => 5,
         "item.set_transform" => 6,
@@ -415,6 +462,19 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
                 rotation_deg: finite(rot, "rotation-deg")?,
             },
         },
+        ("output.create", [id, url]) => Edit::OutputCreate {
+            output_id: OutputId::new(*id),
+            kind: OutputKind::Rtmp {
+                target: rtmp_target(url)?,
+            },
+        },
+        ("output.set_target", [id, url]) => Edit::OutputSetTarget {
+            output_id: OutputId::new(*id),
+            target: rtmp_target(url)?,
+        },
+        ("output.delete", [id]) => Edit::OutputDelete {
+            output_id: OutputId::new(*id),
+        },
         _ => return Err(usage(format!("cannot parse `{name}`"))),
     };
     Ok((edit, rest))
@@ -434,6 +494,22 @@ fn source_kind(text: &str) -> Result<SourceKind, CliError> {
             "source kind `{text}` must be `builtin:<kind>` or `scene:<scene-id>`"
         )))
     }
+}
+
+/// An RTMP server URL as an output target. Only generic RTMP(S) targets exist, so the
+/// URL is the whole target; the engine validates it. A URL without an `rtmp` or `rtmps`
+/// scheme is refused here, which leaves other spellings free for later output kinds.
+/// The message doesn't repeat the argument, which may hold a key.
+fn rtmp_target(url: &str) -> Result<RtmpTarget, CliError> {
+    let scheme = url.split_once("://").map(|(scheme, _)| scheme);
+    if !scheme.is_some_and(|s| s.eq_ignore_ascii_case("rtmp") || s.eq_ignore_ascii_case("rtmps")) {
+        return Err(usage(
+            "an output target must be an `rtmp://` or `rtmps://` server URL",
+        ));
+    }
+    Ok(RtmpTarget::Generic {
+        url: url.to_owned(),
+    })
 }
 
 fn number<T: std::str::FromStr>(text: &str, what: &str) -> Result<T, CliError> {
@@ -463,8 +539,8 @@ mod tests {
     use super::{Command, Connection, Invocation, parse};
     use crate::exit::CliError;
     use jstream_control::protocol::{
-        Action, Batch, Crop, Edit, IdempotencyKey, ItemId, OutputId, Query, Rev, SceneId, SourceId,
-        SourceKind,
+        Action, Batch, Crop, Edit, IdempotencyKey, ItemId, OutputId, OutputKind, Query, Rev,
+        RtmpTarget, SceneId, SourceId, SourceKind,
     };
 
     fn args(line: &[&str]) -> Vec<String> {
@@ -557,6 +633,94 @@ mod tests {
         );
         assert!(err(&["video"]).starts_with("wrong arguments for `"));
         assert!(err(&["video", "snapshot", "extra"]).starts_with("wrong arguments for `"));
+        assert_eq!(
+            ok(&["output", "list"]).command,
+            Command::Query(Query::OutputList)
+        );
+        assert_eq!(
+            ok(&["output", "clear-key", "o"]).command,
+            Command::Action(Action::OutputClearKey { output_id: id() })
+        );
+    }
+
+    #[test]
+    fn set_key_takes_a_key_file_and_never_the_key() {
+        assert_eq!(
+            ok(&["output", "set-key", "o"]).command,
+            Command::SetKey {
+                output_id: OutputId::new("o"),
+                key_file: None,
+            }
+        );
+        assert_eq!(
+            ok(&["output", "set-key", "o", "--key-file", "/k"]).command,
+            Command::SetKey {
+                output_id: OutputId::new("o"),
+                key_file: Some("/k".into()),
+            }
+        );
+        assert_eq!(
+            err(&["output", "set-key", "o", "--key-file"]),
+            "`--key-file` needs a path"
+        );
+        for line in [
+            &["output", "set-key", "o", "hunter2-key"][..],
+            &["output", "set-key", "o", "--key", "hunter2-key"],
+            &["output", "set-key", "o", "--key-file", "/k", "hunter2-key"],
+        ] {
+            let message = err(line);
+            assert!(!message.contains("hunter2"), "{message}");
+            assert!(message.contains("never from the command line"), "{message}");
+        }
+        assert!(err(&["output", "set-key"]).starts_with("wrong arguments for `"));
+    }
+
+    #[test]
+    fn output_edits_take_an_rtmp_server_url() {
+        let target = |url: &str| RtmpTarget::Generic { url: url.into() };
+        let line = [
+            "edit",
+            "output.create",
+            "yt",
+            "rtmp://a.rtmp.youtube.com/live2",
+            "output.set_target",
+            "yt",
+            "RTMPS://a.rtmps.youtube.com:443/live2",
+            "output.delete",
+            "yt",
+        ];
+        let Command::Edit(batch) = ok(&line).command else {
+            panic!("not an edit");
+        };
+        assert_eq!(
+            batch.edits,
+            [
+                Edit::OutputCreate {
+                    output_id: OutputId::new("yt"),
+                    kind: OutputKind::Rtmp {
+                        target: target("rtmp://a.rtmp.youtube.com/live2"),
+                    },
+                },
+                Edit::OutputSetTarget {
+                    output_id: OutputId::new("yt"),
+                    target: target("RTMPS://a.rtmps.youtube.com:443/live2"),
+                },
+                Edit::OutputDelete {
+                    output_id: OutputId::new("yt"),
+                },
+            ]
+        );
+        for url in ["a.rtmp.youtube.com/live2", "srt://host/hunter2", "hunter2"] {
+            let message = err(&["edit", "output.create", "o", url]);
+            assert_eq!(
+                message,
+                "an output target must be an `rtmp://` or `rtmps://` server URL"
+            );
+        }
+        assert_eq!(
+            err(&["edit", "output.set_target", "o"]),
+            "`output.set_target` takes 2 arguments; try `jstream-cli help`"
+        );
     }
 
     #[test]
