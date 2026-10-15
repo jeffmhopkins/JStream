@@ -27,13 +27,23 @@ pub use mock::{MockControl, MockEngine};
 #[cfg(all(feature = "ws", not(target_arch = "wasm32")))]
 pub use ws::WsControl;
 #[cfg(feature = "ws")]
-pub use ws_config::{WS_PROTOCOL, WS_TOKEN_PROTOCOL_PREFIX, WsConfig};
+pub use ws_config::WsConfig;
 #[cfg(all(feature = "ws", target_arch = "wasm32"))]
 pub use ws_web::WsControl;
 
 /// The path of the engine's WebSocket API, shared by the server that mounts it and the
 /// client that connects to it.
 pub const WS_PATH: &str = "/api/v1/ws";
+
+/// The subprotocol a browser client offers and the server selects when it accepts the
+/// token from `Sec-WebSocket-Protocol`. Browsers can't set `Authorization` on a
+/// WebSocket, so the token travels there instead (see [`WS_TOKEN_PROTOCOL_PREFIX`]).
+/// Outside the `ws` feature, like [`WS_PATH`], so the server shares it without the client.
+pub const WS_PROTOCOL: &str = "jstream";
+
+/// The prefix of the subprotocol that carries the control token: a browser offers
+/// `jstream.token.<token>` next to [`WS_PROTOCOL`]. The server never selects it.
+pub const WS_TOKEN_PROTOCOL_PREFIX: &str = "jstream.token.";
 
 /// The protocol crate, re-exported so clients can name its types through one dependency.
 pub use jstream_protocol as protocol;

@@ -30,3 +30,18 @@ updates:
     commit-message:
       prefix: build
       include: scope
+
+  # The web UI's end-to-end tests (Playwright). Its lockfile pins every package with an
+  # integrity hash; CI installs it with install scripts off.
+  - package-ecosystem: npm
+    directory: /crates/jstream-ui/tests/e2e
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 5
+    groups:
+      npm:
+        patterns: ["*"]
+    commit-message:
+      prefix: test
+      include: scope
