@@ -195,7 +195,7 @@ stamp = { hash = "b3:50cf01aa0e35f171" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:9ca86438d4d9c457", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; tools.snap is 177,744 bytes, about 178 KB; tool list holds" }
+stamp = { hash = "b3:0a4148157d1ae643", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the MCP noun list gains `device` and `pairing`, matching tests.rs and tools.snap (20 tools); holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:8eea55b34b97d6a9" }
@@ -210,10 +210,10 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:8c0c258dab2abccb", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:2b61024187ae7e43", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the MCP noun list gains `device` and `pairing`, matching tests.rs and tools.snap (20 tools); holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:0bc178fa258b5061" }
+stamp = { hash = "b3:6410bd72476432c5", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the MCP noun list gains `device` and `pairing`, matching tests.rs and tools.snap (20 tools); holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -234,7 +234,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-mcp server.rs/tests.rs (bounded hello wait) and its README: tools, events, access bullets unaffected; holds" }
+stamp = { hash = "b3:f38e16e8651f138a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the MCP noun list gains `device` and `pairing`, matching tests.rs and tools.snap (20 tools); holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -279,7 +279,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:04b853b872d31424" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:d638c6ca8019b15d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): B5, filters join the audio edits once they are in the protocol, the mixer has chains since D7b; rest holds at 0.19" }
+stamp = { hash = "b3:0073427d67d54b44", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -291,7 +291,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:07915c072e50c894" }
 
 ["ARCH#protocol"."file:crates/jstream-control/README.md"]
-stamp = { hash = "b3:a650491efffa8c19", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Transport bullet against jstream-control README/ws_web.rs/ws_config.rs changes: browser WsControl with subprotocol token is unchanged; error-event handling is a client detail not described here, holds." }
+stamp = { hash = "b3:01cce3bbf0219023", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/control.rs"]
 stamp = { hash = "b3:e55527bc3d425ace" }
@@ -303,7 +303,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:199956940fb1e05a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -321,28 +321,28 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:69a83bcc7bc7abfe", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:fdb33f15187b074c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:e08032e34676ac01" }
+stamp = { hash = "b3:4112f7a2c26674ee", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e099f7b8aaaaa173" }
+stamp = { hash = "b3:6b496a09aa35b572", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:da4b9ef5e429cca2" }
+stamp = { hash = "b3:21c1117fa5ece492", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/envelope.rs"]
-stamp = { hash = "b3:63616c6985c48822" }
+stamp = { hash = "b3:c66cf8967f9d8999", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:1852d33b4d4f86bf" }
+stamp = { hash = "b3:ef942231e7f2d672", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
@@ -351,7 +351,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:c012a3b785dfd6b5" }
+stamp = { hash = "b3:0bf9e2c842180c84", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -360,22 +360,22 @@ stamp = { hash = "b3:91ec5275ab3c5e9f" }
 stamp = { hash = "b3:abc973f4355bada5" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/id.rs"]
-stamp = { hash = "b3:353359feae2606b3" }
+stamp = { hash = "b3:f22d68608273ddbc", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
 stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:9199a0226a0eda2b" }
+stamp = { hash = "b3:a7a320b9ce18e6e4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:489f2e86af7bf320" }
+stamp = { hash = "b3:a667a8df3f0ef64b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:68a1255a9a5f2f73" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:13f2fa2d982a7e24" }
+stamp = { hash = "b3:5be13da1f4c3f59e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -384,40 +384,49 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:c594f42e1b065295" }
+stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/Cargo.toml"]
 stamp = { hash = "b3:e9241efe87e7e719" }
 
 ["ARCH#protocol"."file:crates/jstream-server/README.md"]
-stamp = { hash = "b3:6d997bdefee6d70b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301) into #268: server shutdown and zero-limit details are server Design detail; envelope and versioning text unchanged; holds" }
+stamp = { hash = "b3:4180648b152f141c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+
+["ARCH#protocol"."file:crates/jstream-server/src/admitted.rs"]
+stamp = { hash = "b3:fc786e23618932db", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:c93c7afdc52f6566", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-server config/error/lib changes (zero-limit refusal): section summarises the wire protocol and doesn't state server limits; holds" }
+stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+
+["ARCH#protocol"."file:crates/jstream-server/src/devices.rs"]
+stamp = { hash = "b3:632bb2cf7d3c6cb2", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/error.rs"]
-stamp = { hash = "b3:0f169c15a16bd803", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against jstream-server config/error/lib changes (zero-limit refusal): section summarises the wire protocol and doesn't state server limits; holds" }
+stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:aa923cddbd9a536f" }
+stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:e1df91ff3e5b6801", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301) into #268: server shutdown and zero-limit details are server Design detail; envelope and versioning text unchanged; holds" }
+stamp = { hash = "b3:4df66ab7ae7acc33", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/mcp.rs"]
-stamp = { hash = "b3:05057d7979293830" }
+stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+
+["ARCH#protocol"."file:crates/jstream-server/src/pair.rs"]
+stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Control protocol summary against the server shutdown change: envelope, request/response and versioning claims unaffected; a call after shutdown fails Disconnected as the connection closes, detailed in jstream-server README design." }
+stamp = { hash = "b3:37462b474566879f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the Control protocol summary against the server shutdown change: envelope, request/response and versioning claims unaffected; a call after shutdown fails Disconnected as the connection closes, detailed in jstream-server README design." }
+stamp = { hash = "b3:6ae3dae3b203261c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/ui.rs"]
-stamp = { hash = "b3:4a9ea9ae5014f95c" }
+stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the protocol 0.20 bullet (pairing.start answers the one-time code, POST /api/v1/pair trades it for a device token, device.list/device.revoke, answered by jstream-server, `unsupported` elsewhere per ADR-0046) matches the protocol crate, mock.rs and the new server modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#repo-layout"."body"]
 stamp = { hash = "b3:1c9af28a8142645d", by = "agent:claude@session_01ApfNxzxANDHPeESRr5XsgN", note = "Re-read against main.rs, which only adds docs merge-main to the usage list: the xtask line still names docs among its commands, so the layout holds" }
@@ -444,7 +453,7 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:8bc8c6ff8e57508b" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; the daemon row's --ui-dir mention matches main.rs; holds" }
+stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon row is unchanged, and main.rs only adds the device-file path; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["ARCH#shape"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:f7c235327227029b" }
@@ -738,13 +747,13 @@ stamp = { hash = "b3:3e63f714aef88590" }
 stamp = { hash = "b3:79ca2f935de9480f", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; stale through cascade, text unchanged; only --json shows audio, buses and sends; holds" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client ends on error event, CSP reason): CLI uses the native client; exit 3 Disconnected text still holds." }
+stamp = { hash = "b3:5da8a82af82be504", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the `pair`/`device` commands send pairing.start, device.list and device.revoke, and the code is printed only as the action result (SecretString); cascade from control Design's mock `unsupported` arms; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:513b26286e4094af" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:5ae0e8dd6e0d9eee" }
+stamp = { hash = "b3:de3f78e4fd9c1ab7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the `pair`/`device` commands send pairing.start, device.list and device.revoke, and the code is printed only as the action result (SecretString); cascade from control Design's mock `unsupported` arms; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -759,10 +768,10 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:c7379cddeb275056" }
+stamp = { hash = "b3:d727e5dacfd34bd7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the `pair`/`device` commands send pairing.start, device.list and device.revoke, and the code is printed only as the action result (SecretString); cascade from control Design's mock `unsupported` arms; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:0fd49566ae310db7" }
+stamp = { hash = "b3:18a66d5209099cc9", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the `pair`/`device` commands send pairing.start, device.list and device.revoke, and the code is printed only as the action result (SecretString); cascade from control Design's mock `unsupported` arms; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-cli#purpose"."body"]
 stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Merge of main (scene roles 0.17, studio 0.16, D7b, UI, pairing) into D5: re-read against both sides; text is main's, the CLI's commands are unchanged by D5; holds" }
@@ -771,7 +780,7 @@ stamp = { hash = "b3:e5b3c34606cf36c5", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:194117bebc81240c" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:5ae0e8dd6e0d9eee" }
+stamp = { hash = "b3:de3f78e4fd9c1ab7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: run.rs/args.rs gain `pair`, `device list` and `device revoke`, with run/tests.rs covering them; Purpose (a thin CLI over every protocol call) still describes them; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -786,16 +795,16 @@ stamp = { hash = "b3:fe92cdacb6278716" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:c7379cddeb275056" }
+stamp = { hash = "b3:d727e5dacfd34bd7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: run.rs/args.rs gain `pair`, `device list` and `device revoke`, with run/tests.rs covering them; Purpose (a thin CLI over every protocol call) still describes them; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:0fd49566ae310db7" }
+stamp = { hash = "b3:18a66d5209099cc9", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: run.rs/args.rs gain `pair`, `device list` and `device revoke`, with run/tests.rs covering them; Purpose (a thin CLI over every protocol call) still describes them; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:6dc625770a5edc67", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; D5 note now says protocol 0.19 audio is not in the CLI; holds" }
+stamp = { hash = "b3:bcf7e43d31e4a6e1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage documents `jstream-cli pair` (prints the one-time code), `device list` and `device revoke <id>`, and maps the new `unsupported` error to exit 20, matching args.rs and run.rs write_action/exit mapping; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:5ae0e8dd6e0d9eee" }
+stamp = { hash = "b3:de3f78e4fd9c1ab7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage documents `jstream-cli pair` (prints the one-time code), `device list` and `device revoke <id>`, and maps the new `unsupported` error to exit 20, matching args.rs and run.rs write_action/exit mapping; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
 stamp = { hash = "b3:16e79b530b6f8e0a" }
@@ -804,13 +813,13 @@ stamp = { hash = "b3:16e79b530b6f8e0a" }
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:c7379cddeb275056" }
+stamp = { hash = "b3:d727e5dacfd34bd7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage documents `jstream-cli pair` (prints the one-time code), `device list` and `device revoke <id>`, and maps the new `unsupported` error to exit 20, matching args.rs and run.rs write_action/exit mapping; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Failures bullet matches ws_web.rs (onerror handler ends the session via end_reason, State::close keeps the first reason; connect reason mentions CSP); test paragraph matches connect.spec.js and ws_config.rs tests. Edited open question 3 so it no longer implies the browser client is untested (e2e via jstream-ui now covers it)." }
+stamp = { hash = "b3:5da8a82af82be504", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the mock's `unsupported` arms for the three credential calls and its use of CallResult::action() match mock.rs; cascade from ARCH#protocol's 0.20 pairing bullet; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:0073427d67d54b44", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the mock's `unsupported` arms for the three credential calls and its use of CallResult::action() match mock.rs; cascade from ARCH#protocol's 0.20 pairing bullet; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -831,7 +840,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:199956940fb1e05a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the mock's `unsupported` arms for the three credential calls and its use of CallResult::action() match mock.rs; cascade from ARCH#protocol's 0.20 pairing bullet; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -861,7 +870,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:4f5eb7fab55f6c55" }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:0f11e860c80c48d5" }
+stamp = { hash = "b3:199956940fb1e05a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: mock.rs answers pairing.start, device.list and device.revoke with `unsupported` (ADR-0046); Purpose's account of the mock still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:9a3b07169c7cbb0e" }
@@ -876,16 +885,16 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against PR #324 diff: Contents bullet for ws_config.rs now names the URL, token and end-reason helpers (SocketEnd, end_reason) the browser client uses, tested natively; matches ws_config.rs and ws_web.rs." }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:f8d3caba075c6078", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
+stamp = { hash = "b3:c301aa4fa51d8cc7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.20 text; main's when_shown text kept; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read source clock/re-plan text (set_source_clock swap restarts timing) against the sources.rs test change and jstream-control design's new browser error handling; nothing in core's design depends on either, holds." }
+stamp = { hash = "b3:5da8a82af82be504", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.20 text; main's when_shown text kept; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: core design does not restate asset-path validation; collection/app resolution text unaffected by the stricter absolute asset-path check in jstream-protocol" }
+stamp = { hash = "b3:0fa8dcf2e3873d86", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.20 text; main's when_shown text kept; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:0073427d67d54b44", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.20 text; main's when_shown text kept; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-core#design"."dep:docs/RULES.md#R-API-004"]
 stamp = { hash = "b3:2d6cfa635e9b2786" }
@@ -915,7 +924,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:6b18d551fed7d8b0" }
+stamp = { hash = "b3:00f9e67d8f8a88d8", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.20 text; main's when_shown text kept; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -963,13 +972,13 @@ stamp = { hash = "b3:918fe91ec11037de" }
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:c7afb7b2bff7299a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only tests.rs's cpu_pipeline poll helpers changed: pump_until and wait_until wait up to a 30 s HANG_BOUND instead of 5 s (#392). Design describes engine behaviour (start's 10 s compositor-open bound, RenderHub::caught_up polled by tests) and states no test-helper deadline; no engine code changed, so it holds" }
+stamp = { hash = "b3:b6c250a48e0121df", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.20 text; main's when_shown text kept; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/audio_routing.rs"]
-stamp = { hash = "b3:732249ad50d11c2c" }
+stamp = { hash = "b3:097552fdc8275360", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the bullet that pairing.start/device.list/device.revoke answer `unsupported` and that device sessions are audited as device:<name> matches engine.rs served_by_the_server and admitted.rs's hello rewrite; cascade from protocol and ARCH 0.20 text; main's when_shown text kept; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
@@ -1005,7 +1014,7 @@ stamp = { hash = "b3:6ecb293741341e3b" }
 stamp = { hash = "b3:c7eb14245f6d9072" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:6b18d551fed7d8b0" }
+stamp = { hash = "b3:00f9e67d8f8a88d8", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: engine.rs answers the three credential calls `unsupported` (served_by_the_server) and moved to CallResult::action(), as do tests.rs and tests/audio_routing.rs; Purpose unaffected; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88" }
@@ -1053,13 +1062,13 @@ stamp = { hash = "b3:918fe91ec11037de" }
 stamp = { hash = "b3:7388509dff80cbe4" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests.rs"]
-stamp = { hash = "b3:c7afb7b2bff7299a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only tests.rs's cpu_pipeline poll helpers changed: pump_until and wait_until share a 30 s HANG_BOUND instead of 5 s (#392). The Tests list (render and mixer panics reported as failed on the CPU stand-in, the stage-failure, late-tick, teardown tests) names no deadline and still holds; no engine code changed" }
+stamp = { hash = "b3:b6c250a48e0121df", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: engine.rs answers the three credential calls `unsupported` (served_by_the_server) and moved to CallResult::action(), as do tests.rs and tests/audio_routing.rs; Purpose unaffected; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio.rs"]
 stamp = { hash = "b3:8c529b53cc3fbe3a" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/audio_routing.rs"]
-stamp = { hash = "b3:732249ad50d11c2c" }
+stamp = { hash = "b3:097552fdc8275360", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: engine.rs answers the three credential calls `unsupported` (served_by_the_server) and moved to CallResult::action(), as do tests.rs and tests/audio_routing.rs; Purpose unaffected; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/collection.rs"]
 stamp = { hash = "b3:31eb7a26da4bb8c3" }
@@ -1104,13 +1113,13 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
+stamp = { hash = "b3:a984c6e7ba2e3698", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:f8d3caba075c6078" }
+stamp = { hash = "b3:c301aa4fa51d8cc7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; Signals bullet (serve_with_shutdown closes with 1001) holds; the daemon uses non-zero default limits so InvalidLimit never fires; holds" }
+stamp = { hash = "b3:fcbbd47c6afac1f3", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:7ab4accbf98f6662" }
@@ -1131,19 +1140,19 @@ stamp = { hash = "b3:5c5aac8c1b12a291" }
 stamp = { hash = "b3:2ce291dd14ddd2a9" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
+stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/register.rs"]
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:fc3e0c66f3f7360f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
+stamp = { hash = "b3:a3c948ee35c051d7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/token.rs"]
-stamp = { hash = "b3:5b73caa28ffd99e3" }
+stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the device-file bullet (server owns the file, BLAKE3 digests only) and Listening's "device tokens accepted on loopback only until TLS" match token.rs, main.rs and Devices::load; cascade from core and server Design's pairing text; merge kept main's LNK4199 text; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-daemon#purpose"."body"]
-stamp = { hash = "b3:7ec5dfdaae61831f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
+stamp = { hash = "b3:616f38d798b0a7e0", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-daemon#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:194117bebc81240c" }
@@ -1161,19 +1170,19 @@ stamp = { hash = "b3:5c5aac8c1b12a291" }
 stamp = { hash = "b3:2ce291dd14ddd2a9" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
+stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/register.rs"]
 stamp = { hash = "b3:1ac657a1accf6f5e" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/serve.rs"]
-stamp = { hash = "b3:fc3e0c66f3f7360f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
+stamp = { hash = "b3:a3c948ee35c051d7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/token.rs"]
-stamp = { hash = "b3:5b73caa28ffd99e3" }
+stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/daemon.rs"]
-stamp = { hash = "b3:14ef661d6e07bda3", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Serving bullet (--ui-dir serves the UI's files) and tests bullet (raw HTTP UI requests) match serve.rs and tests/daemon.rs; holds" }
+stamp = { hash = "b3:4a2a984a87a7f854", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the daemon names the device file (token.rs device_file, main.rs) and tests/daemon.rs checks a device survives a restart in a user-only file that holds no token; Purpose's description still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/delay_load.rs"]
 stamp = { hash = "b3:fa55ac483c3bac65" }
@@ -1182,25 +1191,25 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:7666dcee9f6dd8ce" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
+stamp = { hash = "b3:a61b2dec171a5423", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:382cfd9596cf831f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
+stamp = { hash = "b3:6cccf024b5eb414b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/token.rs"]
-stamp = { hash = "b3:5b73caa28ffd99e3" }
+stamp = { hash = "b3:de78db43f2bd8ee4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Usage's paired-devices bullet (the `<token file>.devices` file, deleting both resets every credential) and the exit-1 row for an unusable device file match token.rs::device_file and main.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:c4445af061a77053", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: R-SEC-002 now excepts GET /pair on a TLS listener and allows a device-token cookie; desktop serves loopback without TLS, pairs nothing and uses its in-memory token, so nothing here changes; holds" }
+stamp = { hash = "b3:ce2f9e885ffdc992", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Cascade from R-SEC-002 gaining "a device token is accepted only over loopback or TLS": the desktop binds loopback with ServerConfig::new and sets no device_file, so the sentence doesn't change what it says; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-002"]
-stamp = { hash = "b3:9bcfb0336f6adad9" }
+stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Cascade from R-SEC-002 gaining "a device token is accepted only over loopback or TLS": the desktop binds loopback with ServerConfig::new and sets no device_file, so the sentence doesn't change what it says; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
@@ -1410,7 +1419,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
+stamp = { hash = "b3:0fa8dcf2e3873d86", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade only, from protocol Design's 0.20 pairing additions: the graph crate uses none of the new actions, queries or entity kinds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1461,10 +1470,10 @@ stamp = { hash = "b3:534ac6c88886c8f2" }
 stamp = { hash = "b3:943bb9518712a4b5" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:c252221e9c760096", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:37d51e273bfb1525", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the tools table and the "`pairing` and `device` tools (protocol 0.20)" paragraph match tests.rs and tools.snap; cascade from ARCH#mcp's noun list; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:9ca86438d4d9c457" }
+stamp = { hash = "b3:0a4148157d1ae643", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the tools table and the "`pairing` and `device` tools (protocol 0.20)" paragraph match tests.rs and tools.snap; cascade from ARCH#mcp's noun list; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1497,7 +1506,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Session and identity states the 3 s OPEN_EARLY_TIMEOUT hello wait under the 10 s handshake timeout; Async and transports says handle awaits Control futures and the hello wait's timer woken by its own thread, matching server.rs" }
+stamp = { hash = "b3:f38e16e8651f138a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = """Pairing: the tools table and the "`pairing` and `device` tools (protocol 0.20)" paragraph match tests.rs and tools.snap; cascade from ARCH#mcp's noun list; holds. Merge of main (f0cb974) and wave/m1 kept their text.""" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1527,7 +1536,7 @@ stamp = { hash = "b3:6bc1fa01b2a4a2d4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tests.rs"]
-stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main against server.rs (with_timeout/Timer bounding open_early's hello at 3 s) and tests.rs: contents list and 'needs no async runtime' still hold (timer is its own thread)" }
+stamp = { hash = "b3:f38e16e8651f138a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: tests.rs expects 20 tools, adding `pairing` and `device`; Purpose (one tool per noun) still holds; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
@@ -1929,7 +1938,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:55c9c1982320604f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:0fa8dcf2e3873d86", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -1947,25 +1956,25 @@ stamp = { hash = "b3:24e470838185e418" }
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:e08032e34676ac01" }
+stamp = { hash = "b3:4112f7a2c26674ee", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:e099f7b8aaaaa173" }
+stamp = { hash = "b3:6b496a09aa35b572", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/audio.rs"]
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:da4b9ef5e429cca2" }
+stamp = { hash = "b3:21c1117fa5ece492", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/envelope.rs"]
-stamp = { hash = "b3:63616c6985c48822" }
+stamp = { hash = "b3:c66cf8967f9d8999", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:1852d33b4d4f86bf" }
+stamp = { hash = "b3:ef942231e7f2d672", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
@@ -1974,7 +1983,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:c012a3b785dfd6b5" }
+stamp = { hash = "b3:0bf9e2c842180c84", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -1983,22 +1992,22 @@ stamp = { hash = "b3:91ec5275ab3c5e9f" }
 stamp = { hash = "b3:abc973f4355bada5" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/id.rs"]
-stamp = { hash = "b3:353359feae2606b3" }
+stamp = { hash = "b3:f22d68608273ddbc", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
 stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:9199a0226a0eda2b" }
+stamp = { hash = "b3:a7a320b9ce18e6e4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:489f2e86af7bf320" }
+stamp = { hash = "b3:a667a8df3f0ef64b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:68a1255a9a5f2f73" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:13f2fa2d982a7e24" }
+stamp = { hash = "b3:5be13da1f4c3f59e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -2007,10 +2016,10 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:c594f42e1b065295" }
+stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: the version line, Action result, `unsupported`, Pairing and compat paragraphs say 0.20 and match both snapshots (only the version and the pairing examples changed) and CallResult::action()'s skip_serializing_if; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#purpose"."body"]
-stamp = { hash = "b3:75e84529f81bc5f7", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; version line 0.19 audio, 0.18 virtual_cam, 0.17 role; holds" }
+stamp = { hash = "b3:7d00109b2dce5e3c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
 stamp = { hash = "b3:55468c98f61fc0f9" }
@@ -2019,16 +2028,16 @@ stamp = { hash = "b3:55468c98f61fc0f9" }
 stamp = { hash = "b3:7421b6aaa2a1c085" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:da4b9ef5e429cca2" }
+stamp = { hash = "b3:21c1117fa5ece492", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:241d371850f187f6" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/envelope.rs"]
-stamp = { hash = "b3:63616c6985c48822" }
+stamp = { hash = "b3:c66cf8967f9d8999", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/error.rs"]
-stamp = { hash = "b3:1852d33b4d4f86bf" }
+stamp = { hash = "b3:ef942231e7f2d672", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/event.rs"]
 stamp = { hash = "b3:f2018a2e7c7b8d62" }
@@ -2037,7 +2046,7 @@ stamp = { hash = "b3:f2018a2e7c7b8d62" }
 stamp = { hash = "b3:6eef84d0d81bd66e" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/fixtures.rs"]
-stamp = { hash = "b3:c012a3b785dfd6b5" }
+stamp = { hash = "b3:0bf9e2c842180c84", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry.rs"]
 stamp = { hash = "b3:91ec5275ab3c5e9f" }
@@ -2046,22 +2055,22 @@ stamp = { hash = "b3:91ec5275ab3c5e9f" }
 stamp = { hash = "b3:abc973f4355bada5" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/id.rs"]
-stamp = { hash = "b3:353359feae2606b3" }
+stamp = { hash = "b3:f22d68608273ddbc", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
 stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
-stamp = { hash = "b3:9199a0226a0eda2b" }
+stamp = { hash = "b3:a7a320b9ce18e6e4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/output.rs"]
-stamp = { hash = "b3:489f2e86af7bf320" }
+stamp = { hash = "b3:a667a8df3f0ef64b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/parity.rs"]
 stamp = { hash = "b3:68a1255a9a5f2f73" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:13f2fa2d982a7e24" }
+stamp = { hash = "b3:5be13da1f4c3f59e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -2070,7 +2079,7 @@ stamp = { hash = "b3:b48737a114c2fced" }
 stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:c594f42e1b065295" }
+stamp = { hash = "b3:9a6df78b26add3cd", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing, protocol 0.20: Contents lists pairing.start, device.revoke, device.list, DeviceInfo/DeviceId, EntityKind::Device, `unsupported` and ActionResult, matching command.rs, envelope.rs, error.rs, id.rs and query.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-render#design"."body"]
 stamp = { hash = "b3:7f2a94f0736d9611", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
@@ -2190,16 +2199,16 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:eaa109533b8798d8" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
+stamp = { hash = "b3:fcbbd47c6afac1f3", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against jstream-control design change (browser client error-event handling, CSP wording, open question 3 edit): server-side checks, subprotocol token and CSP description unaffected, holds." }
+stamp = { hash = "b3:5da8a82af82be504", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:0073427d67d54b44", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
-stamp = { hash = "b3:9bcfb0336f6adad9" }
+stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -2207,65 +2216,83 @@ stamp = { hash = "b3:fbe7c61707faa7bd" }
 ["CRATE-jstream-server#design"."file:crates/jstream-server/Cargo.toml"]
 stamp = { hash = "b3:e9241efe87e7e719" }
 
+["CRATE-jstream-server#design"."file:crates/jstream-server/src/admitted.rs"]
+stamp = { hash = "b3:fc786e23618932db", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:c93c7afdc52f6566", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Connection limits paragraph says bind refuses zero max_connections/header_read_timeout/handshake_timeout/max_mcp_sessions/mcp_idle_timeout with InvalidLimit before opening the socket, matching check_limits and bind" }
+stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+
+["CRATE-jstream-server#design"."file:crates/jstream-server/src/devices.rs"]
+stamp = { hash = "b3:632bb2cf7d3c6cb2", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/error.rs"]
-stamp = { hash = "b3:0f169c15a16bd803", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: Connection limits paragraph says bind refuses zero max_connections/header_read_timeout/handshake_timeout/max_mcp_sessions/mcp_idle_timeout with InvalidLimit before opening the socket, matching check_limits and bind" }
+stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:aa923cddbd9a536f" }
+stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:e1df91ff3e5b6801", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301 shutdown) into #268: re-read; main's shutdown paragraph (no request handled once stopping, waits for closes, reads to the client's close frame) and this PR's zero-limit paragraph (bind refuses zero limits with InvalidLimit) both match lib.rs, which carries both changes independently; holds" }
+stamp = { hash = "b3:4df66ab7ae7acc33", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/mcp.rs"]
-stamp = { hash = "b3:05057d7979293830" }
+stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+
+["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair.rs"]
+stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
+stamp = { hash = "b3:37462b474566879f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the shutdown paragraph against lib.rs/session.rs after merging main: no request handled once shutting down (stopped() check in the read branch), serve_with_shutdown waits on shutdown.closed() bounded by 2x CLOSE_TIMEOUT, close drains client frames until its Close before closing; matches." }
+stamp = { hash = "b3:6ae3dae3b203261c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/ui.rs"]
-stamp = { hash = "b3:4a9ea9ae5014f95c" }
+stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): Pairing, Sessions, MCP credentials and Logging describe the device store (BLAKE3 digests, atomic user-only file), the XXXX-XXXX code (2 min, single use, void after 5 wrong), loopback-only device tokens, revocation closing sessions, and open question 2 citing ADR-0047 (round-3 B1); matches devices.rs, pair.rs, gate.rs, admitted.rs, mcp.rs and session.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."body"]
-stamp = { hash = "b3:2f40600f2090e7bf", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Issue 253: gate.rs and lib.rs use jstream_control subprotocol constants instead of local copies; contents list unchanged; holds" }
+stamp = { hash = "b3:dea464c21ccf177c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-server"]
 stamp = { hash = "b3:91b837e64ac2fb2b" }
 
+["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/admitted.rs"]
+stamp = { hash = "b3:fc786e23618932db", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/config.rs"]
-stamp = { hash = "b3:c93c7afdc52f6566", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: config.rs check_limits, error.rs InvalidLimit, lib.rs bind calling it; contents list (config limits, errors) still accurate" }
+stamp = { hash = "b3:1af511774a49607e", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+
+["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/devices.rs"]
+stamp = { hash = "b3:632bb2cf7d3c6cb2", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/error.rs"]
-stamp = { hash = "b3:0f169c15a16bd803", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: config.rs check_limits, error.rs InvalidLimit, lib.rs bind calling it; contents list (config limits, errors) still accurate" }
+stamp = { hash = "b3:123e9f74314a9f25", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:aa923cddbd9a536f" }
+stamp = { hash = "b3:db8aa99cd4414f06", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/lib.rs"]
-stamp = { hash = "b3:e1df91ff3e5b6801", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Merge of main (#301) into #268: lib.rs has both #301's shutdown wait and this PR's check_limits call in bind; contents list unchanged; holds" }
+stamp = { hash = "b3:4df66ab7ae7acc33", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/listener.rs"]
 stamp = { hash = "b3:ca2a076f73f966ae" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/mcp.rs"]
-stamp = { hash = "b3:05057d7979293830" }
+stamp = { hash = "b3:d108df6a1c080f11", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
+
+["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair.rs"]
+stamp = { hash = "b3:0559ccbae63a9911", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/session.rs"]
-stamp = { hash = "b3:fe30cc19eb9a6454", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
+stamp = { hash = "b3:37462b474566879f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:865d176335940128", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against the PR's lib.rs/session.rs/tests.rs changes: module list and responsibilities unchanged (serve_with_shutdown still in lib.rs, session.rs still one connection); holds." }
+stamp = { hash = "b3:6ae3dae3b203261c", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/ui.rs"]
-stamp = { hash = "b3:4a9ea9ae5014f95c" }
+stamp = { hash = "b3:33e0fc93ab4b052b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: Contents lists devices.rs (device store, open code, device file), pair.rs (POST /api/v1/pair), admitted.rs (per-session wrapper answering the credential calls) and the config's device_file; matches the new modules; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-sources#purpose"."body"]
 stamp = { hash = "b3:ba182674aa6f4948", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#224 N1: Windows walk split out of open_inside into walk_below (takes the already-resolved path below the root); Assets paragraph's walk description unchanged and still holds; Tests sentence now says the Windows test refuses links both at resolve and in the walk on its own" }
@@ -2385,10 +2412,10 @@ stamp = { hash = "b3:7e81b19db47fd220" }
 stamp = { hash = "b3:3e890dfae55620cc" }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:263637b2f03e8558", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
+stamp = { hash = "b3:5510e827f0205b81", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the sentence that the server side is built and the UI's pairing form isn't, now linking ADR-0047, still holds since this PR adds no UI code; cascade from control Design; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:26202d1d8a1e1474", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Connecting bullet: now lists a policy-blocked URL among indistinguishable failures, matching end_reason's connect message and connect.spec.js; session bullets unaffected." }
+stamp = { hash = "b3:5da8a82af82be504", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: the sentence that the server side is built and the UI's pairing form isn't, now linking ADR-0047, still holds since this PR adds no UI code; cascade from control Design; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -2880,7 +2907,7 @@ stamp = { hash = "b3:97ae8ab490d4cdca", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:7ab4accbf98f6662" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:d638c6ca8019b15d" }
+stamp = { hash = "b3:0073427d67d54b44", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from ARCH#protocol: protocol 0.20 adds only actions, a query, an entity kind, an error code and an optional `result` field, so it is an additive minor under R-API-001; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:0c75796446b9f30b", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
@@ -2910,16 +2937,16 @@ stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
+stamp = { hash = "b3:a61b2dec171a5423", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from daemon Usage's device-file bullet: the prerequisites don't use pairing; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:6dc625770a5edc67" }
+stamp = { hash = "b3:bcf7e43d31e4a6e1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from CLI and daemon Usage: smoke.ps1 uses the control token and doesn't pair; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
+stamp = { hash = "b3:a61b2dec171a5423", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from CLI and daemon Usage: smoke.ps1 uses the control token and doesn't pair; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -2928,13 +2955,13 @@ stamp = { hash = "b3:a560da0e5768f43e" }
 stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "Round 4 (B5 B6 N6 N7): N7, step 4's continuation line indented three spaces like the rest; holds" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:6dc625770a5edc67" }
+stamp = { hash = "b3:bcf7e43d31e4a6e1", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from CLI Usage (pair/device), daemon Usage (device file) and server Design (pairing): no step pairs a device, and every command still uses the control token; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
+stamp = { hash = "b3:a61b2dec171a5423", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from CLI Usage (pair/device), daemon Usage (device file) and server Design (pairing): no step pairs a device, and every command still uses the control token; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; step 7 (Ctrl-C prints stopped, exits 0) holds with #301's bounded close wait; default limits are non-zero; holds" }
+stamp = { hash = "b3:fcbbd47c6afac1f3", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from CLI Usage (pair/device), daemon Usage (device file) and server Design (pairing): no step pairs a device, and every command still uses the control token; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:c40bfcab7de124d7", by = "agent:claude", note = "New. merge-main --from matches merge.rs; the PR loop is CLAUDE#pr-loop unchanged." }
@@ -2970,13 +2997,13 @@ stamp = { hash = "b3:30468b372b42a1aa", by = "agent:claude", note = "Moving a PR
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
 
 ["SECURITY#scope"."body"]
-stamp = { hash = "b3:06282b84a1425ad4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 accepted: control API bullet now names the TLS-only pairing page and the device-only cookie, per R-SEC-002's amended text; other bullets unchanged" }
+stamp = { hash = "b3:4fabbaa71adf77ab", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): the control-API bullet now says a device token is accepted only over loopback or TLS, matching the R-SEC-002 sentence this PR adds and gate.rs (devices_allowed = loopback || tls); main's ADR-0047 wording is kept beside it; merge of main at 41cfb15 kept main's text; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-002"]
-stamp = { hash = "b3:9bcfb0336f6adad9" }
+stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (ADR-0044): the control-API bullet now says a device token is accepted only over loopback or TLS, matching the R-SEC-002 sentence this PR adds and gate.rs (devices_allowed = loopback || tls); main's ADR-0047 wording is kept beside it; merge of main at 41cfb15 kept main's text; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-003"]
 stamp = { hash = "b3:e62d5f1a75c6baa0" }
@@ -2985,7 +3012,7 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#assets"."body"]
-stamp = { hash = "b3:fc8f9e4fe919b269", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "New Q5 threat model section; re-read against main at e1e2a94 and the cited rules and ADRs; in-flight PRs marked as such" }
+stamp = { hash = "b3:ac2d20dd201b9d41", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the paired-device-tokens row is no longer in flight; it now says the digest lives in the devices file beside the token file and the device keeps its own copy, with only the browser cookie still in flight (#288); matches devices.rs and token.rs::device_file; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:69c6131f3f1bd0fd" }
@@ -3009,7 +3036,7 @@ stamp = { hash = "b3:fbe7c61707faa7bd" }
 stamp = { hash = "b3:528a4d728be121b6" }
 
 ["THREAT-MODEL#pairing"."body"]
-stamp = { hash = "b3:f912fc0a9873c9db", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "#358 B1: narrowed to what ADR-0047 and R-SEC-002 promise: a paired browser holds only its device token, and the cookie never carries the control token" }
+stamp = { hash = "b3:33417deaedc9c769", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): codes and device tokens are now Built (loopback only, no TLS yet), and only the browser page and cookie stay In flight (#288); the controls name the cookie's as #288's; the code (40 bits, 2 min, 5 attempts) and token (256-bit digests, revocable, 30-day lapse) rules match devices.rs; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["THREAT-MODEL#pairing"."dep:docs/adr/0044-pairing-remote-browsers.md"]
 stamp = { hash = "b3:5670e6a5758601b2" }
@@ -3036,10 +3063,10 @@ stamp = { hash = "b3:69c6131f3f1bd0fd" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#server"."body"]
-stamp = { hash = "b3:c4b6a3e7a16f884b", by = "agent:claude@session_015aidkizUPGoaL5g4yHpwZW", note = "#358 B1: Accepted now names the control token cached by a browser through the Basic prompt (gate.rs Basic path, ADR-0047 consequences); rest unchanged" }
+stamp = { hash = "b3:9d68f95562892706", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
-stamp = { hash = "b3:9bcfb0336f6adad9" }
+stamp = { hash = "b3:3a95010938c1605a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing (#265): the gate bullet adds that the token may be a paired device's, accepted only on loopback until TLS, and that POST /api/v1/pair is the one request answered without a token, only while a code is open; matches gate.rs (devices_allowed) and pair.rs, and R-SEC-002's added loopback-or-TLS sentence; holds. Merge of main (f0cb974) and wave/m1 kept their text." }
 
 ["THREAT-MODEL#server"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
