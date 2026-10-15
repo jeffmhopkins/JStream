@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:cd480f2a43276974", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through ARCH#protocol Pairing bullet; consistent with the mock's unsupported bullet here; holds" }
+verified = { hash = "b3:7fcc53525fea7170", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: stale through ARCH#protocol's transport bullet (TLS-only /pair page, device cookie); jstream-control is unchanged and its browser client sends no token subprotocol for an empty token, so the cookie reaches the gate; transport and TLS bullets hold" }
 -->
 
 ### The trait

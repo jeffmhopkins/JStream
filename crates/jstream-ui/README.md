@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:03681d80c54c1817", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#257: outputs.rs gained start_or_stop_all and tests, app.rs connect fields leave the form element; contents list still holds" }
+verified = { hash = "b3:74e1d843de13982f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: contents gain pairing.rs (Pairing panel, its calls, tests against MockEngine and a server-like stub); other entries unchanged" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -38,6 +38,9 @@ Contents (the skeleton; [Design](#design) explains the choices):
   inspector (creating, editing and deleting outputs, their stream keys, start and stop,
   go-live and the pipeline's health), and the calls and logic behind it, tested
   natively against `MockEngine`.
+- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the outputs (start
+  pairing and show the code, list and revoke devices), and the calls behind it, tested
+  natively against `MockEngine` and a stub that answers them as the server does.
 - **Canvas** (`canvas/`): the canvas editor. It draws the program scene's item boxes
   over a placeholder background, edits their geometry with the pointer and the
   keyboard, and undoes and redoes ([Canvas](#canvas)). The preview stream is not
@@ -51,7 +54,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:219946530f304b1d", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main into pairing: main's go-live 'tries every output' and password-manager bullet kept; pairing sentence (server side built, UI form not yet) holds" }
+verified = { hash = "b3:e9290c25a31a3a53", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: connecting bullet now says a browser paired on the server's /pair page connects with an empty token via its cookie; new Pairing bullet matches pairing.rs (hidden on unsupported, countdown, 3 s device.list poll to detect use, revoke, code never logged); style.css gains the panel's classes" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -61,11 +64,11 @@ verified = { hash = "b3:219946530f304b1d", by = "agent:claude@session_01WbL3WRbc
   console, and the field is a password field. It may be left empty when the daemon
   served the page behind HTTP Basic with the token as the password: the browser's
   cached Basic credentials then carry the token on the upgrade, and no token
-  subprotocol is sent. A remote browser will pair with a one-time code instead
-  ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): the server side is built
-  (`pairing.start` and `POST /api/v1/pair`,
-  [jstream-server › Design](../jstream-server/README.md#design)), the UI's pairing form
-  isn't. In the desktop app the form is skipped: the
+  subprotocol is sent. It may also be left empty in a browser that paired on the
+  server's `/pair` page, which holds its device token in a cookie the browser sends on
+  the upgrade ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md),
+  [jstream-server › Design](../jstream-server/README.md#design)); that page is the
+  server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). That connection carries the
   token in the subprotocol, which `jstream-server` accepts
@@ -99,6 +102,17 @@ verified = { hash = "b3:219946530f304b1d", by = "agent:claude@session_01WbL3WRbc
   panel. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
+- **Pairing.** The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
+  calls `device.list` when it opens and shows only if that is served: a session with no
+  server in front answers `unsupported` and the panel stays hidden. "Pair a device"
+  calls `pairing.start` and shows the code, large, with a countdown from its
+  `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address). The
+  code shows until the countdown ends or a device pairs: every 3 seconds the panel
+  re-reads `device.list`, and a device ID that wasn't listed when the code was drawn
+  means the code was used. A newer code replaces the shown one. Each device shows its
+  name and its paired and last-used dates (UTC), with a button that calls
+  `device.revoke` and re-reads the list. The code is never logged or stored by the page,
+  and `OpenCode`'s `Debug` form hides it.
 - **The stream key is write-only** ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). Its
   password field is not bound to a signal: the panel reads it only on save, wraps it in
   a `SecretString` at once (trimming a pasted newline), empties the field and sends

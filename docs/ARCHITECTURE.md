@@ -524,7 +524,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:cda3aa5f7d08fa87", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: stale through protocol design (snapshot description change); Pairing and transport bullets hold" }
+verified = { hash = "b3:812d8c9a7e41dc6b", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: transport bullet now says device tokens on loopback or a TLS listener and names the TLS-only /pair page and the device-only __Host-jstream_device cookie; pairing bullet and the rest hold" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -633,8 +633,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the browser, where the token travels as a subprotocol because a page can't set
   `Authorization` ([ADR-0045](adr/0045-leptos-web-ui.md)). `jstream-server`
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
-  default, with the token (the control token, or a paired device's on loopback until TLS)
-  required and `Origin`/`Host` validated
+  default, with the token (the control token, or a paired device's on loopback or a TLS
+  listener) required and `Origin`/`Host` validated
   ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
   for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
@@ -644,7 +644,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   path, behind the same checks too, when the host names a UI directory. A browser
   presents the token as the password of HTTP `Basic` credentials, which it then sends
   on the UI's WebSocket upgrade as well; a browser client can instead offer it as the
-  subprotocol `jstream.token.<token>`.
+  subprotocol `jstream.token.<token>`. On a TLS listener a browser can instead pair on
+  the token-free page `GET /pair` and hold its device token, never the control token, as
+  the `__Host-jstream_device` cookie
+  ([ADR-0047](adr/0047-browser-pairing-page-and-device-cookie.md)).
 - **Slow clients:** each connection gets a bounded event buffer, and the server keeps
   draining the engine's events while a client is slow to read. When the buffer
   overflows, the server drops the queued events and sends one `events.dropped {count}`

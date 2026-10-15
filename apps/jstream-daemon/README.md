@@ -195,7 +195,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:2162fcf2ed0aaac4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (#267, #215, #262) into pairing: main changes nothing here; device file and pairing bullets from this PR hold" }
+verified = { hash = "b3:27cd62a9fefa1d72", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: serve.rs builds ServerConfig::new (tls off) on 127.0.0.1, so no /pair page and no cookie; added that to the Listening bullet; device file and the rest hold against the server's new design" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -271,7 +271,10 @@ verified = { hash = "b3:2162fcf2ed0aaac4", by = "agent:claude@session_01WbL3WRbc
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
   option to listen on other addresses until remote browsers need it (with TLS,
   [ROADMAP › M2](../../ROADMAP.md#m2)). Pairing is served already, and its device tokens
-  are accepted on loopback only until then.
+  are accepted on loopback only until then. `ServerConfig::tls` stays off, so the browser
+  pairing page and the device cookie
+  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)) wait on
+  TLS too: `/pair` is 404.
 - **The device file** (`token.rs`, `main.rs`). The daemon names
   `ServerConfig::device_file` as the token file's path plus `.devices`, so the devices
   live and move with the token they stand beside, and deleting the two together resets

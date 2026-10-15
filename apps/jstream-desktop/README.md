@@ -92,7 +92,7 @@ Closing the window stops the engine.
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/tauri.conf.json"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
-verified = { hash = "b3:c6465831cff00bd7", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: host.rs uses ServerConfig::new with no device_file, so devices paired from the app are in memory and loopback-only; added that sentence; rest holds" }
+verified = { hash = "b3:e462737eb15720ff", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047 build: host.rs binds loopback with ServerConfig::new (tls off), so no /pair page and no cookie; the server answers pairing calls, so the UI's new pairing panel shows in the app; added those sentences; rest unchanged" }
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
@@ -101,7 +101,10 @@ verified = { hash = "b3:c6465831cff00bd7", by = "agent:claude@session_01WbL3WRbc
   webview's origin besides its own (R-SEC-002); every connection still presents the
   token. No device file is set, so a device paired from the app
   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)) lasts only until it exits,
-  and, like the token, is accepted only on loopback. On Windows the engine is live with the same wiring as the daemon (OS backends,
+  and, like the token, is accepted only on loopback. The server answers the pairing
+  calls here too, so `jstream-ui`'s pairing panel shows in the app. The listener has no
+  TLS, so it serves no pairing page and reads no device cookie
+  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
   keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
   When the app exits, the server closes its connections and the engine stops.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and

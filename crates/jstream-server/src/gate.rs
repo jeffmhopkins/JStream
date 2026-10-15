@@ -1,14 +1,16 @@
 //! The checks every request passes before a session starts (R-SEC-002, ADR-0006,
-//! ADR-0044): `Host`, then `Origin`, then the control token or a device token.
+//! ADR-0044, ADR-0047): `Host`, then `Origin`, then the control token or a device token.
 //!
 //! - **`Host`** must name the server: a loopback name or the bound address with the bound
 //!   port, or a configured extra. This defeats DNS rebinding, where a page on an
 //!   attacker's domain resolves that domain to `127.0.0.1`: its `Host` is still the
 //!   attacker's name. A `Host` without a port means the scheme's default port, 80 for
-//!   `http` and `ws`, so it is accepted only when the server listens on port 80;
-//!   otherwise it names another port and is refused.
-//! - **`Origin`**, when present, must be the server's own (`http://` plus the accepted
-//!   `Host`, where an origin without a port means port 80 too) or a configured extra.
+//!   `http` and `ws` (443 on a TLS listener, `ServerConfig::tls`), so it is accepted
+//!   only when the server listens on that port; otherwise it names another port and is
+//!   refused.
+//! - **`Origin`**, when present, must be the server's own (`http://`, or `https://` on a
+//!   TLS listener, plus the accepted `Host`, where an origin without a port means the
+//!   default port too) or a configured extra.
 //!   Browsers always send it on WebSocket upgrades, so a foreign web page can't connect.
 //!   A request without one is a native client (the CLI, a script, an MCP proxy) and is
 //!   let through to the token check, which is the gate (#44, R-SEC-002).
@@ -24,27 +26,40 @@
 //! - **Device tokens** (ADR-0044) are presented the same three ways, and checked against
 //!   the paired devices' digests the same way (`Devices::admit`). The request is then
 //!   admitted as that device ([`Credential::Device`]). A device token travels only over
-//!   loopback or TLS, and the server has no TLS yet, so one is accepted only while the
-//!   server listens on a loopback address; bound anywhere else, only the control token
-//!   gets in.
-//! - **`POST /api/v1/pair`** is the one request answered without a token: it passes the
-//!   `Host` and `Origin` checks alone ([`Gate::admit_unauthenticated`]), and the open
-//!   pairing code is its gate (`pair.rs`).
+//!   loopback or TLS, so one is accepted only while the server listens on a loopback
+//!   address or on a TLS listener; anywhere else, only the control token gets in.
+//! - **The device cookie** (ADR-0047) is a fourth way, for a device token only and only
+//!   on a TLS listener: `__Host-jstream_device=<token>` in `Cookie`, which a browser that
+//!   paired on the pairing page holds. It is read only when the request has neither
+//!   `Authorization` nor an offered token subprotocol, and only that exact name (never a
+//!   plain `jstream_device` another service on the host could plant). It is never
+//!   compared with the control token. A request carrying it more than once is refused
+//!   ([`Refusal::CookieRepeated`]), and so is one admitted by it without
+//!   `Sec-Fetch-Site: same-origin` or `none` ([`Refusal::CookieSite`]), which keeps out
+//!   pages on another port of the host or on a sibling subdomain, to which the browser
+//!   also sends the cookie. A use that renews the device's lapse, at most once a day,
+//!   says so (`renew_cookie` in [`Credential::Device`]), and the response re-sets the
+//!   cookie with a fresh `Max-Age` ([`renew_cookie`]).
+//! - **`POST /api/v1/pair`** and, on a TLS listener, **`GET /pair`** are the requests
+//!   answered without a token: they pass the `Host` and `Origin` checks alone
+//!   ([`Gate::admit_unauthenticated`]). The open pairing code is the exchange's gate
+//!   (`pair.rs`), and the page is fixed and changes nothing (`pair_page.rs`).
 //!
 //! Configured extra hosts must be `name:port`, with an IPv6 address in brackets
 //! (`[::1]:port`) and exactly one port: `check_extra_hosts` refuses any other form
 //! before the server binds, since it could never match.
 //!
-//! A refused `Host` or `Origin` is HTTP 403, a missing or wrong token 401. `Host` and
-//! the token must appear exactly once, and `Origin` at most once. `Gate::admit` logs each refusal at `warn` with its reason
-//! and the peer address, and never a header's value, so never the token (R-SEC-001).
+//! A refused `Host` or `Origin` is HTTP 403, a missing or wrong token (or a refused
+//! cookie) 401. `Host` and the token must appear exactly once, and `Origin` at most once.
+//! `Gate::admit` logs each refusal at `warn` with its reason and the peer address, and
+//! never a header's value, so never the token or the cookie (R-SEC-001).
 //!
 //! A request that passes the gate can still be refused because the server already has
 //! `ServerConfig::max_connections` connections open: HTTP 503 (`Refusal::Full`), logged
 //! the same way.
 
 use crate::config::{ServerConfig, Token};
-use crate::devices::Devices;
+use crate::devices::{Devices, LAPSE};
 use crate::error::ServerError;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -56,6 +71,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// The default port of the `http` and `ws` schemes: a `Host` or `Origin` without a port
 /// names it (RFC 9110 §7.2, RFC 6455 §3).
 const DEFAULT_PORT: u16 = 80;
+
+/// The default port of the `https` and `wss` schemes, for a TLS listener.
+const DEFAULT_TLS_PORT: u16 = 443;
+
+/// The cookie a paired browser holds its device token in (ADR-0047). The `__Host-`
+/// prefix makes the browser keep it to this exact host name, over HTTPS, with `Path=/`.
+pub(crate) const DEVICE_COOKIE: &str = "__Host-jstream_device";
+
+/// The `Sec-Fetch-Site` values a request admitted by the cookie may carry: the page
+/// itself, or the user typing the address.
+const COOKIE_FETCH_SITES: [&str; 2] = ["same-origin", "none"];
 
 /// Why an upgrade request was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,6 +100,11 @@ pub(crate) enum Refusal {
     NoPairingCode,
     /// `POST /api/v1/pair` with a code that isn't the open one.
     WrongPairingCode,
+    /// The device cookie appears more than once.
+    CookieRepeated,
+    /// The device cookie on a request whose `Sec-Fetch-Site` is missing or neither
+    /// `same-origin` nor `none`.
+    CookieSite,
 }
 
 /// What admitted a request: the control token, or a paired device's token.
@@ -88,6 +119,9 @@ pub(crate) enum Credential {
         /// Its name, which its sessions are known by in the audit log
         /// (`device:<name>`).
         name: String,
+        /// Whether the device cookie admitted it and this use renewed its lapse a day
+        /// or more after the cookie was last set, so the answer re-sets the cookie.
+        renew_cookie: bool,
     },
 }
 
@@ -112,7 +146,18 @@ impl Refusal {
             Refusal::McpSessions => "too many MCP sessions",
             Refusal::NoPairingCode => "pairing attempted while no pairing code is open",
             Refusal::WrongPairingCode => "wrong pairing code",
+            Refusal::CookieRepeated => "device cookie repeated",
+            Refusal::CookieSite => "device cookie without a same-origin Sec-Fetch-Site",
         }
+    }
+
+    /// Whether the refusal is for a missing or refused credential, which the UI's paths
+    /// answer with the `Basic` challenge.
+    pub(crate) fn is_credential(self) -> bool {
+        matches!(
+            self,
+            Refusal::Token | Refusal::CookieRepeated | Refusal::CookieSite
+        )
     }
 
     /// Logs the refusal at `warn` with its reason and `peer`, the address it came from.
@@ -127,7 +172,7 @@ impl IntoResponse for Refusal {
         match self {
             Refusal::Host => (StatusCode::FORBIDDEN, "Host not allowed\n").into_response(),
             Refusal::Origin => (StatusCode::FORBIDDEN, "Origin not allowed\n").into_response(),
-            Refusal::Token => (
+            Refusal::Token | Refusal::CookieRepeated | Refusal::CookieSite => (
                 StatusCode::UNAUTHORIZED,
                 [(header::WWW_AUTHENTICATE, "Bearer")],
                 "a valid control token is required\n",
@@ -157,8 +202,11 @@ impl IntoResponse for Refusal {
 pub(crate) struct Gate {
     token: Token,
     devices: Arc<Devices>,
-    /// Whether device tokens are accepted: only while the server listens on loopback.
+    /// Whether device tokens are accepted: only while the server listens on loopback or
+    /// on a TLS listener.
     devices_allowed: bool,
+    /// Whether the listener is reached over TLS (`ServerConfig::tls`).
+    tls: bool,
     /// The port the server listens on.
     port: u16,
     /// Lowercase `name:port` values.
@@ -193,7 +241,8 @@ impl Gate {
         Gate {
             token: config.token.clone(),
             devices,
-            devices_allowed: local.ip().is_loopback(),
+            devices_allowed: local.ip().is_loopback() || config.tls,
+            tls: config.tls,
             port,
             hosts,
             extra_origins,
@@ -215,8 +264,9 @@ impl Gate {
         result
     }
 
-    /// Checks only `Host` and `Origin`, as for `POST /api/v1/pair`, the one request
-    /// answered without a token, and logs a refusal as [`admit`](Gate::admit) does.
+    /// Checks only `Host` and `Origin`, as for `POST /api/v1/pair` and `GET /pair`, the
+    /// requests answered without a token, and logs a refusal as [`admit`](Gate::admit)
+    /// does.
     pub(crate) fn admit_unauthenticated(
         &self,
         headers: &HeaderMap,
@@ -235,8 +285,12 @@ impl Gate {
         self.check_host_and_origin(headers)?;
         let token = if headers.contains_key(header::AUTHORIZATION) {
             single(headers, &header::AUTHORIZATION).and_then(credentials)
-        } else {
+        } else if offers_token_subprotocol(headers) {
             subprotocol_token(headers)
+        } else if self.tls {
+            return self.check_cookie(headers);
+        } else {
+            None
         }
         .ok_or(Refusal::Token)?;
         if self.token.matches(&token) {
@@ -245,11 +299,37 @@ impl Gate {
         if !self.devices_allowed {
             return Err(Refusal::Token);
         }
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_or(0, |since| since.as_secs());
-        match self.devices.admit(&token, now) {
-            Some((id, name)) => Ok(Credential::Device { id, name }),
+        match self.devices.admit(&token, unix_now()) {
+            Some((id, name)) => Ok(Credential::Device {
+                id,
+                name,
+                renew_cookie: false,
+            }),
+            None => Err(Refusal::Token),
+        }
+    }
+
+    /// Checks the device cookie, on a TLS listener, for a request with neither
+    /// `Authorization` nor a token subprotocol: there must be exactly one, the request
+    /// must be same-origin or typed by the user, and it must be a device's token. It is
+    /// never compared with the control token.
+    fn check_cookie(&self, headers: &HeaderMap) -> Result<Credential, Refusal> {
+        let token = match device_cookie(headers) {
+            Cookie::Absent => return Err(Refusal::Token),
+            Cookie::Repeated => return Err(Refusal::CookieRepeated),
+            Cookie::One(token) => token,
+        };
+        let same_origin =
+            single(headers, &SEC_FETCH_SITE).is_some_and(|site| COOKIE_FETCH_SITES.contains(&site));
+        if !same_origin {
+            return Err(Refusal::CookieSite);
+        }
+        match self.devices.admit_cookie(token, unix_now()) {
+            Some((id, name, renew_cookie)) => Ok(Credential::Device {
+                id,
+                name,
+                renew_cookie,
+            }),
             None => Err(Refusal::Token),
         }
     }
@@ -260,10 +340,15 @@ impl Gate {
             .map(|value| value.to_ascii_lowercase())
             .ok_or(Refusal::Host)?;
         // A `Host` without a port names port 80: it can only be this server on port 80.
+        let default_port = if self.tls {
+            DEFAULT_TLS_PORT
+        } else {
+            DEFAULT_PORT
+        };
         let host = if has_port(&host) {
             host
-        } else if self.port == DEFAULT_PORT {
-            format!("{host}:{DEFAULT_PORT}")
+        } else if self.port == default_port {
+            format!("{host}:{default_port}")
         } else {
             return Err(Refusal::Host);
         };
@@ -276,11 +361,12 @@ impl Gate {
             let origin = single(headers, &header::ORIGIN)
                 .map(|value| value.to_ascii_lowercase())
                 .ok_or(Refusal::Origin)?;
-            let own = origin.strip_prefix("http://").is_some_and(|rest| {
+            let scheme = if self.tls { "https://" } else { "http://" };
+            let own = origin.strip_prefix(scheme).is_some_and(|rest| {
                 if has_port(rest) {
                     rest == host
                 } else {
-                    format!("{rest}:{DEFAULT_PORT}") == host
+                    format!("{rest}:{default_port}") == host
                 }
             });
             if !own && !self.extra_origins.contains(&origin) {
@@ -288,6 +374,75 @@ impl Gate {
             }
         }
         Ok(())
+    }
+}
+
+/// `Sec-Fetch-Site`, which browsers send to say where a request came from.
+const SEC_FETCH_SITE: HeaderName = HeaderName::from_static("sec-fetch-site");
+
+/// Seconds since the Unix epoch.
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |since| since.as_secs())
+}
+
+/// What a request's `Cookie` headers hold under [`DEVICE_COOKIE`].
+enum Cookie<'h> {
+    Absent,
+    One(&'h [u8]),
+    Repeated,
+}
+
+/// The device cookie in every `Cookie` line of `headers`: only the exact name counts.
+fn device_cookie(headers: &HeaderMap) -> Cookie<'_> {
+    let mut found = Cookie::Absent;
+    for line in headers.get_all(header::COOKIE) {
+        for pair in line.as_bytes().split(|&b| b == b';') {
+            let pair = pair.trim_ascii();
+            let Some(eq) = pair.iter().position(|&b| b == b'=') else {
+                continue;
+            };
+            if &pair[..eq] != DEVICE_COOKIE.as_bytes() {
+                continue;
+            }
+            found = match found {
+                Cookie::Absent => Cookie::One(pair[eq + 1..].trim_ascii()),
+                _ => return Cookie::Repeated,
+            };
+        }
+    }
+    found
+}
+
+/// The `Set-Cookie` value that hands a browser its device token (ADR-0047): kept to this
+/// host over HTTPS, unreadable by scripts, sent only on same-site requests, for the 30
+/// days of the device's lapse. `None` for a value that isn't letters and digits, which
+/// the server's own tokens (hex digits) always are.
+pub(crate) fn device_cookie_header(token: &[u8]) -> Option<HeaderValue> {
+    let value = std::str::from_utf8(token).ok()?;
+    if value.is_empty() || !value.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return None;
+    }
+    HeaderValue::from_str(&format!(
+        "{DEVICE_COOKIE}={value}; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age={LAPSE}"
+    ))
+    .ok()
+}
+
+/// Re-sets the device cookie on `response` when `credential` says this use renews it,
+/// with the value the request presented.
+pub(crate) fn renew_cookie(credential: &Credential, headers: &HeaderMap, response: &mut Response) {
+    let Credential::Device {
+        renew_cookie: true, ..
+    } = credential
+    else {
+        return;
+    };
+    if let Cookie::One(token) = device_cookie(headers)
+        && let Some(value) = device_cookie_header(token)
+    {
+        response.headers_mut().append(header::SET_COOKIE, value);
     }
 }
 
@@ -381,6 +536,20 @@ pub(crate) const WS_PROTOCOL: &str = "jstream";
 /// (`jstream_control`'s `WS_TOKEN_PROTOCOL_PREFIX`). It is never selected, so never echoed.
 const TOKEN_PROTOCOL_PREFIX: &str = "jstream.token.";
 
+/// Whether any offered subprotocol is a token's (`jstream.token.…`), valid or not.
+fn offers_token_subprotocol(headers: &HeaderMap) -> bool {
+    headers
+        .get_all(header::SEC_WEBSOCKET_PROTOCOL)
+        .iter()
+        .any(|value| {
+            value.as_bytes().split(|&b| b == b',').any(|offered| {
+                offered
+                    .trim_ascii()
+                    .starts_with(TOKEN_PROTOCOL_PREFIX.as_bytes())
+            })
+        })
+}
+
 /// The token a browser offers as the subprotocol `jstream.token.<token>`, used only when
 /// the request has no `Authorization`. Every `Sec-WebSocket-Protocol` line counts, and
 /// exactly one offered subprotocol may carry a token.
@@ -449,7 +618,10 @@ fn base64_decode(text: &str) -> Option<Vec<u8>> {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{Credential, Gate, Refusal, check_extra_hosts};
+    use super::{
+        Credential, DEVICE_COOKIE, Gate, Refusal, check_extra_hosts, device_cookie_header,
+        renew_cookie,
+    };
     use crate::config::{ServerConfig, Token};
     use crate::devices::{Devices, Now};
     use crate::error::ServerError;
@@ -530,6 +702,259 @@ pub(crate) mod tests {
             Err(Refusal::Token)
         );
         assert_eq!(open.check(&headers(&good())), Ok(Credential::Control));
+    }
+
+    /// A gate on a TLS listener (ADR-0047) on loopback port 4455, with one paired device,
+    /// and that device's token.
+    fn tls_gate() -> (Gate, String) {
+        let Ok(token) = Token::new("t0ken") else {
+            panic!("a valid token");
+        };
+        let mut config = ServerConfig::new(token);
+        config.tls = true;
+        let devices = devices();
+        let device = paired(&devices, "Browser");
+        let gate = Gate::new(&config, SocketAddr::from(([127, 0, 0, 1], 4455)), devices);
+        (gate, device)
+    }
+
+    /// A browser's request on the TLS gate: its own `Host` and `https` `Origin`, these
+    /// `Cookie` lines, and `Sec-Fetch-Site` when given.
+    fn browser(cookies: &[&str], site: Option<&str>) -> HeaderMap {
+        let mut pairs = vec![
+            (header::HOST, "127.0.0.1:4455"),
+            (header::ORIGIN, "https://127.0.0.1:4455"),
+        ];
+        pairs.extend(cookies.iter().map(|line| (header::COOKIE, *line)));
+        if let Some(site) = site {
+            pairs.push((HeaderName::from_static("sec-fetch-site"), site));
+        }
+        headers(&pairs)
+    }
+
+    /// ADR-0047: on a TLS listener the `__Host-jstream_device` cookie admits its device,
+    /// on a same-origin or typed request, among other cookies, without `Origin` too.
+    #[test]
+    fn the_device_cookie_admits_its_device_on_tls() {
+        let (gate, device) = tls_gate();
+        let cookie = format!("theme=dark; {DEVICE_COOKIE}={device}; other=1");
+        for site in ["same-origin", "none"] {
+            let admitted = gate.check(&browser(&[&cookie], Some(site)));
+            assert!(
+                matches!(&admitted, Ok(Credential::Device { name, .. }) if name == "Browser"),
+                "{site}: {admitted:?}"
+            );
+        }
+        let mut no_origin = browser(&[&cookie], Some("none"));
+        no_origin.remove(header::ORIGIN);
+        assert!(matches!(
+            gate.check(&no_origin),
+            Ok(Credential::Device { .. })
+        ));
+        // A just-paired cookie needs no renewal.
+        assert!(matches!(
+            gate.check(&browser(&[&cookie], Some("none"))),
+            Ok(Credential::Device {
+                renew_cookie: false,
+                ..
+            })
+        ));
+        // The control token, the header ways, still gets in on TLS.
+        let control = headers(&[
+            (header::HOST, "127.0.0.1:4455"),
+            (header::ORIGIN, "https://127.0.0.1:4455"),
+            (header::AUTHORIZATION, "Bearer t0ken"),
+        ]);
+        assert_eq!(gate.check(&control), Ok(Credential::Control));
+    }
+
+    /// ADR-0047: a cookie-admitted request must say it is same-origin or typed; a
+    /// same-site page on another port or a sibling subdomain, a cross-site one, and a
+    /// browser that sends no `Sec-Fetch-Site` are refused.
+    #[test]
+    fn the_device_cookie_needs_a_same_origin_fetch() {
+        let (gate, device) = tls_gate();
+        let cookie = format!("{DEVICE_COOKIE}={device}");
+        for site in [
+            None,
+            Some("same-site"),
+            Some("cross-site"),
+            Some("Same-Origin"),
+        ] {
+            assert_eq!(
+                gate.check(&browser(&[&cookie], site)),
+                Err(Refusal::CookieSite),
+                "{site:?}"
+            );
+        }
+        let mut twice = browser(&[&cookie], Some("same-origin"));
+        twice.append(
+            HeaderName::from_static("sec-fetch-site"),
+            HeaderValue::from_static("same-origin"),
+        );
+        assert_eq!(gate.check(&twice), Err(Refusal::CookieSite));
+    }
+
+    /// ADR-0047: a request carrying the cookie twice, on one line or two, is refused, so
+    /// a cookie planted beside the real one can't pick which counts.
+    #[test]
+    fn a_repeated_device_cookie_is_refused() {
+        let (gate, device) = tls_gate();
+        let one = format!("{DEVICE_COOKIE}={device}");
+        let same_line = format!("{one}; {DEVICE_COOKIE}=planted");
+        assert_eq!(
+            gate.check(&browser(&[&same_line], Some("same-origin"))),
+            Err(Refusal::CookieRepeated)
+        );
+        assert_eq!(
+            gate.check(&browser(&[&one, &one], Some("same-origin"))),
+            Err(Refusal::CookieRepeated)
+        );
+        assert!(Refusal::CookieRepeated.is_credential() && Refusal::CookieSite.is_credential());
+    }
+
+    /// ADR-0047: the cookie carries device tokens only. The control token in it, a wrong
+    /// token, and the same token under another name (a plain `jstream_device`, or the
+    /// name in another case) are refused.
+    #[test]
+    fn the_cookie_never_carries_the_control_token() {
+        let (gate, device) = tls_gate();
+        for cookie in [
+            format!("{DEVICE_COOKIE}=t0ken"),
+            format!("{DEVICE_COOKIE}=wr0ng"),
+            format!("{DEVICE_COOKIE}="),
+            format!("jstream_device={device}"),
+            format!("__host-jstream_device={device}"),
+            format!("x{DEVICE_COOKIE}={device}"),
+        ] {
+            assert_eq!(
+                gate.check(&browser(&[&cookie], Some("same-origin"))),
+                Err(Refusal::Token),
+                "{cookie}"
+            );
+        }
+    }
+
+    /// ADR-0047: the cookie is read only when neither `Authorization` nor a token
+    /// subprotocol is present, so a wrong one of those is not rescued by it.
+    #[test]
+    fn the_cookie_is_read_only_without_another_credential() {
+        let (gate, device) = tls_gate();
+        let cookie = format!("{DEVICE_COOKIE}={device}");
+        let mut with_auth = browser(&[&cookie], Some("same-origin"));
+        with_auth.insert(header::AUTHORIZATION, HeaderValue::from_static("Bearer no"));
+        assert_eq!(gate.check(&with_auth), Err(Refusal::Token));
+        for offered in [
+            "jstream, jstream.token.no",
+            "jstream.token.a, jstream.token.b",
+        ] {
+            let mut with_protocol = browser(&[&cookie], Some("same-origin"));
+            with_protocol.insert(
+                header::SEC_WEBSOCKET_PROTOCOL,
+                HeaderValue::from_static(offered),
+            );
+            assert_eq!(gate.check(&with_protocol), Err(Refusal::Token), "{offered}");
+        }
+        // Only `jstream` offered: no token subprotocol, so the cookie counts.
+        let mut plain = browser(&[&cookie], Some("same-origin"));
+        plain.insert(
+            header::SEC_WEBSOCKET_PROTOCOL,
+            HeaderValue::from_static("jstream"),
+        );
+        assert!(matches!(gate.check(&plain), Ok(Credential::Device { .. })));
+    }
+
+    /// ADR-0047: without TLS the cookie is never read, even on loopback.
+    #[test]
+    fn without_tls_the_cookie_is_ignored() {
+        let Ok(token) = Token::new("t0ken") else {
+            panic!("a valid token");
+        };
+        let devices = devices();
+        let device = paired(&devices, "Browser");
+        let gate = Gate::new(
+            &ServerConfig::new(token),
+            SocketAddr::from(([127, 0, 0, 1], 4455)),
+            devices,
+        );
+        let cookie = format!("{DEVICE_COOKIE}={device}");
+        let mut map = browser(&[&cookie], Some("same-origin"));
+        map.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("http://127.0.0.1:4455"),
+        );
+        assert_eq!(gate.check(&map), Err(Refusal::Token));
+    }
+
+    /// On a TLS listener the server's own origin is `https://`, a `Host` without a port
+    /// means 443, and device tokens are accepted beyond loopback.
+    #[test]
+    fn a_tls_listener_is_its_own_https_origin() {
+        let (gate, _) = tls_gate();
+        let request = |origin: &'static str| {
+            headers(&[
+                (header::HOST, "127.0.0.1:4455"),
+                (header::ORIGIN, origin),
+                (header::AUTHORIZATION, "Bearer t0ken"),
+            ])
+        };
+        assert_eq!(
+            gate.check(&request("https://127.0.0.1:4455")),
+            Ok(Credential::Control)
+        );
+        assert_eq!(
+            gate.check(&request("http://127.0.0.1:4455")),
+            Err(Refusal::Origin)
+        );
+        let Ok(token) = Token::new("t0ken") else {
+            panic!("a valid token");
+        };
+        let mut config = ServerConfig::new(token);
+        config.tls = true;
+        config.extra_hosts = vec!["studio.lan:443".into()];
+        let devices = devices();
+        let device = paired(&devices, "Tablet");
+        let wide = Gate::new(&config, SocketAddr::from(([0, 0, 0, 0], 443)), devices);
+        let bearer = format!("Bearer {device}");
+        let map = headers(&[
+            (header::HOST, "studio.lan"),
+            (header::ORIGIN, "https://studio.lan"),
+            (header::AUTHORIZATION, &bearer),
+        ]);
+        assert!(matches!(wide.check(&map), Ok(Credential::Device { .. })));
+    }
+
+    /// The cookie the server sets has every attribute ADR-0047 names, and a renewal
+    /// re-sets the presented value only when the credential asks for it.
+    #[test]
+    fn the_cookie_is_host_only_secure_http_only_and_strict() {
+        let value = device_cookie_header(b"0a1b").and_then(|v| v.to_str().ok().map(str::to_owned));
+        assert_eq!(
+            value.as_deref(),
+            Some(
+                "__Host-jstream_device=0a1b; Secure; HttpOnly; SameSite=Strict; Path=/; \
+                 Max-Age=2592000"
+            )
+        );
+        assert!(device_cookie_header(b"").is_none());
+        assert!(device_cookie_header(b"a;b").is_none());
+        let presented = browser(&[&format!("{DEVICE_COOKIE}=0a1b")], Some("none"));
+        let device = |renew_cookie| Credential::Device {
+            id: jstream_protocol::DeviceId::new("dev_1"),
+            name: "Browser".into(),
+            renew_cookie,
+        };
+        let mut response = axum::response::IntoResponse::into_response("ok");
+        renew_cookie(&device(false), &presented, &mut response);
+        renew_cookie(&Credential::Control, &presented, &mut response);
+        assert!(response.headers().get(header::SET_COOKIE).is_none());
+        renew_cookie(&device(true), &presented, &mut response);
+        let set = response.headers().get(header::SET_COOKIE);
+        assert!(
+            set.and_then(|v| v.to_str().ok())
+                .is_some_and(|v| v.starts_with("__Host-jstream_device=0a1b;")),
+            "{set:?}"
+        );
     }
 
     /// `POST /api/v1/pair` passes `Host` and `Origin` alone, and still needs both.

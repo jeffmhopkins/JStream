@@ -12,9 +12,10 @@
 //! - **Names.** A device's `hello` is sent on with `client_name` set to
 //!   `device:<name>`, so the engine's audit log names its calls that way whatever the
 //!   client calls itself.
-//! - **Pairing only on loopback.** A device token travels only over loopback or TLS. The
-//!   server has no TLS yet, so `pairing.start` fails with `action_failed` while it listens
-//!   anywhere but a loopback address.
+//! - **Pairing only on loopback or TLS.** A device token travels only over loopback or
+//!   TLS, so `pairing.start` fails with `action_failed` while the server listens anywhere
+//!   but a loopback address, unless the listener has TLS (`ServerConfig::tls`), which
+//!   it has no way to serve yet.
 //!
 //! The pairing code is in `pairing.start`'s answer and nowhere else: it is not logged,
 //! and the answer goes only to the client that asked (R-SEC-001).
@@ -34,8 +35,9 @@ pub(crate) struct Admitted {
     inner: Box<dyn Control>,
     credential: Credential,
     devices: Arc<Devices>,
-    /// Whether the server listens on a loopback address, where pairing is offered.
-    loopback: bool,
+    /// Whether pairing is offered: the server listens on a loopback address or on a TLS
+    /// listener.
+    pairing_offered: bool,
     /// Whether `hello` succeeded, which the calls answered here need too.
     greeted: AtomicBool,
     /// Numbers the requests answered here (`server_1`, ...).
@@ -47,13 +49,13 @@ impl Admitted {
         inner: Box<dyn Control>,
         credential: Credential,
         devices: Arc<Devices>,
-        loopback: bool,
+        pairing_offered: bool,
     ) -> Admitted {
         Admitted {
             inner,
             credential,
             devices,
-            loopback,
+            pairing_offered,
             greeted: AtomicBool::new(false),
             answered: AtomicU64::new(0),
         }
@@ -95,10 +97,10 @@ impl Admitted {
     }
 
     fn start_pairing(&self) -> Result<CallResult, ProtocolError> {
-        if !self.loopback {
+        if !self.pairing_offered {
             return Err(ProtocolError::ActionFailed {
-                reason: "pairing is offered only on a loopback address until the server \
-                         has TLS (ADR-0044)"
+                reason: "pairing is offered only on a loopback address or a TLS listener \
+                         (ADR-0044)"
                     .into(),
             });
         }
@@ -206,7 +208,7 @@ mod tests {
         }
     }
 
-    fn admitted(credential: Credential, loopback: bool) -> (Admitted, Arc<Mutex<String>>) {
+    fn admitted(credential: Credential, pairing_offered: bool) -> (Admitted, Arc<Mutex<String>>) {
         let name = Arc::new(Mutex::new(String::new()));
         let inner = Named {
             inner: MockEngine::new().connect(),
@@ -217,7 +219,7 @@ mod tests {
             Err(error) => panic!("devices: {error}"),
         };
         (
-            Admitted::new(Box::new(inner), credential, devices, loopback),
+            Admitted::new(Box::new(inner), credential, devices, pairing_offered),
             name,
         )
     }
@@ -240,6 +242,7 @@ mod tests {
         let device = Credential::Device {
             id: DeviceId::new("dev_1"),
             name: "Tablet".into(),
+            renew_cookie: false,
         };
         let (session, name) = admitted(device, true);
         assert!(block(session.hello(hello())).is_ok());
@@ -250,7 +253,7 @@ mod tests {
         assert_eq!(said(&name), "claude-desktop");
     }
 
-    /// Beyond loopback there is no TLS yet, so pairing is refused there.
+    /// Beyond loopback, without TLS, pairing is refused.
     #[test]
     fn pairing_is_refused_beyond_loopback() {
         let (session, _) = admitted(Credential::Control, false);

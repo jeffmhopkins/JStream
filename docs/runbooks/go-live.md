@@ -36,7 +36,7 @@ verified = { hash = "b3:18cd4472efb91ec3", by = "agent:claude@session_01WbL3WRbc
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:014d5b37cf28575f", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing: daemon/cli usage and server design gained pairing; going-live steps use the control token and unchanged commands; holds" }
+verified = { hash = "b3:809d505384cdad9d", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "ADR-0047: stale through server design's pairing page and cookie subsection; the go-live steps use the control token on loopback with unchanged commands; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
