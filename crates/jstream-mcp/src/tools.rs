@@ -362,7 +362,9 @@ fn events_tool() -> Tool {
          `events.dropped` (the server dropped `count` events because this \
          session fell behind; re-read the state). The once-a-second `stats.tick` \
          is not in `events`: each read returns the newest one as `stats` (running drop \
-         totals). Each comes with a `seq`, a sequence number of this MCP server, starting \
+         totals). Nor is `meters.tick`, about ten a second while the mixer runs: each \
+         read returns the newest one as `meters` (each source's and bus's audio levels, \
+         and the master's loudness). Each comes with a `seq`, a sequence number of this MCP server, starting \
          at 1 when your first call opened the session. Pass the returned `next` as \
          `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At \
          most {PAGE_SIZE} events come back at once; `more` says others are waiting. The \

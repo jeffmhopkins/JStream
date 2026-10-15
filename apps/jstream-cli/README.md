@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:f4deb0ade49b25cb", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: MCP proxy bullet adds that it lists the youtube tool only when the engine has YouTube (mcp.rs probe); rest holds" }
+verified = { hash = "b3:63ace699b3b92650", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b merge of #223 at 2971eae (main at 94fb25d, protocol 0.20): re-read; main's audio, vcam and e2e text holds beside this PR's optional YouTube client and MCP youtube-tool wiring" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -48,7 +48,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:fe1b4b933f3dba44", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: new MCP bullet: youtube.status asked over a second short session as jstream-cli, tool listed unless unavailable or the question fails; matches engine_has_youtube in mcp.rs" }
+verified = { hash = "b3:9118e0f489571a80", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b merge of #223 at 2971eae (main at 94fb25d, protocol 0.20): re-read; main's audio, vcam and e2e text holds beside this PR's optional YouTube client and MCP youtube-tool wiring" }
 -->
 
 ```sh
@@ -121,13 +121,15 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   grouping is one batch that creates a scene as a group, places it through a `scene:`
   source, and moves the items into it. The placement edits'
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
-  the item's own scene, which omitting it already means.
+  the item's own scene, which omitting it already means. Protocol 0.19's audio edits
+  (`source.set_audio`, `bus.*`, `send.*`), `bus.list` and `audio.reset_loudness` are not
+  in the CLI either.
   `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
   which is the whole target of a generic RTMP output. The CLI has no form for a
-  recording output or a YouTube-bound one yet, and none of protocol 0.18's YouTube
+  recording output or a YouTube-bound one yet, and none of protocol 0.20's YouTube
   actions and queries. An argument without an `rtmp` or `rtmps` scheme is a usage
   error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
@@ -165,7 +167,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   server URL, as `output.create` takes it; for any other output, its kind as JSON).
   `state get` prints the sources, then each
   scene in display order with its items, headed `scene <id> (<name>):` or `group <id>
-  (<name>):` by its role, then the outputs. `output status` prints
+  (<name>):` by its role, then the outputs; only `--json` shows the sources' audio, the
+  buses and the sends. `output status` prints
   `<id>: <state>, stream key set` (or `not set`), and, while the output runs,
   `, own encoder` or `, encoder shared with <id>, <id>`. An empty list prints `no scenes`,
   `no sources`, `no items` or `no outputs`.
@@ -182,6 +185,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   When the server dropped events because the CLI read too slowly, it prints
   `events.dropped <count>`. A pipeline drop sample prints
   `stats.tick seq <n> capture_frames <n> audio_frames <n> render_ticks <n> encode_frames <n> encode_blocks <n> output_packets <n>`.
+  Any other event, `meters.tick` among them, prints as its JSON.
 
 **MCP.** `jstream-cli mcp` is the stdio MCP proxy for an agent's MCP client to launch,
 for example:
@@ -242,7 +246,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:8f29c0756354c318", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: proxy design explains the separate probe session (the proxy's own says hello only at initialize with the agent's name) and a failed probe hiding the tool; Tests bullet names mcp.rs's test and the session count now 2 in run tests" }
+verified = { hash = "b3:78923f34c25a90cd", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b merge of #223 at 2971eae (main at 94fb25d, protocol 0.20): re-read; main's audio, vcam and e2e text holds beside this PR's optional YouTube client and MCP youtube-tool wiring" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

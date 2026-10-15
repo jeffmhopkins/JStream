@@ -36,7 +36,7 @@ verified = { hash = "b3:284f1e027ec86853", by = "agent:claude@session_01YKRrREb5
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:4b36225e34658469", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: stale via daemon Usage (YouTube bullet wording, MCP tool hidden without a client); these steps don't use YouTube sign-in; hold" }
+verified = { hash = "b3:ba7c243526825eb1", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b B3 round: stale via daemon Usage after the merge; generic RTMP steps don't use YouTube sign-in; hold" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -76,7 +76,8 @@ $cli = 'target\release\jstream-cli.exe'
    `& $cli --url ws://127.0.0.1:4460 events`. While the output runs, a `stats.tick` line
    comes about once a second. Its counters are running totals of dropped frames and
    packets since the daemon started, so all zeros is healthy. A counter that keeps
-   climbing is worth an issue.
+   climbing is worth an issue. While the program runs, `meters.tick` lines, the audio
+   levels, come about ten a second as well.
 5. **Go live:** the `output` tool with `{"op": {"type": "output.start", "output_id":
    "live"}}`, or `& $cli --url ws://127.0.0.1:4460 output start live`.
    Check: the events show `output.state_changed` going `starting`, then `active`, and
@@ -99,7 +100,7 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:350d14d21891033e", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b: stale via daemon Usage (YouTube bullet wording, MCP tool hidden without a client); these steps don't use YouTube sign-in; hold" }
+verified = { hash = "b3:c20cf5b8c66b3093", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "A6b merge of #223 at 2971eae (main at 94fb25d, protocol 0.20): re-read; main's audio, vcam and e2e text holds beside this PR's optional YouTube client and MCP youtube-tool wiring" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default
@@ -163,7 +164,9 @@ server URL and stream key from YouTube Studio.
 
 Signing in, to manage broadcasts through the API, is optional and Windows only. It
 needs a Google Cloud OAuth client of type "Desktop app" that you create yourself, with
-the YouTube Data API v3 enabled; this build ships none. Then:
+the YouTube Data API v3 enabled; this build ships none. The `youtube.*` calls below go
+through MCP's `youtube` tool, which is listed once a client is set, or through the
+WebSocket API; `jstream-cli` has no YouTube commands yet. Then:
 
 1. Start the daemon with `--youtube-client <the client's JSON>`, or with
    `JSTREAM_YOUTUBE_CLIENT_ID` (and `JSTREAM_YOUTUBE_CLIENT_SECRET`) set
@@ -173,10 +176,16 @@ the YouTube Data API v3 enabled; this build ships none. Then:
    it returns, and approve.
 3. `youtube.status` answers `signed_in`. The refresh token is in Credential Manager, so
    a restart stays signed in.
-4. Create or list a broadcast and bind a stream with the `youtube.*` actions, then
-   create an output with the `youtube { broadcast_id }` target and start it.
+4. Create a broadcast (`youtube.create_broadcast`) or pick one
+   (`youtube.list_broadcasts`), and bind a stream to it (`youtube.bind_broadcast`).
+   Create an output with the `youtube { broadcast_id }` target and start it.
    `youtube.health_changed` reports the stream's health.
-5. `youtube.sign_out` removes the token.
+5. Starting the output doesn't take the broadcast live: broadcasts are created without
+   auto-start. Once the health is good, call `youtube.transition_broadcast` with `to:
+   testing` to preview it (optional), then `to: live`.
+6. To end, call `youtube.transition_broadcast` with `to: complete`, then stop the
+   output.
+7. `youtube.sign_out` removes the token.
 
 This path has not yet been run on hardware: issue #337 holds its run, step by step.
 

@@ -121,11 +121,12 @@ fn with_youtube(engine: Engine, client: Option<youtube::Client>) -> (Engine, boo
 }
 
 /// The Windows backends. Creating them opens no device: each opens what it needs when
-/// a pipeline starts. Windows has no virtual camera sink yet.
+/// a pipeline starts. The virtual camera (`WindowsVcam`) checks on `output.start` that
+/// this Windows has one and that it is registered (`--register-vcam`).
 #[cfg(windows)]
 fn windows_backends() -> anyhow::Result<Backends> {
     use jstream_platform_windows::{
-        MfCodecs, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu,
+        MfCodecs, MfVideoDevices, QpcClock, WasapiAudio, WgcCapture, WindowsGpu, WindowsVcam,
     };
     Ok(Backends {
         clock: Arc::new(QpcClock::new().context("could not open the QPC media clock")?),
@@ -134,7 +135,7 @@ fn windows_backends() -> anyhow::Result<Backends> {
         audio: Arc::new(WasapiAudio::new()),
         codecs: Arc::new(MfCodecs::new()),
         gpu: Arc::new(WindowsGpu::new()),
-        vcam: None,
+        vcam: Some(Box::new(WindowsVcam::new())),
     })
 }
 
