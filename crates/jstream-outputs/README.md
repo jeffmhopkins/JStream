@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-outputs/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-outputs", "docs/ARCHITECTURE.md#threading", "docs/adr/0051-youtube-without-a-required-oauth-client.md", "docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:3bfb1c14434e16e3", by = "agent:claude", note = "re-read the Tests paragraph against the shutdown_over_tls test now waiting for the server's read timeout before the client shuts down (a test-only ordering fix for macOS EINVAL); the test list and every Transport claim still hold" }
+verified = { hash = "b3:4138585786db2eca", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "main merge into #367: re-read; main's shutdown_over_tls test note kept, the generic RTMP/RTMPS output cites ADR-0051, which keeps that output; holds" }
 -->
 
 Layer-4 stream outputs ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). The

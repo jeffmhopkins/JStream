@@ -182,7 +182,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:9b817c7bfb94016b", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "#299 N1: sync now sets each input's activity gain and sends before its fader and mute, so a new muted input never sounds before its routing; Audio routing bullets name no order; holds" }
+verified = { hash = "b3:7653ac4edb6e307a", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "main merge into #367: stale via ARCH#protocol, whose only change is the YouTube link to ADR-0051; re-read the engine design, which names no YouTube scope; holds" }
 -->
 
 ### Engine and sessions
