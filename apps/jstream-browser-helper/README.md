@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-browser-helper/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*", "crates/jstream-browser/README.md#purpose"]
-verified = { hash = "b3:4112fb915a83dc30", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 round 1: stale only via the browser README's purpose (request policy wording); helper sources untouched, text holds" }
+verified = { hash = "b3:6a98c4aef7f43ff4", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b2 merge of C8 round 1: stale only via the browser README's seam paragraph; helper sources untouched, holds" }
 -->
 
 CEF's subprocess exe for browser sources
