@@ -769,6 +769,8 @@ id = "CL1"
 milestone = "M3"
 title = "CLAP plugin host"
 status = "planned"
+prs = [272]
+note = "part 1 merged"
 
 [[item]]
 id = "WA1"

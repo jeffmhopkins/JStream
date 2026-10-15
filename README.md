@@ -32,9 +32,8 @@ engine and MCP come before the GUI ([ADR-0010](docs/adr/0010-headless-first-mile
 <!-- @section
 -->
 
-M0 is done apart from spike S4's Windows run, M1 (the headless engine) is most of the way there, and M2 (the UI) has
-started. Item by item status is in [Progress](#progress); the plan is in
-[ROADMAP.md](ROADMAP.md).
+How far each milestone has got is in [Progress](#progress), and the plan is in
+[ROADMAP.md](ROADMAP.md). In short:
 
 - **Going live from the headless daemon on Windows.** `jstream-daemon` captures the
   display, composites the program scene on the GPU (wgpu), encodes H.264 and AAC with
@@ -74,11 +73,11 @@ match the PR titles that deliver them.
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
 | [M1a: Thin slice to YouTube](ROADMAP.md#m1) | `████████░░` 83% | 15 | 2 | 1 |
-| [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 82% | 29 | 3 | 3 |
-| [M1c: Virtual camera](ROADMAP.md#m1) | `███████░░░` 66% | 4 | 1 | 1 |
-| [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 77% | 7 | 1 | 1 |
-| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 31% | 6 | 7 | 6 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 12% | 1 | 0 | 7 |
+| [M1b: Scenes and mixing](ROADMAP.md#m1) | `████████░░` 83% | 29 | 3 | 3 |
+| [M1c: Virtual camera](ROADMAP.md#m1) | `███████░░░` 67% | 4 | 1 | 1 |
+| [M1d: Hardening](ROADMAP.md#m1) | `████████░░` 78% | 7 | 1 | 1 |
+| [M2: UI](ROADMAP.md#m2) | `███░░░░░░░` 32% | 6 | 7 | 6 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `█░░░░░░░░░` 13% | 1 | 0 | 7 |
 
 73 of 106 items are merged; 6 of those still wait on a run on Windows hardware.
 
@@ -237,7 +236,7 @@ match the PR titles that deliver them.
 | E3c | Encode from GPU frames | ⏳ planned |  |
 | X1 | Full 3D transforms and WGSL effect packs | ⏳ planned |  |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned |  |
-| CL1 | CLAP plugin host | ⏳ planned |  |
+| CL1 | CLAP plugin host | ⏳ planned: part 1 merged | #272 |
 | WA1 | WASM automation plugins | ⏳ planned |  |
 | MAC1 | macOS platform crate | ⏳ planned |  |
 | LNX1 | Linux codec path and platform crate | ⏳ planned |  |
