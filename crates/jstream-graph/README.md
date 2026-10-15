@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:608d2a90706bcfd0", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (#205 collection file, E1, Y1) into B5: collection file paragraph now says sources save duplicated_from as stored (persist/mod.rs FileSource); tests paragraph names the clone in the fixture and the new clone_links_round_trip test; rest re-read against apply.rs" }
+verified = { hash = "b3:dba4ef7364cdd881", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Cascade from ARCH#data-model's Not-yet wording; re-read, the collection-file paragraph already says a mismatched kind_version is refused until kinds ship settings migrations, which agrees" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
