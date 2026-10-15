@@ -447,7 +447,7 @@ prs = [231]
 id = "D5"
 milestone = "M1b"
 title = "Audio in the protocol"
-status = "review"
+status = "done"
 prs = [240]
 
 [[item]]
