@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-browser/src/**", "crates/jstream-browser/examples/**", "crates/jstream-browser/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTURE.md#browser-source"]
-verified = { hash = "b3:db5346e471ecf3b1", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 merge of C8 round 1 (via C8b2): seam paragraph takes C8's use_device wording (a host-opened device for now; here it also names the helper's adapter); sandboxed-helper, pipe and frame bullets unchanged" }
+verified = { hash = "b3:13765b8bbd86e02d", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 merge of C8's N5 (via C8b2): intro keeps the sandboxed-helper wording and takes 'a GPU device the host hands it'; seam paragraph and helper, pipe and frame bullets re-read; holds" }
 -->
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):

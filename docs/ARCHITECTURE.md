@@ -117,7 +117,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:8bc8d4b7a50e236c", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 merge-only round (C8b2, with main, merged in): re-read the hosts table and crate map with main's daemon virtual-camera and ui-e2e rows next to this PR's sandboxed helper rows; both hold together" }
+verified = { hash = "b3:7d6678b2ba01bc9a", by = "agent:claude@session_01E4Mb9bbGDC2GsaQqW2Vb3L", note = "C8b1 merge-only round (C8 with main via C8b2): main's layer-0 jstream-anim row sits beside this PR's jstream-browser row (ADR-0048, helper feature) and the apps helper mention; lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
