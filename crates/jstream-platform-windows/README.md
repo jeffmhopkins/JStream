@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:26613ca10ea82697", by = "agent:claude@session_01PHLTrve4yCsowgu7Zq7xwe", note = "Merge of main (E3a GPU capture, G3a WindowsVcam, Y2) into H1: re-read the section; main's capture, vcam and credential bullets and Not yet line kept as main wrote them; the check_media_foundation bullet sits before Not yet unchanged; Tests lists main's ring, vcam and credential tests with the MF decision, probe and edition-read tests" }
+verified = { hash = "b3:ae8288cdee1bd783", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: platform-windows text is main's; E1 doesn't touch it" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
