@@ -1,7 +1,7 @@
 [package]
 name = "jstream-sources"
 version = "0.0.0"
-description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour and image sources."
+description = "Source kinds: the `Source` trait, the kind registry that supplies descriptors to the engine, and the built-in colour, image and text sources."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -16,6 +16,8 @@ unsafe_allowed = false
 workspace = true
 
 [dependencies]
+# Glyph coverage for the text source (ADR-0031).
+ab_glyph_rasterizer.workspace = true
 # Image decoders (ADR-0031: pure-Rust image crates, the same on every platform).
 gif.workspace = true
 image-webp.workspace = true
@@ -24,6 +26,8 @@ jstream-protocol.workspace = true
 png.workspace = true
 # Settings values and the kind descriptors' defaults (ADR-0025).
 serde_json.workspace = true
+# Fonts for the text source (ADR-0031: pure-Rust font crates).
+skrifa.workspace = true
 thiserror.workspace = true
 zune-core.workspace = true
 zune-jpeg.workspace = true

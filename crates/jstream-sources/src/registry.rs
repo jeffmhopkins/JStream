@@ -4,6 +4,7 @@
 use crate::color::ColorKind;
 use crate::describe::described;
 use crate::image::ImageKind;
+use crate::text::TextKind;
 use crate::{Context, Source, SourceError, SourceKind};
 use jstream_protocol::{KindDescriptor, Settings};
 use std::collections::BTreeMap;
@@ -15,7 +16,7 @@ pub struct Registry {
 
 impl Registry {
     /// The built-in kinds (ADR-0031, docs/adr/0031-source-types-and-decoding-scope.md).
-    /// `color` and `image` produce frames. `display`, `media`, `text`, `webcam` and
+    /// `color`, `image` and `text` produce frames. `display`, `media`, `webcam` and
     /// `window` are described only, so their sources can be created and configured but
     /// fail to start with [`SourceError::NotBuilt`].
     pub fn builtin() -> Self {
@@ -25,6 +26,7 @@ impl Registry {
         };
         add(Box::new(ColorKind::new()));
         add(Box::new(ImageKind::new()));
+        add(Box::new(TextKind::new()));
         for kind in described() {
             add(Box::new(kind));
         }
