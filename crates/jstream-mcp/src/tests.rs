@@ -17,7 +17,8 @@ use std::sync::{Arc, Mutex};
 /// A mock session that records every `hello` and can be made to lose its connection:
 /// for calls only (`lost`), or for good, as `WsControl` does once its socket closes
 /// (`closed`: `hello` fails too). With `events_ended`, its event subscriptions have
-/// already ended, as they have once a socket closed.
+/// already ended, as they have once a socket closed. With `silent`, `hello` is never
+/// answered, as by an engine that accepted the connection and then hangs.
 struct Recording {
     inner: MockControl,
     engine: MockEngine,
@@ -25,6 +26,7 @@ struct Recording {
     lost: AtomicBool,
     closed: AtomicBool,
     events_ended: AtomicBool,
+    silent: AtomicBool,
 }
 
 fn socket_closed<T>() -> BoxFuture<'static, Result<T, ControlError>>
@@ -44,6 +46,9 @@ impl Control for Recording {
             .push(hello.clone());
         if self.closed.load(Ordering::Relaxed) {
             return socket_closed();
+        }
+        if self.silent.load(Ordering::Relaxed) {
+            return Box::pin(std::future::pending());
         }
         self.inner.hello(hello)
     }
@@ -80,6 +85,7 @@ fn fixture() -> Fixture {
         lost: AtomicBool::new(false),
         closed: AtomicBool::new(false),
         events_ended: AtomicBool::new(false),
+        silent: AtomicBool::new(false),
     });
     let server = Server::new(Arc::clone(&control) as Arc<dyn Control>);
     Fixture {
@@ -293,6 +299,41 @@ fn handshake_list_and_call_round_trip() {
     );
     assert_eq!(ok(&started)["result"], json!({"kind": "action"}));
     // One session, opened once (at `initialize`), under the MCP client's name.
+    assert_eq!(f.hello_names(), ["agent-x"]);
+}
+
+/// An engine that accepts the connection but never answers `hello` doesn't hold
+/// `initialize` until the server's handshake timeout closes it (#140 N2): `initialize`
+/// answers once the open-early wait runs out, and the next tool call sends `hello` again.
+#[test]
+fn initialize_answers_when_hello_never_does() {
+    let mut f = fixture();
+    f.server = Server::new(Arc::clone(&f.control) as Arc<dyn Control>)
+        .with_open_early_timeout(std::time::Duration::from_millis(50));
+    f.control.silent.store(true, Ordering::Relaxed);
+    let started = std::time::Instant::now();
+    let init = f.initialize();
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(5),
+        "{:?}",
+        started.elapsed()
+    );
+    assert_eq!(init["protocolVersion"], "2025-11-25");
+    assert_eq!(f.hello_names(), ["agent-x"]);
+
+    f.control.silent.store(false, Ordering::Relaxed);
+    ok(&f.call_tool("scene", json!({"op": {"type": "scene.list"}})));
+    assert_eq!(f.hello_names(), ["agent-x", "agent-x"]);
+}
+
+/// A `hello` that is answered in time isn't cut short by the open-early wait.
+#[test]
+fn initialize_opens_the_session_within_the_wait() {
+    let mut f = fixture();
+    f.server = Server::new(Arc::clone(&f.control) as Arc<dyn Control>)
+        .with_open_early_timeout(std::time::Duration::from_secs(60));
+    f.initialize();
+    ok(&f.call_tool("scene", json!({"op": {"type": "scene.list"}})));
     assert_eq!(f.hello_names(), ["agent-x"]);
 }
 
