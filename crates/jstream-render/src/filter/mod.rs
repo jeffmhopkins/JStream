@@ -84,8 +84,9 @@ impl VideoFilter {
     }
 
     /// The size this filter draws for an input of `width` by `height`. Most filters keep
-    /// the size; aspect ratio and padding filters change it, which changes the source's
-    /// reported size for every placement.
+    /// the size; some change it (for example aspect ratio, padding, a drop shadow, an
+    /// outside outline or a glow), which changes the source's reported size for every
+    /// placement.
     pub fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
         self.pass.output_size(width, height)
     }

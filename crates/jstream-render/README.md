@@ -16,7 +16,7 @@ a single canvas.
 <!-- @section
 covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:2329e77ca7458263", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V2: re-read Purpose; the merge only moves FrameSync staging and narrows an allow in filter/; Purpose still points filters at #filters and the chain runtime at V0; holds" }
+verified = { hash = "b3:11901433da1b7bf2", by = "agent:claude", note = "re-read after the down.wgsl partial-block fix and the harness/doc wording edits; Purpose states none of it; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -113,7 +113,7 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:3bd09bd790b7e4d9", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V2: re-read Design against compositor.rs apply_filter (staging now after encode) and the multipass kinds; no new thread, I/O or steady-path allocation; holds" }
+verified = { hash = "b3:e71590d197886671", by = "agent:claude", note = "re-read after the down.wgsl per-axis sample count change: no new pass, thread or steady-path allocation (apply_filter still has no steady-path caller); the resources table's video delay row unchanged; holds" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
@@ -281,7 +281,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/filter/**"]
 depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md"]
-verified = { hash = "b3:9a2e17bb78e09948", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V2: harness bullets now say FrameSync staged after recording and frame.time wraps daily, matching compositor.rs and prelude.wgsl; video_delay reads ctx.clock().seconds (f64), not frame.time, so it fits; V2 kind text unchanged; holds" }
+verified = { hash = "b3:d52b8b91576190db", by = "agent:claude", note = "B1: harness bullet now says multi-pass kinds also create up to three output-size scratch layers per call (gauss.rs down/across/both, outline.rs) and that V0 pools them, the video delay ring being the only kept state; N1: pixelate's 'exact up to 8 px' now covers partial edge blocks, matching down.wgsl's per-axis sample count; N2: output_size list names shadow/outline/glow; rest re-read, holds" }
 -->
 
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
@@ -302,7 +302,8 @@ kinds.
 
 - `VideoFilter::new(kind_id, settings)` builds a kind's pass; `set_settings` updates it
   in place, keeping its state; `output_size` is the size it draws for a given input,
-  so a filter can change the source's reported size (aspect ratio, padding).
+  so a filter can change the source's reported size (for example aspect ratio, padding,
+  a drop shadow, an outside outline or a glow).
 - `Compositor::apply_filter(filter, input, clock)` draws the filter over `input` into a
   new layer of that size, in one submit. `clock` is the media-clock time, for filters
   that move or hold frames. An imported input's `FrameSync` is staged once the pass has
@@ -319,8 +320,11 @@ kinds.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
 - Each draw creates its two small uniform buffers, two views and a bind group, and each
-  `apply_filter` its output layer. Pooling them is the chain runtime's job (V0); until
-  then a filter costs those small allocations per frame.
+  `apply_filter` its output layer. A multi-pass filter also creates its `Ctx::scratch`
+  layers on every call: up to three, each at most the filter's output size (about
+  16.6 MB at 1080p). Pooling all of these is the chain runtime's job (V0); until then a
+  filter costs those allocations per frame. The video delay's ring of held frames is
+  the one thing a filter keeps between frames.
 
 **The kinds.** Each group documents its kinds here as it lands.
 
@@ -339,8 +343,8 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
   don't darken. The area's edge is hard (no feather), and the blur inside it still
   reads pixels just outside it.
 - `pixelate`: `block_size` (1 to 256 px, default 16) and the same area. Blocks are
-  aligned to the top-left and are the mean of their pixels: exact up to 8 px, an 8 x 8
-  grid of samples above that.
+  aligned to the top-left and are the mean of their pixels: exact up to 8 px, partial
+  edge blocks included, an 8 x 8 grid of samples above that.
 - `drop_shadow`: `color` (with alpha, default `#000000b3`), `offset_x`, `offset_y`
   (-200 to 200 px, default 8) and `blur` (0 to 100 px, default 8). The input's alpha is
   blurred, tinted, moved and drawn under the input. There is no spread.

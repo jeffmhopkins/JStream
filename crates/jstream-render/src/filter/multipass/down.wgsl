@@ -1,5 +1,6 @@
 // Box downsample: each output texel is the mean of a `block` x `block` square of the
-// frame, sampled on a `samples` x `samples` grid (every texel when samples == block).
+// frame, cut at the frame's edge, sampled on a grid of up to `samples` per axis (every
+// texel when the square is no wider than `samples`).
 // The input sits at `origin` in the frame; `edge` is load_edge's.
 
 struct Params {
@@ -20,14 +21,16 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let lo = out_px(in.pos) * p.block;
     let hi = min(lo + vec2<i32>(p.block), vec2<i32>(p.frame_w, p.frame_h));
     let len = max(hi - lo, vec2<i32>(1));
-    let n = p.samples;
+    // A partial block at the right or bottom edge takes fewer samples, so a block no
+    // wider than `samples` reads each of its texels exactly once.
+    let n = min(len, vec2<i32>(p.samples));
     var sum = vec4<f32>(0.0);
-    for (var j = 0; j < n; j++) {
-        for (var i = 0; i < n; i++) {
+    for (var j = 0; j < n.y; j++) {
+        for (var i = 0; i < n.x; i++) {
             // floor((k + 0.5) * len / n), the centre of the k-th of n equal strata.
             let at = lo + ((vec2<i32>(i, j) * 2 + 1) * len) / (2 * n);
             sum += load_edge(at - origin, p.edge);
         }
     }
-    return sum / f32(n * n);
+    return sum / f32(n.x * n.y);
 }

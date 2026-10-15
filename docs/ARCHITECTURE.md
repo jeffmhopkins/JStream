@@ -717,7 +717,7 @@ verified = { hash = "b3:d7965698ca1720f8", by = "agent:claude@session_01BL6HM3DJ
 <!-- @section
 covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:9e9a89ce5f63e412", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "Merge of #300 review fixes into V2: re-read; the merge changes no text here, filters still draw one premultiplied image into one of the filter's output_size, chain runtime unbuilt; holds" }
+verified = { hash = "b3:268b77d6060f8b0e", by = "agent:claude", note = "re-read the filter sentence after the down.wgsl fix and doc wording edits; apply_filter still draws one Rgba16Float image into one of output_size; holds" }
 -->
 
 The Windows path is validated by **spike S1 in M0** before M1 builds on it:

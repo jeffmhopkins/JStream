@@ -112,6 +112,14 @@ mod tests {
         near(&out, 1, 1, R, 1);
         near(&out, 4, 1, B, 1);
         near(&out, 7, 3, B, 1);
+        // A partial block mixing colours is the exact mean of its pixels: 5 columns
+        // alternating red and blue, blocks of 3, so the last block is [B R].
+        let pixels: Vec<[u8; 4]> = (0..3)
+            .flat_map(|_| (0..5).map(|x| if x % 2 == 0 { R } else { B }))
+            .collect();
+        let input = image(&opened, 5, &pixels);
+        let out = run(&mut opened, &mut pixelate, &input, 0.0);
+        near(&out, 4, 2, [188, 0, 188, 255], 2);
         // Blocks past 8 px are sampled on an 8 x 8 grid; a flat block stays flat.
         let pixels: Vec<[u8; 4]> = (0..16)
             .flat_map(|_| (0..32).map(|x| if x < 16 { R } else { B }))
