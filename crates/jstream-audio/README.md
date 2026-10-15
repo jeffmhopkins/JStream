@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-audio/src/**", "crates/jstream-audio/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-audio", "docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:4930ce26f7f6d3a4", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 part 2 (#272 review N1): re-read; insert_host_filter docs in handle.rs gain the one-filter-per-fresh-block contract, which the API bullet's 'block must be initialised ... host ready' still matches; rest unchanged" }
+verified = { hash = "b3:7543c4dfe15938d8", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240 squashed) into D6: main's text plus D6's set_activity_gain bullet and activity-gain line; holds against handle.rs and rt/mixer.rs" }
 -->
 
 The engine's real-time audio mixer. Layer 2: no I/O and no platform code. It depends
@@ -31,9 +31,11 @@ compensates their latency. It also has
 [ADR-0027](../../docs/adr/0027-program-master-and-output-chains.md)'s audio half: a
 master chain on every bus that feeds an output, output taps with their own chains for
 outputs that encode their own audio, and each bus's output before the master chain for
-monitoring. Activity gains (audio that follows the program), sidechain keys in the mixer
+monitoring. Each input has an activity gain (audio that follows the program) before
+its sends. Sidechain keys in the mixer
 and the monitor devices themselves come later. The true-peak and loudness meters
-([Meters](#meters)) exist as DSP but don't run in the mixer yet.
+([Meters](#meters)) exist as DSP but don't run in the mixer yet; `jstream-core`'s
+mixer thread runs them on the master block the mixer returns.
 
 **Time line.** Engine frame `n` is media time `n / rate` on the media clock
 ([ADR-0014](../../docs/adr/0014-media-clock.md)), with `rate` the engine rate (48 kHz by
@@ -58,10 +60,17 @@ stamped on the clock, and no device is the master.
   `BusControl`; `BusControl::remove` removes it, and `Mixer::bus` is the master's,
   which can't be removed. Like inputs, buses change through the command queue while
   `poll` runs. At most 16 buses, the master included. A bus's `BusId` is never reused,
-  so a send to a removed bus stays inert even after a new bus takes its buffer.
+  so a send to a removed bus stays inert even after a new bus takes its buffer. It is
+  also tagged with its mixer, so an input ignores another mixer's bus,
+  `Mixer::bus_block` answers `None` for one and `add_output_tap` refuses one
+  (`Removed`); `BusId::MASTER` names every mixer's master.
 - `InputControl::set_send` (linear or dB, 0 to +24 dB) sends the input into a bus
   after its fader and mute, or changes that send's gain; `remove_send` stops it. A new
   bus has no sends. A send that starts, stops or changes ramps over one block.
+- `InputControl::set_activity_gain` (linear, 0 to 1) scales every send of the input,
+  after its fader, mute and meter: ADR-0028's activity gain, which `jstream-core` sets
+  from what the Program mix shows. It ramps over one block with the sends, and a new
+  input starts at 1.
 - `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
   filter (`FilterSpec`: gain, noise gate, compressor, limiter or delay, built at the
   engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
@@ -176,7 +185,7 @@ simulations need it to finish in seconds.
 <!-- @section
 covers = ["crates/jstream-audio/src/rt/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-001", "docs/RULES.md#R-RT-003"]
-verified = { hash = "b3:b5eca1518191949b", by = "agent:claude@session_01Fdcnfj3q78X58b3kEQDyAo", note = "CL1 merge of main (#215): re-read; ARCH#threading's render-snapshot change doesn't touch the mixer; this PR's CLAP filters paragraph checked against rt/host.rs and chain.rs" }
+verified = { hash = "b3:d06627ad202b90d8", by = "agent:claude@session_01PpGi5RaafNDfvfKXaUsoV7", note = "Merge of main (D5 #240) into D6: main's text plus D6's 'activity gains' in the mixer thread's work; holds" }
 -->
 
 Everything that runs on a real-time thread lives in `src/rt/`
@@ -184,7 +193,8 @@ Everything that runs on a real-time thread lives in `src/rt/`
 **audio thread** (the platform backend's, one per stream) calls
 `InputProducer::push_packet`. That call downmixes, tracks the device clock, resamples,
 and writes into the input's ring. The **mixer thread** calls `Mixer::poll`, which reads
-every ring for the block's window, applies faders and sends, sums each bus and meters.
+every ring for the block's window, applies faders, activity gains and sends, sums each
+bus and meters.
 Neither allocates,
 locks, blocks or logs after setup ([R-RT-001](../../docs/RULES.md#R-RT-001)). They
 share only the rings and atomics: gains, sends, meters and counters
@@ -273,7 +283,10 @@ is two atomic stores: the gain first, then the target, with release ordering so 
 mixer never applies a stale gain to a new target (a retarget only happens once the old
 bus is gone from the slot). A send counts only while its slot
 holds the bus it names. Bus ids are never reused, so a send to a removed bus stays
-silent even after another bus takes the slot. The mixer remembers which bus each send's
+silent even after another bus takes the slot. Each `ControlPlane` takes a tag from a
+process-wide counter when its mixer is made, and stamps it on its `BusId`s; the
+control handles check it before touching a send or adding an output tap, so another
+mixer's bus id never reaches the matrix or a tap (the master's id carries tag 0, valid for any mixer). The mixer remembers which bus each send's
 ramp was for, and starts again from silence when that changes. Skipping silent sends
 keeps the cost at one pass over the block per active send. Sends are post-fader only,
 as ADR-0028 decides.
@@ -523,7 +536,7 @@ descriptors and the protocol. The kernels' cost in the mixer is measured in
   thread that calls it, which must catch a panic there, mute the bus and raise the
   error event. `rt_panic_is_reported` lands with that engine thread.
 - **The rest of the audio model** ([ADR-0028](../../docs/adr/0028-audio-model-v2.md)):
-  the activity gain per source, sidechain keys in the mixer's chains (the compressor
+  sidechain keys in the mixer's chains (the compressor
   has one; the mixer needs the key's source processed first), running the true-peak and
   loudness meters in the mixer (for the
   master bus and subscribed buses and sources) with their meter-stream fields and
