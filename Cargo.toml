@@ -46,6 +46,7 @@ js-sys = { version = "0.3", default-features = false, features = ["std"] }
 jstream-audio = { path = "crates/jstream-audio" }
 jstream-control = { path = "crates/jstream-control" }
 jstream-core = { path = "crates/jstream-core" }
+jstream-effects = { path = "crates/jstream-effects" }
 jstream-encode = { path = "crates/jstream-encode" }
 jstream-graph = { path = "crates/jstream-graph" }
 jstream-mcp = { path = "crates/jstream-mcp" }
@@ -61,6 +62,10 @@ jstream-server = { path = "crates/jstream-server" }
 jstream-sources = { path = "crates/jstream-sources" }
 jstream-vcam-proto = { path = "crates/jstream-vcam-proto" }
 jstream-youtube = { path = "crates/jstream-youtube" }
+# WGSL parsing and validation for effect packs (`jstream-effects`). Pinned to wgpu's
+# exact version (ADR-0004), so it is the copy wgpu already brings in. `wgsl-in` is the
+# only feature: no back ends, no `std`-only extras.
+naga = { version = "=30.0.1", default-features = false, features = ["wgsl-in"] }
 # PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.

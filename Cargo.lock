@@ -2358,6 +2358,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-effects"
+version = "0.0.0"
+dependencies = [
+ "jstream-protocol",
+ "naga",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "toml 1.1.8+spec-1.1.0",
+ "tracing",
+]
+
+[[package]]
 name = "jstream-encode"
 version = "0.0.0"
 dependencies = [
