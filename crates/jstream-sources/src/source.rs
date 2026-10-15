@@ -395,3 +395,104 @@ mod tests {
         assert!(check_opened(&inside, &base, &joined).is_ok());
     }
 }
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::{AssetRoots, Opened, open_inside};
+    use crate::SourceError;
+    use jstream_protocol::AssetRoot;
+    use std::fs;
+    use std::io::Write;
+    use std::path::{Path, PathBuf};
+    use std::process::Command;
+
+    /// Removes the folder however the test ends, a failed assertion included.
+    struct TempDir(PathBuf);
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// Checks that `rel`, which goes through a link inside `root` to `outside.png`
+    /// outside it, is refused by `resolve`, `read` and the walk itself, while the
+    /// target is reachable through the link.
+    fn refused(roots: &AssetRoots, base: &Path, rel: &str) {
+        assert_eq!(
+            fs::read(base.join(rel)).expect("the link leads to the file outside"),
+            b"outside"
+        );
+        assert!(matches!(
+            roots.resolve(AssetRoot::Collection, rel),
+            Err(SourceError::AssetEscapesRoot { .. })
+        ));
+        assert!(matches!(
+            roots.read(AssetRoot::Collection, rel, 1024),
+            Err(SourceError::AssetEscapesRoot { .. })
+        ));
+        assert!(matches!(open_inside(base, rel), Err(Opened::Escapes)));
+    }
+
+    #[test]
+    fn links_inside_the_root_to_outside_are_refused() {
+        let temp = TempDir(
+            std::env::temp_dir().join(format!("jstream-sources-links-{}", std::process::id())),
+        );
+        let dir = &temp.0;
+        let _ = fs::remove_dir_all(dir);
+        let root = dir.join("root");
+        let outside = dir.join("outside");
+        fs::create_dir_all(&root).expect("a temp folder");
+        fs::create_dir_all(&outside).expect("a temp folder");
+        fs::write(root.join("a.png"), b"inside").expect("a file");
+        fs::write(outside.join("outside.png"), b"outside").expect("a file");
+        let roots = AssetRoots {
+            collection: Some(root.clone()),
+            app: None,
+        };
+        let base = root.canonicalize().expect("the root");
+
+        // A file inside the root reads.
+        assert_eq!(
+            roots
+                .read(AssetRoot::Collection, "a.png", 1024)
+                .expect("inside"),
+            b"inside"
+        );
+
+        // A junction needs no privilege, so it is always tested.
+        let made = Command::new("cmd")
+            .arg("/C")
+            .arg("mklink")
+            .arg("/J")
+            .arg(root.join("junction"))
+            .arg(&outside)
+            .output()
+            .expect("cmd runs");
+        assert!(made.status.success(), "mklink /J: {made:?}");
+        refused(&roots, &base, "junction/outside.png");
+
+        // Symbolic links need a privilege (or Developer Mode) the runner may not have.
+        match std::os::windows::fs::symlink_dir(&outside, root.join("dirlink")) {
+            Ok(()) => refused(&roots, &base, "dirlink/outside.png"),
+            Err(e) => {
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "note: directory symlink not tested, can't create one: {e}"
+                );
+            }
+        }
+        match std::os::windows::fs::symlink_file(
+            outside.join("outside.png"),
+            root.join("filelink.png"),
+        ) {
+            Ok(()) => refused(&roots, &base, "filelink.png"),
+            Err(e) => {
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "note: file symlink not tested, can't create one: {e}"
+                );
+            }
+        }
+    }
+}
