@@ -2,22 +2,25 @@
 //! the engine (`jstream-core`, which clients never depend on). Enabled by the `mock`
 //! feature.
 //!
-//! [`MockEngine`] holds a tiny collection (scenes, items and sources) plus a set of outputs,
-//! and follows the protocol's rules for it: the handshake, atomic batches that bump `rev`
-//! by one, `expected_rev` conflicts, idempotency keys, every query, `state.changed` and
-//! `output.state_changed` events. Each [`MockEngine::connect`] opens one client session.
-//! It does no undo, persistence or real output work.
+//! [`MockEngine`] holds a tiny collection (scenes, items, sources and configured outputs),
+//! the outputs' runtime state and an in-memory stand-in for the stream-key store, and
+//! follows the protocol's rules for them: the handshake, atomic batches that bump `rev`
+//! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
+//! stream-key actions, `state.changed` and `output.state_changed` events. Each
+//! [`MockEngine::connect`] opens one client session. It does no undo, persistence or
+//! real output work.
 
 use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
     Action, Batch, Call, CallResult, ClientId, Crop, Edit, EntityKind, Event, Hello,
-    IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputState, PROTOCOL_VERSION,
-    ProtocolError, Query, QueryResult, Reference, RequestId, Response, Rev, SceneId, SceneInfo,
-    SceneSummary, Settings, SourceId, SourceInfo, SourceKind, Welcome,
+    IdempotencyKey, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
+    PROTOCOL_VERSION, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
+    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, Settings, SourceId,
+    SourceInfo, SourceKind, Welcome,
 };
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -44,14 +47,28 @@ impl MockEngine {
         Self::default()
     }
 
-    /// Adds an output in the `stopped` state, so `output.start` and `output.status` can
-    /// name it. Outputs are runtime state: this changes no `rev` and emits no event.
+    /// Declares an output in the `stopped` state, so `output.start`, `output.stop` and
+    /// `output.status` can name it, as `jstream_core::Engine::with_output` does. This
+    /// changes no `rev` and emits no event. A declared output has no target, so it is not
+    /// in the collection: `output.list` and `state.get` don't report it, and
+    /// `output.set_key` answers `not_found` for it. `output.create` configures an output
+    /// through the protocol instead.
     #[must_use]
     pub fn with_output(self, output_id: OutputId) -> Self {
-        lock(&self.shared)
+        let mut state = lock(&self.shared);
+        state.declared.insert(output_id.clone());
+        state
             .outputs
-            .insert(output_id, OutputState::Stopped);
+            .entry(output_id)
+            .or_insert(OutputState::Stopped);
+        drop(state);
         self
+    }
+
+    /// The stream key `output.set_key` stored for `output_id`, if one is set. Lets client
+    /// tests check what reached the engine; the protocol itself never returns a key.
+    pub fn stream_key(&self, output_id: &OutputId) -> Option<SecretString> {
+        lock(&self.shared).keys.get(output_id).cloned()
     }
 
     /// Opens a new client session. It must send `hello` before any call.
@@ -165,7 +182,15 @@ impl Drop for MockControl {
 #[derive(Default)]
 struct State {
     collection: Collection,
+    /// Every output the engine knows (configured or declared), with its runtime state.
     outputs: BTreeMap<OutputId, OutputState>,
+    /// The outputs [`MockEngine::with_output`] declared. They stay known whatever the
+    /// collection holds.
+    declared: BTreeSet<OutputId>,
+    /// The in-memory stand-in for the OS credential store: the stream keys
+    /// `output.set_key` stored, by output. Kept when an output is deleted, as the
+    /// engine's store keeps them, until `output.clear_key`.
+    keys: BTreeMap<OutputId, SecretString>,
     /// The `rev` each applied batch with an idempotency key produced, per client.
     applied: BTreeMap<(ClientId, IdempotencyKey), Rev>,
     /// How many sessions have completed `hello`; numbers the client IDs.
@@ -182,6 +207,8 @@ struct Collection {
     items: BTreeMap<ItemId, Item>,
     /// Ordered by ID, as `source.list` reports them.
     sources: BTreeMap<SourceId, Source>,
+    /// The configured outputs, ordered by ID, as `output.list` reports them.
+    outputs: BTreeMap<OutputId, OutputKind>,
 }
 
 /// A source: its name, what it shows, and its settings. The mock describes no kinds, so
@@ -248,15 +275,17 @@ impl State {
         if batch.edits.is_empty() {
             return Err(ProtocolError::EmptyBatch);
         }
+        let running = self.running();
         let mut next = self.collection.clone();
         for (at, edit) in batch.edits.into_iter().enumerate() {
-            next.apply(edit, at)?;
+            next.apply(edit, at, &running)?;
         }
         next.rev = current.next().ok_or_else(|| ProtocolError::Internal {
             reason: "rev overflowed".into(),
         })?;
         let rev = next.rev;
         self.collection = next;
+        self.sync_outputs();
         if let Some(key) = batch.idempotency_key {
             self.applied.insert((client_id.clone(), key), rev);
         }
@@ -264,20 +293,60 @@ impl State {
             rev,
             client_id: client_id.clone(),
             request_id: Some(request_id.clone()),
+            cause: None,
         });
         Ok(CallResult::Batch { rev })
+    }
+
+    /// The outputs that are running: every state but `stopped` and `failed`.
+    /// `output.delete` refuses these, as the engine does.
+    fn running(&self) -> BTreeSet<OutputId> {
+        self.outputs
+            .iter()
+            .filter(|(_, state)| !is_idle(**state))
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// Follows the collection after a batch, as the engine does: an output it has gained
+    /// starts `stopped`, and one it has lost is forgotten unless it was declared. Only
+    /// idle outputs can have been deleted.
+    fn sync_outputs(&mut self) {
+        for output_id in self.collection.outputs.keys() {
+            self.outputs
+                .entry(output_id.clone())
+                .or_insert(OutputState::Stopped);
+        }
+        let (declared, configured) = (&self.declared, &self.collection.outputs);
+        self.outputs.retain(|id, state| {
+            declared.contains(id) || configured.contains_key(id) || !is_idle(*state)
+        });
     }
 
     fn action(&mut self, action: Action) -> Result<CallResult, ProtocolError> {
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
+            Action::OutputSetKey { output_id, key } => {
+                // The engine's order: the output must be configured, then the key valid.
+                if !self.collection.outputs.contains_key(&output_id) {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                }
+                check_key(&key)?;
+                self.keys.insert(output_id, key);
+                return Ok(CallResult::Action {});
+            }
+            Action::OutputClearKey { output_id } => {
+                // Succeeds with no key, and for an output no longer in the collection.
+                self.keys.remove(&output_id);
+                return Ok(CallResult::Action {});
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {
             return Err(not_found(EntityKind::Output, output_id.as_str()));
         };
-        let idle = matches!(state, OutputState::Stopped | OutputState::Failed);
+        let idle = is_idle(state);
         let steps = match (start, idle) {
             (true, true) => [OutputState::Starting, OutputState::Active],
             (false, false) => [OutputState::Stopping, OutputState::Stopped],
@@ -322,10 +391,9 @@ impl State {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 };
                 QueryResult::OutputStatus {
+                    key_set: self.keys.contains_key(&output_id),
                     output_id,
                     state,
-                    // The mock has no key store.
-                    key_set: false,
                 }
             }
             Query::SourceList => QueryResult::SourceList {
@@ -353,8 +421,11 @@ impl State {
                         items: self.collection.item_infos(scene),
                     })
                     .collect(),
-                // The mock does not implement the output edits.
-                outputs: vec![],
+                outputs: self.collection.output_infos(),
+            },
+            Query::OutputList => QueryResult::OutputList {
+                rev: self.collection.rev,
+                outputs: self.collection.output_infos(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -411,10 +482,16 @@ impl Collection {
     ///
     /// It follows the rules `jstream-graph` enforces for the same edits (existence,
     /// unique IDs, no deleting what is still referenced, index bounds, no nesting
-    /// cycles), with the same error codes and `edits.<at>.<field>` paths. It describes no
-    /// kinds, so it doesn't check settings, fill in defaults, or follow settings
-    /// references when it looks for cycles.
-    fn apply(&mut self, edit: Edit, at: usize) -> Result<(), ProtocolError> {
+    /// cycles, no deleting a running output, RTMP server URLs), with the same error
+    /// codes and `edits.<at>.<field>` paths. It describes no kinds, so it doesn't check
+    /// settings, fill in defaults, or follow settings references when it looks for
+    /// cycles. `running` are the outputs that run.
+    fn apply(
+        &mut self,
+        edit: Edit,
+        at: usize,
+        running: &BTreeSet<OutputId>,
+    ) -> Result<(), ProtocolError> {
         match edit {
             Edit::SceneCreate { scene_id, name } => {
                 check_id(scene_id.as_str(), at, "scene_id")?;
@@ -602,6 +679,47 @@ impl Collection {
                 }
                 self.sources.remove(&source_id);
             }
+            Edit::OutputCreate { output_id, kind } => {
+                check_id(output_id.as_str(), at, "output_id")?;
+                if self.outputs.contains_key(&output_id) {
+                    return Err(already_exists(EntityKind::Output, output_id.as_str()));
+                }
+                match &kind {
+                    OutputKind::Rtmp { target } => check_target(target, at, "kind.target")?,
+                    OutputKind::Record { path, container } => check_record(path, *container, at)?,
+                    OutputKind::Unknown => {
+                        return Err(invalid(
+                            at,
+                            "kind.type",
+                            "is not an output kind this engine knows",
+                        ));
+                    }
+                    _ => return Err(unimplemented_by_mock("this output kind")),
+                }
+                self.outputs.insert(output_id, kind);
+            }
+            Edit::OutputSetTarget { output_id, target } => {
+                let Some(kind) = self.outputs.get_mut(&output_id) else {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                };
+                check_target(&target, at, "target")?;
+                let OutputKind::Rtmp { target: current } = kind else {
+                    return Err(invalid(at, "output_id", "the output is not an RTMP output"));
+                };
+                *current = target;
+            }
+            Edit::OutputDelete { output_id } => {
+                if running.contains(&output_id) {
+                    return Err(invalid(
+                        at,
+                        "output_id",
+                        format!("output `{output_id}` is running; stop it first"),
+                    ));
+                }
+                if self.outputs.remove(&output_id).is_none() {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                }
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         }
         Ok(())
@@ -650,6 +768,17 @@ impl Collection {
                 name: source.name.clone(),
                 kind: source.kind.clone(),
                 settings: source.settings.clone(),
+            })
+            .collect()
+    }
+
+    /// Every configured output, ordered by ID, as queries report them.
+    fn output_infos(&self) -> Vec<OutputInfo> {
+        self.outputs
+            .iter()
+            .map(|(id, kind)| OutputInfo {
+                output_id: id.clone(),
+                kind: kind.clone(),
             })
             .collect()
     }
@@ -740,6 +869,171 @@ fn check_index(index: u32, len: usize, at: usize, what: &str) -> Result<usize, P
     }
 }
 
+/// Whether an output in `state` is not running: `stopped` or `failed`.
+fn is_idle(state: OutputState) -> bool {
+    matches!(state, OutputState::Stopped | OutputState::Failed)
+}
+
+/// The longest stream key `output.set_key` accepts, in bytes, as in the engine.
+const MAX_KEY_LEN: usize = 1024;
+
+/// Checks a stream key's shape as the engine does. The reasons never repeat the key.
+fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
+    let key = key.expose();
+    let reason = if key.is_empty() {
+        "must not be empty"
+    } else if key.len() > MAX_KEY_LEN {
+        "must be at most 1024 bytes"
+    } else if key.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        "must not contain whitespace or control characters"
+    } else {
+        return Ok(());
+    };
+    Err(ProtocolError::InvalidArgument {
+        field: "key".into(),
+        reason: reason.into(),
+    })
+}
+
+/// Checks an RTMP target; `name` is its field path within the edit (`kind.target`).
+fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), ProtocolError> {
+    match target {
+        RtmpTarget::Generic { url } => match rtmp_url_problem(url) {
+            Some(problem) => Err(invalid(at, &format!("{name}.url"), problem)),
+            None => Ok(()),
+        },
+        RtmpTarget::Unknown => Err(invalid(
+            at,
+            &format!("{name}.type"),
+            "is not an RTMP target this engine knows",
+        )),
+        _ => Err(unimplemented_by_mock("this RTMP target")),
+    }
+}
+
+/// Checks a recording output's container and path, as `jstream-graph` does.
+fn check_record(path: &str, container: RecordContainer, at: usize) -> Result<(), ProtocolError> {
+    match container {
+        RecordContainer::Mp4 => {}
+        RecordContainer::Unknown => {
+            return Err(invalid(
+                at,
+                "kind.container",
+                "is not a container this engine knows",
+            ));
+        }
+        _ => return Err(unimplemented_by_mock("this container")),
+    }
+    match record_path_problem(path) {
+        Some(problem) => Err(invalid(at, "kind.path", problem)),
+        None => Ok(()),
+    }
+}
+
+/// The longest recording path accepted, in bytes, as in `jstream-graph`.
+const MAX_PATH_LEN: usize = 4096;
+
+/// Why `path` is not an acceptable recording path, or `None` when it is: the checks and
+/// fixed reasons of `jstream-graph`'s path validation, in the same order. The rule is
+/// the same on every platform: `/…`, `\…`, `C:\…` or `C:/…`, no `..` segment, and a
+/// file name last.
+fn record_path_problem(path: &str) -> Option<&'static str> {
+    if path.is_empty() {
+        return Some("must not be empty");
+    }
+    if path.len() > MAX_PATH_LEN {
+        return Some("must be at most 4096 bytes");
+    }
+    if path.chars().any(char::is_control) {
+        return Some("must not contain control characters");
+    }
+    let bytes = path.as_bytes();
+    let drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\');
+    if !(path.starts_with(['/', '\\']) || drive) {
+        return Some("must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`");
+    }
+    let mut segments = path.split(['/', '\\']);
+    if segments.clone().any(|segment| segment == "..") {
+        return Some("must not contain a `..` segment");
+    }
+    match segments.next_back() {
+        Some("" | ".") | None => Some("must end in a file name"),
+        Some(_) => None,
+    }
+}
+
+/// The longest RTMP server URL accepted, in bytes, as in `jstream-graph`.
+const MAX_URL_LEN: usize = 2048;
+
+/// Why `url` is not an acceptable RTMP(S) server URL, or `None` when it is: the checks
+/// and fixed reasons of `jstream-graph`'s target validation, in the same order. The
+/// reasons never repeat the URL, which might hold a key.
+fn rtmp_url_problem(url: &str) -> Option<&'static str> {
+    if url.is_empty() {
+        return Some("must not be empty");
+    }
+    if url.len() > MAX_URL_LEN {
+        return Some("must be at most 2048 bytes");
+    }
+    if url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Some("must not contain whitespace or control characters");
+    }
+    let Some((scheme, rest)) = url.split_once("://") else {
+        return Some("must start with `rtmp://` or `rtmps://`");
+    };
+    if !(scheme.eq_ignore_ascii_case("rtmp") || scheme.eq_ignore_ascii_case("rtmps")) {
+        return Some("the scheme must be `rtmp` or `rtmps`");
+    }
+    if rest.contains(['?', '#']) {
+        return Some("must not have a query or fragment: set the stream key with `output.set_key`");
+    }
+    let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
+    if authority.contains('@') {
+        return Some(
+            "must not carry credentials (`user:password@`): set the stream key with \
+             `output.set_key`",
+        );
+    }
+    if let Some(problem) = host_port_problem(authority) {
+        return Some(problem);
+    }
+    if path.trim_matches('/').is_empty() {
+        return Some("is missing the application name (the path after the host)");
+    }
+    None
+}
+
+/// Checks `host[:port]` or `[v6]:port`.
+fn host_port_problem(authority: &str) -> Option<&'static str> {
+    let (host, port) = if let Some(v6) = authority.strip_prefix('[') {
+        let Some((host, after)) = v6.split_once(']') else {
+            return Some("has an unclosed `[` in its IPv6 host");
+        };
+        match after {
+            "" => (host, None),
+            _ => match after.strip_prefix(':') {
+                Some(port) => (host, Some(port)),
+                None => return Some("has unexpected text after its IPv6 host"),
+            },
+        }
+    } else {
+        match authority.split_once(':') {
+            Some((host, port)) => (host, Some(port)),
+            None => (authority, None),
+        }
+    };
+    if host.is_empty() {
+        return Some("is missing the host");
+    }
+    match port.map(str::parse::<u16>) {
+        None | Some(Ok(1..)) => None,
+        Some(_) => Some("has a port that is not a number in 1..=65535"),
+    }
+}
+
 fn not_found(entity: EntityKind, id: &str) -> ProtocolError {
     ProtocolError::NotFound {
         entity,
@@ -795,8 +1089,9 @@ mod tests {
     use crate::{Control, ControlError, EventStream};
     use jstream_protocol::{
         Action, Batch, Call, CallResult, ClientId, Edit, EntityKind, Event, Hello, IdempotencyKey,
-        ItemId, OutputId, OutputState, PROTOCOL_VERSION, ProtocolError, ProtocolVersion, Query,
-        QueryResult, Rev, SceneId, SourceId, SourceKind, parity,
+        ItemId, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, ProtocolError,
+        ProtocolVersion, Query, QueryResult, Rev, RtmpTarget, SceneId, SecretString, SourceId,
+        SourceKind, parity,
     };
     use std::future::Future;
     use std::pin::pin;
@@ -1400,6 +1695,7 @@ mod tests {
                 rev: Rev(1),
                 client_id: ClientId::new("mock_2"),
                 request_id: Some(response.id),
+                cause: None,
             },
             changed(OutputState::Starting),
             changed(OutputState::Active),
@@ -1437,6 +1733,188 @@ mod tests {
         };
         let missing = block_on(agent.call(missing)).expect_err("no such output");
         assert_eq!(code(&missing), Some("not_found"));
+    }
+
+    fn rtmp(url: &str) -> OutputKind {
+        OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url: url.into() },
+        }
+    }
+
+    fn action(control: &dyn Control, action: Action) -> Result<CallResult, ControlError> {
+        block_on(control.call(Call::Action { action })).map(|response| response.result)
+    }
+
+    fn status(control: &dyn Control, output: &str) -> Result<(OutputState, bool), ControlError> {
+        let output_id = OutputId::new(output);
+        match query(control, Query::OutputStatus { output_id })? {
+            QueryResult::OutputStatus { state, key_set, .. } => Ok((state, key_set)),
+            other => panic!("not an output status: {other:?}"),
+        }
+    }
+
+    /// A configured output gets a runtime state, as in the engine: it starts `stopped`,
+    /// can't be deleted while it runs (`jstream_graph::Graph::apply_with_running`'s
+    /// error), and is forgotten once deleted. A declared output is not in the collection.
+    #[test]
+    fn configured_outputs_follow_the_collection() {
+        let engine = MockEngine::new().with_output(OutputId::new("declared"));
+        let control = connected(&engine);
+        let create = Batch::single(Edit::OutputCreate {
+            output_id: OutputId::new("yt"),
+            kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+        });
+        assert_eq!(batch(&*control, create), Ok(Rev(1)));
+        assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, false)));
+        assert_eq!(
+            query(&*control, Query::OutputList),
+            Ok(QueryResult::OutputList {
+                rev: Rev(1),
+                outputs: vec![OutputInfo {
+                    output_id: OutputId::new("yt"),
+                    kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+                }],
+            })
+        );
+
+        let start = Action::OutputStart {
+            output_id: OutputId::new("yt"),
+        };
+        assert_eq!(action(&*control, start), Ok(CallResult::Action {}));
+        let delete = || {
+            Batch::single(Edit::OutputDelete {
+                output_id: OutputId::new("yt"),
+            })
+        };
+        let running = batch(&*control, delete()).expect_err("running");
+        assert_eq!(
+            running.protocol(),
+            Some(&ProtocolError::InvalidArgument {
+                field: "edits.0.output_id".into(),
+                reason: "output `yt` is running; stop it first".into(),
+            })
+        );
+        // A running target can still change; it applies from the next start.
+        let retarget = Batch::single(Edit::OutputSetTarget {
+            output_id: OutputId::new("yt"),
+            target: RtmpTarget::Generic {
+                url: "rtmps://a.rtmps.youtube.com/live2".into(),
+            },
+        });
+        assert_eq!(batch(&*control, retarget), Ok(Rev(2)));
+        let stop = Action::OutputStop {
+            output_id: OutputId::new("yt"),
+        };
+        assert_eq!(action(&*control, stop), Ok(CallResult::Action {}));
+        assert_eq!(batch(&*control, delete()), Ok(Rev(3)));
+        let gone = status(&*control, "yt").expect_err("forgotten");
+        assert_eq!(code(&gone), Some("not_found"));
+
+        // The declared output stays known, but is not configured.
+        assert_eq!(
+            status(&*control, "declared"),
+            Ok((OutputState::Stopped, false))
+        );
+        assert_eq!(
+            query(&*control, Query::OutputList),
+            Ok(QueryResult::OutputList {
+                rev: Rev(3),
+                outputs: vec![],
+            })
+        );
+        let undeclare = Batch::single(Edit::OutputDelete {
+            output_id: OutputId::new("declared"),
+        });
+        let error = batch(&*control, undeclare).expect_err("not configured");
+        assert_eq!(code(&error), Some("not_found"));
+    }
+
+    /// `output.set_key` and `output.clear_key` follow the engine's rules, with the
+    /// mock's in-memory store standing in for the OS credential store.
+    #[test]
+    fn stream_keys_are_write_only_and_follow_the_engine() {
+        let engine = MockEngine::new().with_output(OutputId::new("declared"));
+        let control = connected(&engine);
+        let mut events = control.events();
+        let create = Batch::single(Edit::OutputCreate {
+            output_id: OutputId::new("yt"),
+            kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+        });
+        assert_eq!(batch(&*control, create), Ok(Rev(1)));
+        let set = |output: &str, key: &str| {
+            action(
+                &*control,
+                Action::OutputSetKey {
+                    output_id: OutputId::new(output),
+                    key: SecretString::new(key),
+                },
+            )
+        };
+
+        // Only a configured output takes a key: the check comes before the key's.
+        for output in ["ghost", "declared"] {
+            let error = set(output, "").expect_err("not configured");
+            assert_eq!(
+                error.protocol(),
+                Some(&ProtocolError::NotFound {
+                    entity: EntityKind::Output,
+                    id: output.into(),
+                })
+            );
+        }
+        let long = "k".repeat(1025);
+        for (key, reason) in [
+            ("", "must not be empty"),
+            (long.as_str(), "must be at most 1024 bytes"),
+            (
+                "secret key",
+                "must not contain whitespace or control characters",
+            ),
+            (
+                "secret\u{7}",
+                "must not contain whitespace or control characters",
+            ),
+        ] {
+            let error = set("yt", key).expect_err("bad key");
+            assert_eq!(
+                error.protocol(),
+                Some(&ProtocolError::InvalidArgument {
+                    field: "key".into(),
+                    reason: reason.into(),
+                })
+            );
+        }
+        assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, false)));
+
+        assert_eq!(set("yt", "abcd-1234"), Ok(CallResult::Action {}));
+        assert_eq!(status(&*control, "yt"), Ok((OutputState::Stopped, true)));
+        assert_eq!(
+            engine
+                .stream_key(&OutputId::new("yt"))
+                .map(|key| key.expose().to_owned()),
+            Some("abcd-1234".into())
+        );
+        // Not collection state: no `rev`, no event, and no read carries the key.
+        assert_eq!(engine.rev(), Rev(1));
+        let state = format!("{:?}", query(&*control, Query::StateGet));
+        assert!(!state.contains("abcd"), "{state}");
+
+        // The key outlives the output, as in the engine's store, until it is cleared;
+        // clearing an unknown output's key, or a missing key, succeeds.
+        let delete = Batch::single(Edit::OutputDelete {
+            output_id: OutputId::new("yt"),
+        });
+        assert_eq!(batch(&*control, delete), Ok(Rev(2)));
+        assert!(engine.stream_key(&OutputId::new("yt")).is_some());
+        for _ in 0..2 {
+            let clear = Action::OutputClearKey {
+                output_id: OutputId::new("yt"),
+            };
+            assert_eq!(action(&*control, clear), Ok(CallResult::Action {}));
+        }
+        assert!(engine.stream_key(&OutputId::new("yt")).is_none());
+        let events = drain(&mut events);
+        assert_eq!(events.len(), 2, "only the two batches: {events:?}");
     }
 
     #[test]

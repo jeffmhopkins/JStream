@@ -21,7 +21,7 @@ History, revisions and dates come from git and are never stored in files.
 ## Bootstrap status
 <!-- @section
 covers = ["xtask/src/docs/**"]
-verified = { hash = "b3:50e3c412ec4e1a99", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Added the ADR-0042 #jstream-meta covers view to the hash-bound verification bullet; it is implemented in xtask/src/docs/hash.rs (split_cover, jstream_view) with tests (rustfmt applied); other bullets unchanged" }
+verified = { hash = "b3:b098625e37cae5f4", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (docs merge-main bullet) into ADR-0042: the hash bullet adds the #jstream-meta covers view, implemented in hash.rs with tests; merge-main and other bullets are main's and unchanged" }
 -->
 
 The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROADMAP.md#m0)).
@@ -56,6 +56,9 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **History and TTL review** ([History](#history), [Time-based review](#ttl)):
   `cargo xtask docs log` derives a doc's or section's history from git, and
   `cargo xtask docs review` writes a doc's `reviewed` stamp.
+- **`cargo xtask docs merge-main`** ([Hash-bound verification](#verification)): merges
+  `origin/main`, resolves conflicts that are only between `verified` stamps, and lists
+  the sections left stale.
 - **Weekly sweep** ([Time-based review](#ttl)): the scheduled `sweep` workflow reports
   `cargo deny` findings, docs due for review, `cargo update --dry-run` and the override
   audit list in one issue. The parts that [Time-based review](#ttl) lists as not built
@@ -285,8 +288,17 @@ cargo xtask docs review ARCH \
     --by human:jeffmhopkins --note "…"          # doc-level TTL review: write `reviewed`
 cargo xtask docs log ARCH#gpu-pipeline         # history, derived from git
 cargo xtask docs for crates/jstream-render/src/lib.rs   # what governs a file
+cargo xtask docs merge-main                    # merge origin/main; stamp-only conflicts take main's
 cargo xtask docs rehash                        # one-time ADR-0039 migration (below)
 ```
+
+`docs merge-main` fetches and merges `origin/main` into a clean working tree. A conflict
+whose two sides are only `verified` lines inside `@section` blocks takes main's line,
+because the section has to be re-read against the combined change whichever stamp is
+kept. Any other conflict, including one in a file that also has stamp conflicts, is left
+exactly as git wrote it, and the merge stays open for you to finish by hand. When every
+conflict was a stamp conflict it commits the merge and prints the sections that are now
+stale, for `docs verify` after a re-read.
 
 `docs rehash` moved stored hashes to the rule above when it was introduced. It rewrites
 a section's `hash` (keeping `by` and `note`) only when the stored hash is what the

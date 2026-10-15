@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:2ab2ae969a69d26f", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "ADR-0042 edit of ARCH#threading: only the output-pipeline paragraph moved to core README#runtime and the audio 'In the engine' paragraph became a link; the thread roster, clock, snapshot and parameter-channel text this section relies on is unchanged, so it holds" }
+verified = { hash = "b3:4ee94254d79ca428", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main into ADR-0042 edit of ARCH#threading: the output-pipeline paragraph moved to core README#runtime and the audio 'In the engine' paragraph became a short link; the thread roster, clock, snapshot and parameter-channel text this section relies on is unchanged, so it holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

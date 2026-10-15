@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-protocol/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-protocol"]
-verified = { hash = "b3:b5cf903a5f2b3dcd", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): Commands list both source.rename/set_settings and output edits/key actions; Queries list output.list and kind.list/describe; Outputs and Kinds-and-settings bullets; PROTOCOL_VERSION 0.8 for kinds, 0.7 outputs (version.rs)" }
+verified = { hash = "b3:282e2dba9c68124f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#147 nested scenes, #149, #153 MCP over HTTP, #163, #166 CLI/mock outputs, #170 record kind 0.9, #178, #181, #187) into B2 (0.10): History bullet and version line: 0.10 history, 0.9 record kind (version.rs)" }
 -->
 
 **The API.** Every capability of JStream is a command, query, event or stream defined
@@ -28,6 +28,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Envelope** (`envelope.rs`): `ClientMessage` (`hello`, `request`) and `ServerMessage`
   (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`.
   `ClientMessage::parse` maps every parse failure to `malformed`.
+- **History** (`history.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
+  `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
+  kind, and `HistoryDirection` (`undo`, `redo`), the `cause` of a `state.changed` and
+  the `direction` of a `history_empty` error.
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.rename`, `scene.delete`,
   `scene.reorder`, `item.add`, `item.remove`, `item.reorder`, `item.set_transform`,
   `item.set_crop`, `item.set_visible`, `source.create`, `source.rename`,
@@ -36,8 +40,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`);
   `Batch`; and the `Command`/`CommandClass`
   classification view.
-- **Outputs** (`output.rs`): `OutputKind` (only `rtmp` so far), `RtmpTarget` (only a
-  generic `url`), `OutputInfo`, and `SecretString`, the write-only stream key, which
+- **Outputs** (`output.rs`): `OutputKind` (`rtmp` and `record` so far), `RtmpTarget`
+  (only a generic `url`), `RecordContainer` (only `mp4`), `OutputInfo`, and `SecretString`, the write-only stream key, which
   never prints and never comes back from the engine
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
@@ -68,17 +72,20 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `fit` or `fill`. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3
   transform. A negative scale is not refused: `from_legacy` returns the drawn outline
   and flags the reflection, which geometry cannot store. These types are not
-  messages. `PROTOCOL_VERSION` is 0.8 because of the kind queries and settings;
-  0.7 added the output edits, `output.list`, the key actions and `key_set`,
-  `stats.tick` is the 0.6 addition and `video.snapshot` the 0.5 one, and the geometry
-  wire surface ships as a later minor. `ItemTransform`'s schema description names
+  messages. `PROTOCOL_VERSION` is 0.10 because of the `history` calls; 0.9 added
+  the `record` output kind, 0.8 the kind queries and settings, 0.7 the output edits,
+  `output.list`, the key actions and `key_set`, `stats.tick` is the 0.6 addition and
+  `video.snapshot` the 0.5 one, and the geometry wire surface ships as a later minor.
+  `ItemTransform`'s schema description names
   `ItemGeometry` as the replacement (`protocol.snap` and the MCP `tools.snap`).
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
-  support, not wire types. One batch that builds a small collection, the exact answer
-  to every collection read of it, and the exact error for batches rejected against it.
+  support, not wire types. One batch that builds a small collection with two RTMP
+  outputs and a recording output, the exact answer to every collection read of it
+  (`output.list` included), and the exact error for batches rejected against it (RTMP
+  URL and recording path checks included).
   `jstream-graph` and `jstream-control`'s mock engine are both layer 2, so neither can
   test against the other ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)); both enable
   the feature in dev-dependencies only and are held to these answers. `kinds()` names
@@ -91,7 +98,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:4e06cd0fe67b2407", by = "agent:claude@session_011XVJmf1YrrPuYmHXMjrFq1", note = "Merge of main (#142 outputs 0.7, #144 vcam-proto) into B4 (0.8): handshake example updated to 0.8; SourceInfo settings note says 0.7 readers; Queries list has output.list, key_set and the kind queries; outputs and settings paragraphs both hold; geometry paragraph names 0.8/0.7/0.6/0.5" }
+verified = { hash = "b3:124d3cf1910b12af", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "B2-f1: re-read Undo and redo requests; check order (key, expected_rev, stack) and the keep-step case now match core engine.rs history() and core README Order of checks/Conflicts; reading of ADR-0032's 'checked first' stated" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -111,8 +118,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":8},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":8},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":10},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":10},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -131,11 +138,13 @@ no handshake; it is compiled against the same crate.
 Every enum uses serde's internally tagged form, so a message is one flat JSON object
 whose tag says what it is:
 
-- `type` names the message (`request`), the command, query or result (`scene.create`), or
-  the event (`state.changed`). Command, query and event names are `noun.verb` in
+- `type` names the message (`request`), the command, query, history op or result
+  (`scene.create`, `history.undo`), or the event (`state.changed`). Command, query,
+  history and event names are `noun.verb` in
   snake_case ([R-API-002](../../docs/RULES.md#R-API-002)), so the tag *is* the name that
   MCP tools, the CLI and logs use.
-- `kind` names the class of a call and its result: `batch`, `action` or `query`. It is a
+- `kind` names the class of a call and its result: `batch`, `action`, `query` or
+  `history`. It is a
   different key from `type`, so a call can nest its command without the two tags
   colliding, and the class of every request is explicit on the wire.
 - `code` names an error.
@@ -165,7 +174,10 @@ Otherwise it is an action.** A command that does both is split into an edit and 
 action. A **query** (`Query`) changes nothing and is neither.
 
 The types enforce the split: a `Batch` holds only `Edit`s, an action travels alone, and
-`Call` (tagged by `kind`) has exactly three forms: `batch`, `action` and `query`.
+`Call` (tagged by `kind`) has exactly four forms: `batch`, `action`, `query` and
+`history`. A `history` call carries no command: it names a direction and applies edits
+the engine already holds (see *Undo* below), so it is neither class and R-ARCH-006
+still covers every command.
 `Command` is a classification view over both enums, with `class()`, `is_undoable()` and
 `is_batchable()`. The tests `names_are_valid` and `every_command_is_classified` check
 every name in the generated schema.
@@ -244,7 +256,14 @@ Outputs are collection state too: `output.create` adds one, stopped, with its
 while it runs. A target URL must be an `rtmp://` or `rtmps://` server URL with a host and an
 application name, and is refused if it could carry a credential (`user:password@`, a
 query or a fragment). A key pasted into the path can't be told from a nested
-application name, so it is stored as given. The
+application name, so it is stored as given. A `record` output (0.9) records to a file
+on the engine's machine: `path` must be absolute (`/…`, `\…`, `C:\…` or `C:/…`), have
+no `..` segment and end in a file name, and
+`container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
+`action_failed` when `path` or `<path>.part` already exists, so a recording never
+overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
+so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
+record elsewhere. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
@@ -336,17 +355,56 @@ that sets it: `scene.reorder` and `item.reorder` restore positions, and
 place or a setting refers to, or a scene that a `scene` source shows or a setting refers
 to, is rejected, so no edit removes more than the object it names. `jstream-graph`'s property
 test checks that applying a random batch and then its inverse restores the state
-exactly. A new edit that can't state its inverse in edits needs new edits first. Undo
-and redo requests (`history.undo`, `history.redo`), and the `undo_conflict` error for an
-undo whose inverse conflicts with later edits by another client, are decided in
-[ADR-0032](../../docs/adr/0032-live-edits-and-undo.md), together with the live values
-that keep a drag to one batch and one undo step. They come with the engine's history.
+exactly. A new edit that can't state its inverse in edits needs new edits first.
+
+**Undo and redo requests** follow [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md):
+
+```json
+{"type":"request","id":"r4","call":{"kind":"history","op":{"type":"history.undo"},"expected_rev":15}}
+{"type":"response","id":"r4","result":{"kind":"history","rev":16,"step_rev":13,"undo_depth":4,"redo_depth":1}}
+```
+
+- `history.undo` applies the inverse of the client's most recent step that isn't
+  undone, and `history.redo` applies its most recently undone step again. Each is one
+  `rev` bump and emits `state.changed` with `cause` `undo` or `redo`, but makes no new
+  step: the step moves between the client's undo and redo stacks. The client's next
+  batch clears its redo stack. Another client's batches never touch either stack.
+- `expected_rev` and `idempotency_key` work as for a batch, and keys are shared with
+  the client's batches. The engine checks in this order:
+  1. **The key.** A key the client already used gets that call's stored result, whatever
+     `expected_rev` says now, so a retried undo whose response was lost never undoes a
+     second step. A batch's retry works the same way.
+  2. **`expected_rev`.** A stale one fails with `rev_conflict` and leaves both stacks
+     as they were. This is what ADR-0032 means by "checked first": no part of the
+     history is read or changed before it passes.
+  3. **The stack.** An empty one fails with `history_empty`.
+- `rev` is the revision produced, `step_rev` the revision the step's batch originally
+  produced (it names the step), and the depths say what can be undone and redone next.
+- `undo_conflict` (`step_rev`, and the `client_id` and `rev` of the conflicting batch)
+  refuses an undo or redo when another client's batch after it changed a property the
+  step sets, created or deleted an object the step touches, touched an object the step
+  creates or deletes, also reordered the scenes, or made its edits no longer apply. An
+  edit touches the objects it creates, deletes or edits and the ones it places or
+  names, such as an item's source. What the step touches is taken both from when it was recorded and from
+  the edits it would apply now. Nothing is applied and the step is dropped, so the next
+  undo reaches the step before it.
+- A step whose edits fail for a reason no other client caused keeps its place and the
+  call fails with the graph's own error. The usual case is a running output that blocks
+  undoing its `output.create`, which fails with `invalid_argument` until the output
+  stops.
+- `history_empty` (`direction`) means there is nothing to undo or redo.
+- Actions (outputs, stream keys), queries and history calls are never steps. The engine
+  keeps 100 steps per client by default, in memory, for the session's lifetime.
+
+Live values, which keep a drag to one batch and one undo step, are the other half of
+ADR-0032 and are not built yet.
 
 ### Events
 
 After `welcome`, the server pushes every event to every client.
 
-- `state.changed {rev, client_id, request_id?}` follows every applied batch. A client
+- `state.changed {rev, client_id, request_id?, cause?}` follows every applied batch,
+  undo and redo; `cause` is `undo` or `redo` for a history call (0.10). A client
   matches it to its own response by `request_id`; there is no ordering promise between
   the two. Every other client re-reads what it shows. Since each batch adds exactly one
   to `rev`, a gap shows that an event was missed.
@@ -398,6 +456,8 @@ people and agents. Clients match on `code`, never on `message`.
 | `not_found` | A command named a missing object | `entity`, `id` |
 | `already_exists` | A creating edit reused an ID | `entity`, `id` |
 | `invalid_argument` | A field's value was rejected | `field`, `reason` |
+| `undo_conflict` | An undo or redo would overwrite another client's later work; the step is dropped | `step_rev`, `client_id`, `rev` |
+| `history_empty` | Nothing to undo or redo | `direction` |
 | `action_failed` | An accepted action could not be carried out | `reason` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
@@ -423,9 +483,15 @@ after 1.0:
   optional field. Old clients keep working, and a newer server still serves them
   (`can_serve`), because unknown fields are ignored (no type denies them), and because
   unknown server messages, events and error codes parse as an `Unknown` variant that
-  clients skip. An unknown error code still has its `message`. Not yet covered: a new
+  clients skip. An unknown error code still has its `message`. From 0.9, an output's
+  `OutputKind`, `RtmpTarget` and `RecordContainer` parse an unknown `type` or value as
+  `Unknown` too, so later output kinds won't break a 0.9 client. Not yet covered: a new
   value of a string enum (`OutputState`, `EntityKind`) inside a known message breaks an
-  older client's parse, so adding one needs open question 8 settled first.
+  older client's parse, so adding one needs open question 8 settled first. The same
+  break happened once, in 0.9 itself: `OutputKind` had no fallback in 0.7 and 0.8, so a
+  0.7 or 0.8 client can't parse `output.list` or `state.get` once a `record` output
+  exists (the whole response fails, and `WsControl` ends the session). Whether that
+  counts as a minor bump is part of open question 8.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
@@ -462,9 +528,9 @@ function in this crate so the compositor and the UI share one implementation.
   reflected quad.
 
 These types are serde-shaped as the ADR's wire fields, and they are not messages yet.
-`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.8 because of the
-kind queries and settings; the outputs are 0.7, `stats.tick` the 0.6 addition and
-`video.snapshot` the 0.5 one. ADR-0022
+`item.add` still takes `ItemTransform`. `PROTOCOL_VERSION` is 0.10 because of the
+`history` calls; the `record` output kind is 0.9, the kind queries and settings 0.8,
+the outputs 0.7, `stats.tick` the 0.6 addition and `video.snapshot` the 0.5 one. ADR-0022
 names the geometry additions as 0.4, which already shipped with `events.dropped`;
 the geometry wire surface ships as a later minor, under
 [R-API-001](../../docs/RULES.md#R-API-001). The accepted ADR is not edited
@@ -510,11 +576,12 @@ described above.
    should the ID types move to `jstream-types`, once it has IDs and an optional serde
    feature?
 4. **Undo and redo on the wire.** Settled by
-   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md), not built yet:
+   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md) and built in 0.10:
    `history.undo` and `history.redo` are a fourth kind of call, `history`, which
    carries no command (it applies a batch of edits the engine already holds), so
    R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
-   (`live.set`, `live.cancel`, `live.changed`), committed by one batch.
+   (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are not
+   built yet.
 5. **Actions that change collection state.** `studio.transition` changes the program
    scene, which is saved in the collection. Is it an action that also bumps `rev`, or an
    edit plus a separate "run transition" action?
@@ -526,7 +593,9 @@ described above.
    the pipeline runs.
 8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
    fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
-   a new value as a major change?
+   a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
+   fallbacks from 0.9, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
+   outputs (see Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an

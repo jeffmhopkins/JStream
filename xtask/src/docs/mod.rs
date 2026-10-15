@@ -8,6 +8,7 @@ pub(crate) mod generate;
 mod govern;
 mod hash;
 mod history;
+mod merge;
 pub(crate) mod parse;
 
 use std::collections::BTreeMap;
@@ -521,6 +522,35 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             );
             Ok(true)
         }
+        Some("merge-main") => {
+            let [_] = args else {
+                bail!("usage: cargo xtask docs merge-main");
+            };
+            let m = merge::merge_main(root)?;
+            for s in &m.stamps {
+                eprintln!("took main's stamp: {s}");
+            }
+            for (path, why) in &m.refused {
+                eprintln!("left for you: {path}: {why}");
+            }
+            if !m.committed {
+                eprintln!(
+                    "docs merge-main: stamp-only conflicts are resolved and staged; resolve the \
+                     files above by hand, `git commit`, then run `cargo xtask docs check`"
+                );
+                return Ok(false);
+            }
+            for s in &m.stale {
+                eprintln!("stale: {s}");
+            }
+            eprintln!(
+                "docs merge-main: merged {} stamp conflict(s); {} stale section(s) to re-read, \
+                 then `cargo xtask docs verify <DOC#anchor> --by <who> --note \"<what you checked>\"`",
+                m.stamps.len(),
+                m.stale.len()
+            );
+            Ok(true)
+        }
         Some("for") => {
             let [_, arg] = args else {
                 bail!("usage: cargo xtask docs for <path>");
@@ -541,7 +571,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             Ok(true)
         }
         _ => bail!(
-            "usage: cargo xtask docs check | generate | verify <DOC#anchor> --by <who> --note <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | rehash"
+            "usage: cargo xtask docs check | generate | verify <DOC#anchor> --by <who> --note <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | merge-main | rehash"
         ),
     }
 }
@@ -833,6 +863,124 @@ mod tests {
         let err = history::log(&f.0, &l.docs, "T#nope", "HEAD").expect_err("no anchor");
         assert!(
             format!("{err:#}").contains("no section or rule `nope`"),
+            "{err:#}"
+        );
+    }
+
+    /// `docs merge-main` in a clone of a fixture `origin`: a conflict between two stamps
+    /// takes main's and the merge commits, with the section reported stale; any other
+    /// conflict is left alone and the merge stays open; a dirty tree is refused.
+    #[test]
+    fn merge_main_resolves_only_stamp_conflicts() {
+        let sec = |id: &str, glob: &str| {
+            format!(
+                "<!-- @doc\nid = \"{id}\"\n-->\n<a id=\"a\"></a>\n## A\n<!-- @section\ncovers = [\"{glob}\"]\n-->\nText.\n"
+            )
+        };
+        let mut files = REGISTRIES.to_vec();
+        let (s, t) = (sec("S", "src/**"), sec("T", "lib/**"));
+        files.extend([
+            ("S.md", s.as_str()),
+            ("T.md", t.as_str()),
+            ("src/a.rs", "a\n"),
+            ("src/b.rs", "b\n"),
+            ("lib/c.rs", "c\n"),
+        ]);
+        let origin = Fixture::new("merge-main-origin", &files);
+        let commit = |f: &Fixture, msg: &str| {
+            f.git(&["add", "-A"]);
+            f.git(&[
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-q",
+                "-m",
+                msg,
+            ]);
+        };
+        origin.git(&["symbolic-ref", "HEAD", "refs/heads/main"]);
+        verify(&origin.0, "S#a", "agent:test", NOTE).expect("S verifies");
+        verify(&origin.0, "T#a", "agent:test", NOTE).expect("T verifies");
+        commit(&origin, "base");
+        let work = Fixture(
+            origin
+                .0
+                .with_file_name(format!("xtask-merge-main-work-{}", std::process::id())),
+        );
+        let _ = std::fs::remove_dir_all(&work.0);
+        let cloned = Command::new("git")
+            .args(["clone", "-q"])
+            .arg(&origin.0)
+            .arg(&work.0)
+            .status()
+            .is_ok_and(|s| s.success());
+        assert!(cloned, "git clone failed");
+        for f in [&origin, &work] {
+            f.git(&["config", "user.name", "t"]);
+            f.git(&["config", "user.email", "t@t"]);
+        }
+
+        // Both sides change a different covered file of S and re-verify it: S's stamp
+        // conflicts, nothing else does.
+        origin.write("src/a.rs", "a main\n");
+        verify(&origin.0, "S#a", "agent:main", NOTE).expect("S verifies on main");
+        commit(&origin, "main: a");
+        work.write("src/b.rs", "b work\n");
+        verify(&work.0, "S#a", "agent:work", NOTE).expect("S verifies on work");
+        commit(&work, "work: b");
+        work.write("src/b.rs", "dirty\n");
+        let err = merge::merge_main(&work.0).expect_err("dirty tree");
+        assert!(format!("{err:#}").contains("uncommitted"), "{err:#}");
+        work.git(&["checkout", "--", "src/b.rs"]);
+        let m = merge::merge_main(&work.0).expect("merges");
+        assert!(m.committed, "{m:?}");
+        assert_eq!(m.stamps, vec!["S#a".to_owned()]);
+        assert!(m.refused.is_empty(), "{m:?}");
+        assert_eq!(m.stale, vec!["S#a".to_owned()]);
+        let text = std::fs::read_to_string(work.0.join("S.md")).expect("invariant: written");
+        assert!(
+            text.contains("by = \"agent:main\"") && !text.contains("<<<<<<<"),
+            "{text}"
+        );
+        assert_eq!(work.diags("is stale").len(), 1);
+
+        // Now S's text conflicts too (and T's stamp alone): S is refused, T is resolved
+        // and staged, and nothing is committed.
+        verify(&work.0, "S#a", "agent:work", NOTE).expect("S re-verifies");
+        commit(&work, "work: re-verify S");
+        for (f, who) in [(&origin, "main"), (&work, "work")] {
+            let text = std::fs::read_to_string(f.0.join("S.md")).expect("invariant: written");
+            f.write("S.md", &text.replace("Text.", &format!("Text from {who}.")));
+            f.write("lib/c.rs", &format!("c {who}\n"));
+            f.write(&format!("lib/{who}.rs"), "x\n");
+            f.git(&["add", "-A"]);
+            verify(&f.0, "T#a", &format!("agent:{who}"), NOTE).expect("T verifies");
+            commit(f, who);
+        }
+        let m = merge::merge_main(&work.0).expect("runs");
+        assert!(!m.committed, "{m:?}");
+        assert_eq!(m.stamps, vec!["T#a".to_owned()]);
+        let refused: Vec<&str> = m.refused.iter().map(|(p, _)| p.as_str()).collect();
+        assert_eq!(refused, vec!["S.md", "lib/c.rs"], "{m:?}");
+        let s = std::fs::read_to_string(work.0.join("S.md")).expect("invariant: written");
+        assert!(
+            s.contains("<<<<<<<"),
+            "S.md must be left as git wrote it: {s}"
+        );
+        let unmerged = Command::new("git")
+            .args(["diff", "--name-only", "--diff-filter=U"])
+            .current_dir(&work.0)
+            .output()
+            .expect("invariant: git runs");
+        assert_eq!(
+            String::from_utf8_lossy(&unmerged.stdout),
+            "S.md\nlib/c.rs\n"
+        );
+        let err = merge::merge_main(&work.0).expect_err("merge in progress");
+        assert!(
+            format!("{err:#}").contains("already in progress"),
             "{err:#}"
         );
     }
