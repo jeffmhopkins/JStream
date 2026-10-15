@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:1fef9e57b4da636f", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading edit: sessions, StreamEnd and the late-subscriber keyframe rule are unchanged; core now treats a stream end before stop as a failure and subscribes before its producers start, both within this API." }
+verified = { hash = "b3:3be2c796ab329947", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against the ARCH#threading handover addition: encode threads read no snapshots or parameter channels, and the session thread's own park/unpark is unrelated to the stopped marker; unchanged" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A
