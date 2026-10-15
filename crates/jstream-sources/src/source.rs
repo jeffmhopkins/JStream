@@ -362,8 +362,19 @@ mod tests {
     // file opened before a swap is compared with what the path names after it.
     #[test]
     fn a_file_swapped_in_from_outside_the_root_is_refused() {
-        let dir =
-            std::env::temp_dir().join(format!("jstream-sources-opened-{}", std::process::id()));
+        /// Removes the folder however the test ends, a failed assertion included.
+        struct TempDir(std::path::PathBuf);
+        impl Drop for TempDir {
+            fn drop(&mut self) {
+                let _ = fs::remove_dir_all(&self.0);
+            }
+        }
+
+        let temp = TempDir(
+            std::env::temp_dir().join(format!("jstream-sources-opened-{}", std::process::id())),
+        );
+        let dir = &temp.0;
+        let _ = fs::remove_dir_all(dir);
         let root = dir.join("root");
         fs::create_dir_all(&root).expect("a temp folder");
         fs::write(root.join("a.png"), b"inside").expect("a file");
@@ -380,7 +391,5 @@ mod tests {
         // The file the path names, opened and checked, is accepted.
         let inside = File::open(&joined).expect("open");
         assert!(check_opened(&inside, &base, &joined).is_ok());
-
-        fs::remove_dir_all(&dir).expect("clean up");
     }
 }

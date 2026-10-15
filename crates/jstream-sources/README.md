@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:54a34ee7f82c66ff", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#214 ADR-0041) into #217, stamp-only conflicts: re-read; main's text taken as is; #188's Assets paragraph holds against source.rs open_inside/check_opened" }
+verified = { hash = "b3:018baf5cda58feac", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "#217 N1: only the unit test's temp-folder cleanup changed (drop guard); the Assets paragraph on open_inside/check_opened still holds" }
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
