@@ -538,7 +538,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:6a7d646d8dea24c5", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
+verified = { hash = "b3:6e6460f7f6672f49", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Cascade from the server and UI Design wording (ADR-0047 link); this section's pairing text (loopback-only device tokens, protocol 0.20 bullet) is unaffected; holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

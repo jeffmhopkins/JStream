@@ -51,7 +51,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:eb9eb061f9cf3467", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
+verified = { hash = "b3:c054f031d497790a", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Pairing-form sentence now links ADR-0047, which decides it; the form is still not built here; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -65,7 +65,8 @@ verified = { hash = "b3:eb9eb061f9cf3467", by = "agent:claude@session_01WbL3WRbc
   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): the server side is built
   (`pairing.start` and `POST /api/v1/pair`,
   [jstream-server › Design](../jstream-server/README.md#design)), the UI's pairing form
-  isn't. In the desktop app the form is skipped: the
+  isn't ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md) decides
+  it). In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). That connection carries the
   token in the subprotocol, which `jstream-server` accepts

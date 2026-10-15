@@ -65,7 +65,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:faf6faed79f22111", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (94fb25d, audio D5) into pairing: main took protocol 0.19 for audio, so pairing ships as 0.20; re-read main's audio text beside this PR's pairing text, every pairing version mention says 0.20 and audio's stays 0.19, MCP tool lists carry both audio and pairing nouns; holds" }
+verified = { hash = "b3:9390fdbebee5172d", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "B1 (round 3): open question 2 no longer calls the browser pairing form open; it cites ADR-0047 (accepted on main): token-free GET /pair on a TLS listener and the __Host-jstream_device cookie, not built, waiting on TLS (question 1); rest of the section unchanged and holds" }
 -->
 
 ### Listening and admission
@@ -424,9 +424,12 @@ tungstenite's `rand` and used by `jstream-daemon` for its token. No TLS crate is
    UI's upgrade either carries the same credentials (checked in Chromium) or offers
    `jstream.token.<token>` ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
    Pairing a device with a short code instead of pasting the token is settled and built
-   (see *Pairing*, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)). Open: how
-   a browser that gets a 401 reaches a pairing form and then presents its device token
-   on page loads, since the UI's files sit behind the gate.
+   (see *Pairing*, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)). How a
+   browser reaches a pairing form and keeps its device token is decided and not built
+   yet: a token-free `GET /pair` page on a TLS listener, linked from the `401`, and the
+   `__Host-jstream_device` cookie
+   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). It waits
+   on TLS (open question 1).
 3. **UI assets.** Settled and built (see *The web UI*). Open: caching with `ETag`s
    instead of `no-cache`, and compressed variants, if the bundle grows enough to
    matter. MCP over streamable HTTP is settled and built (see *MCP over streamable
