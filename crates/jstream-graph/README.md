@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:5de498de12175cfb", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Model list has Source's duplicated_from, Item's set_source and F3's Encoder/Output; collection-file paragraph lists duplicated_from and encoders; tests paragraph names both fixtures' additions and both round-trip tests" }
+verified = { hash = "b3:988e1d228bc933ca", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B5 #196, D2 #192, #227) into C2: main's text and stamps kept; the only C2 difference is text among the built kinds in ARCH Built so far (and in core, a live text-source test); re-read, holds" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

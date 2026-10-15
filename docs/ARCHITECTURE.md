@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:4aa87a5ad7f630b8", by = "agent:claude@session_01WYFCTjMhcJcAomAVNMYrRc", note = "Merge of main (F3 #208 0.13, C1b #222, #217, #218, #148, #214) into B5, now protocol 0.14: Built so far merges C1b live sources and F3 encoder profiles with B5's set_source/duplicated_from; Not yet keeps settings migrations (not main's stale kind-versions line) and drops B5's items; collection file line names duplicated_from" }
+verified = { hash = "b3:cfcee83f883e7ed4", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B5 #196, D2 #192, #227) into C2: main's text and stamps kept; the only C2 difference is text among the built kinds in ARCH Built so far (and in core, a live text-source test); re-read, holds" }
 -->
 
 ```
