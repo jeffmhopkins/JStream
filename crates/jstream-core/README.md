@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:776be5d7a3dab550", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (B2) into B3: re-read; History bullet (B2) and Snapshot/canvas text (B3) both hold; history.rs now also handles item.set_geometry and canvas.set_size" }
+verified = { hash = "b3:1481042c0f906813", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#183 canvas and item geometry, protocol 0.11) into C1a: re-read; #183's canvas/geometry text taken as is; C1a's Kinds bullet (Registry::builtin) and Not here yet (rendering from the source registry) still match kinds.rs" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -112,7 +112,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:47f70b5587157701", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; core prose unchanged by the merge; Snapshots canvas/placement and undo touched-set (placement, canvas size) text hold against snapshot.rs and history.rs" }
+verified = { hash = "b3:1a805e2110939532", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#183 canvas and item geometry, protocol 0.11) into C1a: re-read; main's text taken as is; C1a's Dependencies (jstream-sources, serde_json dev-only) and Not yet bullet still match Cargo.toml" }
 -->
 
 ### Engine and sessions

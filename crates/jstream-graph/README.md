@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a4ec811e21b6c0ee", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: re-read; graph prose unchanged by the merge and still matches model/, apply.rs and read.rs" }
+verified = { hash = "b3:3ed778aeaad74fc0", by = "agent:claude@session_01JxutE3HYspWxJqSNBBmcVu", note = "Merge of main (#183 canvas and item geometry, protocol 0.11) into C1a: re-read; resolved the Not yet conflict by keeping C1a's Kind versions bullet and #183's blend modes/legacy placements bullet; graph code untouched by C1a" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
