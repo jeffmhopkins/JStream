@@ -9,6 +9,7 @@ use crate::audio;
 use crate::deps::{self, Node};
 use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
 use crate::target::{record_path_problem, rtmp_url_problem};
+use crate::touched::Touched;
 use jstream_protocol::{
     Batch, Canvas, Crop, Edit, EntityKind, GeometryError, ItemGeometry, ItemId, ItemTransform,
     KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType, ProtocolError,
@@ -31,6 +32,9 @@ pub struct Applied {
     /// batch exactly. The caller (the engine's undo history) decides which `expected_rev`
     /// to send it with.
     pub inverse: Batch,
+    /// What the batch touched, from its edits and the inverse's: what the engine's undo
+    /// history checks other clients' later batches against (ADR-0032).
+    pub touched: Touched,
 }
 
 impl Graph {
@@ -86,10 +90,12 @@ impl Graph {
         }
         self.state = work;
         self.rev = rev;
+        let inverse: Vec<Edit> = undo.into_iter().rev().flatten().collect();
         Ok(Applied {
             rev,
+            touched: Touched::of(edits, &inverse),
             inverse: Batch {
-                edits: undo.into_iter().rev().flatten().collect(),
+                edits: inverse,
                 expected_rev: None,
                 idempotency_key: None,
             },

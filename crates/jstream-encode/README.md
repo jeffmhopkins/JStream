@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-encode/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-encode", "docs/ARCHITECTURE.md#threading", "docs/ARCHITECTURE.md#data-model"]
-verified = { hash = "b3:80b40dc1fce68f76", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 cascade from ARCH data-model: re-read; encode text makes no claim about sources' audio or buses" }
+verified = { hash = "b3:49f67d3ec1e2e595", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B5 #196, D2 #192, #227) into C2: main's text and stamps kept; the only C2 difference is text among the built kinds in ARCH Built so far (and in core, a live text-source test); re-read, holds" }
 -->
 
 Layer-3 encoder sessions ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). A

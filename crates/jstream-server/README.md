@@ -54,7 +54,7 @@ stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
 <!-- @section
 covers = ["crates/jstream-server/src/**", "crates/jstream-server/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-SEC-002", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:1c4788beab43d9c9", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 cascade from ARCH protocol: re-read; server names no edit, open question 7 holds" }
+verified = { hash = "b3:ff82d13bb4723fae", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; per-session undo history wording holds" }
 -->
 
 ### Listening and admission

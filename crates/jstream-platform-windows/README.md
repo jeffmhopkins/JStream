@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-platform-windows/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-windows", "docs/ARCHITECTURE.md#threading", "docs/adr/0031-source-types-and-decoding-scope.md", "docs/adr/0014-media-clock.md", "docs/adr/0020-portable-windows-distribution.md", "docs/RULES.md#unsafe", "docs/RULES.md#real-time", "crates/jstream-platform/README.md#purpose"]
-verified = { hash = "b3:cf234b6fe2de8ff9", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "#185: capture::mailbox is now pub(crate) and video_device's stream imports it (the #[path] copy and its duplicate_mod allow are gone); the README already says webcam frames go to the same single-slot mailbox as display capture, and the mailbox bullet (one atomic pointer, tested across threads) is unchanged; holds" }
+verified = { hash = "b3:925da4192deed7ab", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c: register_vcam/vcam_registration/is_elevated/run_elevated bullet matches vcam_register.rs (incl. leaving a null DACL alone); WindowsVcam start names jstream-daemon --register-vcam" }
 -->
 
 The Windows implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -274,7 +274,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     path would copy the engine's texture into the ring on the D3D11 side).
   - **Start:** the media source must already be registered machine-wide, so `start`
     checks for its `HKLM` class key first and is `Unsupported` without it (registering
-    is the app's `--register-vcam` step). It then creates, on a D3D11 device of its own
+    is `jstream-daemon --register-vcam`, through `register_vcam` below). It then creates, on a D3D11 device of its own
     on the default hardware adapter, a ring of three shared BGRA textures and a shared
     fence, plus the control block. They are named in **this session's namespace**,
     because a non-elevated engine can't create `Global\` objects
@@ -333,8 +333,7 @@ The code is ported from spikes S1 to S3. This first cut has:
   returns `PlatformError::MissingComponent`, and the registry's `EditionID` picks the
   advice: the Media Feature Pack for an N edition (an ID ending in a capital `N`), the
   server feature for an ID starting with `Server`, and both otherwise. The host must
-  call it before creating the backends; nothing calls it yet (the daemon's startup
-  will).
+  call it before creating the backends, as `jstream-daemon`'s startup does.
   - **Delay-loading:** the `windows` crate imports Media Foundation's DLLs when the
     process loads, so on such a machine Windows refuses to start a binary that links a
     Media Foundation backend before any check can run. That binary must delay-load each
@@ -342,6 +341,20 @@ The code is ported from spikes S1 to S3. This first cut has:
     to report anything: `mfplat.dll` for `MfCodecs`; `mfplat.dll`, `mf.dll` and
     `mfreadwrite.dll` for `MfVideoDevices`; `mfplat.dll` for `MfMjpegDecoder`;
     `mfplat.dll` and `mfsensorgroup.dll` for `WindowsVcam`. The check itself never imports Media Foundation.
+
+- **`register_vcam`** and **`vcam_registration`**, the virtual camera's registration
+  ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)). Frame Server ignores
+  per-user registration, so `register_vcam` writes the media source's class machine-wide:
+  `HKLM\Software\Classes\CLSID\{clsid}` with `InprocServer32` naming the DLL and
+  `ThreadingModel = Both`, the path written last. It then adds a read-and-execute ACE for
+  LOCAL SERVICE, Frame Server's account, to the DLL file's DACL. It needs an elevated
+  process (`is_elevated`); `run_elevated` relaunches the current executable with the
+  `runas` verb, hidden, and waits for its exit code, which is the one UAC prompt (a
+  declined prompt is `InvalidState`). `vcam_registration` needs no elevation: it reads the
+  registered path and compares it with the DLL the host ships (`VCAM_DLL`, beside the
+  executable), ignoring case, `\\?\` and `/`. The answer is `Missing`, `Current` or
+  `Moved`, the last when a portable install was moved after registering. That comparison
+  is tested on every platform.
 
 **Not yet:** Media Foundation video decoders, encoders and the virtual camera taking
 `VideoSurface::Gpu`, and

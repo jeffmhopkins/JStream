@@ -8,6 +8,7 @@ use jstream_protocol::{
     AudioFollow, BusId, BusInfo, Edit, EntityKind, Finite32, ProtocolError, SendInfo, SourceAudio,
     SourceId, SourceKind, gain_db_problem,
 };
+use std::collections::BTreeMap;
 
 /// The most buses a collection holds, the master included, as in `jstream-graph`.
 const MAX_BUSES: usize = 16;
@@ -78,23 +79,71 @@ impl Collection {
         self.sends.extend(copies);
     }
 
-    /// Takes away the sends of a source that is being deleted.
-    pub(super) fn audio_deleted(&mut self, id: &SourceId) {
-        self.sends.retain(|(_, source), _| source != id);
+    /// Takes away the sends of the source `id`, which `source.delete` has just removed
+    /// (with its `kind` and `audio`), and returns the edits that restore its audio after
+    /// the `source.create` that undoes the delete, as `jstream-graph` does: only what
+    /// differs from the kind's default audio and a master send at 0 dB.
+    pub(super) fn audio_deleted(
+        &mut self,
+        id: &SourceId,
+        kind: &SourceKind,
+        audio: Option<SourceAudio>,
+    ) -> Vec<Edit> {
+        let mut sends = BTreeMap::new();
+        self.sends.retain(|(bus, source), gain| {
+            if source == id {
+                sends.insert(bus.clone(), *gain);
+                false
+            } else {
+                true
+            }
+        });
+        let mut restore = Vec::new();
+        let default = self.default_audio(kind);
+        let gets_master = channel(kind, default.as_ref());
+        if gets_master && !sends.contains_key(&BusId::master()) {
+            restore.push(Edit::SendRemove {
+                source_id: id.clone(),
+                bus_id: BusId::master(),
+            });
+        }
+        for (bus, gain) in sends {
+            if gets_master && bus.is_master() && gain == Finite32::ZERO {
+                continue;
+            }
+            restore.push(Edit::SendSet {
+                source_id: id.clone(),
+                bus_id: bus,
+                gain_db: gain,
+            });
+        }
+        if let (Some(audio), Some(default)) = (audio, default)
+            && audio != default
+        {
+            restore.push(Edit::SourceSetAudio {
+                source_id: id.clone(),
+                enabled: (default.enabled != audio.enabled).then_some(audio.enabled),
+                follow: (default.follow != audio.follow).then_some(audio.follow),
+                gain_db: (default.gain_db != audio.gain_db).then_some(audio.gain_db),
+                muted: (default.muted != audio.muted).then_some(audio.muted),
+            });
+        }
+        restore
     }
 
     fn has_channel(&self, id: &SourceId) -> bool {
         self.sources
             .get(id)
-            .is_some_and(|s| s.audio.is_some() && !matches!(s.kind, SourceKind::Scene { .. }))
+            .is_some_and(|s| channel(&s.kind, s.audio.as_ref()))
     }
 
-    /// Applies an audio edit. `None` for any other edit.
+    /// Applies an audio edit and returns the edits that undo it. `None` for any other
+    /// edit.
     pub(super) fn apply_audio(
         &mut self,
         edit: &Edit,
         at: usize,
-    ) -> Option<Result<(), ProtocolError>> {
+    ) -> Option<Result<Vec<Edit>, ProtocolError>> {
         Some(match edit {
             Edit::SourceSetAudio {
                 source_id,
@@ -117,15 +166,32 @@ impl Collection {
                 gain_db,
             } => self.check_send(source_id, bus_id, at).and_then(|()| {
                 check_gain(*gain_db, at)?;
-                self.sends
+                let old = self
+                    .sends
                     .insert((bus_id.clone(), source_id.clone()), *gain_db);
-                Ok(())
+                Ok(vec![match old {
+                    Some(gain_db) => Edit::SendSet {
+                        source_id: source_id.clone(),
+                        bus_id: bus_id.clone(),
+                        gain_db,
+                    },
+                    None => Edit::SendRemove {
+                        source_id: source_id.clone(),
+                        bus_id: bus_id.clone(),
+                    },
+                }])
             }),
             Edit::SendRemove { source_id, bus_id } => {
                 self.check_send(source_id, bus_id, at).and_then(|()| {
                     self.sends
                         .remove(&(bus_id.clone(), source_id.clone()))
-                        .map(|_| ())
+                        .map(|gain_db| {
+                            vec![Edit::SendSet {
+                                source_id: source_id.clone(),
+                                bus_id: bus_id.clone(),
+                                gain_db,
+                            }]
+                        })
                         .ok_or_else(|| {
                             invalid(
                                 at,
@@ -147,7 +213,7 @@ impl Collection {
         gain_db: Option<Finite32>,
         muted: Option<bool>,
         at: usize,
-    ) -> Result<(), ProtocolError> {
+    ) -> Result<Vec<Edit>, ProtocolError> {
         let source = self
             .sources
             .get_mut(id)
@@ -175,6 +241,9 @@ impl Collection {
         }
         if let Some(gain_db) = gain_db {
             check_gain(gain_db, at)?;
+        }
+        let before = *audio;
+        if let Some(gain_db) = gain_db {
             audio.gain_db = gain_db;
         }
         if let Some(enabled) = enabled {
@@ -186,10 +255,22 @@ impl Collection {
         if let Some(muted) = muted {
             audio.muted = muted;
         }
-        Ok(())
+        // The fields sent, back to what they were.
+        Ok(vec![Edit::SourceSetAudio {
+            source_id: id.clone(),
+            enabled: enabled.map(|_| before.enabled),
+            follow: follow.map(|_| before.follow),
+            gain_db: gain_db.map(|_| before.gain_db),
+            muted: muted.map(|_| before.muted),
+        }])
     }
 
-    fn create_bus(&mut self, id: &BusId, name: &str, at: usize) -> Result<(), ProtocolError> {
+    fn create_bus(
+        &mut self,
+        id: &BusId,
+        name: &str,
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
         check_id(id.as_str(), at, "bus_id")?;
         if self.buses.contains_key(id) {
             return Err(already_exists(EntityKind::Bus, id.as_str()));
@@ -203,26 +284,61 @@ impl Collection {
             ));
         }
         self.buses.insert(id.clone(), Bus::new(name.to_owned()));
-        Ok(())
+        Ok(vec![Edit::BusDelete { bus_id: id.clone() }])
     }
 
-    fn rename_bus(&mut self, id: &BusId, name: &str, at: usize) -> Result<(), ProtocolError> {
+    fn rename_bus(
+        &mut self,
+        id: &BusId,
+        name: &str,
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
         self.bus(id)?;
         check_name(name, at)?;
-        if let Some(bus) = self.buses.get_mut(id) {
-            name.clone_into(&mut bus.name);
-        }
-        Ok(())
+        let bus = self
+            .buses
+            .get_mut(id)
+            .ok_or_else(|| not_found(EntityKind::Bus, id.as_str()))?;
+        let old = std::mem::replace(&mut bus.name, name.to_owned());
+        Ok(vec![Edit::BusRename {
+            bus_id: id.clone(),
+            name: old,
+        }])
     }
 
-    fn delete_bus(&mut self, id: &BusId, at: usize) -> Result<(), ProtocolError> {
+    fn delete_bus(&mut self, id: &BusId, at: usize) -> Result<Vec<Edit>, ProtocolError> {
         self.bus(id)?;
         if id.is_master() {
             return Err(invalid(at, "bus_id", "the master bus can't be deleted"));
         }
-        self.buses.remove(id);
-        self.sends.retain(|(bus, _), _| bus != id);
-        Ok(())
+        let bus = self
+            .buses
+            .remove(id)
+            .ok_or_else(|| not_found(EntityKind::Bus, id.as_str()))?;
+        let mut inverse = vec![Edit::BusCreate {
+            bus_id: id.clone(),
+            name: bus.name,
+        }];
+        if bus.gain_db != Finite32::ZERO || bus.muted {
+            inverse.push(Edit::BusSetFader {
+                bus_id: id.clone(),
+                gain_db: (bus.gain_db != Finite32::ZERO).then_some(bus.gain_db),
+                muted: bus.muted.then_some(true),
+            });
+        }
+        self.sends.retain(|(bus_id, source_id), gain| {
+            if bus_id == id {
+                inverse.push(Edit::SendSet {
+                    source_id: source_id.clone(),
+                    bus_id: bus_id.clone(),
+                    gain_db: *gain,
+                });
+                false
+            } else {
+                true
+            }
+        });
+        Ok(inverse)
     }
 
     fn bus(&self, id: &BusId) -> Result<&Bus, ProtocolError> {
@@ -237,23 +353,29 @@ impl Collection {
         gain_db: Option<Finite32>,
         muted: Option<bool>,
         at: usize,
-    ) -> Result<(), ProtocolError> {
-        self.bus(id)?;
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let bus = self
+            .buses
+            .get_mut(id)
+            .ok_or_else(|| not_found(EntityKind::Bus, id.as_str()))?;
         if gain_db.is_none() && muted.is_none() {
             return Err(invalid(at, "gain_db", "send `gain_db`, `muted` or both"));
         }
         if let Some(gain_db) = gain_db {
             check_gain(gain_db, at)?;
         }
-        if let Some(bus) = self.buses.get_mut(id) {
-            if let Some(gain_db) = gain_db {
-                bus.gain_db = gain_db;
-            }
-            if let Some(muted) = muted {
-                bus.muted = muted;
-            }
+        let inverse = Edit::BusSetFader {
+            bus_id: id.clone(),
+            gain_db: gain_db.map(|_| bus.gain_db),
+            muted: muted.map(|_| bus.muted),
+        };
+        if let Some(gain_db) = gain_db {
+            bus.gain_db = gain_db;
         }
-        Ok(())
+        if let Some(muted) = muted {
+            bus.muted = muted;
+        }
+        Ok(vec![inverse])
     }
 
     /// The order `jstream-graph` checks a send in: the source, the bus, then whether the
@@ -310,6 +432,12 @@ impl Collection {
             })
             .collect()
     }
+}
+
+/// Whether a source of `kind` with `audio` has a channel of its own, and so sends: an
+/// audio source that is not a `scene` source.
+fn channel(kind: &SourceKind, audio: Option<&SourceAudio>) -> bool {
+    audio.is_some() && !matches!(kind, SourceKind::Scene { .. })
 }
 
 fn check_gain(gain_db: Finite32, at: usize) -> Result<(), ProtocolError> {

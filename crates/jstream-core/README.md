@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:17297449771885a6", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; Audio bullet (audio.rs routing, meters.tick, reset_loudness, no source inputs until C5), drop-counts bullet says the sampler emits meters.tick, tests list src/tests/audio.rs and the parity mic kind, Not yet names C5 inputs and D6" }
+verified = { hash = "b3:9834f6266df6591f", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B2-f2 #239 touched sets moved to jstream-graph) into C2: re-read; B2-f2's History bullet (graph's Touched set) and Tests list kept as main has them; C2 adds only the live text-source test in src/tests/sources.rs, covered by the Tests list; holds" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -113,10 +113,11 @@ state machine. Contents:
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), the pipeline against the platform fakes
   (on the software adapter, and again on a CPU stand-in for the compositor so the
-  stage-failure, late-tick, teardown, final-tick, link-loss and stalled-stop tests run
-  without one),
+  stage-failure, late-tick, teardown, final-tick, link-loss, stalled-stop and
+  blocked-send stop tests run without one),
   `connect_rtmp` against a slow fake RTMP server on loopback, one that hangs up
-  and is reconnected to, and one that stops reading while a stop's deadline runs out,
+  and is reconnected to, one that stops reading while a stop's deadline runs out, and
+  one that reads only a trickle of one large tag,
   a publish opener connecting that fake server on every start (start, media, stop,
   twice) and one that cannot connect, a recording output writing MP4 to a temp dir
   (renamed into place on stop, refused when the file exists or the path is not
@@ -155,7 +156,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:5850bccc7bebb7a2", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 cascade from ARCH protocol/control design: re-read; Audio routing, calls and undo text hold" }
+verified = { hash = "b3:009884b53e67a92d", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B2-f2 #239 touched sets moved to jstream-graph) into C2: re-read; B2-f2's Conflicts paragraph (Touched from jstream-graph, encoder objects/props) and A6 audit/collection prose kept as main has them; C2 adds only a source test this section doesn't describe; holds" }
 -->
 
 ### Engine and sessions
@@ -281,14 +282,17 @@ collection lock:
   shared with batches and store the whole result); then `expected_rev`
   (`rev_conflict`); then an empty stack (`history_empty`). None of these drops a step.
 - **Conflicts.** Each applied batch, undo and redo is logged with what it *touched*,
-  computed in core from its edits and the inverse's (so a delete also names what it
+  the `Touched` set `jstream-graph` returns with it, from its edits and the inverse's
+  (so a delete also names what it
   removed): objects created or deleted, objects used (an item's scene and source, both
   sources of an `item.set_source`, a `scene` source's scene, a duplicate's original,
-  the scenes an `item.move` and its inverse name), properties set (names, a scene's
+  the scenes an `item.move` and its inverse name, the profile an `output.set_encoder`
+  names), properties set (names, a scene's
   role, an item's placement, whether set as a transform or a geometry, crop,
   visibility, an item's index, which `item.move` also sets, which source an item
-  places, each settings parameter, an output's target, each audio field a
-  `source.set_audio` or `bus.set_fader` sets, a bus's name, a send's gain), the scenes'
+  places, each settings parameter, an output's target and encoder choice, a profile's
+  encoding, each audio field a `source.set_audio` or `bus.set_fader` sets, a bus's
+  name, a send's gain), the scenes'
   order, and the canvas size. A send is an object of its own, which uses its source
   and its bus, so changing two sources' sends into one bus doesn't conflict, and
   deleting a bus conflicts with every change to its sends. An undo or redo first applies the step's edits to a copy of the
@@ -526,7 +530,8 @@ delete a running output (`invalid_argument`), so the batch passes it the running
 A host can also declare an output with `Engine::with_output(id)`, outside the
 collection: it starts `stopped`, has no target and stays known whatever the collection
 holds. A live host reads a collection output's target with `output_kind` when its
-publish opener runs; wiring that into the daemon is not done yet. A recording output
+publish opener runs, as `jstream-daemon` does on Windows
+([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)). A recording output
 (`OutputKind::Record`) never calls the opener or takes a one-shot target.
 
 **Stream keys.** `with_key_store` injects the OS credential store
@@ -577,6 +582,7 @@ stop or a failure, and no session sits idle before the start. The opener runs af
 `starting`, outside the collection lock and the pipeline gate, before any device
 opens; its error fails the start like a launch failure (`failed`, then
 `action_failed` with `opening the publish target: <reason>`), and the opener is kept.
+An opener builds its own errors with `PublishError::new`.
 Its error text must not carry a stream key
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)); `connect_rtmp`'s does not. Starts run one at a time (a second waits for the first to settle; a stop never
 waits for a start). The call checks the output is idle,
@@ -594,7 +600,7 @@ the host sets another before retrying (an opener is kept); the other outputs kee
 running. `output.stop` on an `active` output emits `stopping`, drops its pipeline
 outside the lock (the program stage and an encoder session stop with the last output
 on them) (its drop sets the stop flag and joins the threads; the output
-thread's drain is bounded, see the RTMP paragraph below), then emits
+thread's drain, and the wait for it, are bounded, see the RTMP paragraph below), then emits
 `stopped`. `output.stop` during the in-flight start cancels that generation, emits
 `stopping`, waits until the start has dropped whatever it opened, then emits
 `stopped`. The start then answers `action_failed` and does not emit `active`. The
@@ -711,19 +717,28 @@ a shorter timeout fails on a slow server), then drops the read timeout to 1 ms s
 `poll` does not block the output thread. Writes keep a 10 s timeout while the output
 runs, so a stalled write takes that long to count as a lost link.
 
-A stop bounds its drain. When the output thread sees the stop flag it gives itself
-2 s (`STOP_DRAIN`) to send what the encoders queued and tells the target that
-deadline (`LivePublish::stop_by`; the default does nothing). Once it passes, or a send
-fails while stopping, the thread drops the packets still queued, counts them in
+A stop bounds its drain. The stop fixes a deadline 2 s (`STOP_DRAIN`) after it
+begins and raises the stop flag; the output thread, once it sees the flag, sends what
+the encoders queued until then and tells the target that deadline
+(`LivePublish::stop_by`; the default does nothing). Once it passes, or a send fails
+while stopping, the thread drops the packets still queued, counts them in
 `output_packets`, and calls `finish`. A failure while stopping is logged, not
-reported: the output is already on its way to `stopped`. `RtmpPublish` honors the
-deadline: each write's timeout is cut to the time left, a lost link is not
+reported: the output is already on its way to `stopped`. The stop does not count on
+the target honoring the deadline (#138): it waits for a publishing output thread
+only until the deadline plus 500 ms (`OUTPUT_GRACE`), then returns without it and
+closes that thread's line to the publish watcher, so a send blocked in a target that
+ignores `stop_by` cannot hold `output.stop` either. The thread is detached and ends
+once that send returns; what it drops after that is not in the final `stats.tick`.
+A recording's output thread is always joined, so its file is renamed into place
+when the stop returns. `RtmpPublish` honors the deadline: every socket write's
+timeout is cut to the time left (`Transport::set_write_deadline`), so a peer that
+reads a trickle cannot stretch one large tag past it, a lost link is not
 reconnected, and past the deadline sends fail and `finish` drops the connection
 without the `FCUnpublish` … `deleteStream` goodbye. So a peer that has stopped
-reading holds `output.stop` for about 2 s, not 10 s per blocked write; a target that
-ignores `stop_by` can still add one blocked send. `connect_rtmp`'s unit tests drive
-fake servers on loopback: a slow one, one that hangs up mid-stream, and one that
-stops reading while the deadline runs out.
+reading holds `output.stop` for about 2 s, not 10 s per blocked write.
+`connect_rtmp`'s unit tests drive fake servers on loopback: a slow one, one that
+hangs up mid-stream, one that stops reading while the deadline runs out, and one
+that reads only a trickle of a 12 MiB tag.
 
 ### Locking
 
@@ -814,8 +829,8 @@ twice the limit. A write error is logged at `warn` and loses the entry; it never
 the call. Dropping the `AuditFile` writes what is queued and joins the thread. Times
 are UTC, RFC 3339 to the millisecond, formatted without a date crate.
 
-No host injects a sink yet: the daemon's wiring, in its data directory, is a later
-item.
+`jstream-daemon` injects an `AuditFile` in its log directory
+([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 
 ### Collection file
 
@@ -830,7 +845,7 @@ contents) and left as it is. It is configured before `connect`, like the other
 builders.
 
 After each applied batch, undo or redo, `Engine::execute` saves the collection before
-the call returns, so a client that has its `rev` knows the file holds it. The save
+the call returns, so the client whose call it was knows the file holds its `rev`. The save
 takes the collection file's mutex, then the collection lock only long enough to
 serialize the graph, and writes with only the file's mutex held: saves happen one at a
 time, never under the collection lock, and one whose `rev` the file already has (or
@@ -841,15 +856,15 @@ Unix the directory flushed too; on Unix it is mode `0600`. A failed save is logg
 result as it is: the change stays applied and the next change saves again. Undo
 history and idempotency keys are not saved.
 
-The daemon's `--collection` option, which turns this on, is a later item.
+`jstream-daemon`'s `--collection` option turns this on
+([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 
 ### Not yet
 
 - **Live values** for continuous gestures (`live.set`, `live.cancel` and their events,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), which need the real-time
   parameter channels.
-- The daemon's `--collection` option and audit file, and an `app` asset folder for
-  live sources.
+- An `app` asset folder for live sources.
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
@@ -866,7 +881,7 @@ The daemon's `--collection` option, which turns this on, is a later item.
 <!-- @section
 covers = ["crates/jstream-core/src/runtime/**"]
 depends_on = ["docs/ARCHITECTURE.md#threading", "docs/RULES.md#R-RT-006"]
-verified = { hash = "b3:4c7c472186c4c5d7", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; mixer thread meters the master, the engine routes into the stage's mixer while it runs, jstream-stats also emits meters.tick" }
+verified = { hash = "b3:b0f8eb4543a20caa", by = "agent:claude@session_01B51ap3T7Ht7XMkn73YkbnT", note = "Merge of main (A3: publish.rs PublishError::new made public) into #207: took main's stamp; re-read; shared program stage and per-output thread text unaffected; holds" }
 -->
 
 The output pipeline (`src/runtime/`) is the part of

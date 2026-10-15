@@ -3108,6 +3108,90 @@ mod cpu_pipeline {
         assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
     }
 
+    /// A publish target whose send, once `stalled`, blocks until `release` fires (or
+    /// 30 s pass) and ignores [`LivePublish::stop_by`]: a destination that neither
+    /// looks at the deadline nor can be cut short. Records when it returns.
+    struct BlockedPeer {
+        stalled: Arc<AtomicBool>,
+        sent: Arc<AtomicU64>,
+        release: mpsc::Receiver<()>,
+        returned: Arc<AtomicBool>,
+    }
+
+    impl LivePublish for BlockedPeer {
+        fn send_tag(&mut self, _tag: &FlvTag) -> Result<(), PublishError> {
+            if self.stalled.load(Ordering::Acquire) {
+                let _ = self.release.recv_timeout(Duration::from_secs(30));
+                self.returned.store(true, Ordering::Release);
+            }
+            self.sent.fetch_add(1, Ordering::AcqRel);
+            Ok(())
+        }
+
+        fn poll(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+
+        fn finish(&mut self) -> Result<(), PublishError> {
+            Ok(())
+        }
+    }
+
+    /// #138: a send that blocks for good, ignoring the stop deadline, cannot hold
+    /// `output.stop` either. The stop returns about `STOP_DRAIN` after it began and
+    /// settles `stopped`, before the send has returned; the output thread ends once it
+    /// does. Before, the stop waited out the blocked send (30 s here).
+    #[test]
+    fn a_send_that_ignores_the_stop_deadline_cannot_hold_output_stop() {
+        use crate::runtime::STOP_DRAIN;
+
+        let fakes = fakes();
+        let stalled = Arc::new(AtomicBool::new(false));
+        let sent = Arc::new(AtomicU64::new(0));
+        let returned = Arc::new(AtomicBool::new(false));
+        let (release, release_rx) = mpsc::channel();
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(BlockedPeer {
+                stalled: Arc::clone(&stalled),
+                sent: Arc::clone(&sent),
+                release: release_rx,
+                returned: Arc::clone(&returned),
+            }),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || sent.load(Ordering::Acquire)
+                >= 5),
+            "nothing was published"
+        );
+
+        stalled.store(true, Ordering::Release);
+        for _ in 0..10 {
+            pump(&fakes.clock, &fakes.audio);
+        }
+        drain(&mut events);
+
+        let started = Instant::now();
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        let took = started.elapsed();
+        let still_blocked = !returned.load(Ordering::Acquire);
+        // Lets the left-behind output thread end.
+        let _ = release.send(());
+        assert!(
+            took < STOP_DRAIN + Duration::from_secs(3),
+            "output.stop took {took:?} behind a send that ignores the deadline"
+        );
+        assert!(
+            still_blocked,
+            "the send returned before the stop did, so nothing was left behind"
+        );
+        assert_eq!(output_state(&control, "yt"), OutputState::Stopped);
+    }
+
     // --- Item: a recording output writes fragmented MP4 to the path it names.
 
     /// A directory under the system temp dir, removed on drop.

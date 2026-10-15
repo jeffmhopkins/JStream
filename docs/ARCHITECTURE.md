@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0002-web-ui-everywhere.md"]
-verified = { hash = "b3:12acea01746e7b87", by = "agent:claude@session_01A2ofG8U5ah39pcrDBmAn77", note = "Merge of main (#184 B6, #206, #199, G3a) into ADR-0042: no shape text changed on main and no app manifest view or main.rs changed; host table holds" }
+verified = { hash = "b3:fd2f10fecf76c5ac", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main (A6): daemon row is main's (loads and saves --collection) plus registering the virtual camera (--register-vcam); diagram unchanged" }
 -->
 
 ```
@@ -55,7 +55,7 @@ verified = { hash = "b3:12acea01746e7b87", by = "agent:claude@session_01A2ofG8U5
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP, not the UI or `--collection` yet ([its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API and MCP over streamable HTTP and loads and saves `--collection`, not the UI yet, and on Windows links `jstream-platform-windows` to run the media pipeline and go live over RTMP(S), and registers the virtual camera (`--register-vcam`) ([its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 
 <a id="principles"></a>
@@ -116,7 +116,7 @@ JStream/
 <!-- @section
 covers = ["crates/*/Cargo.toml#jstream-meta", "apps/*/Cargo.toml#jstream-meta"]
 depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
-verified = { hash = "b3:d55550601ffa56af", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C4b follow-up (review N7): jstream-platform's manifest summary now matches its row word for word (VideoDevices, Codecs, StreamKeyStore, OAuthTokenStore); no other row or edge changed" }
+verified = { hash = "b3:a80da1a5d3a45874", by = "agent:claude@session_01YKRrREb5gUVhTU3pzaRVW8", note = "Merge of main (C4b follow-up N7: platform summary row) into A3 (apps row: desktop and daemon link their OS platform crate); both rows match manifests, lint-deps passes" }
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
@@ -155,7 +155,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-outputs` | `Output` trait; RTMP(S) client with reconnect, recording, vcam output. Uses `encode`, `mux` and platform traits. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl` | no |
 | — | `jstream-ui` | Leptos app compiled to WASM; depends on `jstream-protocol` and `jstream-control` only | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host, planned for M3 ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -166,7 +166,7 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:c7e8471e7d66f5ee", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; Built so far gains source audio, buses and sends (0.21) and why no audio cycle can form yet; Not yet drops source audio settings and buses, keeps filters/keys, monitors and chains; collection file line names buses, sends and audio" }
+verified = { hash = "b3:cfcee83f883e7ed4", by = "agent:claude@session_01Hc59N2dDiDBc3JEys4Fgnx", note = "Merge of main (B5 #196, D2 #192, #227) into C2: main's text and stamps kept; the only C2 difference is text among the built kinds in ARCH Built so far (and in core, a live text-source test); re-read, holds" }
 -->
 
 ```
@@ -358,7 +358,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   cycle check covers them all. Deleting a source an item still places or a setting
   refers to, or a scene a source still shows or a setting refers to, is rejected. The
   built-in kinds come from `jstream-sources`. The engine runs a source of each one
-  whose kind is built (`color` and `image`), rebuilt when its settings change, and
+  whose kind is built (`color`, `image` and `text`), rebuilt when its settings change, and
   the program mix shows its frames, animations advancing on the media clock.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
@@ -525,7 +525,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:181d733cd5a3d51c", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5: re-read; Edits bullet names the audio edits (send.set replaces the old audio.set_send example), queries name bus.list with levels as an event, events add meters.tick and audio.reset_loudness" }
+verified = { hash = "b3:231c7b6d2e48fbe8", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "Merge of main (#196 B5 references and clones) into B2-f3: re-read; history and undo_conflict wording hold; the mock change is internal to jstream-control" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -866,7 +866,7 @@ verified = { hash = "b3:82222c1c09c24b50", by = "agent:claude@session_01D4rY84zM
 ## Packaging
 <!-- @section
 depends_on = ["docs/adr/0020-portable-windows-distribution.md"]
-verified = { hash = "b3:435cdce080086191", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "Merge of main: #190's browser-helper wording and this PR's hardware-run bullet both kept; no conflict in meaning" }
+verified = { hash = "b3:026533f994053898", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "G3c: virtual camera bullet says jstream-daemon --register-vcam is that mode until the app exists, with the startup moved-folder warning; unregister waits for the app" }
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -886,7 +886,10 @@ Direct3D 12).
 - **Virtual camera:** the app registers the COM media source from its own folder the first
   time the camera is enabled. That costs **one UAC prompt** (`jstream.exe --register-vcam`),
   because Frame Server ignores per-user registration. The app can unregister the source and
-  detects a moved folder. Spike S2 (Windows 11 25H2, build 26200) found:
+  detects a moved folder. Until the desktop app exists, `jstream-daemon --register-vcam` is
+  that mode, and the daemon warns at startup when the registration names another folder
+  ([jstream-daemon › Usage](../apps/jstream-daemon/README.md#usage)); unregistering waits
+  for the app. Spike S2 (Windows 11 25H2, build 26200) found:
   - **Per user (`HKCU`) doesn't work.** `MFCreateVirtualCamera` succeeds, but
     `IMFVirtualCamera::Start` fails with `0x80070003`, and Frame Server never loads the
     DLL.
@@ -909,5 +912,4 @@ Direct3D 12).
     served only the producer's frames, with **no** LOCAL SERVICE grant on the file. So the
     grant matters only for a DLL inside a user profile, which is inferred from S2 rather
     than isolated. Frame Server requested about four samples per producer frame, because
-    the stream doesn't pace `RequestSample` yet
-    (#193).
+    the stream didn't pace `RequestSample`; it now answers at most 30 a second (#193).

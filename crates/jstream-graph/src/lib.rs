@@ -18,12 +18,14 @@ mod model;
 mod persist;
 mod read;
 mod target;
+mod touched;
 
 pub use apply::Applied;
 pub use model::{
     Bus, Encoder, Graph, Item, MAX_BUSES, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State,
 };
 pub use persist::{LoadError, SCHEMA_VERSION};
+pub use touched::Touched;
 
 #[cfg(test)]
 mod tests;
