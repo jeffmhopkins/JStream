@@ -121,7 +121,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <!-- @section
 covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
-verified = { hash = "b3:586452dea5a9e420", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip fix: added the sentence that settings numbers parse to the nearest f64 and round-trip; Finite32 paragraph unchanged" }
+verified = { hash = "b3:7aa5f3f591196354", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 (N2): sentence now says non-integer numbers are f64; rest is main's text" }
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -312,9 +312,9 @@ then serializes as `null` and no longer parses. So a
 non-finite or out-of-`f32`-range number fails deserialization, and
 `ClientMessage::parse` rejects the whole message as `malformed`. In-process clients
 can't build a non-finite value either: `Finite32::new` and `Vec2::new` return `None`
-for one. Settings values keep JSON numbers as `f64`, parsed to the nearest one
-(serde_json's `float_roundtrip`), so a message with a long number still serializes and
-parses back to itself.
+for one. Settings values keep non-integer JSON numbers as `f64`, parsed to the nearest
+one (serde_json's `float_roundtrip`), so a message with a long number still serializes
+and parses back to itself.
 
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next

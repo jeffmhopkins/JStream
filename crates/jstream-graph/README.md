@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:a12dc49002f6400a", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "Q1 r3 (N1): blockers clause now scoped to scene and source deletes; encoder deletes checked refused-iff-used only, as encoder.rs returns no blockers" }
+verified = { hash = "b3:66c255ea11558ac5", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 merge of main: text is main's (Q1 tests paragraph); stale via protocol design's number sentence only" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
