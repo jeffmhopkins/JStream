@@ -240,7 +240,7 @@ stamp = { hash = "b3:5528c2a65d3e7ffc", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:60cbb6e9acd50bcf" }
 
 ["ARCH#packaging"."body"]
-stamp = { hash = "b3:2ce3de03f8d149b3", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: covers adds xtask/src/dist.rs and .cargo/config.toml (declared); State bullet names the data folder via paths; new Building-the-zip bullet matches dist.rs (trunk UI or --ui-dir, four binaries, vcruntime/msvcp refused, UCRT and msvcrt.dll allowed, deterministic deflate zip, git describe or --revision naming) and config.toml's crt-static flag; CI dist job as described" }
+stamp = { hash = "b3:f1cd89b16dfff9f6", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 after ADR-0054 (#395): the dist job moved from ci.yml to after-review.yml with its own dist-ui release UI job; the Building-the-zip bullet now says so (runs on main and on a PR once review passes, named by --revision after the commit tested); rest still matches dist.rs and .cargo/config.toml" }
 
 ["ARCH#packaging"."dep:docs/adr/0020-portable-windows-distribution.md"]
 stamp = { hash = "b3:febfe552adc09d5b" }
@@ -1110,7 +1110,7 @@ stamp = { hash = "b3:9597d8d3fe05859a" }
 stamp = { hash = "b3:20b9282859764b8b" }
 
 ["CRATE-jstream-daemon#design"."body"]
-stamp = { hash = "b3:97459d1b122e4407", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; Listening (port, MCP and the UI directory changed) matches serve.rs; main's build.rs text kept; holds" }
+stamp = { hash = "b3:ec76a643a1a5e0b1", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#247): main's Startup/Listening text now names --ui-dir and the UI directory; P1's data-directory bullet (jstream-platform paths, portable marker), Dependencies entry and open question 5 are unaffected and still match logs.rs; holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
 stamp = { hash = "b3:f8d3caba075c6078" }
@@ -1188,7 +1188,7 @@ stamp = { hash = "b3:fa55ac483c3bac65" }
 stamp = { hash = "b3:7666dcee9f6dd8ce" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
+stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main (#247 --ui-dir): main's --ui-dir row, Web UI bullet and exit-1 row sit beside P1's Log files bullet (data folder beside the exe with a portable marker; missing HOME/APPDATA fails only without it), which still matches paths::data_dir_for and logs.rs; holds" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:89352ba5946170b4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; --ui-dir row, ui: banner line, Web UI bullet and exit-1 row match args.rs and main.rs (early is_dir check before the token file); holds" }
@@ -2538,7 +2538,7 @@ stamp = { hash = "b3:5506fd7891457520" }
 stamp = { hash = "b3:6d760c430e428d10", by = "agent:claude@session_01D6iWjpMkoHbWLUxVnmDfxk", note = "U5 (Packaging reworded only): regsvr32 and vcam_smoke steps unchanged and still apply" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:2ce3de03f8d149b3", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH#packaging (dist zip contents and CI artifact); the hardware-check steps still build and register the DLL the same way; holds" }
+stamp = { hash = "b3:f1cd89b16dfff9f6", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH#packaging (CI dist job moved to after-review.yml); hardware-check steps build and register the DLL by hand as before; holds" }
 
 ["CRATE-jstream-vcam-windows#hardware-check"."file:crates/jstream-vcam-windows/examples/vcam_smoke/main.rs"]
 stamp = { hash = "b3:741967485a750fec" }
@@ -2556,7 +2556,7 @@ stamp = { hash = "b3:b6a3f609729e0f1f" }
 stamp = { hash = "b3:ecfd9b5f74db77b1" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/ARCHITECTURE.md#packaging"]
-stamp = { hash = "b3:2ce3de03f8d149b3", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH#packaging (dist builds and zips the vcam DLL, crt-static, CI zip named by --revision); DLL and registration text unchanged and consistent; holds" }
+stamp = { hash = "b3:f1cd89b16dfff9f6", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1: stale via ARCH#packaging, where only the CI dist job's home changed (after-review.yml, ADR-0054); DLL and registration text unchanged; holds" }
 
 ["CRATE-jstream-vcam-windows#purpose"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:9074e32b08b81d5b" }
@@ -2910,7 +2910,7 @@ stamp = { hash = "b3:643b4d999e4b0d68", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
+stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = '''P1 merge of main: daemon usage gained main's --ui-dir/Web UI text plus P1's portable data folder; prerequisites use the default %APPDATA%\JStream layout and no UI flag; holds''' }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtURygmdMVDikoc", note = "D5 merge of main at G3b (virtual_cam, 0.18): re-read against both sides; smoke text is main's and names no audio; holds" }
@@ -2919,7 +2919,7 @@ stamp = { hash = "b3:23844c6bc151254d", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:6dc625770a5edc67" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
+stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = "P1 merge of main: smoke.ps1 still passes --token-file and --log-dir in its run folder and no --ui-dir, so neither main's UI flag nor P1's data-folder default reaches it; holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:a560da0e5768f43e" }
@@ -2931,7 +2931,7 @@ stamp = { hash = "b3:d4540c864985aaa1", by = "agent:claude@session_01D4rY84zMtUR
 stamp = { hash = "b3:6dc625770a5edc67" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:acb6e569228dae69", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main after #376 moved stamps to docs/verified.toml: re-read; this PR's --ui-dir text is unchanged since round 4 and the diff against main is only this PR's hunks; cascade from daemon Usage's --ui-dir row; the runbook and smoke.ps1 don't pass --ui-dir and wait for the last banner line, listening on; holds" }
+stamp = { hash = "b3:ba551e7ad23d7acc", by = "agent:claude@session_012JH6K3TesVLzsmqwabzmYW", note = '''P1 merge of main: daemon usage gained --ui-dir (not used by these steps) and P1's portable data folder; steps run target\release with no marker, so the %APPDATA%\JStream\logs check holds''' }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:9867e005fed58ae2", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Stale via server#design; step 7 (Ctrl-C prints stopped, exits 0) holds with #301's bounded close wait; default limits are non-zero; holds" }
