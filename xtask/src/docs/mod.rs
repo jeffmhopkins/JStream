@@ -565,12 +565,14 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             Ok(true)
         }
         Some("merge-main") => {
-            let [_] = args else {
-                bail!("usage: cargo xtask docs merge-main");
+            let branch = match args {
+                [_] => merge::BRANCH,
+                [_, flag, b] if flag == "--from" => b.as_str(),
+                _ => bail!("usage: cargo xtask docs merge-main [--from wave/<name>]"),
             };
-            let m = merge::merge_main(root)?;
+            let m = merge::merge_main(root, branch)?;
             for s in &m.stamps {
-                eprintln!("took main's stamp: {s}");
+                eprintln!("took {branch}'s stamp: {s}");
             }
             for (path, why) in &m.refused {
                 eprintln!("left for you: {path}: {why}");
@@ -632,7 +634,7 @@ pub(crate) fn run(args: &[String], root: &Path) -> Result<bool> {
             Ok(true)
         }
         _ => bail!(
-            "usage: cargo xtask docs check | generate | progress | verify <DOC#anchor> --by <who> --note <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | merge-main | migrate"
+            "usage: cargo xtask docs check | generate | progress | verify <DOC#anchor> --by <who> --note <text> | review <DOC> --by <who> --note <text> | log <DOC[#anchor]> [--rev <rev>] | for <path> | merge-main [--from wave/<name>] | migrate"
         ),
     }
 }
@@ -966,6 +968,26 @@ mod tests {
         f.git(&["commit", "-q", "-m", msg]);
     }
 
+    /// ADR-0055: `docs merge-main --from wave/<name>` merges the wave branch a PR targets
+    /// instead of main, and any other branch name is refused.
+    #[test]
+    fn merge_main_from_a_wave_branch() {
+        let mut files = REGISTRIES.to_vec();
+        files.push(("src/a.rs", "a\n"));
+        let (origin, work) = origin_and_clone("merge-wave", &files);
+        origin.git(&["checkout", "-q", "-b", "wave/m1"]);
+        origin.write("src/w.rs", "wave\n");
+        commit_all(&origin, "wave: w");
+        origin.git(&["checkout", "-q", "main"]);
+        for bad in ["dev", "wave/", "-x"] {
+            let err = merge::merge_main(&work.0, bad).expect_err("refused");
+            assert!(format!("{err:#}").contains("can only merge"), "{err:#}");
+        }
+        let m = merge::merge_main(&work.0, "wave/m1").expect("merges");
+        assert!(m.committed && m.refused.is_empty(), "{m:?}");
+        assert!(work.0.join("src/w.rs").exists());
+    }
+
     /// ADR-0053 with `docs merge-main`: two branches that change different covered files
     /// of one section and re-verify it merge without a conflict, and the section stays
     /// fresh; changing the same covered file conflicts on its ledger entry, which takes
@@ -1001,10 +1023,10 @@ mod tests {
         verify(&work.0, "S#a", "agent:work", NOTE).expect("S verifies on work");
         commit_all(&work, "work: b");
         work.write("src/b.rs", "dirty\n");
-        let err = merge::merge_main(&work.0).expect_err("dirty tree");
+        let err = merge::merge_main(&work.0, "main").expect_err("dirty tree");
         assert!(format!("{err:#}").contains("uncommitted"), "{err:#}");
         work.git(&["checkout", "--", "src/b.rs"]);
-        let m = merge::merge_main(&work.0).expect("merges");
+        let m = merge::merge_main(&work.0, "main").expect("merges");
         assert!(
             m.committed && m.stamps.is_empty() && m.refused.is_empty(),
             "{m:?}"
@@ -1020,7 +1042,7 @@ mod tests {
         work.write("src/a.rs", "a1 work\n\n\n\n\na5\n");
         verify(&work.0, "S#a", "agent:work", NOTE).expect("S verifies on work");
         commit_all(&work, "work: a");
-        let m = merge::merge_main(&work.0).expect("merges");
+        let m = merge::merge_main(&work.0, "main").expect("merges");
         assert!(m.committed, "{m:?}");
         assert_eq!(m.stamps, vec!["S#a".to_owned()]);
         assert_eq!(m.stale, vec!["S#a".to_owned()]);
@@ -1045,7 +1067,7 @@ mod tests {
             verify(&f.0, "S#a", &format!("agent:{who}"), NOTE).expect("S verifies");
             commit_all(f, who);
         }
-        let m = merge::merge_main(&work.0).expect("runs");
+        let m = merge::merge_main(&work.0, "main").expect("runs");
         assert!(!m.committed, "{m:?}");
         assert_eq!(m.stamps, vec!["S#a".to_owned(), "T#a".to_owned()]);
         let refused: Vec<&str> = m.refused.iter().map(|(p, _)| p.as_str()).collect();
@@ -1064,7 +1086,7 @@ mod tests {
             String::from_utf8_lossy(&unmerged.stdout),
             "S.md\nlib/c.rs\n"
         );
-        let err = merge::merge_main(&work.0).expect_err("merge in progress");
+        let err = merge::merge_main(&work.0, "main").expect_err("merge in progress");
         assert!(
             format!("{err:#}").contains("already in progress"),
             "{err:#}"
@@ -1118,7 +1140,7 @@ mod tests {
         stamp_inline(&work, "N.md", "lib/**");
         commit_all(&work, "work: old-style stamps");
 
-        let m = merge::merge_main(&work.0).expect("merges");
+        let m = merge::merge_main(&work.0, "main").expect("merges");
         assert!(m.committed && m.refused.is_empty(), "{m:?}");
         assert_eq!(m.stamps, vec!["S#a".to_owned()]);
         let mig = m.migrated.expect("the new section's stamp moved");

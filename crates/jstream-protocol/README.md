@@ -153,8 +153,8 @@ chooses, and the server answers each request with exactly one `response` or `err
 carrying the same `id`. Answers may come out of order. `event`s arrive at any time.
 
 ```json
-{"type":"hello","protocol":{"major":0,"minor":19},"client_name":"jstream-cli"}
-{"type":"welcome","protocol":{"major":0,"minor":19},"client_id":"cli_7","rev":12}
+{"type":"hello","protocol":{"major":0,"minor":20},"client_name":"jstream-cli"}
+{"type":"welcome","protocol":{"major":0,"minor":20},"client_id":"cli_7","rev":12}
 {"type":"request","id":"r1","call":{"kind":"batch","edits":[{"type":"scene.create","scene_id":"scn_1","name":"Main"}],"expected_rev":12}}
 {"type":"response","id":"r1","result":{"kind":"batch","rev":13}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
@@ -330,8 +330,14 @@ never a type per kind.
   reference to a missing scene or source is `not_found`. A `source` reference that
   requires `media` rejects a source whose kind doesn't produce it. Asset paths under
   `collection` and `app` are relative, with `/` separators and no `..` segment, drive
-  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows); an
-  asset that doesn't exist yet is accepted.
+  letter, leading `/` or `:` (which names an NTFS alternate data stream on Windows).
+  Under `absolute` the path is `/…`, `\…`, `C:\…` or `C:/…`, with no `..` segment, no
+  second leading separator (`\\host\share`, `//host/share`, `\\.\…` and `\\?\…` name
+  a UNC share or a device, and opening one on Windows hands the engine's credentials to
+  that host), no `:` but the drive letter's, and no `?` or `*` (Win32 never allows
+  them in a file name, and `\??\UNC\…` or `\??\GLOBALROOT\Device\…` is an NT object
+  path that reaches the same hosts and devices). An asset that doesn't exist yet is
+  accepted.
 - **References are dependency edges.** Items placing sources, `scene` sources showing
   scenes, and scene and source references in settings form one dependency graph. An
   edit that would close a cycle (`item.add`, `item.move`, `item.set_source`, `source.create`,
