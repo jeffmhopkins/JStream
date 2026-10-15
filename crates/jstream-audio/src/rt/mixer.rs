@@ -17,9 +17,10 @@
 //! **Time line.** Engine frame `n` is media time `n / rate` (the media clock's zero,
 //! docs/adr/0014-media-clock.md). A block is the frames `[n, n + block)`; its pts is `n`
 //! minus the compensated latency above (so `n` when no chain has any), in ticks of
-//! `1 / rate` seconds. The mixer produces a block once the clock has passed
-//! its end by `latency` frames ([`Mixer::poll`]), so every input's audio for that window
-//! has had `latency` to arrive (device period, the resampler's look-ahead, and jitter).
+//! `1 / rate` seconds. The mixer produces a block once the clock has passed its end by
+//! the configured arrival latency, [`MixerConfig::latency_frames`] ([`Mixer::poll`]), so
+//! every input's audio for that window has had that long to arrive (device period, the
+//! resampler's look-ahead, and jitter).
 //! Inputs that missed it read as silence and are counted as underrun.
 //!
 //! **Falling behind.** If the mixer thread is stalled so long that the block it is due
