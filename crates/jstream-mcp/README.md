@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-mcp/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
-verified = { hash = "b3:9894963166aad7e1", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; holds" }
+verified = { hash = "b3:487eca3625f35f06", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (D5 audio #240, #331): re-read main's audio text beside T1's transition/preview text and merged the sentences both sides edited (contents lists, state.get, file, rebuild order, touched sets, tool nouns, version line); T1 now documents protocol 0.20 since D5 took 0.19; CLI usage also notes the transition edits aren't in the CLI; holds" }
 -->
 
 The MCP server: it gives AI agents full control of JStream through the Model Context
@@ -31,7 +31,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
   and the decoding of tool arguments into protocol calls.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
-  a bounded, numbered buffer.
+  a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`.
 - **JSON-RPC** (`jsonrpc.rs`): parsing one message and building replies.
 - **stdio transport** (`stdio.rs`): `serve_stdio`, newline-delimited messages over any
   `BufRead`/`Write` pair.
@@ -45,7 +45,7 @@ each request body to `Server::handle` ([Design](#design)).
 <!-- @section
 covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:dc111aae4ad4ad9c", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (B6-r, U2-U5, Q1, Q2, float round-trip, CL1): re-read; tool list with studio and transition holds" }
+verified = { hash = "b3:9ae882103fe52513", by = "agent:claude@session_01StfvJc4TCXD8poALM3hjzY", note = "T1 merge of main (D5 audio #240, #331): re-read main's audio text beside T1's transition/preview text and merged the sentences both sides edited (contents lists, state.get, file, rebuild order, touched sets, tool nouns, version line); T1 now documents protocol 0.20 since D5 took 0.19; CLI usage also notes the transition edits aren't in the CLI; holds" }
 -->
 
 ### Tools
@@ -60,7 +60,7 @@ below; its shape is:
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state`, `studio`, `transition`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`audio`, `bus`, `canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `video` today) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -185,7 +185,8 @@ the buffer nor the `Control`'s own stream grows while the agent is idle. It keep
 Consequences). A tick carries running totals, so the feed keeps only the newest one,
 outside the buffer, and every read returns it as `stats`; an agent still sees the drop
 counts, as ADR-0006 requires. A tick takes no `seq`, so it leaves no gap and is not
-counted in `dropped`. A read drains
+counted in `dropped`. `meters.tick`, about ten a second while the mixer runs, is kept
+the same way as `meters`: each one is a full reading of the levels. A read drains
 the subscription first, under the same lock, so it sees every event already delivered,
 then returns at most `PAGE_SIZE` events after `after`:
 
@@ -197,6 +198,7 @@ then returns at most `PAGE_SIZE` events after `after`:
 | `more` | further events are buffered after `next` |
 | `ended` | the subscription has ended with the session; no more events will come |
 | `stats` | the newest `stats.tick`, kept outside the buffer; absent until the first tick |
+| `meters` | the newest `meters.tick`, kept outside the buffer; absent until the first tick |
 
 An `events.dropped` event among `events` is a different gap: over the WebSocket API,
 `jstream-server` dropped events this session's connection had not read yet

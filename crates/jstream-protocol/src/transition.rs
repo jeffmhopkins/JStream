@@ -165,8 +165,9 @@ impl TransitionEffect {
 /// no delay, and the preset's easing and effects.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct ItemTransition {
-    /// Milliseconds before the item starts moving, on top of the preset's
-    /// `stagger_ms` × its stacking index. At most 60000.
+    /// Milliseconds before the item starts moving. An item of the scene being switched
+    /// to also waits the preset's `stagger_ms` × its stacking index; a leaving item
+    /// waits only its own delay (ADR-0052). At most 60000.
     #[serde(default)]
     pub delay_ms: u32,
     /// Its easing, or the preset's.
@@ -235,7 +236,7 @@ pub struct TransitionsInfo {
 
 impl Default for TransitionsInfo {
     /// What every new collection starts with: the one preset [`initial_preset`], which
-    /// is the default. A server older than 0.17 reports no presets, and this is what a
+    /// is the default. A server older than 0.20 reports no presets, and this is what a
     /// switch did there: a cut.
     fn default() -> Self {
         TransitionsInfo {
@@ -325,7 +326,7 @@ pub fn builtin_kinds() -> Vec<KindDescriptor> {
                 default: json!(0),
                 label: "Stagger".into(),
                 description: Some(
-                    "An extra delay per item, by stacking order from the bottom.".into(),
+                    "An extra delay per incoming item, by stacking order from the bottom.".into(),
                 ),
                 group: None,
                 advanced: false,

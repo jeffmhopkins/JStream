@@ -24,6 +24,7 @@ use jstream_control::{Control, ControlError};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::future::Future;
 use std::time::Duration;
 
@@ -600,6 +601,9 @@ struct Panel {
     problem: RwSignal<Option<String>>,
     /// Bumped by each reload, so an older reload that finishes late is dropped.
     loads: StoredValue<u64>,
+    /// Bumped by each transition the panel shows, so a replaced one's timer can't
+    /// clear its successor.
+    transitions: StoredValue<u64>,
 }
 
 impl Panel {
@@ -674,19 +678,31 @@ impl Panel {
         preview: Option<SceneId>,
         duration_ms: Option<u32>,
     ) {
-        self.snapshot.try_update(|snapshot| {
-            if let Some(snapshot) = snapshot {
-                snapshot.program.clone_from(&program);
-                snapshot.preview = preview;
-            }
-        });
+        let moved = self
+            .snapshot
+            .try_update(|snapshot| match snapshot {
+                Some(snapshot) => {
+                    let moved = snapshot.program != program;
+                    snapshot.program.clone_from(&program);
+                    snapshot.preview = preview;
+                    moved
+                }
+                None => false,
+            })
+            .unwrap_or_default();
         let (Some(to), Some(duration_ms)) = (program, duration_ms.filter(|&ms| ms > 0)) else {
+            // A cut (or a scene deleted from under program) ends what was on screen.
+            if moved {
+                self.running.try_set(None);
+            }
             return;
         };
-        let seq = self
-            .running
-            .try_with_untracked(|running| running.as_ref().map_or(0, |r| r.seq + 1))
-            .unwrap_or_default();
+        let Some(seq) = self.transitions.try_update_value(|n| {
+            *n += 1;
+            *n
+        }) else {
+            return;
+        };
         self.running.try_set(Some(Running {
             to,
             duration_ms,
@@ -744,6 +760,7 @@ pub fn StudioMode() -> impl IntoView {
         running: RwSignal::new(None),
         problem: RwSignal::new(None),
         loads: StoredValue::new(0),
+        transitions: StoredValue::new(0),
     };
 
     // Follow the engine: re-read on a collection change (or lost events), and take
@@ -838,7 +855,14 @@ pub fn StudioMode() -> impl IntoView {
                 <label class="slot">
                     <span class="slot-name">"Preview"</span>
                     <select on:change=set_preview aria-label="Scene on preview">
-                        <option value="" disabled=true prop:selected=move || preview().is_none()>
+                        <option
+                            value=""
+                            disabled=true
+                            prop:selected=move || {
+                                let preview = preview();
+                                !scenes().iter().any(|scene| Some(&scene.scene_id) == preview.as_ref())
+                            }
+                        >
                             "Choose a scene"
                         </option>
                         <For each=scenes key=|scene| (scene.scene_id.clone(), scene.name.clone()) let:scene>
@@ -1049,11 +1073,17 @@ fn PresetForm(
         .unwrap_or_else(|| panel.kinds.with_untracked(|kinds| Draft::new(kinds)));
     let draft = RwSignal::new(fresh);
     let field_problem = RwSignal::new(None::<String>);
+    // The parameters whose field holds a value the form refused.
+    let invalid = RwSignal::new(BTreeSet::<String>::new());
     let is_new = editing.is_none();
     let editing = StoredValue::new(editing);
 
     let submit = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
+        if invalid.with_untracked(|ids| !ids.is_empty()) {
+            field_problem.set(Some("Fix the values the form refused first.".into()));
+            return;
+        }
         let current = draft.get_untracked();
         let kinds = panel.kinds.get_untracked();
         let built = match editing.get_value() {
@@ -1110,6 +1140,8 @@ fn PresetForm(
         panel
             .kinds
             .with_untracked(|kinds| draft.update(|draft| draft.set_kind(kinds, &kind_id)));
+        invalid.set(BTreeSet::new());
+        field_problem.set(None);
     };
     let choose_easing = move |event: leptos::ev::Event| {
         if let Some(easing) = parse_easing(&event_target_value(&event)) {
@@ -1194,7 +1226,7 @@ fn PresetForm(
                 </select>
             </label>
             <For each=params key=|param| param.id.clone() let:param>
-                <ParamField param=param draft=draft problem=field_problem />
+                <ParamField param=param draft=draft problem=field_problem invalid=invalid />
             </For>
             {move || field_problem.get().map(|problem| view! { <p class="problem" role="alert">{problem}</p> })}
             <div class="buttons">
@@ -1216,6 +1248,7 @@ fn ParamField(
     param: ParamDescriptor,
     draft: RwSignal<Draft>,
     problem: RwSignal<Option<String>>,
+    invalid: RwSignal<BTreeSet<String>>,
 ) -> impl IntoView {
     let id = param.id.clone();
     let current = {
@@ -1227,12 +1260,22 @@ fn ParamField(
         let id = id.clone();
         match param.with_value(|param| param_value(param, &typed)) {
             Ok(value) => {
-                problem.set(None);
+                invalid.update(|ids| {
+                    ids.remove(&id);
+                });
+                if invalid.with(BTreeSet::is_empty) {
+                    problem.set(None);
+                }
                 draft.update(|d| {
                     d.settings.insert(id, value);
                 });
             }
-            Err(why) => problem.set(Some(why)),
+            Err(why) => {
+                invalid.update(|ids| {
+                    ids.insert(id);
+                });
+                problem.set(Some(why));
+            }
         }
     };
     let label = param.with_value(|p| p.label.clone());

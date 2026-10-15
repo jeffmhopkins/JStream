@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:76518133bfbf74b4", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "Studio mode UI: panels list now names studio.rs (StudioMode under the canvas); re-read; holds" }
+verified = { hash = "b3:c5c7db90bf0d6c96", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304 merge of T1 (D5, G3b, Q3): re-read; panels list with studio.rs sits beside T1/main text unchanged; holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -53,7 +53,7 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f22bf20a70c22b5b", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "Studio mode UI: added the Studio mode bullet (preview/program, Transition/Cut/Swap, presets and scene overrides); styles stay classes in style.css; re-read; holds" }
+verified = { hash = "b3:1a13c2ce69d88bb5", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304 merge of T1 plus review N1-N3: Studio mode bullet now says a cut clears the progress line, a hidden preview reads Choose a scene, refused values block saving; re-read beside T1/main's text; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -111,14 +111,17 @@ verified = { hash = "b3:f22bf20a70c22b5b", by = "agent:claude@session_016SaCkMFy
   collection has none. With "Swap" on (the default), the scene that was on program
   then goes on preview with a second `studio.set_preview`, as in other studio tools;
   the engine itself never moves preview on a switch. While a transition runs, the bar
-  shows an indeterminate progress bar for the `duration_ms` `studio.changed` reported.
+  shows an indeterminate progress bar for the `duration_ms` `studio.changed` reported;
+  a cut, or program moving without a transition, clears it at once. A preview scene
+  the list doesn't show (a group) reads "Choose a scene".
   The presets section lists each preset, adds one (ID from its name, `-2`, `-3`… when
   taken; a 300 ms ease-in-out fade by default), edits one with a `transition.update`
   naming only what changed (after a kind change, the patch is against the new kind's
   defaults, as the engine applies it), makes one the default and deletes any other.
   The kind's parameters come from `kind.list` and `kind.describe` (category
   `transition`), or the built-in `cut`, `fade` and `move` when the engine can't list
-  them; enum, boolean, number and text parameters are editable, others read-only.
+  them; enum, boolean, number and text parameters are editable, others read-only. A
+  value the form refuses keeps the preset from being saved until it is fixed.
   Each scene's `transition_in` and `transition_out` are set with
   `scene.set_transitions`. Items' own transition settings belong to the properties
   panel and are not edited here.
@@ -194,7 +197,7 @@ scene and sends the edits. These three are pure and tested natively against
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:a347b748596b8acf", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "Studio mode UI: Cargo.toml gains serde_json only; trunk build re-run locally with CI's pinned trunk and wasm-bindgen; holds" }
+verified = { hash = "b3:1cffd5b727f3115f", by = "agent:claude@session_016SaCkMFyjjxAzsyJTzs8Cv", note = "#304 merge of T1: Cargo.toml keeps serde_json beside main's changes; trunk build re-run with CI's pinned trunk and wasm-bindgen; holds" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
@@ -221,3 +224,6 @@ clippy for `wasm32` over `jstream-control` (with `ws`) and `jstream-ui`.
 
 A page served by trunk is on a different port from the engine, so the engine refuses
 its `Origin` unless it is configured as an extra origin.
+
+The built page is tested in a browser by CI's `ui-e2e` job: Playwright against a mock
+daemon ([end-to-end tests](tests/e2e/README.md)).

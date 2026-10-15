@@ -209,7 +209,9 @@ fn handshake_list_and_call_round_trip() {
     assert_eq!(
         names,
         [
+            "audio",
             "batch",
+            "bus",
             "canvas",
             "delete",
             "describe_api",
@@ -220,6 +222,7 @@ fn handshake_list_and_call_round_trip() {
             "kind",
             "output",
             "scene",
+            "send",
             "source",
             "state",
             "studio",
@@ -281,6 +284,8 @@ fn handshake_list_and_call_round_trip() {
                "canvas": {"width": 1920, "height": 1080}, "sources": [cam],
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
                "outputs": [], "encoders": [],
+               "buses": [{"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}],
+               "sends": [],
                "transitions": {"presets": [{"preset_id": "cut", "name": "Cut", "kind": "cut",
                                             "duration_ms": 300, "easing": "ease_in_out"}],
                                "default": "cut"}})
@@ -334,7 +339,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(16));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(19));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -705,6 +710,29 @@ fn stats_ticks_are_not_buffered_and_evict_nothing() {
     );
     assert_eq!(page["stats"]["type"], "stats.tick");
     assert_eq!(page["stats"]["seq"], json!(2 * ticks));
+    assert!(
+        page.get("meters").is_none(),
+        "no meters before the first tick"
+    );
+}
+
+/// `meters.tick` comes ten times a second while the mixer runs: like `stats.tick`, only
+/// the newest is kept, as `meters`.
+#[test]
+fn meters_ticks_are_not_buffered() {
+    let f = fixture();
+    f.initialize();
+    read_events(&f, None);
+    for _ in 0..2 * crate::events::BUFFER_CAPACITY {
+        f.engine.emit(Event::MetersTick {
+            sources: Vec::new(),
+            buses: Vec::new(),
+        });
+    }
+    let page = read_events(&f, None);
+    assert_eq!(page["events"], json!([]));
+    assert_eq!(page["dropped"], json!(0));
+    assert_eq!(page["meters"]["type"], "meters.tick");
 }
 
 #[test]
