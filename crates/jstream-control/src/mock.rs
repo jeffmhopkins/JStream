@@ -1769,7 +1769,7 @@ mod tests {
         assert_eq!(items(&*control, "a"), ["gi"]);
         assert_eq!(items(&*control, "g"), ["i1", "i2"]);
 
-        // Within its own scene a move is a reorder, so one past the top is out of range.
+        // Within its own scene a move is a reorder.
         assert_eq!(
             batch(&*control, Batch::single(mv("i2", "g", 0))),
             Ok(Rev(3))
@@ -1786,6 +1786,8 @@ mod tests {
             Some(ProtocolError::InvalidArgument { field, .. }) => field,
             other => panic!("expected invalid_argument, got {other:?}"),
         };
+        // Within its own scene one past the top is out of range; in another it isn't,
+        // but two past is.
         assert_eq!(field(mv("i1", "g", 2)), "edits.0.index");
         assert_eq!(field(mv("i1", "a", 2)), "edits.0.index");
         // The group's own placement moved into the group would make it contain itself.

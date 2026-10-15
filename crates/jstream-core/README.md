@@ -131,7 +131,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:3003b5047d1bc0e9", by = "agent:claude@session_01UrkDUXDJyPZLr2qUKPNdPV", note = "Merge of main (C1a #179, E1 #172) into ADR-0041 (#214): took main's stamp; this branch's upstream change is only the YouTube ADR link in ARCH#protocol and protocol README#design (0034 -> 0041); main's E1 text kept; holds" }
+verified = { hash = "b3:4450bcc7fff14f6c", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#205 collection file, #172 E1 render snapshot, #179) into B6-f: re-read; main's new text untouched by this branch; the mock/differential-script text still holds with the mock's set_role and item.move" }
 -->
 
 ### Engine and sessions
