@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:4ddb7ed2e5d0a48e", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge-only round: merged main at e1e2a94 (#295 clock swap, #297 vcam Windows backends, #309 e2e, #286, #237); took main's text, this PR only changes CallResult::batch constructors here (core design keeps the removed_hotkeys sentence); clippy clean; holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -51,7 +50,6 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:2e70db406b4d8733", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "K1 hotkeys merge of main at 94fb25d (D5 audio #240, which took protocol 0.19): only the DeletePlan .. pattern from this PR; holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
@@ -68,8 +66,8 @@ verified = { hash = "b3:2e70db406b4d8733", by = "agent:claude@session_01PyL6S9Te
   token in the subprotocol, which `jstream-server` accepts
   ([jstream-server › Design](../jstream-server/README.md#design)). After a disconnect the form
   shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
-  a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin
-  and an unreachable engine read the same.
+  a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin,
+  an unreachable engine and a URL the page's policy blocks read the same.
 - **The session.** `Session::connect` opens `jstream-control`'s `WsControl` and says
   `hello`. The open session is provided as Leptos context (`SessionContext`), so a
   panel calls the engine with `session.control.call(…)` and never sees the socket. The
@@ -118,7 +116,6 @@ verified = { hash = "b3:2e70db406b4d8733", by = "agent:claude@session_01PyL6S9Te
 <!-- @section
 covers = ["crates/jstream-ui/src/canvas/**"]
 depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0032-live-edits-and-undo.md"]
-verified = { hash = "b3:9a839098ba71bc5b", by = "agent:claude@session_01PyL6S9Te43DXh72TDa3Upy", note = "hotkeys PR: canvas delete-plan match now ignores the new hotkeys field with ..; canvas behaviour unchanged; holds" }
 -->
 
 The canvas edits the boxes of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)
@@ -168,7 +165,6 @@ scene and sends the edits. These three are pure and tested natively against
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:5a04a748741bf41a", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: added the pointer to CI's ui-e2e job and tests/e2e/README.md; trunk build steps unchanged and still what CI runs" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for

@@ -20,4 +20,9 @@ jstream-platform.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+criterion.workspace = true
 jstream-platform = { workspace = true, features = ["fake"] }
+
+[[bench]]
+name = "session"
+harness = false
