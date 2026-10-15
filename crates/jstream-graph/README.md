@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:4cc8d55ceedde80f", by = "agent:claude@session_016BkTSqJ3kAfTw3EVqkJnMr", note = "Y3 merge of main at 75a18e2 (B9 delete.plan 0.15, B10 scene.switch 0.16, B6-r 0.17 and more), Y3 now protocol 0.18: re-read; youtube target and broadcast_id check hold beside main's touched sets" }
+verified = { hash = "b3:66c255ea11558ac5", by = "agent:claude@session_01FFzJN8ifSytfHpv52HAhhR", note = "float_roundtrip r2 merge of main: text is main's (Q1 tests paragraph); stale via protocol design's number sentence only" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -227,6 +227,14 @@ restore the batch's result. After each failed one, the graph must be unchanged. 
 after every batch, for each scene and source: a plain delete is refused exactly when
 it has blockers, the error lists them, and the `delete.plan` batch applies at the
 planned `rev`, removes the target, and undoes exactly.
+The proptest suites (`tests/properties.rs`, public API only, shrinking failures to a
+minimal batch sequence) start from a graph holding every sort of reference and apply
+random batches with free-form names, numbers and settings values: a batch that applies
+must undo and redo exactly and a failed one change nothing; and after every batch no
+reference may dangle, and each scene, source and encoder profile delete must be refused
+exactly when something refers to it, a scene's or source's with the blockers the test
+works out itself. The
+seed is fixed, so CI is repeatable; `PROPTEST_RNG_SEED` explores others.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
 scene `b` made a group, a clone and a `duplicated_from` naming a missing source) plus a source whose

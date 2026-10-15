@@ -14,6 +14,7 @@
 //! in every bus sum and all buses line up with each other. A [`Delay`] filter is a
 //! deliberate shift with no latency, so it is not compensated.
 
+use super::host::HostFilter;
 use crate::AudioError;
 use crate::filter::{
     AudioFilter, Compressor, CompressorParams, Delay, Gain, GateParams, Limiter, LimiterParams,
@@ -88,6 +89,8 @@ pub(crate) enum KernelKind {
     Compressor,
     Limiter,
     Delay,
+    /// A CLAP filter hosted out of process: no [`FilterParams`] apply to it.
+    Host,
 }
 
 impl FilterSpec {
@@ -130,6 +133,7 @@ pub(crate) enum Kernel {
     Compressor(Compressor),
     Limiter(Limiter),
     Delay(Delay),
+    Host(HostFilter),
 }
 
 impl Kernel {
@@ -158,6 +162,7 @@ impl Kernel {
             Self::Compressor(_) => KernelKind::Compressor,
             Self::Limiter(_) => KernelKind::Limiter,
             Self::Delay(_) => KernelKind::Delay,
+            Self::Host(_) => KernelKind::Host,
         }
     }
 
@@ -168,6 +173,7 @@ impl Kernel {
             Self::Compressor(f) => f,
             Self::Limiter(f) => f,
             Self::Delay(f) => f,
+            Self::Host(f) => f,
         }
     }
 
@@ -178,6 +184,7 @@ impl Kernel {
             Self::Compressor(f) => f.latency_frames(),
             Self::Limiter(f) => f.latency_frames(),
             Self::Delay(f) => f.latency_frames(),
+            Self::Host(f) => f.latency_frames(),
         }
     }
 
@@ -202,8 +209,9 @@ impl Kernel {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct FilterBook {
     pub(crate) id: u64,
-    /// The spec it was built from, with every edit since applied.
-    pub(crate) spec: FilterSpec,
+    /// The spec it was built from, with every edit since applied. `None` for a CLAP
+    /// filter, which can't be built again from a spec.
+    pub(crate) spec: Option<FilterSpec>,
     pub(crate) kind: KernelKind,
     pub(crate) latency: usize,
     /// For a delay, the longest delay it has room for, frames.
@@ -211,7 +219,7 @@ pub(crate) struct FilterBook {
 }
 
 impl FilterBook {
-    pub(crate) fn new(id: u64, spec: FilterSpec, kernel: &Kernel) -> Self {
+    pub(crate) fn new(id: u64, spec: Option<FilterSpec>, kernel: &Kernel) -> Self {
         Self {
             id,
             spec,

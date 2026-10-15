@@ -38,7 +38,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{any, get};
 use gate::Gate;
 use gate::Refusal;
-use jstream_control::Control;
+use jstream_control::{Control, WS_PROTOCOL};
 use listener::{Accepted, Limited};
 use mcp::Mcp;
 use std::future::Future;
@@ -235,7 +235,7 @@ async fn upgrade(
     // A browser client offers `jstream` beside the token's subprotocol and fails the
     // connection unless one is selected; the token's is never echoed.
     upgrade
-        .protocols([gate::WS_PROTOCOL])
+        .protocols([WS_PROTOCOL])
         .max_message_size(MAX_MESSAGE_BYTES)
         .on_upgrade(move |socket| {
             async move {
