@@ -42,6 +42,7 @@ jstream-protocol = { path = "crates/jstream-protocol" }
 jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }
 jstream-sources = { path = "crates/jstream-sources" }
+jstream-vcam-proto = { path = "crates/jstream-vcam-proto" }
 # PNG for `video.snapshot` (ADR-0031: pure-Rust image crates are not banned codecs).
 # Encoding is part of the crate. `default-features = false` leaves deflate on the
 # pure-Rust backend.

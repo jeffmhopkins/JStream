@@ -990,6 +990,15 @@ name = "jstream-vcam-proto"
 version = "0.0.0"
 
 [[package]]
+name = "jstream-vcam-windows"
+version = "0.0.0"
+dependencies = [
+ "jstream-vcam-proto",
+ "windows",
+ "windows-core",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

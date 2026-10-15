@@ -1,0 +1,61 @@
+[package]
+name = "jstream-vcam-windows"
+version = "0.0.0"
+description = "The virtual camera's COM media source DLL, loaded by the Windows camera Frame Server."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 2
+summary = "`cdylib` COM media source loaded by Frame Server (ADR-0020), serving the engine's frames through the `jstream-vcam-proto` contract. Depends only on L0 and `windows`"
+unsafe_allowed = true
+
+# `jstream_vcam_windows.dll` is what Frame Server loads. The `rlib` is for the unit tests
+# and the hardware smoke-test example, which links nothing from it but builds beside it.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
+# one of the crates R-UNSAFE-001 allows to use it. Every other workspace lint is copied
+# unchanged; keep the tables in step with the workspace and jstream-platform-windows.
+[lints.rust]
+missing_docs = "warn"    # R-RS-006 (blocking under -D warnings)
+
+[lints.clippy]
+unwrap_used = "deny"                      # R-RS-004
+print_stdout = "deny"                     # R-RS-005
+print_stderr = "deny"                     # R-RS-005
+allow_attributes_without_reason = "deny"  # R-RS-009
+undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
+
+[dependencies]
+jstream-vcam-proto.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "std",
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D12",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Media_KernelStreaming",
+    "Win32_Media_MediaFoundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Performance",
+    "Win32_System_Registry",
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
+    "Win32_UI_Shell",
+] }
+windows-core = { workspace = true, features = ["std"] }
