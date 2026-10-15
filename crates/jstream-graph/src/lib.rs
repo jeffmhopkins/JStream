@@ -5,13 +5,14 @@
 //! [`Graph::with_collection_json`] save and load the collection as versioned JSON. Layer 2:
 //! plain data, no GPU, no I/O.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#data-model, docs/ARCHITECTURE.md#persistence, crates/jstream-graph/README.md#purpose, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#data-model, docs/ARCHITECTURE.md#persistence, crates/jstream-graph/README.md#purpose, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0026-source-filter-chains.md
 
 #![forbid(unsafe_code)]
 
 mod apply;
 mod deps;
 mod encoder;
+mod filter;
 mod model;
 mod persist;
 mod plan;
@@ -21,7 +22,8 @@ mod touched;
 
 pub use apply::Applied;
 pub use model::{
-    Effect, Encoder, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State,
+    Chains, Effect, Encoder, Filter, Graph, Item, MAX_CANVAS_EDGE, MAX_CHAIN_FILTERS, Output,
+    Placement, Scene, Source, State,
 };
 pub use persist::{LoadError, SCHEMA_VERSION};
 pub use touched::Touched;

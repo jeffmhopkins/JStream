@@ -8,11 +8,12 @@
 use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ClientId, ClientMessage, Command,
     CommandClass, Crop, DeleteTarget, DropCounts, Edit, EntityKind, ErrorResponse, Event,
-    EventMessage, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo,
-    ItemTransform, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm,
-    ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings,
-    Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    EventMessage, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, Finite32, FitMode,
+    Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo,
+    OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult,
+    RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
+    SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId, SourceInfo, SourceKind,
+    Vec2, Welcome, json_schema,
 };
 use crate::{
     AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
@@ -247,7 +248,58 @@ pub(crate) fn edits() -> Vec<Edit> {
         item_id: ItemId::new("itm_3"),
         blend,
     }));
+    edits.extend(filter_edits());
     edits
+}
+
+/// The filter edits (ADR-0026), on both chains.
+fn filter_edits() -> Vec<Edit> {
+    let mic = || FilterOwner::Source {
+        source_id: SourceId::new("src_mic"),
+    };
+    let mut gain = Settings::new();
+    gain.insert("gain_db", serde_json::json!(-6.0));
+    vec![
+        Edit::FilterAdd {
+            owner: mic(),
+            chain: FilterChain::Audio,
+            filter_id: FilterId::new("flt_gain"),
+            kind: "gain".into(),
+            settings: gain.clone(),
+            enabled: None,
+            index: None,
+        },
+        Edit::FilterAdd {
+            owner: FilterOwner::Source {
+                source_id: SourceId::new("src_cam"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("flt_lut"),
+            kind: "pack.lut".into(),
+            settings: Settings::new(),
+            enabled: Some(false),
+            index: Some(0),
+        },
+        Edit::FilterSetEnabled {
+            owner: mic(),
+            filter_id: FilterId::new("flt_gain"),
+            enabled: false,
+        },
+        Edit::FilterSetSettings {
+            owner: mic(),
+            filter_id: FilterId::new("flt_gain"),
+            patch: gain,
+        },
+        Edit::FilterReorder {
+            owner: mic(),
+            filter_id: FilterId::new("flt_gain"),
+            index: 0,
+        },
+        Edit::FilterRemove {
+            owner: mic(),
+            filter_id: FilterId::new("flt_gain"),
+        },
+    ]
 }
 
 /// A recording profile: 12000 kbit/s VBR peaking at 20000, hardware preferred.
@@ -488,6 +540,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: color_settings(),
             duplicated_from: None,
+            filters: Default::default(),
         },
         SourceInfo {
             source_id: SourceId::new("src_cam"),
@@ -497,6 +550,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: None,
+            filters: Default::default(),
         },
         SourceInfo {
             source_id: SourceId::new("src_cam_2"),
@@ -506,6 +560,15 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: Some(SourceId::new("src_cam")),
+            filters: FilterChains {
+                video: vec![FilterInfo {
+                    filter_id: FilterId::new("flt_lut"),
+                    kind: "pack.lut".into(),
+                    enabled: false,
+                    settings: Settings::new(),
+                }],
+                audio: vec![],
+            },
         },
         SourceInfo {
             source_id: SourceId::new("src_intro"),
@@ -515,6 +578,7 @@ fn source_infos() -> Vec<SourceInfo> {
             },
             settings: Settings::new(),
             duplicated_from: None,
+            filters: Default::default(),
         },
     ]
 }
@@ -792,6 +856,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Source,
         EntityKind::Output,
         EntityKind::Encoder,
+        EntityKind::Filter,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,

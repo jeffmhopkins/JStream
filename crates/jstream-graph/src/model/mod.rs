@@ -12,11 +12,16 @@
 //! - Every `builtin` source's kind is one the graph's kinds describe, and its settings
 //!   hold exactly that kind's parameters, each valid for its descriptor. A `scene`
 //!   source has no settings.
-//! - Every scene and source that a settings value refers to exists. A source's
+//! - Every source's filters (ADR-0026) have IDs unique within the source, sit on a
+//!   chain the source has (video if its kind produces video, audio if it produces audio
+//!   and is not a `scene` source), hold at most [`MAX_CHAIN_FILTERS`] per chain, and are
+//!   of a filter kind of that chain whose settings hold exactly its parameters.
+//! - Every scene and source that a settings value (a source's or a filter's) refers to
+//!   exists. A source's
 //!   `duplicated_from` is a plain link, not a reference: it never names the source
 //!   itself, but may name one that no longer exists.
 //! - The dependency edges (items placing sources, `scene` sources showing scenes, and
-//!   scene and source references in settings) have no cycle.
+//!   scene and source references in a source's or its filters' settings) have no cycle.
 //! - The canvas is at least 1×1 and at most [`MAX_CANVAS_EDGE`] on each side.
 //! - Every item's placement is a legacy transform or a valid geometry: positive size, a
 //!   positive perspective if any, and (until the compositor draws 3D) neutral tilt, turn,
@@ -26,20 +31,21 @@
 //!   credential store, outside the collection.
 //! - Every output's encoder profile exists, and every profile holds an encoding the
 //!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
-//!
 //! - Every item's opacity is in [0, 1], and its blend mode is one the compositor draws
 //!   (`normal` so far). Its `effects[]` is empty: per-placement effects are reserved
 //!   (ADR-0023 §1), and [`Effect`] has no values yet.
 //!
-//! The structs have private fields so that later additions (source `filters[]`, the full
-//! 3D transform) don't break callers.
+//! The structs have private fields so that later additions (the full 3D transform,
+//! chains on buses and outputs) don't break callers.
 
 use jstream_protocol::{
-    BlendMode, Canvas, Crop, EncoderProfile, EncoderProfileId, Finite32, ItemGeometry, ItemId,
-    ItemTransform, KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole,
-    Settings, SourceId, SourceKind,
+    BlendMode, Canvas, Crop, EncoderProfile, EncoderProfileId, FilterChain, FilterId, Finite32,
+    ItemGeometry, ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind, PlacementForm, Rev,
+    SceneId, SceneRole, Settings, SourceId, SourceKind,
 };
 use std::collections::BTreeMap;
+
+pub use jstream_protocol::MAX_CHAIN_FILTERS;
 
 /// The scene graph of one collection, its revision, and the kinds it can create.
 ///
@@ -196,6 +202,7 @@ pub struct Source {
     pub(crate) kind: SourceKind,
     pub(crate) settings: Settings,
     pub(crate) duplicated_from: Option<SourceId>,
+    pub(crate) filters: Chains,
 }
 
 impl Source {
@@ -224,6 +231,88 @@ impl Source {
     /// deleted, and queries report it only while that source exists.
     pub fn duplicated_from(&self) -> Option<&SourceId> {
         self.duplicated_from.as_ref()
+    }
+
+    /// Its filter chains (ADR-0026).
+    pub fn filters(&self) -> &Chains {
+        &self.filters
+    }
+}
+
+/// A source's two filter chains, each first filter first (ADR-0026).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Chains {
+    pub(crate) video: Vec<Filter>,
+    pub(crate) audio: Vec<Filter>,
+}
+
+impl Chains {
+    /// The chain `chain`.
+    pub fn chain(&self, chain: FilterChain) -> &[Filter] {
+        match chain {
+            FilterChain::Video => &self.video,
+            FilterChain::Audio => &self.audio,
+        }
+    }
+
+    pub(crate) fn chain_mut(&mut self, chain: FilterChain) -> &mut Vec<Filter> {
+        match chain {
+            FilterChain::Video => &mut self.video,
+            FilterChain::Audio => &mut self.audio,
+        }
+    }
+
+    /// Every filter with its chain: the video chain first, each in chain order.
+    pub fn all(&self) -> impl Iterator<Item = (FilterChain, &Filter)> {
+        let video = self.video.iter().map(|f| (FilterChain::Video, f));
+        video.chain(self.audio.iter().map(|f| (FilterChain::Audio, f)))
+    }
+
+    /// The filter with this ID, its chain and its index there.
+    pub fn find(&self, id: &FilterId) -> Option<(FilterChain, usize, &Filter)> {
+        [FilterChain::Video, FilterChain::Audio]
+            .into_iter()
+            .find_map(|chain| {
+                let filters = self.chain(chain);
+                let index = filters.iter().position(|f| &f.id == id)?;
+                Some((chain, index, &filters[index]))
+            })
+    }
+
+    /// Whether both chains are empty.
+    pub fn is_empty(&self) -> bool {
+        self.video.is_empty() && self.audio.is_empty()
+    }
+}
+
+/// One filter in a source's chain.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Filter {
+    pub(crate) id: FilterId,
+    pub(crate) kind: String,
+    pub(crate) enabled: bool,
+    pub(crate) settings: Settings,
+}
+
+impl Filter {
+    /// Its ID, unique within its source.
+    pub fn id(&self) -> &FilterId {
+        &self.id
+    }
+
+    /// Its kind's ID.
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
+
+    /// Whether it runs; a disabled filter is bypassed.
+    pub fn enabled(&self) -> bool {
+        self.enabled
+    }
+
+    /// Its settings: every parameter of its kind.
+    pub fn settings(&self) -> &Settings {
+        &self.settings
     }
 }
 

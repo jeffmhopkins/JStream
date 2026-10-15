@@ -9,9 +9,12 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::encoder::EncoderProfile;
+use crate::filter::{FilterChain, FilterOwner};
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
-use crate::id::{EncoderProfileId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::id::{
+    EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId,
+};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::settings::Settings;
 use schemars::JsonSchema;
@@ -279,8 +282,8 @@ pub enum Edit {
         /// Parameter ID to new value, or `null` for the default.
         patch: Settings,
     },
-    /// Copies a source under a new ID: a separate instance with the same kind and
-    /// settings, which changes independently from then on. The copy's `duplicated_from`
+    /// Copies a source under a new ID: a separate instance with the same kind, settings
+    /// and filters (with the same filter IDs), which changes independently from then on. The copy's `duplicated_from`
     /// names the source it was copied from. Placing the *same* source again is `item.add`
     /// with its existing `source_id`. Inverse: `source.delete` of the copy.
     #[serde(rename = "source.duplicate")]
@@ -293,14 +296,90 @@ pub enum Edit {
         name: String,
     },
     /// Deletes a source. Rejected with `invalid_argument` while any item still places it,
-    /// or any source's settings refer to it: remove those items, or clear those
-    /// references, first (in the same batch if needed). Deleting a source that others were
-    /// copied from is allowed: their `duplicated_from` then reads as absent. Inverse:
-    /// `source.create` with its name, kind, settings and `duplicated_from`.
+    /// or any source's or filter's settings refer to it: remove those items, or clear
+    /// those references, first (in the same batch if needed). Deleting a source that
+    /// others were copied from is allowed: their `duplicated_from` then reads as absent.
+    /// Inverse: `source.create` with its name, kind, settings and `duplicated_from`, then
+    /// `filter.add` for each of its filters, video chain first, in chain order.
     #[serde(rename = "source.delete")]
     SourceDelete {
         /// The source to delete.
         source_id: SourceId,
+    },
+    /// Adds a filter to one of a source's chains (ADR-0026). Rejected with `not_found` if
+    /// the owner doesn't exist, `already_exists` if it has a filter with this ID, and
+    /// `invalid_argument` if the source has no such chain, the chain is full
+    /// ([`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS)), `kind` is not a filter kind of
+    /// that chain (`video_filter` or `audio_filter`), a setting fails its descriptor as in
+    /// `source.create`, a reference in the settings would close a cycle, or `index` is
+    /// past the end. Inverse: `filter.remove`.
+    #[serde(rename = "filter.add")]
+    FilterAdd {
+        /// What owns the chain.
+        owner: FilterOwner,
+        /// Which chain.
+        chain: FilterChain,
+        /// The new filter's ID, chosen by the client, unique within its owner.
+        filter_id: FilterId,
+        /// The filter's kind, as `kind.list` reports it.
+        kind: String,
+        /// Initial settings, checked against the kind's descriptor and completed with its
+        /// defaults, as `source.create`'s are. Omitted means all defaults.
+        #[serde(default, skip_serializing_if = "Settings::is_empty")]
+        settings: Settings,
+        /// Whether it runs. Omitted means enabled.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        enabled: Option<bool>,
+        /// Its position in the chain, counted from the first filter (0). Must be at most
+        /// the number of filters already in the chain. Omitted means last.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        index: Option<u32>,
+    },
+    /// Removes a filter from its chain. Inverse: `filter.add` with its chain, kind,
+    /// settings, `enabled: false` if it was disabled, and its index.
+    #[serde(rename = "filter.remove")]
+    FilterRemove {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to remove.
+        filter_id: FilterId,
+    },
+    /// Turns a filter on or off. A disabled filter stays in its chain and keeps its
+    /// settings, and is bypassed. Inverse: `filter.set_enabled` with the previous value.
+    #[serde(rename = "filter.set_enabled")]
+    FilterSetEnabled {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to change.
+        filter_id: FilterId,
+        /// Whether it runs.
+        enabled: bool,
+    },
+    /// Changes some of a filter's settings, with `source.set_settings`'s rules: each entry
+    /// is checked against the kind's descriptor, `null` resets a parameter to its default
+    /// (a reference to none), and a reference that would make a cycle is
+    /// `invalid_argument` naming it. Inverse: `filter.set_settings` with the patched
+    /// parameters' previous values.
+    #[serde(rename = "filter.set_settings")]
+    FilterSetSettings {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to change.
+        filter_id: FilterId,
+        /// Parameter ID to new value, or `null` for the default.
+        patch: Settings,
+    },
+    /// Moves a filter to another position in its own chain. Inverse: `filter.reorder`
+    /// back to its previous index.
+    #[serde(rename = "filter.reorder")]
+    FilterReorder {
+        /// What owns the filter.
+        owner: FilterOwner,
+        /// The filter to move.
+        filter_id: FilterId,
+        /// The new position, counted from the first filter (0). Must be less than the
+        /// number of filters in its chain, else `invalid_argument`.
+        index: u32,
     },
     /// Moves a scene to another display position. Inverse: `scene.reorder` back to its
     /// previous index.
@@ -423,6 +502,11 @@ impl Edit {
             Edit::SourceSetSettings { .. } => "source.set_settings",
             Edit::SourceDuplicate { .. } => "source.duplicate",
             Edit::SourceDelete { .. } => "source.delete",
+            Edit::FilterAdd { .. } => "filter.add",
+            Edit::FilterRemove { .. } => "filter.remove",
+            Edit::FilterSetEnabled { .. } => "filter.set_enabled",
+            Edit::FilterSetSettings { .. } => "filter.set_settings",
+            Edit::FilterReorder { .. } => "filter.reorder",
             Edit::OutputCreate { .. } => "output.create",
             Edit::OutputSetTarget { .. } => "output.set_target",
             Edit::OutputDelete { .. } => "output.delete",

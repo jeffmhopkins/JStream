@@ -26,7 +26,8 @@ fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
 }
 
 /// The kinds the tests create: `color`, a video kind with a scalar, a reference of each
-/// sort, and an asset; and `tone`, an audio kind with no parameters.
+/// sort, and an asset; `tone`, an audio kind with no parameters; and the filter kinds
+/// `tint` (video, with a scene reference) and `gain` (audio).
 fn kinds() -> Vec<KindDescriptor> {
     vec![
         KindDescriptor {
@@ -72,6 +73,45 @@ fn kinds() -> Vec<KindDescriptor> {
             video: false,
             audio: true,
             params: vec![],
+        },
+        KindDescriptor {
+            kind_id: "tint".into(),
+            category: KindCategory::VideoFilter,
+            name: "Tint".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params: vec![
+                param(
+                    "amount",
+                    ParamType::Float {
+                        min: Some(0.0),
+                        max: Some(1.0),
+                        step: None,
+                        unit: None,
+                    },
+                    json!(1.0),
+                ),
+                param("mask", ParamType::Scene, Value::Null),
+            ],
+        },
+        KindDescriptor {
+            kind_id: "gain".into(),
+            category: KindCategory::AudioFilter,
+            name: "Gain".into(),
+            version: 1,
+            video: false,
+            audio: true,
+            params: vec![param(
+                "gain_db",
+                ParamType::Float {
+                    min: Some(-60.0),
+                    max: Some(24.0),
+                    step: None,
+                    unit: Some("dB".into()),
+                },
+                json!(0.0),
+            )],
         },
     ]
 }
@@ -1029,6 +1069,14 @@ mod property {
         let sources: Vec<String> = state.sources().map(|s| s.id().to_string()).collect();
         let outputs: Vec<String> = state.outputs().map(|o| o.id().to_string()).collect();
         let encoders: Vec<String> = state.encoders().map(|e| e.id().to_string()).collect();
+        let filters: Vec<(String, String)> = state
+            .sources()
+            .flat_map(|s| {
+                s.filters()
+                    .all()
+                    .map(|(_, f)| (s.id().to_string(), f.id().to_string()))
+            })
+            .collect();
         let urls = [
             "rtmp://a.example/live",
             "rtmps://b.example:443/live",
@@ -1091,7 +1139,14 @@ mod property {
                 jstream_protocol::BlendMode::Multiply,
             ][rng.below(3)]
         };
-        match rng.below(33) {
+        let mask = |rng: &mut Rng| match rng.below(3) {
+            0 => Value::Null,
+            _ => scene_ref(&scene(rng)),
+        };
+        let owner = |source: String| jstream_protocol::FilterOwner::Source {
+            source_id: SourceId::new(source),
+        };
+        match rng.below(35) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1268,6 +1323,40 @@ mod property {
                 item_id: ItemId::new(item(rng)),
                 blend: blend(rng),
             },
+            31 => Edit::FilterAdd {
+                owner: owner(source(rng)),
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new(pool(rng, "f")),
+                kind: "tint".into(),
+                settings: super::settings(&[("mask", mask(rng))]),
+                enabled: (rng.below(3) == 0).then_some(false),
+                index: (rng.below(2) == 0).then(|| index(rng)),
+            },
+            32 => {
+                let (source, filter) = rng
+                    .pick(&filters)
+                    .unwrap_or_else(|| (source(rng), pool(rng, "f")));
+                let filter_id = jstream_protocol::FilterId::new(filter);
+                let owner = owner(source);
+                match rng.below(4) {
+                    0 => Edit::FilterRemove { owner, filter_id },
+                    1 => Edit::FilterSetEnabled {
+                        owner,
+                        filter_id,
+                        enabled: rng.below(2) == 0,
+                    },
+                    2 => Edit::FilterSetSettings {
+                        owner,
+                        filter_id,
+                        patch: super::settings(&[("mask", mask(rng))]),
+                    },
+                    _ => Edit::FilterReorder {
+                        owner,
+                        filter_id,
+                        index: index(rng),
+                    },
+                }
+            }
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
                 height: 720,
@@ -1361,6 +1450,11 @@ mod property {
             "encoder.create",
             "encoder.update",
             "encoder.delete",
+            "filter.add",
+            "filter.remove",
+            "filter.set_enabled",
+            "filter.set_settings",
+            "filter.reorder",
             "canvas.set_size",
         ]
         .into();
@@ -2990,3 +3084,5 @@ fn item_add_takes_opacity_and_blend_and_remove_restores_them() {
     apply_ok(&mut g, removed.inverse.edits);
     assert_eq!(g.state(), &before);
 }
+
+mod filters;

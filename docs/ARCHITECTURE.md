@@ -165,14 +165,15 @@ isolation or a dependency boundary requires it, and record the split in an ADR
 ## Data model
 <!-- @section
 covers = ["crates/jstream-graph/src/model/**"]
-depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
-verified = { hash = "b3:7021d11fa3e50d0d", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#221 C2 text): Built so far now lists color, image and text as built and keeps C5's audio-only sentence; re-read, holds" }
+depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-placements-references-and-clones.md", "docs/adr/0024-scene-structure.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026-source-filter-chains.md", "docs/adr/0027-program-master-and-output-chains.md", "docs/adr/0028-audio-model-v2.md", "docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md", "docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md"]
+verified = { hash = "b3:9fc0405bfe5ac9e6", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: Source line shows filters { video, audio } and a Filter row, SourceAudio loses filters[]; Filters bullet describes the two chains per ADR-0026; Built so far lists chains, opacity, blend (normal only), reserved effects[] and the built-in audio filter kinds; Not yet trimmed" }
 -->
 
 ```
 Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
-├── sources        Source { id, kind, settings, filters[], duplicated_from?, labels, favourite, audio? }   video and/or audio
-│                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted, filters[] }
+├── sources        Source { id, kind, settings, filters { video[], audio[] }, duplicated_from?, labels, favourite, audio? }   video and/or audio
+│                  Filter { filter_id, kind, enabled, settings }   unique within its source; at most 8 per chain
+│                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
 │                          items[] }   flat display order
@@ -203,7 +204,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 - Each source is **one** instance (one capture, one decoder), however many scenes use it.
   Adding an *existing* source to a scene adds a `SceneItem` that is a **reference**: it
   shares everything with the other placements of that source except its own placement,
-  opacity and blend. Changing the source or its `filters[]` changes it everywhere.
+  opacity and blend. Changing the source or its filters changes it everywhere.
   **Duplicate** creates a new `Source` with its own id and `duplicated_from` set to the
   original; an item placing it is a **clone** and changes independently. Sources have no
   owner: every placement of a shared source is equal, and a client shows how often a
@@ -265,8 +266,14 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)). `Scene.background` (absent
   means transparent) is scene model, not metadata, because the compositor draws it
   wherever the scene renders.
-- **Filters and effects:** `Source.filters[]` belong to the source and apply wherever it
-  is used. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
+- **Filters and effects:** a source's two filter chains, `filters.video` and
+  `filters.audio`, belong to the source and apply wherever it is used
+  ([ADR-0026](adr/0026-source-filter-chains.md)). A source has a video chain if its kind
+  produces video, and an audio chain if it produces audio and is not a `scene` source. A
+  filter's kind is a `video_filter` or `audio_filter` kind matching its chain, and the
+  `filter.*` edits address it by its owner and its ID, which is unique within the source
+  and kept by `source.duplicate`. A disabled filter keeps its place and settings and is
+  bypassed. The audio chain runs on the source's input before its fader. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; a mode is rejected until the
   compositor draws it). `SceneItem.effects[]` is reserved for per-placement effects and
   stays empty in v1, so adding them later needs no collection migration.
@@ -342,9 +349,11 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 - **Undo** primitives (an edit plus its inverse) live in `jstream-graph`. The per-client
   undo stacks live in `jstream-core`.
 - **Built so far** (`jstream-graph`): sources (`kind`: a builtin kind ID or a nested
-  scene, with `settings` checked against the kind's descriptor and stored complete; no
-  filters yet), scenes in display order, and items in stacking order with `source_id`,
-  a placement, `crop` and `visible`. The placement is a `geometry` or, until 1.0, a
+  scene, with `settings` checked against the kind's descriptor and stored complete, and
+  its video and audio filter chains, each filter's settings checked the same way),
+  scenes in display order, and items in stacking order with `source_id`, a placement,
+  `crop`, `visible`, `opacity` and `blend` (only `normal` is accepted), and the reserved
+  `effects[]`, which a collection file must leave empty. The placement is a `geometry` or, until 1.0, a
   legacy placement (protocol 0.3's 2D transform as written), and the collection has
   its `canvas` (protocol 0.11); non-neutral 3D geometry is still rejected. Scenes have
   a `role` (`scene` or `group`, set by `scene.set_role`), and `item.move` moves an item
@@ -356,12 +365,15 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   plain link that reads as absent once the original is deleted. Scene and source
   references in settings are dependency edges with items and nested scenes, so one
   cycle check covers them all. Deleting a source an item still places or a setting
-  refers to, or a scene a source still shows or a setting refers to, is rejected. The
+  refers to, or a scene a source still shows or a setting refers to, is rejected; a
+  reference in a filter's settings is an edge of the filter's source. The
   built-in kinds come from `jstream-sources`. The engine runs a source of each one
   whose kind is built (`color`, `image` and `text`), rebuilt when its settings change,
   and the program mix shows its frames, animations advancing on the media clock. The
   audio-only kinds (`audio_input`, `desktop_audio`, `app_audio`) have no `Source`:
-  while an output runs, the engine records each as a mixer input sent to master.
+  while an output runs, the engine records each as a mixer input sent to master, running
+  the source's enabled audio filters of the built-in kinds (`gain`, `noise_gate`,
+  `compressor`, `limiter`, `delay`). No video filter kind is built in yet.
   Outputs, ordered by ID, with their `kind` and an optional `encoder_profile`: `Rtmp {
   target: Generic { url } }`, the URL checked to carry no credential, or `Record { path,
   container: mp4 }`, the path checked to be absolute and to end in a file name. A stream
@@ -372,8 +384,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the engine's default; a profile an output uses can't be deleted. The mix is always
   `Program` until video mixes exist, so outputs share a session by profile alone.
   Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), filters, source audio settings, `opacity`, `blend`, the reserved
-  `effects[]`, the transition fields, 3D
+  version is refused on load), video filter kinds, blend modes other than `normal`,
+  source audio settings, per-placement effects, the transition fields, 3D
   geometry, `scene.create`'s optional `role`, variants and overrides (so no edit drops
   any yet), folders, labels, favourites and other organisation metadata,
   `background`, hotkeys, an output's mix, buses and chains, the
@@ -519,7 +531,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:b84d57b23cb0f078", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: main's B9 delete.plan/blockers text kept; unaffected by this branch" }
+verified = { hash = "b3:3609ee25f90a0bf1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: Edits bullet adds item.set_opacity, item.set_blend and the filter.* edits with owner and SourceInfo.filters (no version number until the queue bump); rest re-read, holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -543,6 +555,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `item.set_transform`. `encoder.create`, `encoder.update` and `encoder.delete`
   configure encoder profiles, and `output.set_encoder` points an output at one or back
   at the engine's default (protocol 0.13). A profile an output uses can't be deleted.
+  `item.set_opacity` and `item.set_blend` set a placement's opacity and blend mode
+  (`item.add` takes both too), and `filter.add`, `filter.remove`, `filter.set_enabled`,
+  `filter.set_settings` and `filter.reorder` edit a source's filter chains, addressed by
+  an `owner` and a filter ID; `SourceInfo.filters` reports them
+  ([ADR-0026](adr/0026-source-filter-chains.md)).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -634,11 +651,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
 <!-- @section
 covers = ["crates/jstream-mcp/**"]
 depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "docs/adr/0036-mcp-events-polling-tool.md"]
-verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (B6 #184, F3 #208, B5 #196 at 0.14, B1 #205, C1b, D2 and others) into B9, now protocol 0.15: re-read; tool list includes delete and encoder; tools.snap 146 KB, text says about 145 KB" }
+verified = { hash = "b3:b0e104b036a61688", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: tool list adds filter; tools.snap now 178104 bytes, text says about 178 KB" }
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`canvas`, `delete`, `encoder`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
+  (`canvas`, `delete`, `encoder`, `filter`, `history`, `item`, `kind`, `output`, `scene`, `source`, `state` and `video` so far; `audio`, `studio`, `youtube`
   as those commands land), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol.
 - **Events** reach agents through the `events` tool, which returns the engine's events
@@ -648,7 +665,7 @@ verified = { hash = "b3:666240d620068d32", by = "agent:claude@session_011UxatT9f
   evict the state and output events and its drop counts stay visible.
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 145 KB
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 178 KB
   of `tools/list` today, as `tools.snap` stores it), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
@@ -835,7 +852,7 @@ the sandboxed layout.
 <!-- @section
 covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
-verified = { hash = "b3:e8da9a7e3807bb8c", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "B9 CI fix: LoadError::Invalid now boxes its ProtocolError, a type-size change only; re-read, the Collections bullet (checks a loaded collection as it checks edits) holds" }
+verified = { hash = "b3:33559418fddd4c10", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: source or filter at another kind version refused; opacity/blend written only when non-default, enabled only when false, effects[] must be empty; matches persist/mod.rs" }
 -->
 
 - **Collections:** JSON with a `schema_version` field and forward migrations in
@@ -845,7 +862,10 @@ verified = { hash = "b3:e8da9a7e3807bb8c", by = "agent:claude@session_011UxatT9f
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source and filter records its kind's descriptor version, migrated on load
   like the collection ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until
-  kinds ship settings migrations, a source saved at another version is refused on load.
+  kinds ship settings migrations, a source or filter saved at another version is
+  refused on load. A placement's `opacity` and `blend` are written only when they differ
+  from 1 and `normal`, a disabled filter's `enabled` only when false, and the reserved
+  `effects[]` must be empty.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store.
 - **Control token:** a random token in a user-only file in the config directory

@@ -35,6 +35,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::task::{Context, Poll, Waker};
 
+mod filter;
+
 /// Locks `mutex`, ignoring poisoning: the mock's state stays consistent because every
 /// change is computed first and committed without panicking.
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -399,6 +401,8 @@ struct Source {
     settings: Settings,
     /// A plain link, which may name a deleted source; reported only while it exists.
     duplicated_from: Option<SourceId>,
+    /// Its filter chains, settings as given (ADR-0026).
+    filters: jstream_protocol::FilterChains,
 }
 
 #[derive(Clone)]
@@ -1101,16 +1105,27 @@ impl Collection {
                 new_source_id,
                 name,
             } => {
-                let Some((kind, settings)) = self
+                let Some((kind, settings, filters)) = self
                     .sources
                     .get(&source_id)
-                    .map(|s| (s.kind.clone(), s.settings.clone()))
+                    .map(|s| (s.kind.clone(), s.settings.clone(), s.filters.clone()))
                 else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
                 check_id(new_source_id.as_str(), at, "new_source_id")?;
                 check_name(&name, at)?;
-                self.create_source(new_source_id, name, kind, settings, Some(source_id))?
+                let inverse = self.create_source(
+                    new_source_id.clone(),
+                    name,
+                    kind,
+                    settings,
+                    Some(source_id),
+                )?;
+                // A duplicate keeps its original's filter IDs (ADR-0026 §2).
+                if let Some(copy) = self.sources.get_mut(&new_source_id) {
+                    copy.filters = filters;
+                }
+                inverse
             }
             Edit::SourceDelete { source_id } => {
                 if !self.sources.contains_key(&source_id) {
@@ -1137,13 +1152,15 @@ impl Collection {
                 let Some(source) = self.sources.remove(&source_id) else {
                     return Err(not_found(EntityKind::Source, source_id.as_str()));
                 };
-                vec![Edit::SourceCreate {
-                    source_id,
+                let mut inverse = vec![Edit::SourceCreate {
+                    source_id: source_id.clone(),
                     name: source.name,
                     kind: source.kind,
                     settings: source.settings,
                     duplicated_from: source.duplicated_from,
-                }]
+                }];
+                inverse.extend(filter::restore_all(&source_id, source.filters));
+                inverse
             }
             Edit::OutputCreate { output_id, kind } => {
                 check_id(output_id.as_str(), at, "output_id")?;
@@ -1284,6 +1301,11 @@ impl Collection {
                     profile,
                 }]
             }
+            edit @ (Edit::FilterAdd { .. }
+            | Edit::FilterRemove { .. }
+            | Edit::FilterSetEnabled { .. }
+            | Edit::FilterSetSettings { .. }
+            | Edit::FilterReorder { .. }) => self.apply_filter(edit, at)?,
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
@@ -1358,6 +1380,7 @@ impl Collection {
                 kind,
                 settings,
                 duplicated_from,
+                filters: jstream_protocol::FilterChains::default(),
             },
         );
         Ok(vec![Edit::SourceDelete { source_id: id }])
@@ -1369,11 +1392,15 @@ impl Collection {
             .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))
     }
 
-    /// Whether any source's settings hold a reference matching `is_target`.
+    /// Whether any source's settings, or its filters' settings, hold a reference
+    /// matching `is_target`.
     fn is_referred_to(&self, is_target: impl Fn(&Reference) -> bool) -> bool {
-        self.sources
-            .values()
-            .any(|source| source.settings.references().any(|(_, r)| is_target(&r)))
+        self.sources.values().any(|source| {
+            let filters = source.filters.video.iter().chain(&source.filters.audio);
+            std::iter::once(&source.settings)
+                .chain(filters.map(|f| &f.settings))
+                .any(|settings| settings.references().any(|(_, r)| is_target(&r)))
+        })
     }
 
     /// Every source, ordered by ID, as queries report them.
@@ -1389,6 +1416,7 @@ impl Collection {
                     .duplicated_from
                     .clone()
                     .filter(|original| self.sources.contains_key(original)),
+                filters: source.filters.clone(),
             })
             .collect()
     }
@@ -2368,6 +2396,10 @@ mod tests {
                 Edit::SourceDelete {
                     source_id: SourceId::new("aux"),
                 },
+                // Its inverse re-adds its filters, in order and with their switches.
+                Edit::SourceDelete {
+                    source_id: SourceId::new("desk"),
+                },
                 Edit::OutputSetEncoder {
                     output_id: OutputId::new("yt"),
                     profile_id: Some(EncoderProfileId::new("hq")),
@@ -2619,6 +2651,7 @@ mod tests {
                 ("cam", "Camera"),
                 ("cam_2", "Camera 2"),
                 ("cam_copy", "Camera copy"),
+                ("desk", "Desktop"),
             ]
         );
         assert_eq!(sources[3].kind, sources[2].kind);

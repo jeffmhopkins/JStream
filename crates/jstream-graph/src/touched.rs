@@ -3,7 +3,9 @@
 //! [`Graph::apply`](crate::Graph::apply) returns it with every batch. The engine's undo
 //! history logs it and checks a step's touched set against other clients' later ones.
 
-use jstream_protocol::{Edit, EncoderProfileId, ItemId, OutputId, SceneId, SourceId, SourceKind};
+use jstream_protocol::{
+    Edit, EncoderProfileId, FilterId, ItemId, OutputId, SceneId, SourceId, SourceKind,
+};
 use std::collections::BTreeSet;
 
 /// An object of the collection, named by its ID.
@@ -14,6 +16,8 @@ enum Object {
     Source(SourceId),
     Output(OutputId),
     Encoder(EncoderProfileId),
+    /// A filter, by its owner's source and its ID there (ADR-0026).
+    Filter(SourceId, FilterId),
 }
 
 /// A property an edit sets, on its object.
@@ -43,6 +47,8 @@ enum Prop {
     EncoderChoice,
     /// An encoder profile's encoding.
     Encoding,
+    /// Whether a filter runs.
+    Enabled,
 }
 
 /// What a batch touched: computed from its edits and its inverse's, so a delete also
@@ -181,6 +187,41 @@ impl Touched {
                 let encoder = Object::Encoder(profile_id.clone());
                 self.prop(encoder.clone(), Prop::Name);
                 self.prop(encoder, Prop::Encoding);
+            }
+            Edit::FilterAdd {
+                owner, filter_id, ..
+            } => {
+                let source_id = owner.source_id();
+                self.exists
+                    .insert(Object::Filter(source_id.clone(), filter_id.clone()));
+                self.uses.insert(Object::Source(source_id.clone()));
+            }
+            Edit::FilterRemove { owner, filter_id } => {
+                self.exists
+                    .insert(Object::Filter(owner.source_id().clone(), filter_id.clone()));
+            }
+            Edit::FilterSetEnabled {
+                owner, filter_id, ..
+            } => {
+                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                self.prop(filter, Prop::Enabled);
+            }
+            Edit::FilterSetSettings {
+                owner,
+                filter_id,
+                patch,
+            } => {
+                for param in patch.0.keys() {
+                    let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                    self.prop(filter, Prop::Setting(param.clone()));
+                }
+            }
+            // A filter's position in its chain.
+            Edit::FilterReorder {
+                owner, filter_id, ..
+            } => {
+                let filter = Object::Filter(owner.source_id().clone(), filter_id.clone());
+                self.prop(filter, Prop::Index);
             }
             _ => self.unknown = true,
         }

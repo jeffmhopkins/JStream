@@ -6,10 +6,10 @@
 //! Reads never change the graph. Each collection result carries the revision it was
 //! read at; kinds are not collection state, so their results carry none.
 
-use crate::model::{Encoder, Graph, Item, Output, Placement, Scene, Source, State};
+use crate::model::{Encoder, Filter, Graph, Item, Output, Placement, Scene, Source, State};
 use jstream_protocol::{
-    EncoderProfileInfo, EntityKind, ItemInfo, KindDescriptor, OutputInfo, ProtocolError, Query,
-    QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
+    EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, ItemInfo, KindDescriptor, OutputInfo,
+    ProtocolError, Query, QueryResult, SceneId, SceneInfo, SceneSummary, SourceInfo,
 };
 
 impl Graph {
@@ -151,6 +151,22 @@ impl Source {
                 .duplicated_from
                 .clone()
                 .filter(|original| state.source(original).is_some()),
+            filters: FilterChains {
+                video: self.filters.video.iter().map(Filter::to_info).collect(),
+                audio: self.filters.audio.iter().map(Filter::to_info).collect(),
+            },
+        }
+    }
+}
+
+impl Filter {
+    /// This filter as query results report it.
+    pub fn to_info(&self) -> FilterInfo {
+        FilterInfo {
+            filter_id: self.id.clone(),
+            kind: self.kind.clone(),
+            enabled: self.enabled,
+            settings: self.settings.clone(),
         }
     }
 }
@@ -316,7 +332,9 @@ mod tests {
         let Some(Ok(QueryResult::KindList { kinds })) = graph.query(&Query::KindList) else {
             panic!("kind.list");
         };
-        assert_eq!(kinds, vec![parity::kinds()[0].summary()]);
+        let mut expected: Vec<_> = parity::kinds().iter().map(|k| k.summary()).collect();
+        expected.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
+        assert_eq!(kinds, expected);
         let describe = |id: &str| graph.query(&Query::KindDescribe { kind_id: id.into() });
         let Some(Ok(QueryResult::KindDescribe {
             kind,

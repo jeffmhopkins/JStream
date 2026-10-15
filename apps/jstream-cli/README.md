@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-cli/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:cac7e37dcf08f749", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239, #221, #235, #197, #238) into B6-f: re-read; contents list holds" }
+verified = { hash = "b3:40075b3ea49511fd", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: re-read; contents list holds" }
 -->
 
 The command-line client: it drives an engine from a shell or a script. It is a client
@@ -47,7 +47,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 ## Usage
 <!-- @section
 covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
-verified = { hash = "b3:00552cf966cc5c18", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: re-read; this branch's Edits/Reads text holds; main's B9 changes touch no CLI command" }
+verified = { hash = "b3:b5dfc2036272a679", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: re-read whole section; Edits bullet adds item.set_opacity and item.set_blend, filter edits listed as unsupported (need JSON args); reads columns unchanged (human output shows no opacity)" }
 -->
 
 ```sh
@@ -101,10 +101,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Edits** are written as their protocol command name followed by its arguments, in a
   fixed order (`scene.create <scene-id> <name>`, `item.set_crop <item-id> <left> <top>
   <right> <bottom>`, …), so the CLI adds no vocabulary of its own. Every edit in the
-  protocol is supported except settings, encoder profiles and `source.create`'s
-  `duplicated_from`. `source.set_settings`,
-  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`
-  and `output.set_encoder` need a JSON argument form the CLI doesn't have yet, so a
+  protocol is supported except settings, encoder profiles, `source.create`'s
+  `duplicated_from` and the filter edits. `source.set_settings`,
+  `source.create` with settings, `encoder.create`, `encoder.update`, `encoder.delete`,
+  `output.set_encoder` and the `filter.*` edits need a JSON argument form the CLI
+  doesn't have yet, so a
   source it creates gets its kind's defaults and an output it creates the engine's
   default encoder (MCP and the WebSocket API take them). `item.add` sends neither
   placement, so its item is a legacy one; place it with `item.set_geometry <item-id>
@@ -118,7 +119,10 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   through a `scene:` source, and moves the items into it. The placement edits'
   optional `scene_id` is not in the CLI: until keyframe scenes exist it can only name
   the item's own scene, which omitting it already means.
-  `item.set_source <item-id> <source-id>` switches an item to another source. Several edits on one line go as **one atomic batch**: one new
+  `item.set_source <item-id> <source-id>` switches an item to another source.
+  `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
+  item's opacity and blend mode; the engine accepts only `normal` until it draws the
+  others. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
@@ -232,7 +236,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:f5101ac13a2b736b", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: re-read; holds" }
+verified = { hash = "b3:f60c3227c2b660c2", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: re-read; parser stays hand-rolled and pure, holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

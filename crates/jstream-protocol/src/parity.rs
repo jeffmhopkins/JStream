@@ -11,30 +11,67 @@
 
 use crate::{
     AudioCodec, AudioEncoding, Batch, BlendMode, Canvas, Crop, Edit, EncoderProfile,
-    EncoderProfileId, EncoderProfileInfo, EntityKind, Finite32, FitMode, HardwarePreference,
-    ItemGeometry, ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor, OutputId,
-    OutputInfo, OutputKind, PlacementForm, ProtocolError, Query, QueryResult, RateControl,
-    RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId,
-    SourceInfo, SourceKind, Vec2, VideoCodec, VideoEncoding,
+    EncoderProfileId, EncoderProfileInfo, EntityKind, FilterChain, FilterChains, FilterId,
+    FilterInfo, FilterOwner, Finite32, FitMode, HardwarePreference, ItemGeometry, ItemId, ItemInfo,
+    ItemTransform, KindCategory, KindDescriptor, OutputId, OutputInfo, OutputKind, ParamDescriptor,
+    ParamType, PlacementForm, ProtocolError, Query, QueryResult, RateControl, RecordContainer, Rev,
+    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, Size, SourceId, SourceInfo,
+    SourceKind, Vec2, VideoCodec, VideoEncoding,
 };
 
 /// The revision of a collection that started empty at rev 0 once [`collection`] has been
 /// applied to it: the batch is applied as one batch, so exactly one revision later.
 pub const COLLECTION_REV: Rev = Rev(1);
 
-/// The kinds an implementation must describe for [`collection`] to apply: `webcam`, a
-/// source kind without parameters, so every implementation reports its settings as an
-/// empty map.
+/// The kinds an implementation must describe for [`collection`] to apply: `webcam` and
+/// `desktop_audio`, source kinds without parameters, so every implementation reports
+/// their settings as an empty map, and the audio filter kind `gain`, whose one parameter
+/// the collection always sets, so its settings read back as given.
 pub fn kinds() -> Vec<KindDescriptor> {
-    vec![KindDescriptor {
-        kind_id: "webcam".into(),
-        category: KindCategory::Source,
-        name: "Webcam".into(),
-        version: 1,
-        video: true,
-        audio: false,
-        params: vec![],
-    }]
+    vec![
+        KindDescriptor {
+            kind_id: "webcam".into(),
+            category: KindCategory::Source,
+            name: "Webcam".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            params: vec![],
+        },
+        KindDescriptor {
+            kind_id: "desktop_audio".into(),
+            category: KindCategory::Source,
+            name: "Desktop audio".into(),
+            version: 1,
+            video: false,
+            audio: true,
+            params: vec![],
+        },
+        KindDescriptor {
+            kind_id: "gain".into(),
+            category: KindCategory::AudioFilter,
+            name: "Gain".into(),
+            version: 1,
+            video: false,
+            audio: true,
+            params: vec![ParamDescriptor {
+                id: "gain_db".into(),
+                ty: ParamType::Float {
+                    min: Some(-96.0),
+                    max: Some(24.0),
+                    step: None,
+                    unit: Some("dB".into()),
+                },
+                default: serde_json::Value::from(0.0),
+                label: "Gain".into(),
+                description: None,
+                group: None,
+                advanced: false,
+                visible_if: None,
+                live: true,
+            }],
+        },
+    ]
 }
 
 /// The batch that builds the fixture collection from an empty one: a 1280×720 canvas,
@@ -57,6 +94,15 @@ pub fn collection() -> Batch {
         kind: s.kind,
         settings: s.settings,
         duplicated_from: s.duplicated_from,
+    };
+    let gain = |id: &str, db: f32, index: Option<u32>| Edit::FilterAdd {
+        owner: desk_owner(),
+        chain: FilterChain::Audio,
+        filter_id: FilterId::new(id),
+        kind: "gain".into(),
+        settings: gain_db(db),
+        enabled: None,
+        index,
     };
     let add = |item: &str, source: &str| Edit::ItemAdd {
         scene_id: SceneId::new("a"),
@@ -189,6 +235,24 @@ pub fn collection() -> Batch {
                 duplicated_from: Some(SourceId::new("gone")),
                 ..aux()
             }),
+            source(desk()),
+            gain("g1", -6.0, None),
+            gain("g2", 0.0, Some(0)),
+            Edit::FilterSetEnabled {
+                owner: desk_owner(),
+                filter_id: FilterId::new("g2"),
+                enabled: false,
+            },
+            Edit::FilterSetSettings {
+                owner: desk_owner(),
+                filter_id: FilterId::new("g1"),
+                patch: gain_db(-3.0),
+            },
+            Edit::FilterReorder {
+                owner: desk_owner(),
+                filter_id: FilterId::new("g1"),
+                index: 0,
+            },
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
@@ -791,7 +855,85 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 id: "ghost".into(),
             },
         ),
+        // Filters (ADR-0026): the owner must exist, IDs are unique within it, a scene
+        // source has no audio chain, and indexes are bounded by the chain.
+        (
+            Batch::single(filter_add("ghost", "g", FilterChain::Audio, None)),
+            ProtocolError::NotFound {
+                entity: EntityKind::Source,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(filter_add("desk", "", FilterChain::Audio, None)),
+            invalid("edits.0.filter_id", "must not be empty"),
+        ),
+        (
+            Batch::single(filter_add("desk", "g1", FilterChain::Audio, None)),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Filter,
+                id: "g1".into(),
+            },
+        ),
+        (
+            Batch::single(filter_add("b_src", "g", FilterChain::Audio, None)),
+            invalid("edits.0.chain", "source `b_src` has no audio chain"),
+        ),
+        (
+            Batch::single(filter_add("desk", "g3", FilterChain::Audio, Some(3))),
+            invalid(
+                "edits.0.index",
+                "must be less than the number of positions in the chain (3)",
+            ),
+        ),
+        (
+            Batch::single(Edit::FilterRemove {
+                owner: desk_owner(),
+                filter_id: FilterId::new("ghost"),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Filter,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::FilterReorder {
+                owner: desk_owner(),
+                filter_id: FilterId::new("g2"),
+                index: 2,
+            }),
+            invalid(
+                "edits.0.index",
+                "must be less than the number of filters in the chain (2)",
+            ),
+        ),
+        // The chain holds at most eight: six more fit beside `g1` and `g2`, a ninth not.
+        (
+            Batch {
+                edits: (3..=9)
+                    .map(|i| filter_add("desk", &format!("g{i}"), FilterChain::Audio, None))
+                    .collect(),
+                expected_rev: None,
+                idempotency_key: None,
+            },
+            invalid("edits.6.chain", "a chain holds at most 8 filters"),
+        ),
     ]
+}
+
+/// A `gain` filter on `source`, at 0 dB.
+fn filter_add(source: &str, id: &str, chain: FilterChain, index: Option<u32>) -> Edit {
+    Edit::FilterAdd {
+        owner: FilterOwner::Source {
+            source_id: SourceId::new(source),
+        },
+        chain,
+        filter_id: FilterId::new(id),
+        kind: "gain".into(),
+        settings: gain_db(0.0),
+        enabled: None,
+        index,
+    }
 }
 
 /// Profile `low`: 3000 kbit/s CBR, a keyframe every 2 s, hardware preferred, AAC at
@@ -912,7 +1054,52 @@ fn sources() -> Vec<SourceInfo> {
             duplicated_from: Some(SourceId::new("cam")),
             ..cam()
         },
+        SourceInfo {
+            filters: FilterChains {
+                video: vec![],
+                audio: vec![
+                    FilterInfo {
+                        filter_id: FilterId::new("g1"),
+                        kind: "gain".into(),
+                        enabled: true,
+                        settings: gain_db(-3.0),
+                    },
+                    FilterInfo {
+                        filter_id: FilterId::new("g2"),
+                        kind: "gain".into(),
+                        enabled: false,
+                        settings: gain_db(0.0),
+                    },
+                ],
+            },
+            ..desk()
+        },
     ]
+}
+
+/// Desktop audio source `desk`, before its filters.
+fn desk() -> SourceInfo {
+    SourceInfo {
+        source_id: SourceId::new("desk"),
+        name: "Desktop".into(),
+        kind: SourceKind::Builtin {
+            kind: "desktop_audio".into(),
+        },
+        ..cam()
+    }
+}
+
+fn desk_owner() -> FilterOwner {
+    FilterOwner::Source {
+        source_id: SourceId::new("desk"),
+    }
+}
+
+/// A `gain` filter's settings.
+fn gain_db(db: f32) -> crate::Settings {
+    let mut settings = crate::Settings::new();
+    settings.insert("gain_db", serde_json::Value::from(f64::from(db)));
+    settings
 }
 
 /// Created with a `duplicated_from` naming a source that doesn't exist, so it reads as
@@ -934,6 +1121,7 @@ fn cam() -> SourceInfo {
         },
         settings: crate::Settings::new(),
         duplicated_from: None,
+        filters: Default::default(),
     }
 }
 
@@ -946,6 +1134,7 @@ fn nested_b() -> SourceInfo {
         },
         settings: crate::Settings::new(),
         duplicated_from: None,
+        filters: Default::default(),
     }
 }
 

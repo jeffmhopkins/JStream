@@ -4,7 +4,7 @@ source: crates/jstream-mcp/src/tests.rs
 {
   "tools": [
     {
-      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `canvas`, `encoder`, `item`, `output`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `canvas`, `encoder`, `filter`, `item`, `output`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "AudioCodec": {
@@ -664,7 +664,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Copies a source under a new ID: a separate instance with the same kind and\nsettings, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
+                "description": "Copies a source under a new ID: a separate instance with the same kind, settings\nand filters (with the same filter IDs), which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
                 "properties": {
                   "name": {
                     "description": "The copy's display name.",
@@ -692,7 +692,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Deleting a source that others were\ncopied from is allowed: their `duplicated_from` then reads as absent. Inverse:\n`source.create` with its name, kind, settings and `duplicated_from`.",
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's or filter's settings refer to it: remove those items, or clear\nthose references, first (in the same batch if needed). Deleting a source that\nothers were copied from is allowed: their `duplicated_from` then reads as absent.\nInverse: `source.create` with its name, kind, settings and `duplicated_from`, then\n`filter.add` for each of its filters, video chain first, in chain order.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -706,6 +706,168 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "source_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Adds a filter to one of a source's chains (ADR-0026). Rejected with `not_found` if\nthe owner doesn't exist, `already_exists` if it has a filter with this ID, and\n`invalid_argument` if the source has no such chain, the chain is full\n([`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS)), `kind` is not a filter kind of\nthat chain (`video_filter` or `audio_filter`), a setting fails its descriptor as in\n`source.create`, a reference in the settings would close a cycle, or `index` is\npast the end. Inverse: `filter.remove`.",
+                "properties": {
+                  "chain": {
+                    "$ref": "#/$defs/FilterChain",
+                    "description": "Which chain."
+                  },
+                  "enabled": {
+                    "description": "Whether it runs. Omitted means enabled.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "filter_id": {
+                    "$ref": "#/$defs/FilterId",
+                    "description": "The new filter's ID, chosen by the client, unique within its owner."
+                  },
+                  "index": {
+                    "description": "Its position in the chain, counted from the first filter (0). Must be at most\nthe number of filters already in the chain. Omitted means last.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "description": "The filter's kind, as `kind.list` reports it.",
+                    "type": "string"
+                  },
+                  "owner": {
+                    "$ref": "#/$defs/FilterOwner",
+                    "description": "What owns the chain."
+                  },
+                  "settings": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Initial settings, checked against the kind's descriptor and completed with its\ndefaults, as `source.create`'s are. Omitted means all defaults."
+                  },
+                  "type": {
+                    "const": "filter.add",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "owner",
+                  "chain",
+                  "filter_id",
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes a filter from its chain. Inverse: `filter.add` with its chain, kind,\nsettings, `enabled: false` if it was disabled, and its index.",
+                "properties": {
+                  "filter_id": {
+                    "$ref": "#/$defs/FilterId",
+                    "description": "The filter to remove."
+                  },
+                  "owner": {
+                    "$ref": "#/$defs/FilterOwner",
+                    "description": "What owns the filter."
+                  },
+                  "type": {
+                    "const": "filter.remove",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "owner",
+                  "filter_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Turns a filter on or off. A disabled filter stays in its chain and keeps its\nsettings, and is bypassed. Inverse: `filter.set_enabled` with the previous value.",
+                "properties": {
+                  "enabled": {
+                    "description": "Whether it runs.",
+                    "type": "boolean"
+                  },
+                  "filter_id": {
+                    "$ref": "#/$defs/FilterId",
+                    "description": "The filter to change."
+                  },
+                  "owner": {
+                    "$ref": "#/$defs/FilterOwner",
+                    "description": "What owns the filter."
+                  },
+                  "type": {
+                    "const": "filter.set_enabled",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "owner",
+                  "filter_id",
+                  "enabled"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes some of a filter's settings, with `source.set_settings`'s rules: each entry\nis checked against the kind's descriptor, `null` resets a parameter to its default\n(a reference to none), and a reference that would make a cycle is\n`invalid_argument` naming it. Inverse: `filter.set_settings` with the patched\nparameters' previous values.",
+                "properties": {
+                  "filter_id": {
+                    "$ref": "#/$defs/FilterId",
+                    "description": "The filter to change."
+                  },
+                  "owner": {
+                    "$ref": "#/$defs/FilterOwner",
+                    "description": "What owns the filter."
+                  },
+                  "patch": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Parameter ID to new value, or `null` for the default."
+                  },
+                  "type": {
+                    "const": "filter.set_settings",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "owner",
+                  "filter_id",
+                  "patch"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a filter to another position in its own chain. Inverse: `filter.reorder`\nback to its previous index.",
+                "properties": {
+                  "filter_id": {
+                    "$ref": "#/$defs/FilterId",
+                    "description": "The filter to move."
+                  },
+                  "index": {
+                    "description": "The new position, counted from the first filter (0). Must be less than the\nnumber of filters in its chain, else `invalid_argument`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "owner": {
+                    "$ref": "#/$defs/FilterOwner",
+                    "description": "What owns the filter."
+                  },
+                  "type": {
+                    "const": "filter.reorder",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "owner",
+                  "filter_id",
+                  "index"
                 ],
                 "type": "object"
               },
@@ -952,6 +1114,48 @@ source: crates/jstream-mcp/src/tests.rs
           "EncoderProfileId": {
             "description": "An encoder profile in the collection.",
             "type": "string"
+          },
+          "FilterChain": {
+            "description": "Which of an owner's chains a filter is on. Every owner has at most these two, so the\nset is closed.",
+            "oneOf": [
+              {
+                "const": "video",
+                "description": "The video chain: `video_filter` kinds. A source has one if its kind produces\nvideo.",
+                "type": "string"
+              },
+              {
+                "const": "audio",
+                "description": "The audio chain: `audio_filter` kinds, run before the source's fader\n(ADR-0028). A source has one if its kind produces audio and it is not a `scene`\nsource.",
+                "type": "string"
+              }
+            ]
+          },
+          "FilterId": {
+            "description": "A filter in one of a source's chains. Unique within its source, not across\nsources, so a duplicated source keeps its filters' IDs (ADR-0026).",
+            "type": "string"
+          },
+          "FilterOwner": {
+            "description": "What owns a filter chain. Serialized with an internal `type` tag. Only sources own\nchains so far; buses, scenes and outputs will be further variants.",
+            "oneOf": [
+              {
+                "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
+                "properties": {
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source."
+                  },
+                  "type": {
+                    "const": "source",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id"
+                ],
+                "type": "object"
+              }
+            ]
           },
           "Finite32": {
             "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
@@ -1901,6 +2105,271 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "events"
+    },
+    {
+      "description": "Runs one `filter` operation: set `op.type` to one of `filter.add` (edit), `filter.remove` (edit), `filter.set_enabled` (edit), `filter.set_settings` (edit), `filter.reorder` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "FilterChain": {
+            "description": "Which of an owner's chains a filter is on. Every owner has at most these two, so the\nset is closed.",
+            "oneOf": [
+              {
+                "const": "video",
+                "description": "The video chain: `video_filter` kinds. A source has one if its kind produces\nvideo.",
+                "type": "string"
+              },
+              {
+                "const": "audio",
+                "description": "The audio chain: `audio_filter` kinds, run before the source's fader\n(ADR-0028). A source has one if its kind produces audio and it is not a `scene`\nsource.",
+                "type": "string"
+              }
+            ]
+          },
+          "FilterId": {
+            "description": "A filter in one of a source's chains. Unique within its source, not across\nsources, so a duplicated source keeps its filters' IDs (ADR-0026).",
+            "type": "string"
+          },
+          "FilterOwner": {
+            "description": "What owns a filter chain. Serialized with an internal `type` tag. Only sources own\nchains so far; buses, scenes and outputs will be further variants.",
+            "oneOf": [
+              {
+                "description": "A source's chains, which apply wherever it is placed (ADR-0023).",
+                "properties": {
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source."
+                  },
+                  "type": {
+                    "const": "source",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "source_id"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "Settings": {
+            "additionalProperties": true,
+            "description": "A source's (or later a filter's) settings: parameter ID to value.\n\nThe values follow the kind's descriptor (`kind.describe`). The engine validates every\nedit against it and stores the complete map, so a reported map holds every parameter\nof the kind.",
+            "type": "object"
+          },
+          "SourceId": {
+            "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `filter` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Adds a filter to one of a source's chains (ADR-0026). Rejected with `not_found` if\nthe owner doesn't exist, `already_exists` if it has a filter with this ID, and\n`invalid_argument` if the source has no such chain, the chain is full\n([`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS)), `kind` is not a filter kind of\nthat chain (`video_filter` or `audio_filter`), a setting fails its descriptor as in\n`source.create`, a reference in the settings would close a cycle, or `index` is\npast the end. Inverse: `filter.remove`.",
+                "properties": {
+                  "chain": {
+                    "$ref": "#/$defs/FilterChain",
+                    "description": "Which chain."
+                  },
+                  "enabled": {
+                    "description": "Whether it runs. Omitted means enabled.",
+                    "type": [
+                      "boolean",
+                      "null"
+                    ]
+                  },
+                  "filter_id": {
+                    "$ref": "#/$defs/FilterId",
+                    "description": "The new filter's ID, chosen by the client, unique within its owner."
+                  },
+                  "index": {
+                    "description": "Its position in the chain, counted from the first filter (0). Must be at most\nthe number of filters already in the chain. Omitted means last.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "description": "The filter's kind, as `kind.list` reports it.",
+                    "type": "string"
+                  },
+                  "owner": {
+                    "$ref": "#/$defs/FilterOwner",
+                    "description": "What owns the chain."
+                  },
+                  "settings": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Initial settings, checked against the kind's descriptor and completed with its\ndefaults, as `source.create`'s are. Omitted means all defaults."
+                  },
+                  "type": {
+                    "const": "filter.add",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "owner",
+                  "chain",
+                  "filter_id",
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes a filter from its chain. Inverse: `filter.add` with its chain, kind,\nsettings, `enabled: false` if it was disabled, and its index.",
+                "properties": {
+                  "filter_id": {
+                    "$ref": "#/$defs/FilterId",
+                    "description": "The filter to remove."
+                  },
+                  "owner": {
+                    "$ref": "#/$defs/FilterOwner",
+                    "description": "What owns the filter."
+                  },
+                  "type": {
+                    "const": "filter.remove",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "owner",
+                  "filter_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Turns a filter on or off. A disabled filter stays in its chain and keeps its\nsettings, and is bypassed. Inverse: `filter.set_enabled` with the previous value.",
+                "properties": {
+                  "enabled": {
+                    "description": "Whether it runs.",
+                    "type": "boolean"
+                  },
+                  "filter_id": {
+                    "$ref": "#/$defs/FilterId",
+                    "description": "The filter to change."
+                  },
+                  "owner": {
+                    "$ref": "#/$defs/FilterOwner",
+                    "description": "What owns the filter."
+                  },
+                  "type": {
+                    "const": "filter.set_enabled",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "owner",
+                  "filter_id",
+                  "enabled"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Changes some of a filter's settings, with `source.set_settings`'s rules: each entry\nis checked against the kind's descriptor, `null` resets a parameter to its default\n(a reference to none), and a reference that would make a cycle is\n`invalid_argument` naming it. Inverse: `filter.set_settings` with the patched\nparameters' previous values.",
+                "properties": {
+                  "filter_id": {
+                    "$ref": "#/$defs/FilterId",
+                    "description": "The filter to change."
+                  },
+                  "owner": {
+                    "$ref": "#/$defs/FilterOwner",
+                    "description": "What owns the filter."
+                  },
+                  "patch": {
+                    "$ref": "#/$defs/Settings",
+                    "description": "Parameter ID to new value, or `null` for the default."
+                  },
+                  "type": {
+                    "const": "filter.set_settings",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "owner",
+                  "filter_id",
+                  "patch"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a filter to another position in its own chain. Inverse: `filter.reorder`\nback to its previous index.",
+                "properties": {
+                  "filter_id": {
+                    "$ref": "#/$defs/FilterId",
+                    "description": "The filter to move."
+                  },
+                  "index": {
+                    "description": "The new position, counted from the first filter (0). Must be less than the\nnumber of filters in its chain, else `invalid_argument`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "owner": {
+                    "$ref": "#/$defs/FilterOwner",
+                    "description": "What owns the filter."
+                  },
+                  "type": {
+                    "const": "filter.reorder",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "owner",
+                  "filter_id",
+                  "index"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "filter"
     },
     {
       "description": "Runs one `history` operation: set `op.type` to one of `history.undo` (history call), `history.redo` (history call). Undo and redo apply to this session's own edits only, never another client's: each raises the state `rev` by one, and is refused with `undo_conflict` when another client has since changed what the step touched (the step is then dropped), or `history_empty` when there is nothing to undo or redo. They accept `expected_rev` and `idempotency_key`. Failures come back as a tool error whose `error.code` is stable.",
@@ -3423,7 +3892,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Copies a source under a new ID: a separate instance with the same kind and\nsettings, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
+                "description": "Copies a source under a new ID: a separate instance with the same kind, settings\nand filters (with the same filter IDs), which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
                 "properties": {
                   "name": {
                     "description": "The copy's display name.",
@@ -3451,7 +3920,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Deleting a source that others were\ncopied from is allowed: their `duplicated_from` then reads as absent. Inverse:\n`source.create` with its name, kind, settings and `duplicated_from`.",
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's or filter's settings refer to it: remove those items, or clear\nthose references, first (in the same batch if needed). Deleting a source that\nothers were copied from is allowed: their `duplicated_from` then reads as absent.\nInverse: `source.create` with its name, kind, settings and `duplicated_from`, then\n`filter.add` for each of its filters, video chain first, in chain order.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",

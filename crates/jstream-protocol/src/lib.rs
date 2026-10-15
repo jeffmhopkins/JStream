@@ -12,6 +12,7 @@ mod encoder;
 mod envelope;
 mod error;
 mod event;
+mod filter;
 mod finite;
 mod geometry;
 mod history;
@@ -39,6 +40,7 @@ pub use envelope::{
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{DropCounts, Event, OutputState};
+pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
 pub use geometry::{
     Canvas, CanvasPoint, ContentRect, FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad,
@@ -46,7 +48,8 @@ pub use geometry::{
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use id::{
-    ClientId, EncoderProfileId, IdempotencyKey, ItemId, OutputId, RequestId, Rev, SceneId, SourceId,
+    ClientId, EncoderProfileId, FilterId, IdempotencyKey, ItemId, OutputId, RequestId, Rev,
+    SceneId, SourceId,
 };
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,

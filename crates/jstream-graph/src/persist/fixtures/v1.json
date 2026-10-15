@@ -169,6 +169,36 @@
       "duplicated_from": "cam"
     },
     {
+      "id": "desk",
+      "name": "Desktop",
+      "kind": {
+        "type": "builtin",
+        "kind": "desktop_audio"
+      },
+      "kind_version": 1,
+      "filters": {
+        "audio": [
+          {
+            "id": "g1",
+            "kind": "gain",
+            "kind_version": 1,
+            "settings": {
+              "gain_db": -3.0
+            }
+          },
+          {
+            "id": "g2",
+            "kind": "gain",
+            "kind_version": 1,
+            "enabled": false,
+            "settings": {
+              "gain_db": 0.0
+            }
+          }
+        ]
+      }
+    },
+    {
       "id": "z_base",
       "name": "z_base",
       "kind": {

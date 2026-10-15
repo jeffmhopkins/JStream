@@ -15,9 +15,9 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    BlendMode, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, Finite32, ItemGeometry,
-    ItemId, ItemTransform, OutputId, OutputKind, ProtocolError, Rev, SceneId, SceneRole, Settings,
-    SourceId, SourceKind,
+    BlendMode, Canvas, Crop, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
+    FilterOwner, Finite32, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind,
+    ProtocolError, Rev, SceneId, SceneRole, Settings, SourceId, SourceKind,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -164,6 +164,47 @@ struct FileSource {
     /// that may name a source since deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     duplicated_from: Option<SourceId>,
+    /// Its filter chains (ADR-0026); omitted while both are empty.
+    #[serde(default, skip_serializing_if = "FileChains::is_empty")]
+    filters: FileChains,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileChains {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    video: Vec<FileFilter>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    audio: Vec<FileFilter>,
+}
+
+impl FileChains {
+    fn is_empty(&self) -> bool {
+        self.video.is_empty() && self.audio.is_empty()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileFilter {
+    id: FilterId,
+    kind: String,
+    /// The kind descriptor's version the settings follow, as for a source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    kind_version: Option<u32>,
+    /// Omitted while enabled.
+    #[serde(default = "enabled", skip_serializing_if = "is_enabled")]
+    enabled: bool,
+    #[serde(default, skip_serializing_if = "Settings::is_empty")]
+    settings: Settings,
+}
+
+fn enabled() -> bool {
+    true
+}
+
+fn is_enabled(enabled: &bool) -> bool {
+    *enabled
 }
 
 #[derive(Serialize, Deserialize)]
@@ -185,6 +226,20 @@ struct FileEncoder {
 }
 
 impl Graph {
+    /// One chain as the file saves it.
+    fn file_filters(&self, filters: &[crate::Filter]) -> Vec<FileFilter> {
+        filters
+            .iter()
+            .map(|filter| FileFilter {
+                id: filter.id.clone(),
+                kind: filter.kind.clone(),
+                kind_version: self.kinds.get(&filter.kind).map(|k| k.version),
+                enabled: filter.enabled,
+                settings: filter.settings.clone(),
+            })
+            .collect()
+    }
+
     /// The collection as the JSON of a collection file at [`SCHEMA_VERSION`]: its
     /// `rev`, scenes in display order with their items bottom first, sources and outputs
     /// ordered by ID. Pretty-printed, ending in a newline. The kinds are not saved: they
@@ -238,6 +293,10 @@ impl Graph {
                     },
                     settings: source.settings.clone(),
                     duplicated_from: source.duplicated_from.clone(),
+                    filters: FileChains {
+                        video: self.file_filters(&source.filters.video),
+                        audio: self.file_filters(&source.filters.audio),
+                    },
                 })
                 .collect(),
             outputs: state
@@ -349,7 +408,7 @@ fn migrate_with(value: &mut Value, migrations: &[Migration]) -> Result<(), LoadE
 /// The edits that build `file`'s collection from an empty one, each with the object it
 /// creates for the error message. The canvas comes first (when not the default), then
 /// scenes, empty, in display order and with their roles; then sources, each after the
-/// sources its settings refer to; then items, encoder profiles, and outputs, each with
+/// sources its settings refer to; then every source's filters; then items, encoder profiles, and outputs, each with
 /// its profile.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
@@ -386,6 +445,33 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
     let mut placed = BTreeSet::new();
     for source in &file.sources {
         order_source(graph, &sources, source, &mut placed, &mut edits)?;
+    }
+    // After every source, so a filter's references find what they name.
+    for source in &file.sources {
+        let chains = [
+            (FilterChain::Video, &source.filters.video),
+            (FilterChain::Audio, &source.filters.audio),
+        ];
+        for (chain, filters) in chains {
+            for filter in filters {
+                let object = format!("filter `{}` of source `{}`", filter.id, source.id);
+                check_kind_version(graph, &object, &filter.kind, filter.kind_version)?;
+                edits.push((
+                    object,
+                    Edit::FilterAdd {
+                        owner: FilterOwner::Source {
+                            source_id: source.id.clone(),
+                        },
+                        chain,
+                        filter_id: filter.id.clone(),
+                        kind: filter.kind.clone(),
+                        settings: filter.settings.clone(),
+                        enabled: (!filter.enabled).then_some(false),
+                        index: None,
+                    },
+                ));
+            }
+        }
     }
     for scene in &file.scenes {
         for item in &scene.items {
@@ -466,6 +552,29 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
     Ok(edits)
 }
 
+/// Refuses settings saved by another version of `kind`'s descriptor (a missing version
+/// reads as the current one). A kind the graph doesn't describe is left to the edit.
+fn check_kind_version(
+    graph: &Graph,
+    object: &str,
+    kind: &str,
+    saved: Option<u32>,
+) -> Result<(), LoadError> {
+    let Some(descriptor) = graph.kinds.get(kind) else {
+        return Ok(());
+    };
+    let saved = saved.unwrap_or(descriptor.version);
+    if saved != descriptor.version {
+        return Err(LoadError::KindVersion {
+            object: object.to_owned(),
+            kind: kind.to_owned(),
+            saved,
+            current: descriptor.version,
+        });
+    }
+    Ok(())
+}
+
 /// Pushes `source.create` for `source`, after the sources its settings refer to. A
 /// source already placed, or being placed (a reference cycle, which the edit then
 /// refuses), is skipped.
@@ -487,18 +596,8 @@ fn order_source<'a>(
         }
     }
     let object = format!("source `{}`", source.id);
-    if let SourceKind::Builtin { kind } = &source.kind
-        && let Some(descriptor) = graph.kinds.get(kind)
-    {
-        let saved = source.kind_version.unwrap_or(descriptor.version);
-        if saved != descriptor.version {
-            return Err(LoadError::KindVersion {
-                object,
-                kind: kind.clone(),
-                saved,
-                current: descriptor.version,
-            });
-        }
+    if let SourceKind::Builtin { kind } = &source.kind {
+        check_kind_version(graph, &object, kind, source.kind_version)?;
     }
     edits.push((
         object,

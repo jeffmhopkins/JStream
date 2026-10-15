@@ -6,12 +6,12 @@
 //! edit succeeds does the working copy replace the state.
 
 use crate::deps::{self, Node};
-use crate::model::{Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
+use crate::model::{Chains, Graph, Item, MAX_CANVAS_EDGE, Output, Placement, Scene, Source, State};
 use crate::target::{record_path_problem, rtmp_url_problem};
 use crate::touched::Touched;
 use jstream_protocol::{
     Batch, BlendMode, Blocker, Canvas, Crop, Edit, EntityKind, Finite32, GeometryError,
-    ItemGeometry, ItemId, ItemTransform, KindDescriptor, Media, OutputId, OutputKind,
+    ItemGeometry, ItemId, ItemTransform, KindCategory, KindDescriptor, Media, OutputId, OutputKind,
     ParamDescriptor, ParamType, ProtocolError, RecordContainer, Reference, Rev, RtmpTarget,
     SceneId, SceneRole, Settings, SourceId, SourceKind,
 };
@@ -19,7 +19,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The kinds a graph can create, by ID.
-type Kinds = BTreeMap<String, KindDescriptor>;
+pub(crate) type Kinds = BTreeMap<String, KindDescriptor>;
 
 /// The result of a successful [`Graph::apply`].
 #[derive(Clone, Debug, PartialEq)]
@@ -163,7 +163,12 @@ pub(crate) fn check_name(value: &str, at: usize) -> Result<(), ProtocolError> {
 }
 
 /// Converts a wire index into a position below `len`.
-fn check_index(index: u32, len: usize, at: usize, what: &str) -> Result<usize, ProtocolError> {
+pub(crate) fn check_index(
+    index: u32,
+    len: usize,
+    at: usize,
+    what: &str,
+) -> Result<usize, ProtocolError> {
     match usize::try_from(index) {
         Ok(i) if i < len => Ok(i),
         _ => Err(invalid(
@@ -174,7 +179,7 @@ fn check_index(index: u32, len: usize, at: usize, what: &str) -> Result<usize, P
     }
 }
 
-fn wire_index(index: usize) -> Result<u32, ProtocolError> {
+pub(crate) fn wire_index(index: usize) -> Result<u32, ProtocolError> {
     u32::try_from(index).map_err(|_| ProtocolError::Internal {
         reason: format!("position {index} does not fit the protocol's u32 index"),
     })
@@ -281,6 +286,9 @@ fn apply_edit(
     running: &BTreeSet<OutputId>,
 ) -> Result<Vec<Edit>, ProtocolError> {
     if let Some(applied) = crate::encoder::apply(state, edit, at) {
+        return applied;
+    }
+    if let Some(applied) = crate::filter::apply(state, kinds, edit, at) {
         return applied;
     }
     match edit {
@@ -573,6 +581,13 @@ fn apply_edit(
                             format!("there is no kind `{kind}`; `kind.list` names them"),
                         )
                     })?;
+                    if descriptor.category != KindCategory::Source {
+                        return Err(invalid(
+                            at,
+                            "kind.kind",
+                            format!("kind `{kind}` is a filter kind, not a source kind"),
+                        ));
+                    }
                     complete_settings(state, kinds, descriptor, source_id, settings, at)?
                 }
                 _ => {
@@ -599,18 +614,23 @@ fn apply_edit(
                 .source(source_id)
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
             let (kind, settings) = (original.kind.clone(), original.settings.clone());
+            let filters = original.filters.clone();
             check_id(new_source_id.as_str(), at, "new_source_id")?;
             check_name(name, at)?;
             // The copy has the original's outgoing edges and none coming in, so it can't
             // close a cycle.
-            create_source(
+            let inverse = create_source(
                 state,
                 new_source_id,
                 name,
                 &kind,
                 settings,
                 Some(source_id.clone()),
-            )
+            )?;
+            if let Some(copy) = state.sources.get_mut(new_source_id) {
+                copy.filters = filters;
+            }
+            Ok(inverse)
         }
         Edit::SourceRename { source_id, name } => {
             check_name(name, at)?;
@@ -640,13 +660,15 @@ fn apply_edit(
                 .sources
                 .remove(source_id)
                 .ok_or_else(|| not_found(EntityKind::Source, source_id.as_str()))?;
-            Ok(vec![Edit::SourceCreate {
-                source_id: source.id,
-                name: source.name,
-                kind: source.kind,
-                settings: source.settings,
-                duplicated_from: source.duplicated_from,
-            }])
+            let mut inverse = vec![Edit::SourceCreate {
+                source_id: source.id.clone(),
+                name: source.name.clone(),
+                kind: source.kind.clone(),
+                settings: source.settings.clone(),
+                duplicated_from: source.duplicated_from.clone(),
+            }];
+            inverse.extend(crate::filter::restore_all(&source));
+            Ok(inverse)
         }
         Edit::OutputCreate { output_id, kind } => {
             check_id(output_id.as_str(), at, "output_id")?;
@@ -870,6 +892,7 @@ fn create_source(
             kind: kind.clone(),
             settings,
             duplicated_from,
+            filters: Chains::default(),
         },
     );
     Ok(vec![Edit::SourceDelete {
@@ -945,7 +968,7 @@ fn restore_item(
 /// The complete settings of a new source of kind `descriptor`: `given`, checked, with
 /// every parameter it leaves out (or sends as `null`, outside reference parameters) at
 /// its default.
-fn complete_settings(
+pub(crate) fn complete_settings(
     state: &State,
     kinds: &Kinds,
     descriptor: &KindDescriptor,
@@ -1047,7 +1070,7 @@ fn set_settings(
 /// constraints, that a referenced scene or source exists (`not_found` if not), and that a
 /// referenced source produces what the parameter needs. A source may name itself here;
 /// [`check_reference_cycles`] rejects that as a cycle.
-fn check_value(
+pub(crate) fn check_value(
     state: &State,
     kinds: &Kinds,
     source_id: &SourceId,

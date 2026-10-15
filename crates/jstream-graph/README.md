@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
-verified = { hash = "b3:d6dbf011986bad16", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#197 B9): re-read; B9's blockers and delete_plan text is main's, untouched by C5; only the stamp differs from main; holds" }
+verified = { hash = "b3:2ad9f8cf4cb52279", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: Source chains, Item opacity/blend/effects, Filters bullet in check order, touched props, blockers field filters.<id>.<param>, cycle edges, plan, reads, persist (opacity/blend/filters/effects) and tests updated against filter.rs, apply.rs, persist/mod.rs" }
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -36,10 +36,15 @@ codes, so the engine passes them to clients unchanged.
   capture. `source.duplicate` makes a separate copy under a new ID and records the
   original in the copy's `duplicated_from`, a plain link that is no dependency edge:
   the original may be deleted, and reads then omit the link. Removing an item never
-  deletes its source.
+  deletes its source. A source also has its filter `Chains`, a video and an audio
+  chain of `Filter`s (an ID unique within the source, a kind, `enabled` and complete
+  settings), at most `MAX_CHAIN_FILTERS` (8) each
+  ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
   here) and its items in stacking order, bottom first.
-- `Item`: the source it places, a `Placement`, a `crop` and `visible`. `Placement` is
+- `Item`: the source it places, a `Placement`, a `crop`, `visible`, an `opacity` from
+  0 to 1 and a `BlendMode`, and the reserved per-placement `effects`, an uninhabited
+  `Effect` list that is always empty. `Placement` is
   one of [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two forms: a
   `Geometry` (a box on the canvas) or a `Legacy` 0.3 `ItemTransform`, kept exactly as
   written. Only an edit changes the form.
@@ -74,7 +79,8 @@ the batch **touched**.
   (an item's scene and source, both sources of an `item.set_source`, a `scene`
   source's scene, a duplicate's original, the scene an `item.move` names, the profile
   an `output.set_encoder` names), the properties set (names, a scene's role, an item's
-  placement, crop, visibility, index and source, each settings parameter, an output's
+  placement, crop, visibility, opacity, blend, index and source, each settings
+  parameter, a filter's switch, settings parameters and index, an output's
   target and encoder choice, a profile's encoding), and whether the scenes' order or
   the canvas size was set. An edit it doesn't know marks the set as conflicting with
   everything. `conflicts_with` is the undo rule the engine's history applies to other
@@ -93,8 +99,8 @@ the batch **touched**.
   places the source or a setting refers to it, and `scene.delete` while a `scene`
   source shows the scene or a setting refers to it. The `invalid_argument` lists every
   blocker in `blockers` (`deps::blockers`, the reverse of the cycle check's edges): the
-  item (`source_id`), the `scene` source (`kind.scene_id`) or the setting
-  (`settings.<param>`). The client removes them first, in the same batch if it likes,
+  item (`source_id`), the `scene` source (`kind.scene_id`), the setting
+  (`settings.<param>`) or a filter's setting (`filters.<filter_id>.<param>`). The client removes them first, in the same batch if it likes,
   or sends the batch `delete.plan` returns. Rejecting rather than cascading keeps each
   edit's effect, and its inverse, limited to the object it names.
 - **Canvas and geometry** ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)):
@@ -106,6 +112,21 @@ the batch **touched**.
   `item.set_transform`. A geometry is checked before it is stored: a positive size and
   perspective, finite corners, and neutral tilt, turn, depth and perspective until the
   compositor draws 3D; each failure names its field (`edits.N.geometry.tilt_deg`).
+  `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
+  `item.add`'s `opacity` accept 0 to 1; `item.set_blend` and `item.add`'s `blend`
+  accept only `normal` until the compositor draws the other modes. Each is undone by
+  the previous value, and removing an item restores both.
+- **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
+  `filter.add` checks, in order, the owner source, the filter ID (non-empty, unused in
+  the source), that the source has the chain (video if its kind produces video, audio
+  if it produces audio and it is not a `scene` source), that the chain has room, that
+  the kind is a filter kind of that chain (`kind`), the settings exactly as a source's,
+  and the index; it is undone by `filter.remove`. `filter.remove` is undone by the
+  `filter.add` that puts the filter back where it was, with its switch and settings;
+  `filter.set_enabled`, `filter.set_settings` (a patch, `null` resets) and
+  `filter.reorder` by the previous values. `source.duplicate` copies both chains with
+  their IDs, `source.delete`'s inverse re-adds every filter after `source.create`, and
+  `source.create` refuses a filter kind.
 - **Outputs** (`target.rs` checks the URL): `output.create` and `output.set_target`
   reject, with `invalid_argument` and a fixed reason that never repeats the URL, one
   that isn't an `rtmp://` or `rtmps://` server URL with a host and an application
@@ -132,7 +153,7 @@ the batch **touched**.
   `item.move` moves an item to an index in another scene (up to one past its top) or
   within its own (a reorder), keeping the whole item, and is undone by `item.move`
   back. The placement edits (`item.set_geometry`, `item.set_transform`, `item.set_crop`,
-  `item.set_visible`)
+  `item.set_visible`, `item.set_opacity`)
   take an optional `scene_id`: absent or the item's own scene changes the item, another
   scene is `invalid_argument` until keyframe scenes exist, and the inverse keeps the
   addressing. No keyframe overrides exist yet, so no edit drops any
@@ -140,10 +161,10 @@ the batch **touched**.
   §1 applies once they do).
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a `scene` source on its scene, and a source on the
-  scenes and sources its settings refer to. Asset references are not edges. Every edit
-  that adds an edge runs the cycle check: `item.add`, `item.move`, `item.set_source`
-  (from the item's scene to its new source), `source.create` and
-  `source.set_settings`; `source.duplicate` copies outgoing edges onto a source nothing
+  scenes and sources its settings, or its filters' settings, refer to. Asset references
+  are not edges. Every edit that adds an edge runs the cycle check: `item.add`,
+  `item.move`, `item.set_source` (from the item's scene to its new source),
+  `source.create`, `source.set_settings`, `filter.add` and `filter.set_settings`; `source.duplicate` copies outgoing edges onto a source nothing
   depends on, so it can't close one. A cycle is `invalid_argument` naming it
   (for example scene `a` -> source `sa` -> scene `a`).
 
@@ -158,24 +179,28 @@ unknown kind), and `delete.plan` (`plan.rs`,
 target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
-to `null` (one `source.set_settings` per source), and the target's own delete comes
-last. Sources come ordered by ID, scenes in
+to `null` (one `source.set_settings` per source, and one `filter.set_settings` per
+filter), and the target's own delete comes last. Sources come ordered by ID, scenes in
 display order, items bottom first, outputs and encoder profiles ordered by ID.
 `state.get` carries the
 canvas. A geometry item reads its `geometry`, and the deprecated `transform` view the
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
 stored transform and no geometry. `Source::to_info` (given the `State`, to omit a
 `duplicated_from` whose source is gone),
-`Scene::to_info`, `Item::to_info` and `Output::to_info` convert single objects. Reads change nothing.
+`Scene::to_info`, `Item::to_info`, `Filter::to_info` and `Output::to_info` convert single
+objects; a source reports its chains in `filters`, omitted while both are empty, and an
+item its `opacity` and `blend`. Reads change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
 (`SCHEMA_VERSION`, now 1), `rev`, the `canvas`, scenes in display order (a group with
 `role: "group"`, ADR-0024) with their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
-and `visible`), sources ordered by ID (with `kind_version`, the descriptor version a
-`builtin` source's settings follow, ADR-0025, and `duplicated_from` as stored, even
-when it names a deleted source), outputs ordered by ID (each with its
+and `visible`, and its `opacity` and `blend` only when they differ from 1 and
+`normal`), sources ordered by ID (with `kind_version`, the descriptor version a
+`builtin` source's settings follow, ADR-0025, `duplicated_from` as stored, even
+when it names a deleted source, and `filters`, omitted while both chains are empty: each
+filter with its `kind_version` and settings, and `enabled` only when false), outputs ordered by ID (each with its
 `encoder_profile`, omitted for the default), and encoder profiles (`encoders`) ordered by
 ID, omitted when there are none. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -185,17 +210,19 @@ the engine's; this crate does no I/O.
   `schema_version` it has no path from (missing, 0, or newer), runs the forward
   migrations from the file's version (`MIGRATIONS[n]` upgrades `n + 1` to `n + 2`;
   there are none while the schema is at 1), and refuses unknown fields in the file's
-  own objects, so a newer field is never silently dropped by the next save.
+  own objects, so a newer field is never silently dropped by the next save. An item's
+  reserved `effects` is accepted only empty.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
   graph with the caller's kinds: the canvas size, scenes with their roles, then sources (each after the
   sources its settings refer to), then items in their placement form with their crop
-  and visibility, then encoder profiles, then outputs with their profiles. A
+  and visibility, opacity and blend, then every source's filters, then encoder
+  profiles, then outputs with their profiles. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
   `LoadError` stay small); nothing is partly loaded. Then `rev` is set
-  to the file's, so revisions keep increasing across restarts. A source whose
+  to the file's, so revisions keep increasing across restarts. A source or filter whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
 - **Errors** never quote a value beyond IDs, so they are safe to log. `serde_json`'s
@@ -212,12 +239,14 @@ placement conversions and their inverses, geometry and canvas validation,
 delete rejection by references, roles, moves and the grouping and ungrouping batches,
 `scene_id` addressing, output URL checks and the refused delete of a running
 output, encoder edits and their inverses (a profile freed and deleted in one batch),
-exact inverses,
+opacity and blend checks and inverses, the filter edits (`tests/filters.rs`: each
+check's field, exact inverses, duplicate and delete, references in filter settings as
+cycles, blockers and plans, and the collection file), exact inverses,
 what each query reports, and parity with `jstream-control`'s mock: the reads and
 rejected batches of `jstream_protocol::parity` (a dev-dependency with the `fixtures`
 feature) must get exactly the fixture's answers, the same ones the mock is held to. And a
 property test: a seeded generator applies 6000 random
-batches of every edit, including moves, role changes, source switches and addressed placement edits. After each successful one, the state must hold no cycle, applying its
+batches of every edit, including moves, role changes, source switches, addressed placement edits and filter edits. After each successful one, the state must hold no cycle, applying its
 inverse must restore the state exactly, and applying the inverse's inverse (redo) must
 restore the batch's result. After each failed one, the graph must be unchanged. And
 after every batch, for each scene and source: a plain delete is refused exactly when
@@ -225,7 +254,8 @@ it has blockers, the error lists them, and the `delete.plan` batch applies at th
 planned `rev`, removes the target, and undoes exactly.
 The collection file's tests (`persist/tests.rs`): saving the parity collection (a
 1280×720 canvas, legacy and geometry items, two encoder profiles that two outputs use,
-scene `b` made a group, a clone and a `duplicated_from` naming a missing source) plus a source whose
+scene `b` made a group, a clone, a `duplicated_from` naming a missing source,
+opacities and a desktop audio source with two gain filters, one disabled) plus a source whose
 settings refer to a later one must produce exactly the checked-in
 `persist/fixtures/v1.json`, and that fixture must load back to the same state and
 `rev` ([R-API-003](../../docs/RULES.md#R-API-003): the fixture stays when the schema

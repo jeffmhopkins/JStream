@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
-verified = { hash = "b3:159b653a7aae7653", by = "agent:claude@session_01CXg71NHyVzJjzxUHKNu1r6", note = "C5 merge of main (#197 B9 delete.plan): re-read; B9 changed no core README text; C5's Audio sources bullet and src/tests/audio.rs list hold beside main's; delete.plan is a query, not a mutation path" }
+verified = { hash = "b3:0e39664a64d15119", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: Kinds bullet includes audio filter kinds; new Audio filters bullet (filters.rs); Audio sources runs enabled audio filters; tests list adds filters.rs and opacity snapshot test" }
 -->
 
 The engine ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): `Engine` owns the
@@ -48,9 +48,14 @@ state machine. Contents:
 - **Collection file** (`collection.rs`): loads the collection from the file the host
   names with `with_collection_file` (or creates it), and saves it atomically after every
   change (see *Collection file* in [Design](#design)).
-- **Kinds** (`kinds.rs`): the built-in source kinds the graph validates settings
-  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)),
-  taken from `jstream-sources`' built-in registry.
+- **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
+  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
+  the source kinds of `jstream-sources`' built-in registry and the audio filter kinds.
+- **Audio filters** (`filters.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
+  the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
+  one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
+  `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's filters in
+  line with its source's audio chain.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -61,9 +66,9 @@ state machine. Contents:
   Audio-only kinds make no frames and have no live source.
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input, sent to master at unity, for each `audio_input`, `desktop_audio` and
-  `app_audio` source, added when the source is created and removed when it is deleted;
-  while there is none, the default microphone and desktop audio (see *Audio sources*
-  in [Design](#design)).
+  `app_audio` source, added when the source is created and removed when it is deleted,
+  running the source's enabled audio filters; while there is none, the default
+  microphone and desktop audio (see *Audio sources* in [Design](#design)).
 - **Snapshot** (`snapshot.rs`): the program mix as both the render thread and
   `video.snapshot` draw it (`plan`, `compose`), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -126,7 +131,10 @@ state machine. Contents:
   stand-in (`src/tests/audio.rs`: the defaults while there is none, sources added and
   deleted while an output runs, an unavailable device or application that leaves the
   output running, a failed stream reopened, an application found again under a new
-  process ID, and a settings change reopening its input), the output edits and the
+  process ID, and a settings change reopening its input), the audio filter kinds and
+  their kernels (`filters.rs`: defaults, range edges, and a chain updated in place or
+  rebuilt on a real mixer), item opacity in linear light through a nested scene
+  (`snapshot.rs`), the output edits and the
   stream-key actions against `jstream-platform`'s `MemoryKeyStore` (with `secrets_are_redacted`,
   which captures the engine's traces and audit entries), the audit entries of a run of
   batches and actions (`batches_and_actions_are_audited`) and `AuditFile`'s lines and
@@ -151,7 +159,7 @@ of the clients can reach it.
 <!-- @section
 covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:24ce24aaf3375494", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: cascade; main's text kept, mock text unaffected by this branch" }
+verified = { hash = "b3:332b93b9408ee6b6", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: re-read whole section; Dependencies move serde_json to a normal dep; touched props add opacity, blend and filter props; Snapshots says opacity is drawn and blend is src-over; Audio sources paragraph describes chain_of and Chain::apply (in place vs rebuild, refusal bypassed); Not yet adds video filter kinds and blend modes" }
 -->
 
 ### Engine and sessions
@@ -192,7 +200,8 @@ the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its d
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
 publisher and the recording file sink), `jstream-sources` (the built-in kinds: their
-descriptors and the sources that draw them), `png`
+descriptors and the sources that draw them), `serde_json` (settings values: the audio
+filter kinds' defaults and what the mixer kernels read from a filter's settings), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
 [ADR-0031](../../docs/adr/0031-source-types-and-decoding-scope.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams) and
@@ -200,8 +209,8 @@ descriptors and the sources that draw them), `png`
 the pipeline is up or has failed, and `video.snapshot` runs on a plain thread. Dev-dependencies: `jstream-control`'s `mock`
 feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
-`tests/scenarios.rs`), `jstream-mcp` (`tests/mcp.rs`) and `serde_json` (settings
-values and saved collection files in `src/tests.rs`, `src/tests/` and `tests/mcp.rs`). All of them
+`tests/scenarios.rs`) and `jstream-mcp` (`tests/mcp.rs`); the tests also use
+`serde_json` for settings values and saved collection files. All of them
 are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
@@ -282,8 +291,9 @@ collection lock:
   the scenes an `item.move` and its inverse name, the profile an `output.set_encoder`
   names), properties set (names, a scene's
   role, an item's placement, whether set as a transform or a geometry, crop,
-  visibility, an item's index, which `item.move` also sets, which source an item
-  places, each settings parameter, an output's target and encoder choice, a profile's
+  visibility, opacity and blend, an item's index, which `item.move` also sets, which
+  source an item places, each settings parameter, a filter's switch, settings
+  parameters and index, an output's target and encoder choice, a profile's
   encoding), the scenes'
   order, and the canvas size. An undo or redo first applies the step's edits to a copy of the
   graph, so the step's touched set includes what they touch *now*: undoing
@@ -320,8 +330,9 @@ nested ones included, is composited at that size; the PNG is that canvas scaled 
 ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)): a geometry by the
 shared formula, a legacy transform evaluated against the frame's size.
 Hidden items are skipped. A source with no stored frame is skipped, not drawn as a
-placeholder. Opacity is 1 and the only blend is src-over: the graph does not store
-either yet, and the compositor's blend is src-over.
+placeholder. Each item is drawn at its `opacity`, multiplied into its premultiplied
+colour in linear light, so a nested scene's layer fades as one image; the blend is
+src-over, the only mode the graph accepts (`normal`).
 
 **Nested scenes.** A `scene` source shows its scene composited at the canvas size,
 then placed like any image. The shot is scheduled inside out: each nested scene is
@@ -387,7 +398,16 @@ is only described (`NotBuilt`) draws nothing silently. Audio-only kinds
 sources' and wakes the program stage's thread when that set changes. When the program
 stage starts, its `AudioInputs` opens one mixer input per audio source through
 `MixerControl` (D1's live API), sent to the master bus at unity as every new input
-is; gain, mute and routing come with D5. Each input is opened by asking the platform
+is; gain, mute and routing come with D5. Each source's input runs the source's audio
+filter chain ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)): `sync` also
+records each source's enabled filters of a built-in kind, in order (`filters::chain_of`;
+a disabled filter or a pack kind is left out, so bypassed), and on every pass the
+thread brings the input's filters in line (`filters::Chain::apply`). When only
+settings changed, each changed filter is updated in place (`FilterControl::set`), so a
+gate's envelope or a delay line carries on; a new kind, a reorder, or a limiter's
+look-ahead (its latency) rebuilds the chain. A filter the mixer refuses is bypassed and
+logged at `warn`, never an edit failure, and a reopened input gets its chain again.
+Each input is opened by asking the platform
 for the format the device delivers (`AudioIo::input_format`), adding the mixer input
 in that format, and opening the stream with the input's producer as its handler; a
 stream that opens in another format is closed and tried again. An `audio_input`
@@ -872,6 +892,7 @@ history and idempotency keys are not saved.
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
+- Video filter kinds, and blend modes other than `normal`, in the compositor.
 - The audio and outputs snapshots, the parameter channels and gesture release of the
   live-value handover, and a GPU encode target. `output.start` is a cut of
   [ARCH › Threads](../../docs/ARCHITECTURE.md#threading): the program mix with one

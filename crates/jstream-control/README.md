@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:b24d855a6714afcc", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: re-read; contents list holds" }
+verified = { hash = "b3:eed5465c0dae88ad", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: Mock bullet names mock/filter.rs" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -28,9 +28,9 @@ Contents (a first cut; [Design](#design) explains the choices):
   `BoxFuture`, `EventStream` and `MaybeSendSync` types that keep it dyn-compatible.
 - **Errors** (`error.rs`): `ControlError`, a `thiserror` enum: the engine's `WireError`,
   or a lost connection.
-- **Mock** (`mock.rs`, feature `mock`): `MockEngine` and `MockControl`, an in-memory
-  implementation for developing and testing clients without the engine, which
-  they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
+- **Mock** (`mock.rs`, feature `mock`, with its filter edits in `mock/filter.rs`):
+  `MockEngine` and `MockControl`, an in-memory implementation for developing and
+  testing clients without the engine, which they never depend on. `jstream-core`'s `InProcessControl` is the real in-process
   implementation; its tests hold it to the mock's answers.
 - **WebSocket client** (`ws.rs`, feature `ws`, native targets): `WsControl` and
   `WsConfig`, the `Control` trait over the engine's WebSocket API, and `WS_PATH`, the
@@ -44,7 +44,7 @@ Not here yet: the browser (`wasm32`) WebSocket client (see [Design](#design)).
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:b10544e7956fd894", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "Merge of main (#239 B2-f2, #221 C2, #235 G3c, #197 B9, #238 C5) into B6-f: kept main's B9 line (delete.plan internal, no blockers on refused deletes) beside this branch's set_role/item.move bullets; matches mock.rs" }
+verified = { hash = "b3:01d97b26c59c1ff1", by = "agent:claude@session_01BL6HM3DJQvGExjdE4Z1JCd", note = "B7: re-read whole section; mock checks add opacity/blend and the filter edits (mock/filter.rs), what it doesn't check (filter kind, chain fit for builtin), state it keeps and undo restores filters; parity text names the filter chain" }
 -->
 
 ### The trait
@@ -126,21 +126,30 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
     `encoder.update`, deleting a profile an output uses, and `output.set_encoder`
-    naming a missing output, then a missing profile.
+    naming a missing output, then a missing profile;
+  - an `opacity` outside 0 to 1 and a blend mode other than `normal`, in `item.add`,
+    `item.set_opacity` and `item.set_blend`;
+  - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
+    a missing owner or filter, an empty or duplicate filter ID, an audio chain on a
+    `scene` source, a full chain and an index out of range. `source.duplicate` copies
+    the chains and `source.delete`'s inverse re-adds them; a reference in a filter's
+    settings blocks deleting its target, as a source's own does.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
-  kinds, so it accepts any non-empty builtin kind, stores settings as sent without
-  checking them or filling in defaults (a `null` in a `source.set_settings` patch
-  removes the entry), and doesn't follow settings references when it looks for cycles.
+  kinds, so it accepts any non-empty builtin kind and any filter kind, doesn't check
+  whether a builtin source has the chain a filter names, stores settings (a source's
+  and a filter's) as sent without checking them or filling in defaults (a `null` in a
+  patch removes the entry), and doesn't follow settings references when it looks for
+  cycles.
   `kind.list`, `kind.describe` and `delete.plan` answer `internal`, and its refused
   deletes carry no `blockers`;
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
   scene), `output.list` and `encoder.list` (ordered by ID), each at the current `rev`.
-  So it keeps everything an edit sets: the canvas, source names, kinds and settings,
-  each item's placement (its transform, or its geometry and the transform view of it),
-  crop and visibility, each scene's role and each item's scene after an `item.move`,
+  So it keeps everything an edit sets: the canvas, source names, kinds, settings and
+  filter chains, each item's placement (its transform, or its geometry and the
+  transform view of it), crop, visibility, opacity and blend, each scene's role and each item's scene after an `item.move`,
   each output's kind, target and encoder profile, and each profile. `video.snapshot`
   is not one of those reads: the mock has no compositor and answers it with
   `internal`, as it does for any protocol variant it does not implement;
@@ -161,11 +170,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - per-client undo and redo (`history.undo`, `history.redo`,
   [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Each batch is a step built
   from the same inverse edits `jstream-graph` returns: a removed item comes back at its
-  index with its placement in its own form (transform or geometry), crop and
-  visibility, a deleted scene at its position with its role and items, `item.move`
+  index with its placement in its own form (transform or geometry), crop, visibility,
+  opacity and blend, a deleted scene at its position with its role and items, `item.move`
   back to the item's previous scene and index, `scene.set_role` back to the previous
   role, a deleted source with its
-  settings and `duplicated_from`, `item.set_source` back to the item's previous source,
+  settings, `duplicated_from` and filters, each filter edit to the chain as it was, `item.set_source` back to the item's previous source,
   a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
   back with its encoder profile, encoder profile edits undo to the profile as it was,
@@ -196,8 +205,9 @@ The mock re-implements these checks and reads rather than calling
 for dev-dependencies, so the dependency would need a layering change. The duplication
 is small, and both crates' tests run the shared fixture `jstream_protocol::parity` (a
 dev-dependency with the `fixtures` feature): one batch that builds a collection with
-its outputs, the exact answer to every read of it, and the exact error for batches
-rejected against it, RTMP URL and recording path rejections included. The mock's
+its outputs and a filter chain, the exact answer to every read of it, and the exact
+error for batches rejected against it, RTMP URL, recording path and filter rejections
+included. The mock's
 undo test tears that collection down in one batch and checks that undo gives back
 exactly the fixture's state, which `jstream-graph`'s inverse property test guarantees
 for the graph.

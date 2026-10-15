@@ -68,6 +68,11 @@ opaque_id!(
     OutputId
 );
 opaque_id!(
+    /// A filter in one of a source's chains. Unique within its source, not across
+    /// sources, so a duplicated source keeps its filters' IDs (ADR-0026).
+    FilterId
+);
+opaque_id!(
     /// An encoder profile in the collection.
     EncoderProfileId
 );
