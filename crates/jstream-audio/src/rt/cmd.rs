@@ -1,5 +1,5 @@
-//! Lock-free commands that add and remove mixer inputs, buses and filters, and edit
-//! filters, while the mixer runs.
+//! Lock-free commands that add and remove mixer inputs, buses, output taps and filters,
+//! and edit filters, while the mixer runs.
 //!
 //! The control thread allocates the ring and the producer (or a bus's shared state),
 //! then `try_send`s it to the mixer. The mixer applies the command at the start of the next block and does
@@ -21,6 +21,7 @@ use super::input::{InputProducer, InputShared};
 use super::retire::Retirer;
 use super::ring::FrameRing;
 use super::sinc::{MAX_DOWN_RATIO, MAX_UP_RATIO};
+use super::tap::{MAX_OUTPUT_TAPS, Tap};
 use crate::error::AudioError;
 
 /// Inputs the mixer can hold without growing its list on the mixer thread.
@@ -30,12 +31,22 @@ pub(crate) const MAX_INPUTS: usize = 64;
 /// before the mixer has applied the removals.
 pub(crate) const COMMAND_CAP: usize = 128;
 
-/// The input or bus whose filter chain a command changes.
+/// The filter chain a command changes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum ChainTarget {
     Input(u64),
-    Bus { slot: usize, id: u64 },
+    Bus {
+        slot: usize,
+        id: u64,
+    },
+    /// The master chain, which every bus has its own copy of.
+    Master,
+    OutputTap(u64),
 }
+
+/// One copy of a new master filter for each bus, by slot, with the id of the bus it
+/// was built for.
+pub(crate) type MasterKernels = Box<[Option<(u64, Box<Kernel>)>]>;
 
 pub(crate) enum Command {
     Add {
@@ -50,6 +61,8 @@ pub(crate) enum Command {
         id: u64,
         shared: Arc<BusShared>,
         chain: Box<Chain>,
+        /// Its copy of the master chain, with every master filter queued so far.
+        master: Box<Chain>,
     },
     RemoveBus {
         slot: usize,
@@ -61,6 +74,14 @@ pub(crate) enum Command {
         id: u64,
         kernel: Box<Kernel>,
     },
+    /// A master filter, one copy per bus. The emptied list goes to the collector.
+    AddMasterFilter {
+        index: usize,
+        id: u64,
+        kernels: MasterKernels,
+    },
+    AddTap(Tap),
+    RemoveTap(u64),
     RemoveFilter {
         target: ChainTarget,
         id: u64,
@@ -87,9 +108,13 @@ pub(crate) struct ControlPlane {
     /// Touched only from the control plane.
     books: Mutex<BTreeMap<ChainTarget, Vec<FilterBook>>>,
     next_filter_id: AtomicU64,
+    /// Output taps accepted and not yet removed. Touched only from the control plane.
+    taps: Mutex<BTreeSet<u64>>,
+    next_tap_id: AtomicU64,
     retirer: Retirer,
     sample_rate: u32,
     ring_frames: usize,
+    block_frames: usize,
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -102,6 +127,7 @@ impl ControlPlane {
         retirer: Retirer,
         sample_rate: u32,
         ring_frames: usize,
+        block_frames: usize,
     ) -> Self {
         Self {
             tx,
@@ -109,17 +135,23 @@ impl ControlPlane {
             admitted: Mutex::new(BTreeSet::new()),
             buses: Mutex::new(std::array::from_fn(|slot| (slot == 0).then_some(MASTER_ID))),
             next_bus_id: AtomicU64::new(MASTER_ID + 1),
-            books: Mutex::new(BTreeMap::from([(
-                ChainTarget::Bus {
-                    slot: 0,
-                    id: MASTER_ID,
-                },
-                Vec::new(),
-            )])),
+            books: Mutex::new(BTreeMap::from([
+                (
+                    ChainTarget::Bus {
+                        slot: 0,
+                        id: MASTER_ID,
+                    },
+                    Vec::new(),
+                ),
+                (ChainTarget::Master, Vec::new()),
+            ])),
             next_filter_id: AtomicU64::new(1),
+            taps: Mutex::new(BTreeSet::new()),
+            next_tap_id: AtomicU64::new(1),
             retirer,
             sample_rate,
             ring_frames,
+            block_frames,
         }
     }
 
@@ -195,6 +227,10 @@ impl ControlPlane {
         let Some(slot) = buses.iter().position(Option::is_none) else {
             return Err(AudioError::TooManyBuses);
         };
+        // Held while the master copy is built and queued, so a master filter is either
+        // in it or queued after it with a copy for this bus.
+        let mut books = lock(&self.books);
+        let master = self.master_copy(books.get(&ChainTarget::Master))?;
         let id = self.next_bus_id.fetch_add(1, Ordering::Relaxed);
         let shared = Arc::new(BusShared::new());
         let queued = Command::AddBus {
@@ -202,13 +238,61 @@ impl ControlPlane {
             id,
             shared: Arc::clone(&shared),
             chain: Box::new(Chain::new(self.sample_rate)?),
+            master: Box::new(master),
         };
         if self.tx.try_send(queued).is_err() {
             return Err(AudioError::CommandQueueFull);
         }
         buses[slot] = Some(id);
-        lock(&self.books).insert(ChainTarget::Bus { slot, id }, Vec::new());
+        books.insert(ChainTarget::Bus { slot, id }, Vec::new());
         Ok((slot, id, shared))
+    }
+
+    /// A bus's copy of the master chain: each filter in `book` built from its spec,
+    /// edits included.
+    fn master_copy(&self, book: Option<&Vec<FilterBook>>) -> Result<Chain, AudioError> {
+        let mut chain = Chain::new(self.sample_rate)?;
+        for filter in book.into_iter().flatten() {
+            let kernel = Box::new(Kernel::build(self.sample_rate, filter.spec)?);
+            // The book holds at most MAX_FILTERS, which the chain has room for.
+            if chain.insert(usize::MAX, filter.id, kernel).is_err() {
+                return Err(AudioError::TooManyFilters);
+            }
+        }
+        Ok(chain)
+    }
+
+    /// Adds an output tap on bus `bus` in `slot` and queues it for the mixer. Returns
+    /// its id.
+    pub(crate) fn add_tap(&self, slot: usize, bus: u64) -> Result<u64, AudioError> {
+        if lock(&self.buses).get(slot).copied().flatten() != Some(bus) {
+            return Err(AudioError::Removed);
+        }
+        let mut taps = lock(&self.taps);
+        if taps.len() >= MAX_OUTPUT_TAPS {
+            return Err(AudioError::TooManyOutputTaps);
+        }
+        let id = self.next_tap_id.fetch_add(1, Ordering::Relaxed);
+        let chain = Box::new(Chain::new(self.sample_rate)?);
+        let tap = Tap::new(id, slot, bus, chain, self.block_frames);
+        if self.tx.try_send(Command::AddTap(tap)).is_err() {
+            return Err(AudioError::CommandQueueFull);
+        }
+        taps.insert(id);
+        lock(&self.books).insert(ChainTarget::OutputTap(id), Vec::new());
+        Ok(id)
+    }
+
+    /// Queues removal of output tap `id`. False when it is already removed, or when the
+    /// command queue cannot take it (the tap stays).
+    pub(crate) fn remove_tap(&self, id: u64) -> bool {
+        let mut taps = lock(&self.taps);
+        if !taps.contains(&id) || self.tx.try_send(Command::RemoveTap(id)).is_err() {
+            return false;
+        }
+        taps.remove(&id);
+        lock(&self.books).remove(&ChainTarget::OutputTap(id));
+        true
     }
 
     /// Queues removal of bus `id` in `slot`. False for the master, for a bus already
@@ -237,14 +321,36 @@ impl ControlPlane {
         index: usize,
         spec: FilterSpec,
     ) -> Result<(u64, usize), AudioError> {
+        if target == ChainTarget::Master {
+            return self.add_master_filter(index, spec);
+        }
         let mut books = lock(&self.books);
         let book = books.get_mut(&target).ok_or(AudioError::Removed)?;
+        let kernel = self.admit(book, spec)?;
+        let latency = kernel.latency_frames();
+        let id = self.next_filter_id.fetch_add(1, Ordering::Relaxed);
+        let filter = FilterBook::new(id, spec, &kernel);
+        let queued = Command::AddFilter {
+            target,
+            index,
+            id,
+            kernel: Box::new(kernel),
+        };
+        if self.tx.try_send(queued).is_err() {
+            return Err(AudioError::CommandQueueFull);
+        }
+        book.insert(index.min(book.len()), filter);
+        Ok((id, latency))
+    }
+
+    /// Builds `spec` for a chain holding `book`, if the chain has room for it: at most
+    /// [`MAX_FILTERS`] filters and [`MAX_CHAIN_LATENCY_MS`] of latency.
+    fn admit(&self, book: &[FilterBook], spec: FilterSpec) -> Result<Kernel, AudioError> {
         if book.len() >= MAX_FILTERS {
             return Err(AudioError::TooManyFilters);
         }
         let kernel = Kernel::build(self.sample_rate, spec)?;
-        let latency = kernel.latency_frames();
-        let total: usize = book.iter().map(|f| f.latency).sum::<usize>() + latency;
+        let total: usize = book.iter().map(|f| f.latency).sum::<usize>() + kernel.latency_frames();
         let cap = (f64::from(MAX_CHAIN_LATENCY_MS) * f64::from(self.sample_rate) / 1000.0).round()
             as usize;
         if total > cap {
@@ -252,13 +358,41 @@ impl ControlPlane {
                 what: "a filter chain's latency must be at most 100 ms",
             });
         }
+        Ok(kernel)
+    }
+
+    /// Builds a master filter once per bus and queues the copies in one command, so
+    /// every bus's master chain gets it at the same block.
+    fn add_master_filter(
+        &self,
+        index: usize,
+        spec: FilterSpec,
+    ) -> Result<(u64, usize), AudioError> {
+        let buses = lock(&self.buses);
+        let mut books = lock(&self.books);
+        let book = books.entry(ChainTarget::Master).or_default();
+        let first = self.admit(book, spec)?;
+        let latency = first.latency_frames();
         let id = self.next_filter_id.fetch_add(1, Ordering::Relaxed);
-        let filter = FilterBook::new(id, &kernel);
-        let queued = Command::AddFilter {
-            target,
+        let filter = FilterBook::new(id, spec, &first);
+        let mut first = Some(first);
+        let mut kernels: Vec<Option<(u64, Box<Kernel>)>> = Vec::with_capacity(MAX_BUSES);
+        for bus in buses.iter() {
+            kernels.push(match bus {
+                Some(bus) => {
+                    let kernel = match first.take() {
+                        Some(kernel) => kernel,
+                        None => Kernel::build(self.sample_rate, spec)?,
+                    };
+                    Some((*bus, Box::new(kernel)))
+                }
+                None => None,
+            });
+        }
+        let queued = Command::AddMasterFilter {
             index,
             id,
-            kernel: Box::new(kernel),
+            kernels: kernels.into_boxed_slice(),
         };
         if self.tx.try_send(queued).is_err() {
             return Err(AudioError::CommandQueueFull);
@@ -295,14 +429,17 @@ impl ControlPlane {
         id: u64,
         params: FilterParams,
     ) -> Result<(), AudioError> {
-        let books = lock(&self.books);
+        let mut books = lock(&self.books);
         let filter = books
-            .get(&target)
-            .and_then(|book| book.iter().find(|f| f.id == id))
+            .get_mut(&target)
+            .and_then(|book| book.iter_mut().find(|f| f.id == id))
             .ok_or(AudioError::Removed)?;
         filter.check(self.sample_rate, &params)?;
         self.tx
             .try_send(Command::EditFilter { target, id, params })
-            .map_err(|_| AudioError::CommandQueueFull)
+            .map_err(|_| AudioError::CommandQueueFull)?;
+        // A bus added later builds its master copy from this.
+        filter.spec = filter.spec.with(params);
+        Ok(())
     }
 }
