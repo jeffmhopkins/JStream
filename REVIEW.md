@@ -22,7 +22,6 @@ prompt never drifts from them.
 ## Ground rules
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:542b376128cb5437", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read against ADR-0019: comment-only reviewer, one head SHA, recusal via Claude-Session trailers, PR text as data, base-branch REVIEW/RULES/DOCS all unchanged" }
 -->
 
 - **You only comment.** Never push commits, edit files, merge, close, approve through GitHub
@@ -65,7 +64,6 @@ verified = { hash = "b3:542b376128cb5437", by = "agent:claude@session_01QBbMRwRu
 ## Step 2: Review
 <!-- @section
 depends_on = ["docs/RULES.md#R-DOC-004", "docs/RULES.md#R-GOV-001"]
-verified = { hash = "b3:011a2a1821c2c5fd", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read Step 2 item 3 and the blocking list against ADR-0043: tier checked against ADR-0043, too-high tier non-blocking, decision-comment rules unchanged" }
 -->
 
 Work through these in order. For each, cite the rule ID or doc anchor that a finding rests on.
@@ -133,7 +131,6 @@ Don't inflate. A PR with only non-blocking findings gets `pass`.
 ## Step 4: Post the review
 <!-- @section
 covers = [".github/workflows/review-gate.yml"]
-verified = { hash = "b3:471871808956a241", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Only the escalate row's wording changed (maintainer-tier ADR); verdict semantics and gate rules unchanged" }
 -->
 
 Post **one summary comment per round**. Inline comments on specific lines are welcome
@@ -200,7 +197,7 @@ verdict.
 `cargo xtask docs check` (the `docs` CI job) checks links, anchors, registered external
 URLs, facts, metadata schema, history tables and **stale section hashes**. Read its result
 on the PR. A green `docs` job proves the hashes match; it can't prove the re-read happened.
-So for every section whose `verified` line the PR changes, read the section against the
-diff yourself and judge the note (Step 2 item 4). `docs check` also fails on `covers`
+So for every section whose entries in `docs/verified.toml` the PR changes, read the
+section against the diff yourself and judge the note (Step 2 item 4). `docs check` also fails on `covers`
 globs that match no file ([R-DOC-012](docs/RULES.md#R-DOC-012)). `applies_to` globs may
 legitimately match nothing yet, so check that new or edited ones aren't typos.

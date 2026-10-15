@@ -17,7 +17,6 @@ and what to check.
 ## Before you start
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage"]
-verified = { hash = "b3:cd492f48bc291fb4", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Stale through daemon Usage's --ui-dir row (non-directory refused before files are written); the runbook doesn't pass --ui-dir; commands and prerequisites unchanged; holds" }
 -->
 
 - **Windows with Media Foundation.** On an N or KN edition, install the Media Feature
@@ -36,7 +35,6 @@ verified = { hash = "b3:cd492f48bc291fb4", by = "agent:claude@session_01WbL3WRbc
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:f41e1079db63f4f6", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge-only round (main 94fb25d): stale through main's changes to its dependencies; the runbook doesn't pass --ui-dir; commands unchanged; holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI
@@ -100,7 +98,6 @@ $cli = 'target\release\jstream-cli.exe'
 <!-- @section
 covers = ["scripts/smoke.ps1"]
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage"]
-verified = { hash = "b3:004320de31fb1349", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge-only round (main 94fb25d): stale through main's changes to its dependencies; the runbook doesn't pass --ui-dir; commands unchanged; holds" }
 -->
 
 `scripts/smoke.ps1` runs the steps above against a daemon it starts itself. By default

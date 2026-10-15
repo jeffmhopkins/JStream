@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/tests/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
-verified = { hash = "b3:fe07ad25e9f9e987", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge-only round (main e1e2a94): main's text kept; this PR's Serving (UI files with --ui-dir), Tests (raw HTTP UI requests) and Not-here-yet edits re-read and still hold" }
 -->
 
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
@@ -77,7 +76,6 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 ## Usage
 <!-- @section
 covers = ["apps/jstream-daemon/src/args.rs", "apps/jstream-daemon/src/main.rs", "apps/jstream-daemon/src/token.rs"]
-verified = { hash = "b3:8e03f312da88c790", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Round 1 N2: --ui-dir row now says a non-directory fails with exit 1 before the token or collection file is written, matching main.rs's early is_dir check and the daemon test asserting no token file; option row, ui: line, Web UI bullet and exit-1 row otherwise unchanged" }
 -->
 
 ```sh
@@ -197,7 +195,6 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml"]
 depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:788c22330894eac8", by = "agent:claude@session_01WbL3WRbcjCtYjwjoicNdxV", note = "Merge of main (d813d07: #328 LNK4199, #350, #381, #299, #360): main's build.rs/delay-load text kept verbatim; this PR's Listening edit (port, MCP and the UI directory, serve.rs) unchanged and still true; holds" }
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands

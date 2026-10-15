@@ -13,7 +13,6 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-vcam-proto/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-vcam-proto"]
-verified = { hash = "b3:e983ea67355b838a", by = "agent:claude@session_01653X3QeMRu5VETn2xTqUWA", note = "Review round 1: re-read against the code after B1/N2/N3: sddl_objects(user_sid) replaces the IU DACL, logging left out of the contract, choose_frame safety stated as a timing assumption, re-initialisation and format_matches listed" }
 -->
 
 Layer-0 contract between the engine, which produces the virtual camera's frames, and the
