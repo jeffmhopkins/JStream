@@ -321,7 +321,7 @@ stamp = { hash = "b3:57c24211f23f4a98", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:74ec9b2f97a135ea", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at f0cb974 (#324, #301, #373, #371, #395): control, protocol and server READMEs changed as above; this section's Live values bullet holds" }
+stamp = { hash = "b3:5cfa3cb55bbe75fa", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:6fb1039ccf2cada5", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): re-read; Live values bullet beside main's audio additions; holds" }
@@ -363,7 +363,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:253b81997429b93f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): re-read; Live values bullet beside main's audio additions; holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:4a0fef0b094b4bd5", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15: lib.rs only re-wrapped by cargo fmt (same re-exports); holds" }
@@ -384,7 +384,7 @@ stamp = { hash = "b3:281f01c983615553", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: control-protocol summary does not restate asset-path rules and defers to jstream-protocol design; still holds" }
+stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: section names no asset-path rules; it defers to the protocol README Design, which was updated; wire format and versions unchanged" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
@@ -885,7 +885,7 @@ stamp = { hash = "b3:5cf054814e42a585", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:9abefea51e344fb4", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at f0cb974 (#324, #301, #373, #371, #395): cascade from control/protocol design and tests.rs; Live values subsection unaffected; holds" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:ac8dd387dbbe9b55", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at f0cb974 (#324, #301, #373, #371, #395): cascade from control/protocol design and tests.rs; Live values subsection unaffected; holds" }
+stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: re-read; engine/session design does not restate asset-path rules; the protocol Design change only tightens a per-value check" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:f34d43c76a6b41e7", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): Actions bullet merged: scene.switch, audio.reset_loudness, live.set/live.cancel; changed() doc lists live sources, program mixer and live values on deleted items; Live values subsection holds against engine.rs" }
@@ -1425,7 +1425,7 @@ stamp = { hash = "b3:21668f51b28f0233" }
 stamp = { hash = "b3:7f258c3499d29be1", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = '''Re-read after merging main: record-path rule now drops 'as for an absolute asset' and still matches record_path_problem in target.rs (/, \, C:\, C:/, no .., file name last)''' }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:ac8dd387dbbe9b55", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at f0cb974 (#324, #301, #373, #371, #395): cascade only; main's dependency text changes (browser client errors, server shutdown, asset paths) don't touch claims here; holds" }
+stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: re-read; graph purpose relies on protocol Edits, IDs and errors, unaffected by the tighter absolute asset-path check" }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -1944,7 +1944,7 @@ stamp = { hash = "b3:0f2425741faff210" }
 stamp = { hash = "b3:8cec5f4716edad12" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:ac8dd387dbbe9b55", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at f0cb974 (#324, #301, #373, #371, #395): re-read main's absolute asset path rules beside the Live values subsection; unrelated; snapshots unchanged by the merge; holds" }
+stamp = { hash = "b3:3b023fca59b94c48", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -2001,7 +2001,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:253b81997429b93f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): re-read the Live values subsection beside main's audio/bus/send text; live-adjustable setters are still the three item setters, faders noted as following; snapshots regenerated on the merged tree" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:4a0fef0b094b4bd5", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15: lib.rs only re-wrapped by cargo fmt (same re-exports); holds" }
@@ -2022,7 +2022,7 @@ stamp = { hash = "b3:281f01c983615553", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: absolute asset-path rules (no double leading separator, no ':' beyond drive letter, no ? or *) match check_asset_path in kind.rs; record path text matches target.rs" }
+stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: Design Rejections asset-path bullet now states the DOS device last-component rule (stem before first '.', trailing spaces stripped, CON/PRN/AUX/NUL/COM0-9/COM¹-³/LPT0-9/LPT¹-³/CONIN$/CONOUT$), matching check_asset_path; no version bump, consistent with the per-value tightening stance" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
@@ -2067,7 +2067,7 @@ stamp = { hash = "b3:abc973f4355bada5" }
 stamp = { hash = "b3:253b81997429b93f", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15 (D5 audio protocol 0.19, D6, K2, ADR-0053 ledger): contents list merged both sides: Action has audio.reset_loudness beside live.set/live.cancel, queries bus.list beside live.list, events meters.tick beside live events, IDs BusId::master and GestureId; version paragraph is main's 0.19; this PR's bump comes at its slot (B2)" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/kind.rs"]
-stamp = { hash = "b3:96b4bbe9081cd904", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
+stamp = { hash = "b3:8b14e2a88a39dd9d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: kind.rs/settings.rs changes only tighten check_asset_path and its docs; the Kinds and settings contents bullet (pure per-value checks incl. check_asset_path) still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/lib.rs"]
 stamp = { hash = "b3:4a0fef0b094b4bd5", by = "agent:claude@session_01WG1uLVazjTqn2gmsarSsqg", note = "I2 merge of main at 41cfb15: lib.rs only re-wrapped by cargo fmt (same re-exports); holds" }
@@ -2088,7 +2088,7 @@ stamp = { hash = "b3:281f01c983615553", by = "agent:claude@session_01WG1uLVazjTq
 stamp = { hash = "b3:b48737a114c2fced" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/settings.rs"]
-stamp = { hash = "b3:7d8275809787cc4d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after merging main: contents list still names check_asset_path and Reference; kind.rs/settings.rs changes only tighten the absolute asset check and its docs" }
+stamp = { hash = "b3:5e3b1dc180fcd82c", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#384: kind.rs/settings.rs changes only tighten check_asset_path and its docs; the Kinds and settings contents bullet (pure per-value checks incl. check_asset_path) still holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:c594f42e1b065295" }
