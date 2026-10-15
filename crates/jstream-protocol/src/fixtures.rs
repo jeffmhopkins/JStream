@@ -11,8 +11,12 @@ use crate::{
     EventMessage, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo,
     ItemTransform, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm,
     ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev,
-    RtmpTarget, SceneId, SceneInfo, SceneSummary, SecretString, ServerMessage, Settings, Size,
-    SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings,
+    Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+};
+use crate::{
+    AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
+    EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,
 };
 use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
@@ -34,6 +38,15 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::SceneDelete {
             scene_id: SceneId::new("scn_1"),
+        },
+        Edit::SceneSetRole {
+            scene_id: SceneId::new("scn_grp"),
+            role: SceneRole::Group,
+        },
+        Edit::ItemMove {
+            item_id: ItemId::new("itm_2"),
+            scene_id: SceneId::new("scn_grp"),
+            index: 0,
         },
         Edit::ItemAdd {
             scene_id: SceneId::new("scn_1"),
@@ -61,6 +74,7 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::ItemSetTransform {
             item_id: ItemId::new("itm_2"),
+            scene_id: None,
             transform: ItemTransform {
                 position: Vec2::new(1280.0, 0.5).expect("finite"),
                 scale: Vec2::new(0.25, f32::MAX).expect("finite"),
@@ -69,6 +83,7 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::ItemSetGeometry {
             item_id: ItemId::new("itm_2"),
+            scene_id: None,
             geometry: ItemGeometry {
                 fit_mode: FitMode::Fill,
                 rotation_deg: Finite32::new(12.5).expect("finite"),
@@ -81,7 +96,13 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::ItemSetVisible {
             item_id: ItemId::new("itm_2"),
+            scene_id: None,
             visible: false,
+        },
+        Edit::ItemSetVisible {
+            item_id: ItemId::new("itm_2"),
+            scene_id: Some(SceneId::new("scn_1")),
+            visible: true,
         },
         Edit::ItemReorder {
             item_id: ItemId::new("itm_2"),
@@ -93,6 +114,7 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::ItemSetCrop {
             item_id: ItemId::new("itm_2"),
+            scene_id: None,
             crop: Crop {
                 left: 8,
                 top: 0,
@@ -107,6 +129,7 @@ pub(crate) fn edits() -> Vec<Edit> {
                 kind: "webcam".into(),
             },
             settings: Settings::new(),
+            duplicated_from: None,
         },
         Edit::SourceCreate {
             source_id: SourceId::new("src_bg"),
@@ -115,6 +138,7 @@ pub(crate) fn edits() -> Vec<Edit> {
                 kind: "color".into(),
             },
             settings: color_settings(),
+            duplicated_from: None,
         },
         Edit::SourceCreate {
             source_id: SourceId::new("src_intro"),
@@ -123,6 +147,7 @@ pub(crate) fn edits() -> Vec<Edit> {
                 scene_id: SceneId::new("scn_1"),
             },
             settings: Settings::new(),
+            duplicated_from: None,
         },
         Edit::SourceRename {
             source_id: SourceId::new("src_bg"),
@@ -145,6 +170,19 @@ pub(crate) fn edits() -> Vec<Edit> {
             source_id: SourceId::new("src_cam"),
             new_source_id: SourceId::new("src_cam_2"),
             name: "Camera 2".into(),
+        },
+        Edit::SourceCreate {
+            source_id: SourceId::new("src_cam_2"),
+            name: "Camera 2".into(),
+            kind: SourceKind::Builtin {
+                kind: "webcam".into(),
+            },
+            settings: Settings::new(),
+            duplicated_from: Some(SourceId::new("src_cam")),
+        },
+        Edit::ItemSetSource {
+            item_id: ItemId::new("itm_2"),
+            source_id: SourceId::new("src_cam_2"),
         },
         Edit::SourceDelete {
             source_id: SourceId::new("src_cam_2"),
@@ -169,6 +207,63 @@ pub(crate) fn edits() -> Vec<Edit> {
                 container: RecordContainer::Mp4,
             },
         },
+        Edit::EncoderCreate {
+            profile_id: EncoderProfileId::new("enc_rec"),
+            name: "Recording".into(),
+            profile: recording_profile(),
+        },
+        Edit::EncoderUpdate {
+            profile_id: EncoderProfileId::new("enc_rec"),
+            name: "Recording (hardware)".into(),
+            profile: EncoderProfile {
+                video: VideoEncoding {
+                    hardware: HardwarePreference::Require,
+                    ..EncoderProfile::DEFAULT.video
+                },
+                ..EncoderProfile::DEFAULT
+            },
+        },
+        Edit::OutputSetEncoder {
+            output_id: OutputId::new("out_rec"),
+            profile_id: Some(EncoderProfileId::new("enc_rec")),
+        },
+        Edit::EncoderDelete {
+            profile_id: EncoderProfileId::new("enc_old"),
+        },
+    ]
+}
+
+/// A recording profile: 12000 kbit/s VBR peaking at 20000, hardware preferred.
+fn recording_profile() -> EncoderProfile {
+    EncoderProfile {
+        video: VideoEncoding {
+            codec: VideoCodec::H264,
+            rate_control: RateControl::Vbr {
+                kbps: 12000,
+                max_kbps: 20000,
+            },
+            keyframe_interval_s: 2,
+            hardware: HardwarePreference::Prefer,
+        },
+        audio: AudioEncoding {
+            codec: AudioCodec::Aac,
+            kbps: 320,
+        },
+    }
+}
+
+fn encoder_infos() -> Vec<EncoderProfileInfo> {
+    vec![
+        EncoderProfileInfo {
+            profile_id: EncoderProfileId::new("enc_rec"),
+            name: "Recording".into(),
+            profile: recording_profile(),
+        },
+        EncoderProfileInfo {
+            profile_id: EncoderProfileId::new("enc_stream"),
+            name: "Stream".into(),
+            profile: EncoderProfile::DEFAULT,
+        },
     ]
 }
 
@@ -180,10 +275,21 @@ fn rtmp(url: &str) -> OutputKind {
 }
 
 fn output_infos() -> Vec<OutputInfo> {
-    vec![OutputInfo {
-        output_id: OutputId::new("out_yt"),
-        kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
-    }]
+    vec![
+        OutputInfo {
+            output_id: OutputId::new("out_rec"),
+            kind: OutputKind::Record {
+                path: "/home/me/Videos/show.mp4".into(),
+                container: RecordContainer::Mp4,
+            },
+            encoder_profile: Some(EncoderProfileId::new("enc_rec")),
+        },
+        OutputInfo {
+            output_id: OutputId::new("out_yt"),
+            kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+            encoder_profile: None,
+        },
+    ]
 }
 
 pub(crate) fn actions() -> Vec<Action> {
@@ -221,6 +327,7 @@ pub(crate) fn queries() -> Vec<Query> {
             kind_id: "color".into(),
         },
         Query::OutputList,
+        Query::EncoderList,
         Query::DeletePlan {
             target: DeleteTarget::Scene {
                 scene_id: SceneId::new("scn_mask"),
@@ -363,6 +470,7 @@ fn source_infos() -> Vec<SourceInfo> {
                 kind: "color".into(),
             },
             settings: color_settings(),
+            duplicated_from: None,
         },
         SourceInfo {
             source_id: SourceId::new("src_cam"),
@@ -371,6 +479,16 @@ fn source_infos() -> Vec<SourceInfo> {
                 kind: "webcam".into(),
             },
             settings: Settings::new(),
+            duplicated_from: None,
+        },
+        SourceInfo {
+            source_id: SourceId::new("src_cam_2"),
+            name: "Camera 2".into(),
+            kind: SourceKind::Builtin {
+                kind: "webcam".into(),
+            },
+            settings: Settings::new(),
+            duplicated_from: Some(SourceId::new("src_cam")),
         },
         SourceInfo {
             source_id: SourceId::new("src_intro"),
@@ -379,6 +497,7 @@ fn source_infos() -> Vec<SourceInfo> {
                 scene_id: SceneId::new("scn_intro"),
             },
             settings: Settings::new(),
+            duplicated_from: None,
         },
     ]
 }
@@ -434,6 +553,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             scenes: vec![SceneSummary {
                 scene_id: SceneId::new("scn_1"),
                 name: "Main".into(),
+                role: SceneRole::Scene,
                 item_count: 2,
             }],
         },
@@ -441,6 +561,13 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             output_id: OutputId::new("out_yt"),
             state: OutputState::Active,
             key_set: true,
+            encoder: Some(EncoderSessionInfo {
+                profile_id: None,
+                shared_with: vec![OutputId::new("out_tw")],
+                hardware: false,
+            }),
+            encoder_sessions: 2,
+            hardware_sessions: 1,
         },
         QueryResult::SourceList {
             rev: Rev(12),
@@ -459,15 +586,18 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 SceneInfo {
                     scene_id: SceneId::new("scn_1"),
                     name: "Main".into(),
+                    role: SceneRole::Scene,
                     items: item_infos(),
                 },
                 SceneInfo {
                     scene_id: SceneId::new("scn_intro"),
                     name: "Intro".into(),
+                    role: SceneRole::Group,
                     items: vec![],
                 },
             ],
             outputs: output_infos(),
+            encoders: encoder_infos(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -501,6 +631,10 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::OutputList {
             rev: Rev(12),
             outputs: output_infos(),
+        },
+        QueryResult::EncoderList {
+            rev: Rev(12),
+            encoders: encoder_infos(),
         },
         QueryResult::DeletePlan {
             rev: Rev(12),
@@ -636,6 +770,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Item,
         EntityKind::Source,
         EntityKind::Output,
+        EntityKind::Encoder,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,

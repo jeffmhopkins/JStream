@@ -213,6 +213,7 @@ fn handshake_list_and_call_round_trip() {
             "canvas",
             "delete",
             "describe_api",
+            "encoder",
             "events",
             "history",
             "item",
@@ -277,7 +278,7 @@ fn handshake_list_and_call_round_trip() {
         json!({"type": "state.get", "rev": 2,
                "canvas": {"width": 1920, "height": 1080}, "sources": [cam],
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
-               "outputs": []})
+               "outputs": [], "encoders": []})
     );
     let started = f.call_tool(
         "output",

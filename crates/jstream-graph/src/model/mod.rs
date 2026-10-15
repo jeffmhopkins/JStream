@@ -1,5 +1,5 @@
 //! The collection state: the canvas, sources, scenes and the items that place sources in
-//! scenes, and the outputs.
+//! scenes, the outputs, and the encoder profiles they use.
 //!
 //! Docs: docs/ARCHITECTURE.md#data-model, docs/adr/0022-item-transform-and-canvas.md
 //!
@@ -12,7 +12,9 @@
 //! - Every `builtin` source's kind is one the graph's kinds describe, and its settings
 //!   hold exactly that kind's parameters, each valid for its descriptor. A `scene`
 //!   source has no settings.
-//! - Every scene and source that a settings value refers to exists.
+//! - Every scene and source that a settings value refers to exists. A source's
+//!   `duplicated_from` is a plain link, not a reference: it never names the source
+//!   itself, but may name one that no longer exists.
 //! - The dependency edges (items placing sources, `scene` sources showing scenes, and
 //!   scene and source references in settings) have no cycle.
 //! - The canvas is at least 1×1 and at most [`MAX_CANVAS_EDGE`] on each side.
@@ -22,13 +24,16 @@
 //! - Every RTMP output's URL is a valid `rtmp://` or `rtmps://` server URL that carries
 //!   no credential. Stream keys are never here (R-SEC-001): they live in the OS
 //!   credential store, outside the collection.
+//! - Every output's encoder profile exists, and every profile holds an encoding the
+//!   engine can open: H.264 and AAC, with bit rates and keyframe interval in range.
 //!
 //! The structs have private fields so that later additions (source `filters[]`, item
 //! `effects[]`, the full 3D transform) don't break callers.
 
 use jstream_protocol::{
-    Canvas, Crop, ItemGeometry, ItemId, ItemTransform, KindDescriptor, OutputId, OutputKind,
-    PlacementForm, Rev, SceneId, Settings, SourceId, SourceKind,
+    Canvas, Crop, EncoderProfile, EncoderProfileId, ItemGeometry, ItemId, ItemTransform,
+    KindDescriptor, OutputId, OutputKind, PlacementForm, Rev, SceneId, SceneRole, Settings,
+    SourceId, SourceKind,
 };
 use std::collections::BTreeMap;
 
@@ -92,6 +97,7 @@ pub struct State {
     pub(crate) sources: BTreeMap<SourceId, Source>,
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
+    pub(crate) encoders: BTreeMap<EncoderProfileId, Encoder>,
 }
 
 impl State {
@@ -145,6 +151,26 @@ impl State {
         self.outputs.get(id)
     }
 
+    /// Every encoder profile, ordered by ID.
+    pub fn encoders(&self) -> impl ExactSizeIterator<Item = &Encoder> {
+        self.encoders.values()
+    }
+
+    /// The encoder profile with this ID.
+    pub fn encoder(&self, id: &EncoderProfileId) -> Option<&Encoder> {
+        self.encoders.get(id)
+    }
+
+    /// The encoding `output` uses: its profile's, or the engine's default when it has
+    /// none. `None` for an output not in the collection.
+    pub fn encoding_of(&self, output: &OutputId) -> Option<EncoderProfile> {
+        let output = self.outputs.get(output)?;
+        Some(match &output.encoder_profile {
+            Some(id) => self.encoders.get(id)?.profile,
+            None => EncoderProfile::DEFAULT,
+        })
+    }
+
     pub(crate) fn scene_index(&self, id: &SceneId) -> Option<usize> {
         self.scenes.iter().position(|s| &s.id == id)
     }
@@ -165,6 +191,7 @@ pub struct Source {
     pub(crate) name: String,
     pub(crate) kind: SourceKind,
     pub(crate) settings: Settings,
+    pub(crate) duplicated_from: Option<SourceId>,
 }
 
 impl Source {
@@ -187,13 +214,21 @@ impl Source {
     pub fn settings(&self) -> &Settings {
         &self.settings
     }
+
+    /// The source it was copied from, as `source.duplicate` recorded it (ADR-0023). A
+    /// plain link, not a dependency edge: it may name a source that has since been
+    /// deleted, and queries report it only while that source exists.
+    pub fn duplicated_from(&self) -> Option<&SourceId> {
+        self.duplicated_from.as_ref()
+    }
 }
 
-/// A scene: a stack of items.
+/// A scene: a stack of items. A group is a scene too, with the role `group`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Scene {
     pub(crate) id: SceneId,
     pub(crate) name: String,
+    pub(crate) role: SceneRole,
     pub(crate) items: Vec<Item>,
 }
 
@@ -206,6 +241,11 @@ impl Scene {
     /// Its display name.
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    /// What it is for. The role changes no engine behaviour.
+    pub fn role(&self) -> SceneRole {
+        self.role
     }
 
     /// Its items in stacking order: the first is at the bottom.
@@ -278,6 +318,7 @@ impl Item {
 pub struct Output {
     pub(crate) id: OutputId,
     pub(crate) kind: OutputKind,
+    pub(crate) encoder_profile: Option<EncoderProfileId>,
 }
 
 impl Output {
@@ -289,5 +330,35 @@ impl Output {
     /// What it is and where it sends.
     pub fn kind(&self) -> &OutputKind {
         &self.kind
+    }
+
+    /// The encoder profile it uses, or `None` for the engine's default.
+    pub fn encoder_profile(&self) -> Option<&EncoderProfileId> {
+        self.encoder_profile.as_ref()
+    }
+}
+
+/// One encoder profile: a named encoding outputs can share.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Encoder {
+    pub(crate) id: EncoderProfileId,
+    pub(crate) name: String,
+    pub(crate) profile: EncoderProfile,
+}
+
+impl Encoder {
+    /// Its ID.
+    pub fn id(&self) -> &EncoderProfileId {
+        &self.id
+    }
+
+    /// Its display name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The encoding.
+    pub fn profile(&self) -> &EncoderProfile {
+        &self.profile
     }
 }

@@ -4,9 +4,39 @@ source: crates/jstream-mcp/src/tests.rs
 {
   "tools": [
     {
-      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `canvas`, `item`, `output`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `canvas`, `encoder`, `item`, `output`, `scene`, `source` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "AudioCodec": {
+            "description": "An audio codec. Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "aac",
+                "description": "AAC-LC.",
+                "type": "string"
+              }
+            ]
+          },
+          "AudioEncoding": {
+            "description": "How the audio is encoded.",
+            "properties": {
+              "codec": {
+                "$ref": "#/$defs/AudioCodec",
+                "description": "The codec."
+              },
+              "kbps": {
+                "description": "The bit rate, in kilobits per second: 32..=320, else `invalid_argument`.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "codec",
+              "kbps"
+            ],
+            "type": "object"
+          },
           "Crop": {
             "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
             "properties": {
@@ -93,7 +123,30 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+                "description": "Changes what a scene is for (ADR-0024 §1): a `scene`, or a `group` placed in\nother scenes through a `scene` source. The role changes no engine behaviour: a\ngroup renders, nests and can be placed more than once like any scene, and clients\nhide groups from the scene list. Inverse: `scene.set_role` with the previous role.",
+                "properties": {
+                  "role": {
+                    "$ref": "#/$defs/SceneRole",
+                    "description": "Its new role."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_role",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "role"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -179,11 +232,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle) or if the index is out of range. Inverse:\n`item.move` back to its previous scene and index.",
+                "properties": {
+                  "index": {
+                    "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to move."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to move it to. Its own scene is allowed, and then the move is an\n`item.reorder`."
+                  },
+                  "type": {
+                    "const": "item.move",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "scene_id",
+                  "index"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to move."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
                   },
                   "transform": {
                     "$ref": "#/$defs/ItemTransform",
@@ -212,6 +306,17 @@ source: crates/jstream-mcp/src/tests.rs
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to place."
                   },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
                   "type": {
                     "const": "item.set_geometry",
                     "type": "string"
@@ -230,6 +335,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.\nAny other scene is `invalid_argument` until keyframe scenes exist, when naming\na keyframe scene of the item's scene will write that scene's override."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -273,6 +389,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Changes which source an item places, keeping the item's ID, transform, crop,\nvisibility and stacking position (ADR-0023). It switches an item between a\nreference and a clone: `source.duplicate` then `item.set_source` to the copy makes\na clone, and `item.set_source` back to the copy's `duplicated_from` (then\n`source.delete` of the copy if nothing else places it) makes it a reference again.\nRejected with `not_found` if the item or the source doesn't exist, and with\n`invalid_argument` naming the cycle if the scene would then contain itself,\ndirectly or through other scenes. Inverse: `item.set_source` with the previous\nsource.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source it places from now on."
+                  },
+                  "type": {
+                    "const": "item.set_source",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "source_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Replaces an item's crop. Inverse: `item.set_crop` with the previous one.",
                 "properties": {
                   "crop": {
@@ -282,6 +421,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to crop."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
                   },
                   "type": {
                     "const": "item.set_crop",
@@ -298,6 +448,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Adds a source to the collection. It appears in no scene until an `item.add`\nplaces it. Inverse: `source.delete`.",
                 "properties": {
+                  "duplicated_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The source this one was copied from, as `source.duplicate` records it. A plain\nlink: it may name a source that no longer exists (`source.delete`'s inverse\nrestores it that way), and is reported only while that source exists. It must\nnot name the new source itself, else `invalid_argument`. Omitted means none."
+                  },
                   "kind": {
                     "$ref": "#/$defs/SourceKind",
                     "description": "What the source shows. A `scene` source must name an existing scene; a\n`builtin` one a kind that `kind.list` reports."
@@ -374,7 +535,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Copies a source under a new ID: a separate instance with the same kind and\nsettings, which changes independently from then on. Placing the *same* source again\nis `item.add` with its existing `source_id`. Inverse: `source.delete` of the copy.",
+                "description": "Copies a source under a new ID: a separate instance with the same kind and\nsettings, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
                 "properties": {
                   "name": {
                     "description": "The copy's display name.",
@@ -402,7 +563,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Inverse: `source.create` with its\nname, kind and settings.",
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Deleting a source that others were\ncopied from is allowed: their `duplicated_from` then reads as absent. Inverse:\n`source.create` with its name, kind, settings and `duplicated_from`.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -534,8 +695,134 @@ source: crates/jstream-mcp/src/tests.rs
                   "output_id"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "Chooses the encoder profile an output uses, or the engine's default. A running\noutput keeps its encoder session; the profile applies from its next\n`output.start`. Inverse: `output.set_encoder` with the previous profile.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output to change."
+                  },
+                  "profile_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/EncoderProfileId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "The profile, which must exist, else `not_found`. Absent or `null` means the\nengine's default."
+                  },
+                  "type": {
+                    "const": "output.set_encoder",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Adds an encoder profile. Inverse: `encoder.delete`.",
+                "properties": {
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "$ref": "#/$defs/EncoderProfile",
+                    "description": "The encoding. Out-of-range values, and codecs or rate controls the engine\ndoesn't know, are rejected with `invalid_argument`."
+                  },
+                  "profile_id": {
+                    "$ref": "#/$defs/EncoderProfileId",
+                    "description": "The new profile's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "encoder.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "profile_id",
+                  "name",
+                  "profile"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an encoder profile's name and encoding. Running outputs keep their\nencoder sessions; the new encoding applies from each output's next\n`output.start`. Inverse: `encoder.update` with the previous name and encoding.",
+                "properties": {
+                  "name": {
+                    "description": "The new display name.",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "$ref": "#/$defs/EncoderProfile",
+                    "description": "The new encoding, validated as in `encoder.create`."
+                  },
+                  "profile_id": {
+                    "$ref": "#/$defs/EncoderProfileId",
+                    "description": "The profile to change."
+                  },
+                  "type": {
+                    "const": "encoder.update",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "profile_id",
+                  "name",
+                  "profile"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes an encoder profile. Rejected with `invalid_argument` while an output\nuses it: point those outputs elsewhere with `output.set_encoder` first (in the\nsame batch if needed). Inverse: `encoder.create` with its name and encoding.",
+                "properties": {
+                  "profile_id": {
+                    "$ref": "#/$defs/EncoderProfileId",
+                    "description": "The profile to delete."
+                  },
+                  "type": {
+                    "const": "encoder.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "profile_id"
+                ],
+                "type": "object"
               }
             ]
+          },
+          "EncoderProfile": {
+            "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on the software encoder,\nand AAC at 160 kbit/s.",
+            "properties": {
+              "audio": {
+                "$ref": "#/$defs/AudioEncoding",
+                "description": "The audio encoding."
+              },
+              "video": {
+                "$ref": "#/$defs/VideoEncoding",
+                "description": "The video encoding."
+              }
+            },
+            "required": [
+              "video",
+              "audio"
+            ],
+            "type": "object"
+          },
+          "EncoderProfileId": {
+            "description": "An encoder profile in the collection.",
+            "type": "string"
           },
           "Finite32": {
             "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
@@ -558,6 +845,26 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "fill",
                 "description": "The smallest rectangle of the source's aspect ratio that covers the box,\ncentred. The part outside the box is clipped by the compositor.",
+                "type": "string"
+              }
+            ]
+          },
+          "HardwarePreference": {
+            "description": "Whether a video encoder runs on the GPU's encoder block. Serialized as a snake_case\nstring. Hardware encoders limit how many sessions run at once, per GPU vendor and\ndriver; the engine doesn't guess that limit, and `output.status` reports the\nhardware sessions in use.",
+            "oneOf": [
+              {
+                "const": "prefer",
+                "description": "Hardware if there is one, else software.",
+                "type": "string"
+              },
+              {
+                "const": "require",
+                "description": "Hardware only: `output.start` fails when there is none.",
+                "type": "string"
+              },
+              {
+                "const": "avoid",
+                "description": "Software only.",
                 "type": "string"
               }
             ]
@@ -697,6 +1004,58 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "RateControl": {
+            "description": "How a video encoder spends bits. Serialized with an internal `type` tag.",
+            "oneOf": [
+              {
+                "description": "Constant bit rate, as RTMP ingest expects.",
+                "properties": {
+                  "kbps": {
+                    "description": "The target, in kilobits per second.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "cbr",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kbps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Variable bit rate with a peak, for a recording.",
+                "properties": {
+                  "kbps": {
+                    "description": "The average target, in kilobits per second.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "max_kbps": {
+                    "description": "The peak, in kilobits per second; at least `kbps`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "vbr",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kbps",
+                  "max_kbps"
+                ],
+                "type": "object"
+              }
+            ]
+          },
           "RecordContainer": {
             "description": "The file format a recording is written in. Serialized as a snake_case string.",
             "oneOf": [
@@ -739,6 +1098,21 @@ source: crates/jstream-mcp/src/tests.rs
           "SceneId": {
             "description": "A scene in the collection.",
             "type": "string"
+          },
+          "SceneRole": {
+            "description": "What a scene is for (ADR-0024 §1). It changes no engine behaviour; it tells clients,\nagents and switchers how to show the scene.",
+            "oneOf": [
+              {
+                "const": "scene",
+                "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+                "type": "string"
+              },
+              {
+                "const": "group",
+                "description": "A group: a scene placed in other scenes to hold items together. Clients hide it\nfrom the scene list and show it under the items that place it.",
+                "type": "string"
+              }
+            ]
           },
           "Settings": {
             "additionalProperties": true,
@@ -823,6 +1197,46 @@ source: crates/jstream-mcp/src/tests.rs
             "required": [
               "x",
               "y"
+            ],
+            "type": "object"
+          },
+          "VideoCodec": {
+            "description": "A video codec. Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "h264",
+                "description": "H.264 (AVC).",
+                "type": "string"
+              }
+            ]
+          },
+          "VideoEncoding": {
+            "description": "How the video is encoded.",
+            "properties": {
+              "codec": {
+                "$ref": "#/$defs/VideoCodec",
+                "description": "The codec."
+              },
+              "hardware": {
+                "$ref": "#/$defs/HardwarePreference",
+                "default": "avoid",
+                "description": "Whether to use a hardware encoder. Omitted means `avoid`."
+              },
+              "keyframe_interval_s": {
+                "description": "Seconds from one keyframe to the next, 1..=10, else `invalid_argument`. Most\nstreaming services ask for 2.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "rate_control": {
+                "$ref": "#/$defs/RateControl",
+                "description": "How the encoder spends bits. Rejected with `invalid_argument` outside\n100..=100000 kbit/s, or, for `vbr`, with a peak below the average or above\n200000 kbit/s."
+              }
+            },
+            "required": [
+              "codec",
+              "rate_control",
+              "keyframe_interval_s"
             ],
             "type": "object"
           }
@@ -1042,6 +1456,309 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "describe_api"
     },
     {
+      "description": "Runs one `encoder` operation: set `op.type` to one of `encoder.create` (edit), `encoder.update` (edit), `encoder.delete` (edit), `encoder.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "AudioCodec": {
+            "description": "An audio codec. Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "aac",
+                "description": "AAC-LC.",
+                "type": "string"
+              }
+            ]
+          },
+          "AudioEncoding": {
+            "description": "How the audio is encoded.",
+            "properties": {
+              "codec": {
+                "$ref": "#/$defs/AudioCodec",
+                "description": "The codec."
+              },
+              "kbps": {
+                "description": "The bit rate, in kilobits per second: 32..=320, else `invalid_argument`.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "codec",
+              "kbps"
+            ],
+            "type": "object"
+          },
+          "EncoderProfile": {
+            "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on the software encoder,\nand AAC at 160 kbit/s.",
+            "properties": {
+              "audio": {
+                "$ref": "#/$defs/AudioEncoding",
+                "description": "The audio encoding."
+              },
+              "video": {
+                "$ref": "#/$defs/VideoEncoding",
+                "description": "The video encoding."
+              }
+            },
+            "required": [
+              "video",
+              "audio"
+            ],
+            "type": "object"
+          },
+          "EncoderProfileId": {
+            "description": "An encoder profile in the collection.",
+            "type": "string"
+          },
+          "HardwarePreference": {
+            "description": "Whether a video encoder runs on the GPU's encoder block. Serialized as a snake_case\nstring. Hardware encoders limit how many sessions run at once, per GPU vendor and\ndriver; the engine doesn't guess that limit, and `output.status` reports the\nhardware sessions in use.",
+            "oneOf": [
+              {
+                "const": "prefer",
+                "description": "Hardware if there is one, else software.",
+                "type": "string"
+              },
+              {
+                "const": "require",
+                "description": "Hardware only: `output.start` fails when there is none.",
+                "type": "string"
+              },
+              {
+                "const": "avoid",
+                "description": "Software only.",
+                "type": "string"
+              }
+            ]
+          },
+          "IdempotencyKey": {
+            "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
+            "type": "string"
+          },
+          "RateControl": {
+            "description": "How a video encoder spends bits. Serialized with an internal `type` tag.",
+            "oneOf": [
+              {
+                "description": "Constant bit rate, as RTMP ingest expects.",
+                "properties": {
+                  "kbps": {
+                    "description": "The target, in kilobits per second.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "cbr",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kbps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Variable bit rate with a peak, for a recording.",
+                "properties": {
+                  "kbps": {
+                    "description": "The average target, in kilobits per second.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "max_kbps": {
+                    "description": "The peak, in kilobits per second; at least `kbps`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "vbr",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "kbps",
+                  "max_kbps"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "Rev": {
+            "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "VideoCodec": {
+            "description": "A video codec. Serialized as a snake_case string.",
+            "oneOf": [
+              {
+                "const": "h264",
+                "description": "H.264 (AVC).",
+                "type": "string"
+              }
+            ]
+          },
+          "VideoEncoding": {
+            "description": "How the video is encoded.",
+            "properties": {
+              "codec": {
+                "$ref": "#/$defs/VideoCodec",
+                "description": "The codec."
+              },
+              "hardware": {
+                "$ref": "#/$defs/HardwarePreference",
+                "default": "avoid",
+                "description": "Whether to use a hardware encoder. Omitted means `avoid`."
+              },
+              "keyframe_interval_s": {
+                "description": "Seconds from one keyframe to the next, 1..=10, else `invalid_argument`. Most\nstreaming services ask for 2.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "rate_control": {
+                "$ref": "#/$defs/RateControl",
+                "description": "How the encoder spends bits. Rejected with `invalid_argument` outside\n100..=100000 kbit/s, or, for `vbr`, with a peak below the average or above\n200000 kbit/s."
+              }
+            },
+            "required": [
+              "codec",
+              "rate_control",
+              "keyframe_interval_s"
+            ],
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "expected_rev": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/Rev"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Apply only if the state is still at this revision, else fail with `rev_conflict`\n(optimistic concurrency). Omitted means apply against whatever is current."
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/IdempotencyKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Makes a retry safe: a batch whose key the engine has already applied for this\nclient is not applied again, and gets the original result."
+          },
+          "op": {
+            "description": "The `encoder` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Adds an encoder profile. Inverse: `encoder.delete`.",
+                "properties": {
+                  "name": {
+                    "description": "Display name.",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "$ref": "#/$defs/EncoderProfile",
+                    "description": "The encoding. Out-of-range values, and codecs or rate controls the engine\ndoesn't know, are rejected with `invalid_argument`."
+                  },
+                  "profile_id": {
+                    "$ref": "#/$defs/EncoderProfileId",
+                    "description": "The new profile's ID, chosen by the client. Rejected if it exists."
+                  },
+                  "type": {
+                    "const": "encoder.create",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "profile_id",
+                  "name",
+                  "profile"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Replaces an encoder profile's name and encoding. Running outputs keep their\nencoder sessions; the new encoding applies from each output's next\n`output.start`. Inverse: `encoder.update` with the previous name and encoding.",
+                "properties": {
+                  "name": {
+                    "description": "The new display name.",
+                    "type": "string"
+                  },
+                  "profile": {
+                    "$ref": "#/$defs/EncoderProfile",
+                    "description": "The new encoding, validated as in `encoder.create`."
+                  },
+                  "profile_id": {
+                    "$ref": "#/$defs/EncoderProfileId",
+                    "description": "The profile to change."
+                  },
+                  "type": {
+                    "const": "encoder.update",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "profile_id",
+                  "name",
+                  "profile"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes an encoder profile. Rejected with `invalid_argument` while an output\nuses it: point those outputs elsewhere with `output.set_encoder` first (in the\nsame batch if needed). Inverse: `encoder.create` with its name and encoding.",
+                "properties": {
+                  "profile_id": {
+                    "$ref": "#/$defs/EncoderProfileId",
+                    "description": "The profile to delete."
+                  },
+                  "type": {
+                    "const": "encoder.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "profile_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists the collection's encoder profiles, ordered by ID.",
+                "properties": {
+                  "type": {
+                    "const": "encoder.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "encoder"
+    },
+    {
       "description": "Returns the engine's events after the cursor `after`, oldest first, without waiting: `state.changed` (the state `rev` moved; `client_id` and `request_id` say whose batch did it) and `output.state_changed`, from every client, yours included, and `events.dropped` (the server dropped `count` events because this session fell behind; re-read the state). The once-a-second `stats.tick` is not in `events`: each read returns the newest one as `stats` (running drop totals). Each comes with a `seq`, a sequence number of this MCP server, starting at 1 when your first call opened the session. Pass the returned `next` as `after` to read on; omit `after` (or pass 0) to read from the oldest kept. At most 100 events come back at once; `more` says others are waiting. The server keeps the last 1000: `dropped` counts events after your cursor that were discarded before you read them, so re-read the state if it is not 0. `ended` means the session is gone and no more events will come.",
       "inputSchema": {
         "additionalProperties": false,
@@ -1135,7 +1852,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "history"
     },
     {
-      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_crop` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Crop": {
@@ -1431,11 +2148,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Moves an item to a stacking position in another scene, keeping its ID, source,\nplacement, crop and visibility (ADR-0024 §1). Grouping is a batch that creates a\ngroup scene, places it, and moves the selected items into it. Rejected with\n`invalid_argument` if the move would make a scene contain itself (field\n`scene_id`, naming the cycle) or if the index is out of range. Inverse:\n`item.move` back to its previous scene and index.",
+                "properties": {
+                  "index": {
+                    "description": "Its position in that scene after the move, counted from the bottom (0). Must\nbe at most the number of items already in that scene (less than it for the\nitem's own scene), else `invalid_argument`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to move."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to move it to. Its own scene is allowed, and then the move is an\n`item.reorder`."
+                  },
+                  "type": {
+                    "const": "item.move",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "scene_id",
+                  "index"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to move."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
                   },
                   "transform": {
                     "$ref": "#/$defs/ItemTransform",
@@ -1464,6 +2222,17 @@ source: crates/jstream-mcp/src/tests.rs
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to place."
                   },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
                   "type": {
                     "const": "item.set_geometry",
                     "type": "string"
@@ -1482,6 +2251,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change, as every placement edit\ntakes it (ADR-0024 §2). Omitted, or the item's own scene, changes the item.\nAny other scene is `invalid_argument` until keyframe scenes exist, when naming\na keyframe scene of the item's scene will write that scene's override."
                   },
                   "type": {
                     "const": "item.set_visible",
@@ -1525,6 +2305,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Changes which source an item places, keeping the item's ID, transform, crop,\nvisibility and stacking position (ADR-0023). It switches an item between a\nreference and a clone: `source.duplicate` then `item.set_source` to the copy makes\na clone, and `item.set_source` back to the copy's `duplicated_from` (then\n`source.delete` of the copy if nothing else places it) makes it a reference again.\nRejected with `not_found` if the item or the source doesn't exist, and with\n`invalid_argument` naming the cycle if the scene would then contain itself,\ndirectly or through other scenes. Inverse: `item.set_source` with the previous\nsource.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "source_id": {
+                    "$ref": "#/$defs/SourceId",
+                    "description": "The source it places from now on."
+                  },
+                  "type": {
+                    "const": "item.set_source",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "source_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Replaces an item's crop. Inverse: `item.set_crop` with the previous one.",
                 "properties": {
                   "crop": {
@@ -1534,6 +2337,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
                     "description": "The item to crop."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
                   },
                   "type": {
                     "const": "item.set_crop",
@@ -1625,9 +2439,13 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "kind"
     },
     {
-      "description": "Runs one `output` operation: set `op.type` to one of `output.create` (edit), `output.set_target` (edit), `output.delete` (edit), `output.start` (action), `output.stop` (action), `output.set_key` (action), `output.clear_key` (action), `output.status` (query), `output.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `output` operation: set `op.type` to one of `output.create` (edit), `output.set_target` (edit), `output.delete` (edit), `output.set_encoder` (edit), `output.start` (action), `output.stop` (action), `output.set_key` (action), `output.clear_key` (action), `output.status` (query), `output.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "EncoderProfileId": {
+            "description": "An encoder profile in the collection.",
+            "type": "string"
+          },
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
@@ -1818,6 +2636,36 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Chooses the encoder profile an output uses, or the engine's default. A running\noutput keeps its encoder session; the profile applies from its next\n`output.start`. Inverse: `output.set_encoder` with the previous profile.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output to change."
+                  },
+                  "profile_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/EncoderProfileId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "description": "The profile, which must exist, else `not_found`. Absent or `null` means the\nengine's default."
+                  },
+                  "type": {
+                    "const": "output.set_encoder",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Starts an output (stream, recording or virtual camera).",
                 "properties": {
                   "output_id": {
@@ -1936,7 +2784,7 @@ source: crates/jstream-mcp/src/tests.rs
       "name": "output"
     },
     {
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "IdempotencyKey": {
@@ -1952,6 +2800,21 @@ source: crates/jstream-mcp/src/tests.rs
           "SceneId": {
             "description": "A scene in the collection.",
             "type": "string"
+          },
+          "SceneRole": {
+            "description": "What a scene is for (ADR-0024 §1). It changes no engine behaviour; it tells clients,\nagents and switchers how to show the scene.",
+            "oneOf": [
+              {
+                "const": "scene",
+                "description": "A scene of its own, listed in the scene list. Scenes are created with this role.",
+                "type": "string"
+              },
+              {
+                "const": "group",
+                "description": "A group: a scene placed in other scenes to hold items together. Clients hide it\nfrom the scene list and show it under the items that place it.",
+                "type": "string"
+              }
+            ]
           }
         },
         "additionalProperties": false,
@@ -2028,7 +2891,30 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), then each deleted item's `item.remove`\ninverse, from bottom to top.",
+                "description": "Changes what a scene is for (ADR-0024 §1): a `scene`, or a `group` placed in\nother scenes through a `scene` source. The role changes no engine behaviour: a\ngroup renders, nests and can be placed more than once like any scene, and clients\nhide groups from the scene list. Inverse: `scene.set_role` with the previous role.",
+                "properties": {
+                  "role": {
+                    "$ref": "#/$defs/SceneRole",
+                    "description": "Its new role."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_role",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "role"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source shows it or any source's settings refer\nto it: delete those sources, or clear those references, first (in the same batch\nif needed). Inverse: `scene.create`, then `scene.reorder` to its old\ndisplay position (unless it was last), `scene.set_role` if it was a group, then\neach deleted item's `item.remove` inverse, from bottom to top.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -2192,6 +3078,17 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "description": "Adds a source to the collection. It appears in no scene until an `item.add`\nplaces it. Inverse: `source.delete`.",
                 "properties": {
+                  "duplicated_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The source this one was copied from, as `source.duplicate` records it. A plain\nlink: it may name a source that no longer exists (`source.delete`'s inverse\nrestores it that way), and is reported only while that source exists. It must\nnot name the new source itself, else `invalid_argument`. Omitted means none."
+                  },
                   "kind": {
                     "$ref": "#/$defs/SourceKind",
                     "description": "What the source shows. A `scene` source must name an existing scene; a\n`builtin` one a kind that `kind.list` reports."
@@ -2268,7 +3165,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Copies a source under a new ID: a separate instance with the same kind and\nsettings, which changes independently from then on. Placing the *same* source again\nis `item.add` with its existing `source_id`. Inverse: `source.delete` of the copy.",
+                "description": "Copies a source under a new ID: a separate instance with the same kind and\nsettings, which changes independently from then on. The copy's `duplicated_from`\nnames the source it was copied from. Placing the *same* source again is `item.add`\nwith its existing `source_id`. Inverse: `source.delete` of the copy.",
                 "properties": {
                   "name": {
                     "description": "The copy's display name.",
@@ -2296,7 +3193,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Inverse: `source.create` with its\nname, kind and settings.",
+                "description": "Deletes a source. Rejected with `invalid_argument` while any item still places it,\nor any source's settings refer to it: remove those items, or clear those\nreferences, first (in the same batch if needed). Deleting a source that others were\ncopied from is allowed: their `duplicated_from` then reads as absent. Inverse:\n`source.create` with its name, kind, settings and `duplicated_from`.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -2345,7 +3242,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `state` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, and every output) at one revision: what a client reads on connecting, after\na `state.changed` it didn't cause, or before an edit it sends with `expected_rev`.",
+                "description": "Reads the whole collection state (the canvas, every source, every scene with its\nitems, every output and every encoder profile) at one revision: what a client\nreads on connecting, after a `state.changed` it didn't cause, or before an edit it\nsends with `expected_rev`.",
                 "properties": {
                   "type": {
                     "const": "state.get",

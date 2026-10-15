@@ -249,7 +249,7 @@ reports; it never unwinds into foreign frames. The release profile keeps `panic 
 ## Real-time code
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#threading"]
-verified = { hash = "b3:080fea9002e1d852", by = "agent:claude@session_01RsUPFGhwxWtajSCPi7JX7m", note = "Merge of main (#166 A5 outputs in CLI/mock, audio live inputs) into F2b: rule text unchanged; ARCH#threading only combines main's collector text and F2b's recording write path, both within R-RT-003/R-RT-004" }
+verified = { hash = "b3:7b4f96d085372f6b", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 review B5: stale via ARCH#threading's Collector row rewording only (program-stage collector fed by render and mixer; mixer's own for input rings); this section's text unchanged and consistent; holds" }
 -->
 
 <a id="R-RT-001"></a>
@@ -320,7 +320,7 @@ running unless the error is fatal and reported.
 ## Dependencies
 <!-- @section
 depends_on = ["docs/adr/0031-source-types-and-decoding-scope.md"]
-verified = { hash = "b3:cee5defb3a32a048", by = "agent:claude@session_01H77oW1hhSxiNfijCpkEKPw", note = "Re-read R-DEP-001..006 against H2: R-DEP-005 now says multiple-versions is deny (M1d) and duplicates need a skip entry with a reason, which deny.toml now has for all eight; other rules unchanged" }
+verified = { hash = "b3:d555bf7414bec253", by = "agent:claude@session_01JkxnrLGfCUpQuDuUjrUHMR", note = "Re-read R-DEP-001..006 for I-162: R-DEP-005 now points at deny.toml's skip list instead of naming windows-crate duplicates (none exist today); png 0.18 drops the bitflags 1 duplicate and its skip entry; other rules unchanged" }
 -->
 
 <a id="R-DEP-001"></a>
@@ -377,9 +377,9 @@ status = "active"
 enforced_by = ["deny:bans"]
 applies_to = ["Cargo.lock"]
 -->
-Duplicates need a `deny.toml` skip entry with a reason. Known duplicates (several `windows`
-crate versions via Tauri, wgpu and windows-rs) are expected. `multiple-versions` is `deny`
-(M1d, [ROADMAP](../ROADMAP.md#m1)).
+Duplicates need a `deny.toml` skip entry with a reason. The `skip` list in `deny.toml` is
+the record of today's known duplicates and the crate that pins each one. `multiple-versions`
+is `deny` (M1d, [ROADMAP](../ROADMAP.md#m1)).
 
 <a id="R-DEP-006"></a>
 ### R-DEP-006: TLS through rustls with the ring provider
@@ -471,7 +471,7 @@ no C build scripts; otherwise say "not checked on Windows".
 ## Protocol and persistence compatibility
 <!-- @section
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/ARCHITECTURE.md#persistence"]
-verified = { hash = "b3:e09703eb29a8ea6d", by = "agent:claude@session_011UxatT9fDdtYhwZG6vstxK", note = "Merge of main (#176 B2 history, #183 B3 canvas/geometry, #171 B8) into B9: took main's text, re-read; R-API-001 unchanged; delete.plan and optional blockers are minor additions" }
+verified = { hash = "b3:3eb3cf79871277a7", by = "agent:claude@session_01FuozqmqhGn6SKKprNgPvhC", note = "F3 merge of main (#214 ADR-0041): #214 only repoints ADR-0034 links to ADR-0041 here; re-read against F3's merged text (encoder profiles, protocol 0.13, shared program stage), both hold" }
 -->
 
 <a id="R-API-001"></a>
@@ -782,7 +782,7 @@ rules.
 ## Governance
 <!-- @section
 depends_on = ["docs/adr/0019-review-gate-v2.md"]
-verified = { hash = "b3:6a3bee027e59ef38", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Re-read R-GOV-001..005 against ADR-0019: owner-only verdicts live in REVIEW/gate, labels+justification, tiers and proxy decisions unchanged" }
+verified = { hash = "b3:689f8a82ade70b26", by = "agent:claude@session_01QqhacPgB3z2c4mPzggpnbP", note = "Re-read R-GOV-001..005: R-GOV-005 now follows ADR-0043's narrowed maintainer tier; labels, overrides, gate and proxy decisions unchanged" }
 -->
 
 <a id="R-GOV-001"></a>
@@ -835,16 +835,18 @@ finding is wrong). Disputes that last three rounds go to the maintainer through
 `needs-human` ([REVIEW › Re-review rounds](../REVIEW.md#rounds)).
 
 <a id="R-GOV-005"></a>
-### R-GOV-005: Tier-1 decisions need the maintainer
+### R-GOV-005: Maintainer-tier decisions need the maintainer
 <!-- @rule
 status = "active"
 enforced_by = ["review"]
 applies_to = ["docs/adr/**"]
 -->
 Every new ADR declares `tier = "maintainer"` or `tier = "agent"`, following
-[ADR-0017](adr/0017-adr-decision-tiers.md). A Tier-1 ADR (product and platforms, process
-and governance, or superseding any ADR) lands as `proposed` with `needs-human`. It becomes
-`accepted` or `rejected` only on the maintainer's `/accept` or `/reject` decision on the
-PR, either directly or relayed by an agent with a quoted instruction from the maintainer that
-names the ADR ([ADR-0017](adr/0017-adr-decision-tiers.md)). Agents never post a decision the
-maintainer did not give.
+[ADR-0043](adr/0043-narrow-maintainer-tier.md). A maintainer-tier ADR (product scope,
+licensing, security and privacy posture, public compatibility promises, spending, or the
+tier rules themselves) lands as `proposed` with `needs-human`. It becomes `accepted` or
+`rejected` only on the maintainer's `/accept` or `/reject` decision on the PR, either
+directly or relayed by an agent with a quoted instruction from the maintainer that names the
+ADR. Every other ADR, including one that amends or supersedes an ADR on another subject, is
+agent tier and lands as `accepted` after review. Agents never post a decision the maintainer
+did not give.

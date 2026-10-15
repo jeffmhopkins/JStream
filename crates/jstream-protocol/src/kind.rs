@@ -449,6 +449,9 @@ pub fn check_asset_path(root: AssetRoot, path: &str) -> Result<(), String> {
                 Err("a relative asset path uses `/` separators".into())
             } else if path.starts_with('/') || drive {
                 Err("a relative asset path must not start with `/` or a drive letter".into())
+            } else if path.contains(':') {
+                // On Windows `a.png:s` names an NTFS alternate data stream of `a.png`.
+                Err("a relative asset path must not contain `:`".into())
             } else if segments().any(str::is_empty) {
                 Err("a relative asset path must not have an empty segment".into())
             } else {
@@ -599,7 +602,16 @@ mod tests {
         assert!(file.check(&asset("collection", "img/a.PNG")).is_ok());
         assert!(file.check(&asset("absolute", "C:\\img\\a.png")).is_ok());
         assert!(file.check(&asset("collection", "img/a.jpg")).is_err());
-        for bad in ["../a.png", "/a.png", "C:/a.png", "a\\b.png", "a//b.png", ""] {
+        for bad in [
+            "../a.png",
+            "/a.png",
+            "C:/a.png",
+            "a\\b.png",
+            "a//b.png",
+            "",
+            "img/a.png:stream",
+            "a:b/c.png",
+        ] {
             assert!(file.check(&asset("collection", bad)).is_err(), "{bad}");
         }
         assert!(file.check(&asset("absolute", "img/a.png")).is_err());

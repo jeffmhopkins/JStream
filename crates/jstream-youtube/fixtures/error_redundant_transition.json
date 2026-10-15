@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": 403,
+    "message": "Redundant transition",
+    "errors": [
+      { "message": "Redundant transition", "domain": "youtube.liveBroadcast", "reason": "redundantTransition" }
+    ]
+  }
+}

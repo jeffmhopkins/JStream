@@ -14,9 +14,9 @@ a single canvas.
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-render/src/**"]
+covers = ["crates/jstream-render/src/**", "crates/jstream-render/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-render", "docs/ARCHITECTURE.md#gpu-pipeline", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0022-item-transform-and-canvas.md", "crates/jstream-platform/README.md#gpu-frames"]
-verified = { hash = "b3:cfee4b9a02104325", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main (E3a, S4) into B3: E3a's capture-format text and B3's two placement forms both present; matches place.rs and scene.rs" }
+verified = { hash = "b3:d35d5306bc8ac01f", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Stale via ARCH#threading after Merge of main (H7b ADR-0042: as-built runtime moved from ARCH#threading to core README#runtime) into E1: render's link to ARCH Threads for the cache hand-off still points at the model's State-to-RT-threads text; holds" }
 -->
 
 One scene, composited on the GPU with wgpu
@@ -53,10 +53,17 @@ and calls this crate.
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)). The only blend is
   premultiplied src-over. Other modes stay rejected by the engine until a later change
   draws them.
-- Nested scenes are not walked here. The caller renders the inner scene with
-  `render_image`, which returns the composite as an `Image` on this compositor, and
-  places that image in the outer scene. The depth bound and cycle handling are the
-  caller's ([jstream-core › Snapshots](../jstream-core/README.md#design)).
+- Nested scenes are not walked here. The caller composites the inner scene into a
+  layer, an `Image` on this compositor, and places that image in the outer scene:
+  `render_image` makes a new layer, and `render_into` redraws one the caller keeps
+  (from `layer`). The depth bound and cycle handling are the caller's
+  ([jstream-core › Snapshots](../jstream-core/README.md#design)).
+- `ResourceCache` keeps what a caller draws every frame (uploads and layers), keyed by
+  the caller's IDs, so a frame that shows what the last one showed allocates no
+  texture. An image no frame references is freed only after the GPU has finished the
+  last frame that used it, and the cache hands it back as `Reclaimed` so the caller
+  picks the thread that drops it
+  ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)).
 
 **Where it sits on the existing APIs.**
 
@@ -91,7 +98,8 @@ and calls this crate.
   BT.709 primaries. `jstream-core` encodes it as the `video.snapshot` PNG. It
   is not the encoder's NV12 texture.
 
-**Not in this cut.** The render thread (`frame_loop.rs`), arc-swap snapshots, NV12 or
+**Not in this cut.** The render thread and its snapshots are `jstream-core`'s
+(`runtime/`), not this crate's. Also not here: NV12 or
 P010 conversion, encode-target export and the D3D12 `PRESENT` transition, WGSL effect
 packs, 3D tilt/turn/depth/perspective, transitions, the master chain and the privacy
 stage. The protocol formula for 3D exists; this crate does not draw it, and 3D
@@ -104,14 +112,16 @@ steps stay in
 <!-- @section
 covers = ["crates/jstream-render/src/**"]
 depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.md"]
-verified = { hash = "b3:3b60b5c6ca1a36be", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: re-read; passes include C6's render_image Rgba16Float target and B3's geometry placement in place.rs (local-frame clip, proportional UVs); holds" }
+verified = { hash = "b3:c91d3972472d19b9", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 geometry quads) into E1: render_into/rewrite_rgba8 and the ResourceCache paragraph are independent of how a quad is placed; both hold" }
 -->
 
 `render` does not wait on the control plane and does no file or network I/O
-([R-RT-002](../../docs/RULES.md#R-RT-002)). This crate has no render thread, so
-there is no lock-free hand-off to build ([R-RT-003](../../docs/RULES.md#R-RT-003)).
-Calling `render` is the caller's tick. GPU calls may allocate inside the driver; this
-crate does not allocate per item on the steady path.
+([R-RT-002](../../docs/RULES.md#R-RT-002)). This crate has no render thread: calling
+`render` is the caller's tick, on `jstream-core`'s render thread. Nothing here drops
+an image on its own: `ResourceCache` returns what it frees as `Reclaimed`, so that
+thread can hand it to a collector ([R-RT-003](../../docs/RULES.md#R-RT-003)). GPU
+calls may allocate inside the driver; this crate does not allocate per item on the
+steady path.
 
 ### Passes
 
@@ -159,7 +169,14 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    placing it filters exactly at partly transparent edges, and nothing is quantised
    to 8 bits between nesting levels. It is one submit, ordered before the submit of
    the outer scene that samples it. The texture belongs to the `Image`, not the
-   compositor, so a later `render` cannot overwrite it.
+   compositor, so a later `render` cannot overwrite it. **`render_into`** is the same
+   pass into a layer the caller already has (`layer` makes one; the `Image` keeps its
+   render-target view, so a redraw creates no view either). The layer must be this
+   compositor's, the canvas size, and not placed by the scene being drawn into it,
+   or the call is `RenderError::Invalid` before any GPU work. Submits that placed the
+   layer earlier are ordered before the redraw, so they keep the old contents.
+   **`rewrite_rgba8`** refills an upload in place the same way (pass 1 into the
+   existing texture).
 4. **Readback**, only when asked. `copy_texture_to_buffer` into a map-read buffer,
    rows padded to 256 bytes, then a map and a pack into tightly packed RGBA8. This
    waits on the GPU. The tick that feeds an encoder does not call it. Snapshots and
@@ -181,6 +198,19 @@ the compositor's own, not a shared encode target, so nothing transitions it to
 | Staged-hold scratch | Cleared and refilled each frame; capacity kept |
 | Per-image texture and bind group | `Image`, dropped with it |
 | `render_image` texture | The returned `Image`, allocated per call |
+| `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
+| `ResourceCache` entries | While a frame uses them; then retired until the GPU finishes the last frame that used them, and handed back as `Reclaimed` |
+
+**`ResourceCache`.** A frame runs `begin_frame`, `upload` or `layer` for each image it
+draws, its passes, then `end_frame`. `upload` keyed by an ID reuses the entry when the
+caller's version and the size are unchanged, rewrites the same texture for a new
+version, and makes a new texture (retiring the old one) for a new size; `layer` reuses
+a layer of the same size. `end_frame` retires every entry the frame did not use,
+registers `Queue::on_submitted_work_done` for the frame (the frame fence: it records
+the newest finished frame in an atomic), polls the device once without blocking, and
+returns the retired images whose last frame has finished. A steady frame allocates
+only that callback; a frame that fails before `end_frame` leaves its retirees to the
+next frame's fence, which covers it.
 
 A returned output texture is a clone of the cached sRGB target. The next `render`
 overwrites those texels, including when the canvas size is unchanged. Readback bytes
@@ -249,7 +279,7 @@ Logging goes through `tracing` (adapter name at open). No `println!`.
 <!-- @section
 covers = ["crates/jstream-render/src/tests.rs"]
 depends_on = ["docs/RULES.md#R-TEST-003", "docs/RULES.md#R-TEST-004", "docs/RULES.md#testing"]
-verified = { hash = "b3:3e16adcadbe1704c", by = "agent:claude@session_01SS5BBdawiuaRV6Pk4PbfKw", note = "Merge of main into B3: tests.rs has C6's render_image tests (migrated to Placement::Legacy) and B3's geometry grids; both paragraphs hold" }
+verified = { hash = "b3:c92966a4c0c88ccd", by = "agent:claude@session_01SZXaqcgUA1wWCDzxs3hWJ6", note = "Merge of main (B3 golden geometry tests) into E1: the E1 layer/cache test list and B3's golden tests are both in tests.rs; holds" }
 -->
 
 CI has no GPU ([R-TEST-004](../../docs/RULES.md#R-TEST-004)). The
@@ -289,7 +319,13 @@ staged once per submit and not staged when the item is hidden. Nested scenes
 (`render_image`), three pixel tests and an ownership check: an image placed in
 another scene lands where its scene put the item and is transparent elsewhere, and
 survives a later `render`; a half-opaque item stays exact in linear light; images
-nest twice with scaling at each level; another compositor refuses the image. Alpha edges: a 2x1
+nest twice with scaling at each level; another compositor refuses the image. Layers
+and the cache: a layer redrawn with `render_into` keeps its texture and shows only
+the newest composite; `render_into` refuses a layer the scene places, a wrong size
+and a non-layer; `rewrite_rgba8` keeps the texture and changes the pixels and refuses
+a layer; the cache reuses a texture per key, rewrites it for a new version and
+replaces it for a new size; an unused entry is handed back only after the frame fence
+(not while its frame is still being built). Alpha edges: a 2x1
 opaque-red-then-transparent upload drawn half a pixel off and at scale 2 keeps red
 at 255 where it is partly covered (straight filtering gave 187 on lavapipe); an
 imported sRGB texture is read as straight alpha. An image from another compositor on

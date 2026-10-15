@@ -23,15 +23,17 @@ use std::time::Duration;
 
 use crossbeam_channel::{Receiver, Sender, TryRecvError, TrySendError, bounded};
 
+use super::bus::{BusShared, MAX_BUSES};
 use super::cmd::{COMMAND_CAP, MAX_INPUTS};
 use super::input::InputShared;
 use super::ring::FrameRing;
 use crate::error::AudioError;
 
 /// Objects that can wait to be freed. Every input sends at most two of each kind (one
-/// from the mixer, one from the producer), and the mixer applies at most a command
-/// queue's worth of changes per block, so a few blocks' worth fits with room to spare.
-const QUEUE_CAP: usize = 4 * MAX_INPUTS + 4 * COMMAND_CAP;
+/// from the mixer, one from the producer), every bus one (from the mixer), and the
+/// mixer applies at most a command queue's worth of changes per block, so a few blocks'
+/// worth fits with room to spare.
+const QUEUE_CAP: usize = 4 * MAX_INPUTS + 2 * MAX_BUSES + 4 * COMMAND_CAP;
 
 /// How long the collector sleeps between drains. Freeing late costs only memory.
 const POLL: Duration = Duration::from_millis(10);
@@ -39,6 +41,7 @@ const POLL: Duration = Duration::from_millis(10);
 enum Retired {
     Ring(Arc<FrameRing>),
     Shared(Arc<InputShared>),
+    Bus(Arc<BusShared>),
 }
 
 /// Hands shared objects to one mixer's collector thread. Cloned into each holder.
@@ -88,6 +91,10 @@ impl Retirer {
         self.hand_off(Retired::Shared(shared));
     }
 
+    pub(crate) fn bus(&self, bus: Arc<BusShared>) {
+        self.hand_off(Retired::Bus(bus));
+    }
+
     fn hand_off(&self, item: Retired) {
         match self.tx.try_send(item) {
             Ok(()) => {}
@@ -112,6 +119,7 @@ fn collect(rx: &Receiver<Retired>) {
             match rx.try_recv() {
                 Ok(Retired::Ring(ring)) => drop(ring),
                 Ok(Retired::Shared(shared)) => drop(shared),
+                Ok(Retired::Bus(bus)) => drop(bus),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => return,
             }

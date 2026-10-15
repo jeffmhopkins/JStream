@@ -14,11 +14,12 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::{
-    Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EntityKind, Event,
-    GeometryError, Hello, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId,
-    OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneSummary, SecretString, Settings, SourceId, SourceInfo, SourceKind, Welcome,
+    Action, Batch, Call, CallResult, Canvas, ClientId, Crop, Edit, EncoderProfile,
+    EncoderProfileId, EncoderProfileInfo, EntityKind, Event, GeometryError, Hello, IdempotencyKey,
+    ItemGeometry, ItemId, ItemInfo, ItemTransform, OutputId, OutputInfo, OutputKind, OutputState,
+    PROTOCOL_VERSION, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference,
+    RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
+    SecretString, Settings, SourceId, SourceInfo, SourceKind, Welcome,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -210,6 +211,10 @@ struct Collection {
     sources: BTreeMap<SourceId, Source>,
     /// The configured outputs, ordered by ID, as `output.list` reports them.
     outputs: BTreeMap<OutputId, OutputKind>,
+    /// The encoder profile each output uses, for those that chose one.
+    output_encoders: BTreeMap<OutputId, EncoderProfileId>,
+    /// The encoder profiles, ordered by ID: name and encoding.
+    encoders: BTreeMap<EncoderProfileId, (String, EncoderProfile)>,
 }
 
 /// A source: its name, what it shows, and its settings. The mock describes no kinds, so
@@ -219,6 +224,8 @@ struct Source {
     name: String,
     kind: SourceKind,
     settings: Settings,
+    /// A plain link, which may name a deleted source; reported only while it exists.
+    duplicated_from: Option<SourceId>,
 }
 
 #[derive(Clone)]
@@ -385,6 +392,7 @@ impl State {
                     .map(|scene| SceneSummary {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
+                        role: SceneRole::Scene,
                         item_count: u32::try_from(scene.items.len()).unwrap_or(u32::MAX),
                     })
                     .collect(),
@@ -393,10 +401,14 @@ impl State {
                 let Some(&state) = self.outputs.get(&output_id) else {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 };
+                // The mock opens no encoders, so it reports no sessions.
                 QueryResult::OutputStatus {
                     key_set: self.keys.contains_key(&output_id),
                     output_id,
                     state,
+                    encoder: None,
+                    encoder_sessions: 0,
+                    hardware_sessions: 0,
                 }
             }
             Query::SourceList => QueryResult::SourceList {
@@ -422,14 +434,20 @@ impl State {
                     .map(|scene| SceneInfo {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
+                        role: SceneRole::Scene,
                         items: self.collection.item_infos(scene),
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
+                encoders: self.collection.encoder_infos(),
             },
             Query::OutputList => QueryResult::OutputList {
                 rev: self.collection.rev,
                 outputs: self.collection.output_infos(),
+            },
+            Query::EncoderList => QueryResult::EncoderList {
+                rev: self.collection.rev,
+                encoders: self.collection.encoder_infos(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -486,7 +504,8 @@ impl Collection {
     ///
     /// It follows the rules `jstream-graph` enforces for the same edits (existence,
     /// unique IDs, no deleting what is still referenced, index bounds, no nesting
-    /// cycles, no deleting a running output, RTMP server URLs), with the same error
+    /// cycles from `item.add` or `item.set_source`, `duplicated_from` never naming the
+    /// source itself, no deleting a running output, RTMP server URLs), with the same error
     /// codes and `edits.<at>.<field>` paths. It describes no kinds, so it doesn't check
     /// settings, fill in defaults, or follow settings references when it looks for
     /// cycles. `running` are the outputs that run.
@@ -561,17 +580,7 @@ impl Collection {
                 if self.items.contains_key(&item_id) {
                     return Err(already_exists(EntityKind::Item, item_id.as_str()));
                 }
-                if let SourceKind::Scene { scene_id: nested } = kind
-                    && self.contains(nested, &scene_id)
-                {
-                    return Err(invalid(
-                        at,
-                        "source_id",
-                        format!(
-                            "placing scene `{nested}` in scene `{scene_id}` would create a cycle"
-                        ),
-                    ));
-                }
+                self.check_nesting(&scene_id, kind, at)?;
                 let transform = match (transform, geometry) {
                     (Some(_), Some(_)) => {
                         return Err(invalid(
@@ -612,13 +621,21 @@ impl Collection {
                 items.retain(|id| *id != item_id);
                 items.insert(to, item_id);
             }
-            Edit::ItemSetTransform { item_id, transform } => {
-                let item = self.existing_item(&item_id)?;
+            Edit::ItemSetTransform {
+                item_id,
+                scene_id,
+                transform,
+            } => {
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
                 item.transform = transform;
                 item.geometry = None;
             }
-            Edit::ItemSetGeometry { item_id, geometry } => {
-                self.existing_item(&item_id)?;
+            Edit::ItemSetGeometry {
+                item_id,
+                scene_id,
+                geometry,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?;
                 let view = geometry_view(&geometry, at)?;
                 let item = self.existing_item(&item_id)?;
                 item.transform = view;
@@ -629,20 +646,44 @@ impl Collection {
                 check_canvas_side(height, at, "height")?;
                 self.canvas = Canvas { width, height };
             }
-            Edit::ItemSetCrop { item_id, crop } => {
-                self.existing_item(&item_id)?.crop = crop;
+            Edit::ItemSetCrop {
+                item_id,
+                scene_id,
+                crop,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?.crop = crop;
             }
-            Edit::ItemSetVisible { item_id, visible } => {
-                self.existing_item(&item_id)?.visible = visible;
+            Edit::ItemSetSource { item_id, source_id } => {
+                let scene_id = self.existing_item(&item_id)?.scene_id.clone();
+                let Some(Source { kind, .. }) = self.sources.get(&source_id) else {
+                    return Err(not_found(EntityKind::Source, source_id.as_str()));
+                };
+                self.check_nesting(&scene_id, kind, at)?;
+                self.existing_item(&item_id)?.source_id = source_id;
+            }
+            Edit::ItemSetVisible {
+                item_id,
+                scene_id,
+                visible,
+            } => {
+                self.placement(&item_id, scene_id.as_ref(), at)?.visible = visible;
             }
             Edit::SourceCreate {
                 source_id,
                 name,
                 kind,
                 settings,
+                duplicated_from,
             } => {
                 check_id(source_id.as_str(), at, "source_id")?;
                 check_name(&name, at)?;
+                if duplicated_from.as_ref() == Some(&source_id) {
+                    return Err(invalid(
+                        at,
+                        "duplicated_from",
+                        "must not name the source itself",
+                    ));
+                }
                 match &kind {
                     SourceKind::Scene { scene_id } => {
                         self.existing_scene(scene_id)?;
@@ -653,7 +694,7 @@ impl Collection {
                     SourceKind::Builtin { .. } => {}
                     _ => return Err(unimplemented_by_mock("this source kind")),
                 }
-                self.create_source(source_id, name, kind, settings)?;
+                self.create_source(source_id, name, kind, settings, duplicated_from)?;
             }
             Edit::SourceRename { source_id, name } => {
                 check_name(&name, at)?;
@@ -684,7 +725,7 @@ impl Collection {
                 };
                 check_id(new_source_id.as_str(), at, "new_source_id")?;
                 check_name(&name, at)?;
-                self.create_source(new_source_id, name, kind, settings)?;
+                self.create_source(new_source_id, name, kind, settings, Some(source_id))?;
             }
             Edit::SourceDelete { source_id } => {
                 if !self.sources.contains_key(&source_id) {
@@ -750,6 +791,70 @@ impl Collection {
                 if self.outputs.remove(&output_id).is_none() {
                     return Err(not_found(EntityKind::Output, output_id.as_str()));
                 }
+                self.output_encoders.remove(&output_id);
+            }
+            Edit::OutputSetEncoder {
+                output_id,
+                profile_id,
+            } => {
+                if !self.outputs.contains_key(&output_id) {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                }
+                match profile_id {
+                    Some(id) => {
+                        if !self.encoders.contains_key(&id) {
+                            return Err(not_found(EntityKind::Encoder, id.as_str()));
+                        }
+                        self.output_encoders.insert(output_id, id);
+                    }
+                    None => {
+                        self.output_encoders.remove(&output_id);
+                    }
+                }
+            }
+            Edit::EncoderCreate {
+                profile_id,
+                name,
+                profile,
+            } => {
+                check_id(profile_id.as_str(), at, "profile_id")?;
+                if self.encoders.contains_key(&profile_id) {
+                    return Err(already_exists(EntityKind::Encoder, profile_id.as_str()));
+                }
+                check_name(&name, at)?;
+                check_profile(&profile, at)?;
+                self.encoders.insert(profile_id, (name, profile));
+            }
+            Edit::EncoderUpdate {
+                profile_id,
+                name,
+                profile,
+            } => {
+                if !self.encoders.contains_key(&profile_id) {
+                    return Err(not_found(EntityKind::Encoder, profile_id.as_str()));
+                }
+                check_name(&name, at)?;
+                check_profile(&profile, at)?;
+                self.encoders.insert(profile_id, (name, profile));
+            }
+            Edit::EncoderDelete { profile_id } => {
+                if !self.encoders.contains_key(&profile_id) {
+                    return Err(not_found(EntityKind::Encoder, profile_id.as_str()));
+                }
+                if let Some((user, _)) = self
+                    .output_encoders
+                    .iter()
+                    .find(|(_, id)| **id == profile_id)
+                {
+                    return Err(invalid(
+                        at,
+                        "profile_id",
+                        format!(
+                            "encoder profile `{profile_id}` is used by output `{user}`; point it elsewhere first"
+                        ),
+                    ));
+                }
+                self.encoders.remove(&profile_id);
             }
             other => return Err(unimplemented_by_mock(other.name())),
         }
@@ -762,6 +867,7 @@ impl Collection {
         name: String,
         kind: SourceKind,
         settings: Settings,
+        duplicated_from: Option<SourceId>,
     ) -> Result<(), ProtocolError> {
         if self.sources.contains_key(&id) {
             return Err(already_exists(EntityKind::Source, id.as_str()));
@@ -772,6 +878,7 @@ impl Collection {
                 name,
                 kind,
                 settings,
+                duplicated_from,
             },
         );
         Ok(())
@@ -799,6 +906,10 @@ impl Collection {
                 name: source.name.clone(),
                 kind: source.kind.clone(),
                 settings: source.settings.clone(),
+                duplicated_from: source
+                    .duplicated_from
+                    .clone()
+                    .filter(|original| self.sources.contains_key(original)),
             })
             .collect()
     }
@@ -810,6 +921,19 @@ impl Collection {
             .map(|(id, kind)| OutputInfo {
                 output_id: id.clone(),
                 kind: kind.clone(),
+                encoder_profile: self.output_encoders.get(id).cloned(),
+            })
+            .collect()
+    }
+
+    /// Every encoder profile, ordered by ID, as queries report them.
+    fn encoder_infos(&self) -> Vec<EncoderProfileInfo> {
+        self.encoders
+            .iter()
+            .map(|(id, (name, profile))| EncoderProfileInfo {
+                profile_id: id.clone(),
+                name: name.clone(),
+                profile: *profile,
             })
             .collect()
     }
@@ -835,6 +959,26 @@ impl Collection {
                 })
             })
             .collect()
+    }
+
+    /// Rejects placing a source of `kind` in scene `scene_id` (`item.add`,
+    /// `item.set_source`) if the scene would then contain itself.
+    fn check_nesting(
+        &self,
+        scene_id: &SceneId,
+        kind: &SourceKind,
+        at: usize,
+    ) -> Result<(), ProtocolError> {
+        match kind {
+            SourceKind::Scene { scene_id: nested } if self.contains(nested, scene_id) => {
+                Err(invalid(
+                    at,
+                    "source_id",
+                    format!("placing scene `{nested}` in scene `{scene_id}` would create a cycle"),
+                ))
+            }
+            _ => Ok(()),
+        }
     }
 
     /// Whether scene `outer` is `inner` or shows it, directly or through nested scene
@@ -869,6 +1013,31 @@ impl Collection {
         self.items
             .get_mut(item_id)
             .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))
+    }
+
+    /// The item a placement edit changes, with its optional `scene_id` checked as
+    /// `jstream-graph` checks it: only the item's own scene, until keyframe scenes exist.
+    fn placement(
+        &mut self,
+        item_id: &ItemId,
+        scene_id: Option<&SceneId>,
+        at: usize,
+    ) -> Result<&mut Item, ProtocolError> {
+        let own = self.existing_item(item_id)?.scene_id.clone();
+        if let Some(scene_id) = scene_id
+            && *scene_id != own
+        {
+            self.existing_scene(scene_id)?;
+            return Err(invalid(
+                at,
+                "scene_id",
+                format!(
+                    "item `{item_id}` is in scene `{own}`, and only its own scene can be named \
+                     until keyframe scenes exist"
+                ),
+            ));
+        }
+        self.existing_item(item_id)
     }
 }
 
@@ -971,6 +1140,14 @@ fn check_key(key: &SecretString) -> Result<(), ProtocolError> {
 }
 
 /// Checks an RTMP target; `name` is its field path within the edit (`kind.target`).
+/// Checks an encoder profile as the engine does.
+fn check_profile(profile: &EncoderProfile, at: usize) -> Result<(), ProtocolError> {
+    match profile.problem() {
+        Some((name, reason)) => Err(invalid(at, &format!("profile.{name}"), reason)),
+        None => Ok(()),
+    }
+}
+
 fn check_target(target: &RtmpTarget, at: usize, name: &str) -> Result<(), ProtocolError> {
     match target {
         RtmpTarget::Generic { url } => match rtmp_url_problem(url) {
@@ -1228,6 +1405,7 @@ mod tests {
                 kind: "webcam".into(),
             },
             settings: Default::default(),
+            duplicated_from: None,
         }
     }
 
@@ -1375,11 +1553,13 @@ mod tests {
                         scene_id: SceneId::new("b"),
                     },
                     settings: Default::default(),
+                    duplicated_from: None,
                 },
                 add("a", "i1", "webcam"),
                 add("a", "i2", "nested_b"),
                 Edit::ItemSetVisible {
                     item_id: ItemId::new("i1"),
+                    scene_id: None,
                     visible: false,
                 },
                 Edit::ItemReorder {
@@ -1422,6 +1602,7 @@ mod tests {
                         scene_id: SceneId::new("a"),
                     },
                     settings: Default::default(),
+                    duplicated_from: None,
                 },
                 add("b", "i3", "nested_a"),
             ],
@@ -1521,12 +1702,103 @@ mod tests {
         assert_eq!(
             names,
             [
+                ("aux", "Aux"),
                 ("b_src", "Scene B"),
                 ("cam", "Camera"),
-                ("cam_2", "Camera 2")
+                ("cam_2", "Camera 2"),
+                ("cam_copy", "Camera copy"),
             ]
         );
-        assert_eq!(sources[2].kind, sources[1].kind);
+        assert_eq!(sources[3].kind, sources[2].kind);
+        assert_eq!(sources[3].duplicated_from, Some(SourceId::new("cam")));
+
+        // Deleting the original leaves the copies, whose link then reads as absent.
+        let unplace = Batch {
+            edits: vec![
+                Edit::ItemRemove {
+                    item_id: ItemId::new("i3"),
+                },
+                Edit::ItemRemove {
+                    item_id: ItemId::new("i4"),
+                },
+                Edit::SourceDelete {
+                    source_id: SourceId::new("cam"),
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, unplace), Ok(Rev(3)));
+        let Ok(QueryResult::SourceList { sources, .. }) = query(&*control, Query::SourceList)
+        else {
+            panic!("not a source list");
+        };
+        assert!(sources.iter().all(|s| s.duplicated_from.is_none()));
+    }
+
+    /// `item.set_source` keeps the item and is cycle checked like `item.add`.
+    #[test]
+    fn set_source_retargets_an_item_without_a_cycle() {
+        let (_engine, control) = parity_engine();
+        // Scene `a` shows `b` through `i2`; a source showing `a` can't go into `b`...
+        let setup = Batch {
+            edits: vec![
+                Edit::SourceCreate {
+                    source_id: SourceId::new("a_src"),
+                    name: "Scene A".into(),
+                    kind: SourceKind::Scene {
+                        scene_id: SceneId::new("a"),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("b"),
+                    item_id: ItemId::new("ib"),
+                    source_id: SourceId::new("cam"),
+                    transform: None,
+                    geometry: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(2)));
+        let cycle = Batch::single(Edit::ItemSetSource {
+            item_id: ItemId::new("ib"),
+            source_id: SourceId::new("a_src"),
+        });
+        let error = batch(&*control, cycle).expect_err("cycle");
+        assert_eq!(code(&error), Some("invalid_argument"));
+        // ... until `a` stops showing `b`, in the same batch.
+        let retarget = Batch {
+            edits: vec![
+                Edit::ItemSetSource {
+                    item_id: ItemId::new("i2"),
+                    source_id: SourceId::new("cam"),
+                },
+                Edit::ItemSetSource {
+                    item_id: ItemId::new("ib"),
+                    source_id: SourceId::new("a_src"),
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+        };
+        assert_eq!(batch(&*control, retarget), Ok(Rev(3)));
+        let Ok(QueryResult::ItemList { items, .. }) = query(
+            &*control,
+            Query::ItemList {
+                scene_id: SceneId::new("b"),
+            },
+        ) else {
+            panic!("not an item list");
+        };
+        let ib = items
+            .iter()
+            .find(|item| item.item_id.as_str() == "ib")
+            .expect("ib is in b");
+        assert_eq!(ib.source_id.as_str(), "a_src");
     }
 
     /// Every batch the shared parity fixture rejects fails with exactly the error
@@ -1581,6 +1853,7 @@ mod tests {
                 kind: "color".into(),
             },
             settings: Default::default(),
+            duplicated_from: None,
         };
         assert_eq!(field(source), "edits.0.source_id");
         let duplicate = Edit::SourceDuplicate {
@@ -1794,6 +2067,9 @@ mod tests {
                     output_id: OutputId::new("yt"),
                     state: OutputState::Active,
                     key_set: false,
+                    encoder: None,
+                    encoder_sessions: 0,
+                    hardware_sessions: 0,
                 }
             }
         );
@@ -1851,6 +2127,7 @@ mod tests {
                 outputs: vec![OutputInfo {
                     output_id: OutputId::new("yt"),
                     kind: rtmp("rtmp://a.rtmp.youtube.com/live2"),
+                    encoder_profile: None,
                 }],
             })
         );
