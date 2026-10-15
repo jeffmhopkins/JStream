@@ -10,6 +10,7 @@
 
 use crate::finite::Finite32;
 use crate::id::{IdempotencyKey, ItemId, OutputId, Rev, SceneId, SourceId};
+use crate::output::{OutputKind, RtmpTarget, SecretString};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -154,6 +155,35 @@ pub enum Edit {
         /// relative order.
         index: u32,
     },
+    /// Adds an output to the collection, `stopped`. Its stream key is not part of it:
+    /// set that with the `output.set_key` action. Inverse: `output.delete`.
+    #[serde(rename = "output.create")]
+    OutputCreate {
+        /// The new output's ID, chosen by the client. Rejected if it exists.
+        output_id: OutputId,
+        /// What it is and where it sends. A URL that is not a valid RTMP(S) server URL,
+        /// or that could carry a credential, is rejected with `invalid_argument`.
+        kind: OutputKind,
+    },
+    /// Changes where an RTMP output publishes. A running output keeps its connection;
+    /// the new target applies from its next `output.start`. Its stream key is kept.
+    /// Inverse: `output.set_target` with the previous target.
+    #[serde(rename = "output.set_target")]
+    OutputSetTarget {
+        /// The output to change.
+        output_id: OutputId,
+        /// The new target, validated as in `output.create`.
+        target: RtmpTarget,
+    },
+    /// Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.
+    /// Its stream key stays in the credential store, so undoing the delete restores a
+    /// working output; `output.clear_key` removes it. Inverse: `output.create` with its
+    /// kind.
+    #[serde(rename = "output.delete")]
+    OutputDelete {
+        /// The output to delete.
+        output_id: OutputId,
+    },
 }
 
 impl Edit {
@@ -173,6 +203,9 @@ impl Edit {
             Edit::SourceCreate { .. } => "source.create",
             Edit::SourceDuplicate { .. } => "source.duplicate",
             Edit::SourceDelete { .. } => "source.delete",
+            Edit::OutputCreate { .. } => "output.create",
+            Edit::OutputSetTarget { .. } => "output.set_target",
+            Edit::OutputDelete { .. } => "output.delete",
         }
     }
 }
@@ -199,6 +232,30 @@ pub enum Action {
         /// The output to stop.
         output_id: OutputId,
     },
+    /// Stores an output's stream key in the OS credential store (R-SEC-001), replacing
+    /// any key it had. Write-only: the key never comes back in a response, event, error,
+    /// `state.get` or log, and `output.status` reports only `key_set`. An action, not an
+    /// edit: the key is not collection state, so it is never undone. A running output
+    /// uses the new key from its next `output.start`. Fails with `not_found` for an
+    /// output not in the collection, `invalid_argument` (field `key`) for an empty key,
+    /// one over 1024 bytes or one with whitespace or control characters, and
+    /// `action_failed` when the engine has no credential store or the store refuses.
+    #[serde(rename = "output.set_key")]
+    OutputSetKey {
+        /// The output whose key to set.
+        output_id: OutputId,
+        /// The stream key, as the streaming service shows it.
+        key: SecretString,
+    },
+    /// Removes an output's stream key from the credential store. Succeeds when there is
+    /// none, and for an output that is no longer in the collection, so a client can clear
+    /// the key of an output it deleted. Fails with `action_failed` when the engine has no
+    /// credential store or the store refuses.
+    #[serde(rename = "output.clear_key")]
+    OutputClearKey {
+        /// The output whose key to remove.
+        output_id: OutputId,
+    },
 }
 
 impl Action {
@@ -207,6 +264,8 @@ impl Action {
         match self {
             Action::OutputStart { .. } => "output.start",
             Action::OutputStop { .. } => "output.stop",
+            Action::OutputSetKey { .. } => "output.set_key",
+            Action::OutputClearKey { .. } => "output.clear_key",
         }
     }
 }
