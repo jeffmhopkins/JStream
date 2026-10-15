@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-ui/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-ui"]
-verified = { hash = "b3:27fa543724274877", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
+verified = { hash = "b3:f77129a46f3e8525", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
 -->
 
 The web UI: one Rust app, compiled to WASM, for both the desktop app and the browser
@@ -43,14 +43,16 @@ Contents (the skeleton; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-ui/src/**", "crates/jstream-ui/style.css"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.md#design"]
-verified = { hash = "b3:632a58846c0871ed", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
+verified = { hash = "b3:fdb60b1306409963", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
 -->
 
 - **Connecting.** The connect form asks for the engine URL and the control token. The
   URL defaults to the page's own host with the API path (`ws://` for an `http:` page,
   `wss://` for an `https:` one), because the daemon serves the UI from the port the API
   is on. The token stays in memory: the page never stores it or writes it to the
-  console, and the field is a password field. How the daemon hands the token to a
+  console, and the field is a password field. It may be left empty when the browser
+  already sends credentials to the engine (the daemon serving the page behind HTTP
+  Basic); the connection then carries those. How the daemon hands the token to a
   browser (pairing) is not decided yet. A failed connect shows the transport's reason;
   a browser doesn't say why an upgrade was refused, so a wrong token, a refused origin
   and an unreachable engine read the same.
@@ -77,7 +79,7 @@ verified = { hash = "b3:632a58846c0871ed", by = "agent:claude@session_01SHnfsdCu
 <!-- @section
 covers = ["crates/jstream-ui/index.html", "crates/jstream-ui/Trunk.toml", "crates/jstream-ui/Cargo.toml", "crates/jstream-ui/src/main.rs"]
 depends_on = ["docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:1f08fe1163f5d35d", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
+verified = { hash = "b3:d9a09ce6278bbd14", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
 -->
 
 The UI is built with [trunk](https://github.com/trunk-rs/trunk) for
@@ -93,7 +95,10 @@ trunk serve            # rebuilds on change and serves dist/ locally
 trunk needs the `wasm-bindgen` CLI at the version `Cargo.lock` resolves for
 `wasm-bindgen`. It uses one found on `PATH`, and otherwise downloads it; a release build
 also downloads `wasm-opt`. `dist/` holds `index.html`, the JavaScript glue, the `.wasm`
-and the stylesheet, with content hashes in their names. It is not committed.
+and the stylesheet, with content hashes in their names. It is not committed. trunk's
+inline loader script carries a `{{__TRUNK NONCE__}}` placeholder (`create_nonce` in
+`Trunk.toml`), which the serving engine replaces with each response's
+Content-Security-Policy nonce.
 
 CI's `wasm` job builds the UI this way on every PR, with trunk and the `wasm-bindgen`
 CLI downloaded at pinned versions and checked against pinned SHA-256 sums, and runs

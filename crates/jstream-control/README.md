@@ -13,7 +13,7 @@ review_every = "90d"
 <!-- @section
 covers = ["crates/jstream-control/src/**"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-control"]
-verified = { hash = "b3:c6bae3ad1d51b34c", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: re-read after ws_config.rs compiled its browser-only helpers under cfg(any(test, wasm32)) instead of allow(dead_code); text unchanged and still matches" }
+verified = { hash = "b3:b98537eb75bd2a22", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
 -->
 
 The `Control` trait: the one API through which every client talks to the engine
@@ -45,7 +45,7 @@ Contents (a first cut; [Design](#design) explains the choices):
 <!-- @section
 covers = ["crates/jstream-control/src/**", "crates/jstream-control/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md"]
-verified = { hash = "b3:e16cc07af9e570cf", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
+verified = { hash = "b3:5c3241f916beca9d", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
 -->
 
 ### The trait
@@ -230,7 +230,9 @@ pulls `web-sys`.
   native clients, and from browsers, which can't set that header, two subprotocols in
   `Sec-WebSocket-Protocol`: `jstream` and `jstream.token.<token>`
   ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). The server selects `jstream`; the
-  browser client fails the connection if it selects anything else. A token that isn't an
+  browser client fails the connection if it selects anything else. With an empty token
+  the browser client offers no subprotocol and relies on the credentials the browser
+  already sends for the engine's origin (HTTP Basic, when the engine served the page). A token that isn't an
   HTTP token (RFC 7230 `tchar`s) can't be a subprotocol and fails `connect`; the
   daemon's tokens are hex. `jstream-server` doesn't accept the subprotocol yet, so a
   browser connects only to an engine that does. The caller supplies the token (the CLI

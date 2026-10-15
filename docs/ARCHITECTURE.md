@@ -20,7 +20,7 @@ provisional, and globs that match nothing are only warnings.
 <!-- @section
 covers = ["apps/*/Cargo.toml#jstream-meta", "apps/*/src/main.rs"]
 depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web-ui.md"]
-verified = { hash = "b3:dffea86bfec8a1f6", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
+verified = { hash = "b3:eee68208a93fb7b3", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
 -->
 
 ```
@@ -519,7 +519,7 @@ yet.
 <!-- @section
 covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
 depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
-verified = { hash = "b3:b67d81ee720da2f6", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
+verified = { hash = "b3:16b973a5ddb5c631", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in

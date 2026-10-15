@@ -8,10 +8,12 @@
 //! page's one thread, so the shared state is an `Rc<RefCell<…>>`, and no borrow is held
 //! across an `await` or a call into JavaScript that could re-enter a handler.
 //!
-//! Browsers can't set `Authorization` on a WebSocket, so the control token travels as the
+//! Browsers can't set `Authorization` on a WebSocket, so a control token travels as the
 //! `jstream.token.<token>` subprotocol next to `jstream`, which the server selects
-//! ([`crate::WS_PROTOCOL`]). The browser sets `Origin` to the page's own and handles
-//! `wss://` itself.
+//! ([`crate::WS_PROTOCOL`]). With an empty token no subprotocol is offered, and the
+//! connection carries whatever credentials the browser already sends for the engine's
+//! origin (HTTP Basic, when the engine served the page behind it). The browser sets
+//! `Origin` to the page's own and handles `wss://` itself.
 //!
 //! Docs: crates/jstream-control/README.md#design, docs/adr/0006-mcp-full-access.md
 
@@ -130,10 +132,17 @@ impl WsControl {
         config: &WsConfig,
     ) -> Result<(WsControl, oneshot::Receiver<Result<(), ControlError>>), ControlError> {
         let url = browser_url(&config.url)?;
-        let protocols =
-            js_sys::Array::of2(&WS_PROTOCOL.into(), &token_protocol(&config.token)?.into());
-        let socket = WebSocket::new_with_str_sequence(&url, &protocols)
-            .map_err(|_| disconnected(format!("the browser refused to open `{url}`")))?;
+        // With a token, offer it as a subprotocol. Without one, offer none: the page relies
+        // on credentials the browser already sends for the engine's origin.
+        let with_token = !config.token.is_empty();
+        let socket = if with_token {
+            let protocols =
+                js_sys::Array::of2(&WS_PROTOCOL.into(), &token_protocol(&config.token)?.into());
+            WebSocket::new_with_str_sequence(&url, &protocols)
+        } else {
+            WebSocket::new(&url)
+        }
+        .map_err(|_| disconnected(format!("the browser refused to open `{url}`")))?;
         // Binary frames (the preview stream) are not designed yet; array buffers keep
         // them out of the blob store until they are.
         socket.set_binary_type(BinaryType::Arraybuffer);
@@ -150,7 +159,7 @@ impl WsControl {
             let socket = socket.clone();
             Closure::<dyn FnMut(DomEvent)>::new(move |_: DomEvent| {
                 let selected = socket.protocol();
-                if selected != WS_PROTOCOL {
+                if with_token && selected != WS_PROTOCOL {
                     state.borrow_mut().close(format!(
                         "the engine selected subprotocol `{selected}`, not `{WS_PROTOCOL}`"
                     ));

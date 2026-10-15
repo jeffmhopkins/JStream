@@ -36,7 +36,7 @@ verified = { hash = "b3:a134c22c21423116", by = "agent:claude@session_01Lx8gSdsa
 ## Going live by hand
 <!-- @section
 depends_on = ["apps/jstream-daemon/README.md#usage", "apps/jstream-cli/README.md#usage", "crates/jstream-server/README.md#design"]
-verified = { hash = "b3:d41b9d6c2a28ab99", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
+verified = { hash = "b3:a83fe3630bb62380", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
 -->
 
 The commands are PowerShell, run from the repository root. `$cli` is short for the CLI

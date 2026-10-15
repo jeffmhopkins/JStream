@@ -22,7 +22,9 @@ pub struct WsConfig {
     /// `/`) the API path `/api/v1/ws` is used. The browser client also takes `wss://`.
     pub url: String,
     /// The control token: sent as `Authorization: Bearer <token>` by the native client,
-    /// and as the `jstream.token.<token>` subprotocol by the browser client.
+    /// and as the `jstream.token.<token>` subprotocol by the browser client. The browser
+    /// client sends nothing when it is empty, relying on credentials the browser already
+    /// holds for the engine's origin.
     pub token: String,
     /// The `Origin` to send. `None` sends the engine's own origin (`http://<host>:<port>`
     /// of the URL), which the server always accepts. The browser client ignores it: the

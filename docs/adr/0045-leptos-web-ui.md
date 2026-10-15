@@ -62,7 +62,11 @@ And adds:
    daemon's are lowercase hex), so it is a valid subprotocol name. Native clients keep
    sending `Authorization: Bearer`. The token is the same credential either way, so
    what a client may do is unchanged. Servers must not log the `Sec-WebSocket-Protocol`
-   header, as they don't log `Authorization` (R-SEC-001).
+   header, as they don't log `Authorization` (R-SEC-001). A page the engine served
+   behind credentials the browser already sends (HTTP Basic) can connect with no token:
+   the client then offers no subprotocol, and the browser's credentials go with the
+   upgrade. How the daemon hands a browser its credentials is the pairing work's
+   decision, not this ADR's.
 
 <a id="consequences"></a>
 ## Consequences

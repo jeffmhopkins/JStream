@@ -223,7 +223,7 @@ for example:
 <!-- @section
 covers = ["apps/jstream-cli/src/**", "apps/jstream-cli/Cargo.toml"]
 depends_on = ["crates/jstream-control/README.md#design"]
-verified = { hash = "b3:a288c76d32c43b3e", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: renumbered the Leptos ADR from 0044 to 0045 (0044 is taken by the pairing ADR in #248); re-read, only the ADR number and link changed, content still holds" }
+verified = { hash = "b3:8ccb84ca7869fb23", by = "agent:claude@session_01SHnfsdCupikc9rN2BdzzeD", note = "U0: browser client connects without a subprotocol when the token is empty (relying on browser credentials such as U2's HTTP Basic); ADR-0045 point 4, control and ui READMEs, server open question 2 updated; re-read, holds" }
 -->
 
 - **Argument parsing is hand-rolled.** The grammar is small, and the part that matters

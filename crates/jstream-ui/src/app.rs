@@ -125,7 +125,8 @@ pub fn App() -> impl IntoView {
 }
 
 /// The form that opens a session: the engine URL and the control token. The token stays
-/// in memory: it is never stored by the page or written to the console.
+/// in memory: it is never stored by the page or written to the console. Left empty, the
+/// connection relies on the credentials the browser already sends to the engine.
 #[component]
 fn ConnectForm(
     status: RwSignal<Status>,
@@ -151,7 +152,12 @@ fn ConnectForm(
                 </label>
                 <label>
                     "Control token"
-                    <input type="password" autocomplete="off" bind:value=token />
+                    <input
+                        type="password"
+                        autocomplete="off"
+                        placeholder="Not needed if the browser already signed in"
+                        bind:value=token
+                    />
                 </label>
                 <button type="submit" disabled=busy>
                     {move || if busy() { "Connecting…" } else { "Connect" }}
